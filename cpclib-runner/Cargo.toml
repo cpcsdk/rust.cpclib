@@ -11,6 +11,10 @@ resolver = "2"
 description = "Dependency for various cpclib crates to help running external applications (mostly assemblers or emulators)"
 
 [dependencies]
+# Opening a URL is not three lines of `cfg!`: WSL, snap-confined browsers and
+# `BROWSER=` all need handling, and getting one wrong looks like "it opened
+# nothing and said nothing". Already in the lockfile via the egui crates.
+webbrowser = "1"
 cpclib-common = {workspace=true, features=["network"]}
 cpclib-asm.workspace=true
 cpclib-csl.workspace=true

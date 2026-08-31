@@ -177,6 +177,110 @@ fn roundtrip_quoted_comma() {
 }
 
 #[test]
+/// Regression test, reported live: decoding a program back to text doubled
+/// every space around AND/OR/XOR/MOD - `Display` for these tokens used to
+/// pad itself with its own leading/trailing space on top of the real space
+/// *already* separately stored around them (confirmed against a real CPC's
+/// own saved bytes, `mandelbrot_matches_a_real_cpcs_own_save`). `NOT` is
+/// included here too but for the opposite reason: it's parsed as a unary
+/// prefix that only peeks at (doesn't store) the character after it, so it
+/// genuinely needs its own trailing space and must NOT lose it the same way
+/// - this test pins both directions down together. `test_roundtrip` alone
+/// doesn't catch either - it only checks the two `Display` calls agree with
+/// *each other*, not that either matches the spacing actually typed.
+fn roundtrip_and_or_xor_mod_not_do_not_double_space() {
+    let code = "10 IF x2+y2<=4 AND it<itmax THEN y=1\n\
+                20 IF a OR b THEN y=2\n\
+                30 IF a XOR b THEN y=3\n\
+                40 c=a MOD b\n\
+                50 IF NOT a THEN y=5";
+    let prog = BasicProgram::parse(code).expect("parse");
+    let bytes = prog.as_bytes();
+    let decoded = BasicProgram::decode(&bytes).expect("decode");
+    assert_eq!(
+        decoded.to_string().trim(),
+        code.trim(),
+        "decoded spacing must match what was actually typed"
+    );
+}
+
+#[test]
+/// Regression test, reported live: `IF ... THEN 100` (a bare line number,
+/// Locomotive BASIC's implicit-GOTO shorthand) decoded back with a
+/// synthesised "GO TO"/"GOTO" word the user never typed. An earlier
+/// version of `parse_if` inserted a real `Goto` token for this shape
+/// (never verified against real hardware for this specific construct -
+/// see `parse_if`'s own doc comment) and `BasicLine`'s `Display` then
+/// special-cased that shape back into literal "GO TO " text; both are
+/// gone now. The target uses the same dedicated `LineNumber` token
+/// `GOTO`/`GOSUB` already use (real-hardware-verified via hello.bas's own
+/// "GOTO 10"), with no separate `Goto` marker and no synthesised word, so
+/// it round-trips back to exactly what was typed - "100", not "GOTO 100"
+/// and not "GO TO 100". Covers the same shorthand after `ELSE` too, and
+/// confirms an *explicit* `GOTO 80` is unaffected either way.
+fn roundtrip_implicit_then_and_else_linenumber_renders_bare() {
+    let code = "10 IF a THEN 100\n\
+                20 IF b THEN 200 ELSE 300\n\
+                30 IF c THEN y=1:GOTO 80";
+    let prog = BasicProgram::parse(code).expect("parse");
+    let bytes = prog.as_bytes();
+    let decoded = BasicProgram::decode(&bytes).expect("decode");
+    assert_eq!(
+        decoded.to_string().trim(),
+        code.trim(),
+        "an implicit THEN/ELSE line number must round-trip bare, with no synthesised GOTO/GO TO word"
+    );
+}
+
+#[test]
+/// Regression test for a real ROM behavior: after a GOTO/GOSUB target first
+/// runs, the ROM self-modifies its `LineNumber` token (&1E) into a
+/// `LineMemoryAddressPointer` (&1D) - reported live as `GOTO
+/// <const:LineMemoryAddressPointer>` when decoding real (already-`RUN`)
+/// memory. `BasicProgram::decode` resolves this back to the line number by
+/// mapping each line's own address (assuming `PROGRAM_START`, same as
+/// `as_sna`/cpclib-dap's own live memory reads) - after which it displays
+/// exactly like an unmodified GOTO target.
+///
+/// The cached payload is one byte *short* of the target line's own record
+/// start, not equal to it - confirmed live against a real, already-`RUN`
+/// 1984js session (`GOTO 80` cached as &26A when this crate's own encoding
+/// puts line 80 at &26B) - this test pins that -1 down; an earlier version
+/// of both the fix and this test assumed the payload was the address
+/// itself, which resolved nothing in the live session that reported it.
+fn decode_resolves_self_modified_goto_cache_to_a_line_number() {
+    let code = "10 GOTO 20\n20 PRINT 1";
+    let prog = BasicProgram::parse(code).expect("parse");
+    let mut bytes = prog.as_bytes();
+
+    // Locate line 10's own length (its own first 2 bytes) to compute
+    // where line 20 actually starts in memory.
+    let line10_length = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let line20_address = cpclib_basic::PROGRAM_START + line10_length;
+
+    // Find the `LineNumber` token (0x1E) followed by the little-endian
+    // value 20 within line 10's own bytes, and self-modify it exactly as
+    // the ROM would: swap the marker to LineMemoryAddressPointer (0x1D)
+    // and its payload to one less than the target's absolute address.
+    let target_bytes = [20u8, 0u8];
+    let pos = bytes[..line10_length as usize]
+        .windows(3)
+        .position(|w| w[0] == 0x1E && w[1..] == target_bytes)
+        .expect("expected an unmodified LineNumber token for the GOTO target");
+    bytes[pos] = 0x1D;
+    let addr_bytes = (line20_address - 1).to_le_bytes();
+    bytes[pos + 1] = addr_bytes[0];
+    bytes[pos + 2] = addr_bytes[1];
+
+    let decoded = BasicProgram::decode(&bytes).expect("decode");
+    assert_eq!(
+        decoded.to_string().trim(),
+        code.trim(),
+        "a self-modified GOTO-cache token must resolve back to its target line number"
+    );
+}
+
+#[test]
 fn roundtrip_edge_cases() {
     // Single character strings
     test_roundtrip("10 PRINT \"A\"");

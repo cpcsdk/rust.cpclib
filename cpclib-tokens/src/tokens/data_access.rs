@@ -109,6 +109,41 @@ impl fmt::Display for DataAccess {
     }
 }
 
+/// What kind of operand this is, reduced to the distinctions that matter to
+/// code reasoning about instructions rather than about syntax.
+///
+/// Exists so such code can be written once, generically over
+/// [`DataAccessElem`], instead of matching concrete [`DataAccess`] variants -
+/// which forces anyone holding a *located* operand to clone it into a plain
+/// one first. The instruction-duration rules in `cpclib-z80flow` are the first
+/// consumer; before this they were 464 lines of concrete matching, and
+/// `LocatedToken::estimated_duration` cloned a whole token per instruction to
+/// reach them.
+///
+/// Carries the payloads that behaviour genuinely depends on - `(hl)` is not
+/// `(bc)`, and `a` is not `b` for some instructions - and nothing else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperandKind {
+    Reg8(Register8),
+    Reg16(Register16),
+    IndexReg16(IndexRegister16),
+    IndexReg8,
+    /// `(ix + d)`
+    Indexed,
+    Expression,
+    /// `(hl)`, `(bc)`, `(de)`
+    MemReg16(Register16),
+    /// `(ix)`
+    MemIndexReg16,
+    /// `(nn)`
+    Memory,
+    FlagTest,
+    PortC,
+    PortN,
+    SpecialI,
+    SpecialR
+}
+
 pub trait DataAccessElem: Sized + Debug + Display {
     type Expr: ExprElement;
 
@@ -119,6 +154,16 @@ pub trait DataAccessElem: Sized + Debug + Display {
     fn get_indexregister8(&self) -> Option<IndexRegister8>;
     fn get_register16(&self) -> Option<Register16>;
     fn get_register8(&self) -> Option<Register8>;
+
+    /// This operand's [`OperandKind`].
+    ///
+    /// Required rather than defaulted, and returns a kind rather than an
+    /// `Option`: every variant of both implementing types maps to exactly one
+    /// kind, so an exhaustive `match` in each impl makes the compiler enforce
+    /// that - adding an operand variant becomes a build error instead of a
+    /// silent "unknown", which a caller would quietly turn into "no duration
+    /// for this instruction".
+    fn kind(&self) -> OperandKind;
 
     #[inline]
     fn is_flag_test(&self) -> bool {
@@ -374,6 +419,25 @@ macro_rules! data_access_impl_most_methods {
 
 #[allow(missing_docs)]
 impl DataAccessElem for DataAccess {
+
+    fn kind(&self) -> OperandKind {
+        match self {
+            Self::IndexRegister16WithIndex(..) => OperandKind::Indexed,
+            Self::IndexRegister16(..) => OperandKind::IndexReg16(self.get_indexregister16().unwrap()),
+            Self::IndexRegister8(..) => OperandKind::IndexReg8,
+            Self::Register16(reg, ..) => OperandKind::Reg16(*reg),
+            Self::Register8(reg, ..) => OperandKind::Reg8(*reg),
+            Self::MemoryRegister16(reg, ..) => OperandKind::MemReg16(*reg),
+            Self::MemoryIndexRegister16(..) => OperandKind::MemIndexReg16,
+            Self::Expression(..) => OperandKind::Expression,
+            Self::Memory(..) => OperandKind::Memory,
+            Self::FlagTest(..) => OperandKind::FlagTest,
+            Self::SpecialRegisterI => OperandKind::SpecialI,
+            Self::SpecialRegisterR => OperandKind::SpecialR,
+            Self::PortC => OperandKind::PortC,
+            Self::PortN(..) => OperandKind::PortN
+        }
+    }
     type Expr = Expr;
 
     data_access_impl_most_methods!();

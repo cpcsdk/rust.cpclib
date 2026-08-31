@@ -1,0 +1,38 @@
+[package]
+name = "cpclib-project"
+version.workspace = true
+description = "What a source file belongs to: project discovery, configuration, entry resolution and source maps, shared by the LSP and the debug adapter"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# `PeepholeGoal` converts into `OptimizationGoal`; both types are foreign to
+# any third crate, so the orphan rule keeps that `From` impl here with the
+# config it belongs to.
+cpclib-asmoptim.workspace = true
+cpclib-asm.workspace = true
+cpclib-tokens.workspace = true
+# `build_defs` recovers the `-D` symbols a build rule passes to basm by loading
+# the real build file - the same loader bndbuild itself uses, so the two cannot
+# disagree about what a rule means.
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
+camino.workspace = true
+minijinja.workspace = true
+enumflags2 = "0.7.12"
+dashmap = "6"
+
+serde = { workspace = true, features = ["derive"] }
+toml = "0.8"
+toml_edit = "0.20"
+
+# Workspace walking that honours .gitignore
+ignore.workspace = true
+
+[dev-dependencies]
+camino-tempfile.workspace = true
+cpclib-common.workspace = true
+serde_json = "1"

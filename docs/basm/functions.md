@@ -60,6 +60,7 @@ This page documents all built-in functions available in basm expressions.
 - **`string_push(string, char_or_string)`** - Append character or string
 - **`string_concat(s1, s2, ...)`** - Concatenate strings (variadic)
 - **`string_from_list(list)`** - Convert list of integers to string
+- **`string_uppercase(s)`**
 - **`string_format(template, arg0, arg1, ...)`** - Rust/Python-`str.format`-style positional
   substitution: `{0}`, `{1}`, ... in `template` are replaced by `arg0`, `arg1`, ... (0-based); use
   `{{`/`}}` for a literal `{`/`}`. A placeholder can be reused, and an argument that's itself a
@@ -102,6 +103,11 @@ This page documents all built-in functions available in basm expressions.
 - **`list_argsort(list)`** - Return indices that would sort the list
 - **`list_push(list, element)`** - Append element to list (returns new list)
 - **`list_extend(list1, list2)`** - Concatenate two lists (returns new list)
+- **`list_filer(list, predicate`)** - Return a list containing the elements that matchs the predicate is provided as a string that is the name of a function that takes an expression and returns a boolean
+- **`list_map(list, transform)`**
+- **`list_position(list, predicate)`** (-1 if not found, predicate)
+- **`list_position_value(list, value)`** (-1 if not found, value)
+- **`list_split_by_value(list, value)`**
 
 ## Matrix Functions
 

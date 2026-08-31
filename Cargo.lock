@@ -532,7 +532,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
  "x11rb",
 ]
 
@@ -1094,7 +1094,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1176e49f42fe135cd2b56465e4f7d07038d3728f5e9f27fb2f08ed3fef75339"
 dependencies = [
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "proc-macro-error2",
  "proc-macro2 1.0.107",
  "quote 1.0.47",
@@ -1120,7 +1120,7 @@ dependencies = [
  "bitflags 2.13.1",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2 1.0.107",
@@ -2048,7 +2048,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -2059,7 +2059,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -2080,7 +2080,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2527,6 +2527,7 @@ dependencies = [
  "cpclib-image",
  "cpclib-sna",
  "cpclib-tokens",
+ "cpclib-z80flow",
  "criterion",
  "custom_error",
  "delegate",
@@ -2548,6 +2549,7 @@ dependencies = [
  "regex",
  "rust-embed",
  "serde",
+ "serde_json",
  "smallvec",
  "substring",
  "velcro",
@@ -2563,6 +2565,17 @@ dependencies = [
  "cpclib-common",
  "serde",
  "toml 0.8.2",
+]
+
+[[package]]
+name = "cpclib-asmoptim"
+version = "0.11.0"
+dependencies = [
+ "cpclib-asm",
+ "cpclib-common",
+ "cpclib-tokens",
+ "cpclib-z80emu",
+ "cpclib-z80flow",
 ]
 
 [[package]]
@@ -2593,6 +2606,7 @@ dependencies = [
  "cpclib-asm",
  "cpclib-common",
  "cpclib-disc",
+ "cpclib-sna",
  "cpclib-xfer",
  "criterion",
  "enumflags2",
@@ -2603,6 +2617,7 @@ dependencies = [
  "pretty_assertions",
  "regex",
  "rust-ini",
+ "serde_json",
  "serial_test",
  "strip-ansi-escapes",
  "test-generator",
@@ -2636,6 +2651,21 @@ dependencies = [
  "serde_json",
  "tempfile",
  "ureq",
+]
+
+[[package]]
+name = "cpclib-basmopt"
+version = "0.11.0"
+dependencies = [
+ "camino",
+ "camino-tempfile",
+ "clap",
+ "cpclib-asm",
+ "cpclib-asmoptim",
+ "cpclib-common",
+ "cpclib-tokens",
+ "fs-err",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -2677,6 +2707,7 @@ dependencies = [
  "cpclib-basic",
  "cpclib-basm",
  "cpclib-basmdoc",
+ "cpclib-basmopt",
  "cpclib-bdasm",
  "cpclib-catalog",
  "cpclib-common",
@@ -2707,6 +2738,7 @@ dependencies = [
  "paste",
  "predicates",
  "query-shell",
+ "quick-xml 0.39.4",
  "rtzx",
  "self_cell",
  "self_update",
@@ -2900,6 +2932,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-dap"
+version = "0.11.0"
+dependencies = [
+ "camino",
+ "camino-tempfile",
+ "cpclib-asm",
+ "cpclib-basic",
+ "cpclib-bndbuild",
+ "cpclib-common",
+ "cpclib-image",
+ "cpclib-project",
+ "cpclib-runner",
+ "cpclib-sna",
+ "cpclib-tokens",
+ "image",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "cpclib-disc"
 version = "0.11.0"
 dependencies = [
@@ -2955,12 +3008,15 @@ dependencies = [
  "anyhow",
  "as-slice",
  "cpclib-common",
+ "cpclib-files",
+ "delegate",
  "fs-err",
  "gif",
  "gif-dispose",
  "image",
  "log",
  "nutype",
+ "owo-colors",
  "rayon",
  "serde",
 ]
@@ -3024,18 +3080,23 @@ dependencies = [
  "clap_complete",
  "cpclib-asm",
  "cpclib-asmfmt",
+ "cpclib-asmoptim",
  "cpclib-basic",
  "cpclib-basmdoc",
  "cpclib-bndbuild",
  "cpclib-catart",
  "cpclib-common",
+ "cpclib-dap",
+ "cpclib-project",
  "cpclib-runner",
  "cpclib-tokens",
  "cpclib-z80emu",
+ "cpclib-z80flow",
  "dashmap 6.2.1",
  "either",
  "enumflags2",
  "futures-util",
+ "ignore",
  "minijinja",
  "rayon",
  "ropey",
@@ -3053,7 +3114,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walkdir",
- "winnow 0.6.26",
 ]
 
 [[package]]
@@ -3076,6 +3136,27 @@ dependencies = [
  "cpclib-tokens",
  "encoding_rs",
  "fs-err",
+]
+
+[[package]]
+name = "cpclib-project"
+version = "0.11.0"
+dependencies = [
+ "camino",
+ "camino-tempfile",
+ "cpclib-asm",
+ "cpclib-asmoptim",
+ "cpclib-bndbuild",
+ "cpclib-common",
+ "cpclib-tokens",
+ "dashmap 6.2.1",
+ "enumflags2",
+ "ignore",
+ "minijinja",
+ "serde",
+ "serde_json",
+ "toml 0.8.2",
+ "toml_edit 0.20.2",
 ]
 
 [[package]]
@@ -3136,6 +3217,7 @@ dependencies = [
  "tar",
  "transparent",
  "utf8-chars",
+ "webbrowser",
  "wmctrl",
  "xcap",
  "xz2",
@@ -3296,6 +3378,22 @@ dependencies = [
  "delegate",
  "either",
  "paste",
+]
+
+[[package]]
+name = "cpclib-z80flow"
+version = "0.11.0"
+dependencies = [
+ "cpclib-tokens",
+]
+
+[[package]]
+name = "cpclib-z80flow-tests"
+version = "0.11.0"
+dependencies = [
+ "cpclib-asm",
+ "cpclib-tokens",
+ "cpclib-z80flow",
 ]
 
 [[package]]
@@ -4024,7 +4122,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.9",
 ]
 
 [[package]]
@@ -4680,7 +4778,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5922,7 +6020,7 @@ dependencies = [
  "bitflags 2.13.1",
  "com",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.9",
  "thiserror 1.0.69",
  "widestring",
  "winapi",
@@ -6209,7 +6307,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -6349,6 +6447,22 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "ignore"
+version = "0.4.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b17771570a2b94107741a7b033f19132c2eee21d59d21b24d2ced26500bd66e"
+dependencies = [
+ "crossbeam-deque",
+ "globset",
+ "log",
+ "memchr",
+ "regex-automata",
+ "same-file",
+ "walkdir",
+ "winapi-util",
 ]
 
 [[package]]
@@ -6606,7 +6720,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7994,7 +8108,7 @@ version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9224be3459a0c1d6e9b0f42ab0e76e98b29aef5aba33c0487dfcf47ea08b5150"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.5.0",
  "proc-macro2 1.0.107",
  "quote 1.0.47",
  "syn 1.0.109",
@@ -8117,7 +8231,7 @@ version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.5.0",
  "proc-macro2 1.0.107",
  "quote 1.0.47",
  "syn 2.0.119",
@@ -8882,7 +8996,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -10448,7 +10562,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.5",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -11288,7 +11402,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11301,7 +11415,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -13099,7 +13213,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -14985,7 +15099,7 @@ dependencies = [
  "js-sys",
  "khronos-egl",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.9",
  "log",
  "metal 0.28.0",
  "naga 0.20.0",
@@ -15107,7 +15221,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15887,15 +16001,6 @@ name = "winnow"
 version = "0.5.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "winnow"
-version = "0.6.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
 dependencies = [
  "memchr",
 ]

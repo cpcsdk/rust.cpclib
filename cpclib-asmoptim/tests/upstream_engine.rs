@@ -1,0 +1,221 @@
+//! Runs the *whole* upstream rule library against real assembly, rather than
+//! one hand-picked rule at a time.
+//!
+//! This is the scale check: matching 187 real patterns over real source is
+//! where a backtracking matcher blows up, loops forever, or starts producing
+//! replacements that are not valid assembly. None of that shows up when each
+//! rule is tested in isolation.
+
+use cpclib_asm::parser::parse_z80_str;
+use cpclib_asmoptim::dsl::RuleSet;
+use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
+use cpclib_tokens::{ToSimpleToken, Token};
+
+mod common;
+
+const UPSTREAM: &str = include_str!("../src/vendor/pbo-patterns.txt");
+
+/// Matches `source` against the full upstream rule set as both `LocatedToken`
+/// and plain `Token`, asserting the two runs agree - see
+/// `engine_matching.rs`'s `matches_for` for why. At this file's scale (the
+/// whole 187-pattern corpus over real source) this is also where a genericity
+/// assumption that happens to hold for hand-picked single-rule cases but not
+/// in general would most likely surface.
+fn matches_both_token_kinds(source: &str) -> Vec<PeepholeMatch> {
+    let rules = RuleSet::parse(UPSTREAM).unwrap();
+    let listing = parse_z80_str(source).expect("source must parse");
+
+    let located_tokens: Vec<_> = listing.iter().collect();
+    let located_result = find_matches(&located_tokens, &rules);
+
+    let simple_tokens: Vec<Token> = listing
+        .iter()
+        .map(|t| t.as_simple_token().into_owned())
+        .collect();
+    let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
+    let simple_result = find_matches(&simple_refs, &rules);
+
+    common::assert_token_kinds_agree(&located_result, &simple_result, source);
+
+    located_result
+}
+
+/// A chunk of ordinary Z80 that deliberately contains several known-optimisable
+/// sequences plus plenty of code that must be left alone.
+const SOURCE: &str = "\
+start:
+    ld a, 0
+    cp 0
+    ld b, b
+    push hl
+    pop de
+    and c
+    and c
+    xor a
+    ld hl, 0x1234
+    call somewhere
+    ret
+somewhere:
+    nop
+    nop
+    nop
+    ret
+";
+
+#[test]
+fn the_whole_upstream_library_runs_over_real_source_without_panicking() {
+    let found = matches_both_token_kinds(SOURCE);
+    let token_count = parse_z80_str(SOURCE).unwrap().iter().count();
+
+    // Every reported match must be internally consistent - a bad span would
+    // make a consumer highlight or replace the wrong region of the file.
+    for m in &found {
+        assert!(m.start < m.end, "empty span: {m:?}");
+        assert!(m.end <= token_count, "span past end of input: {m:?}");
+        assert!(
+            m.range().contains(&m.anchor),
+            "anchor outside its own match: {m:?}"
+        );
+        assert!(!m.message.is_empty(), "match with no message: {m:?}");
+    }
+
+    // Matches must not overlap - the engine resumes past each one, and a
+    // consumer applying two overlapping rewrites would corrupt the source.
+    for pair in found.windows(2) {
+        assert!(
+            pair[0].end <= pair[1].start,
+            "overlapping matches: {:?} and {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+}
+
+/// Whatever the engine suggests must itself be assemblable - a "fix" that
+/// does not parse is worse than no suggestion at all.
+#[test]
+fn every_suggested_replacement_is_valid_assembly() {
+    for m in matches_both_token_kinds(SOURCE) {
+        for line in &m.replacement {
+            assert!(
+                parse_z80_str(format!(" {line}\n")).is_ok(),
+                "rule {:?} suggested unparsable replacement {line:?}",
+                m.rule_name
+            );
+        }
+    }
+}
+
+/// The subset of upstream rules this crate can actually evaluate today.
+/// Recorded as a test so the number moving is a deliberate, visible event
+/// (implementing a new constraint should raise it) rather than a silent drift.
+#[test]
+fn the_supported_rule_count_is_what_we_think_it_is() {
+    let rules = RuleSet::parse(UPSTREAM).unwrap();
+    let supported: Vec<&str> = rules
+        .rules
+        .iter()
+        .filter(|r| cpclib_asmoptim::constraints::all_supported(&r.constraints))
+        .map(|r| r.name.as_deref().unwrap_or("<unnamed>"))
+        .collect();
+
+    // 173 -> 177 came from `regFlagEffectsNotUsedAfter`, which asks whether
+    // an instruction's *entire* output is dead.
+    // 11 -> 120 came from the forward-liveness pair
+    // (`regsNotUsedAfter`/`flagsNotUsedAfter`, the two most common constraints
+    // in the corpus at 87 and 78 uses); 120 -> 173 from the block-local family
+    // (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`,
+    // 45/13/11/1), and the last 8 from `atLeastOneCPUOp`,
+    // `evenPushPopsSPNotRead`, `memoryNotWritten`, `memoryNotUsed` and
+    // `noStackArguments`.
+    //
+    // Every constraint any real rule uses is now evaluated. Note "evaluated"
+    // is not "always decidable": three of them answer conservatively where a
+    // sound answer is not available (memory aliasing, and a callee whose stack
+    // behaviour cannot be scanned), reporting `Unknown` - which fails, so the
+    // rule stays silent rather than guessing. `regsModified` is the one name
+    // left unimplemented, and no rule in the corpus uses it.
+    assert_eq!(
+        supported.len(),
+        185,
+        "the supported subset of the {} upstream rules changed - a constraint \
+         was implemented or removed, or the corpus was re-vendored",
+        rules.rules.len()
+    );
+
+    // Spot-check by name too, so a change says *which* rules moved rather
+    // than only that the total did. These are the ones the earlier,
+    // structural-only constraint set already covered - none may regress.
+    for name in [
+        "neg-to-sub",
+        "unnecessary-ld-to-itself",
+        "regpair-transfer",
+        "redundant-op",
+        "jp2jr"
+    ] {
+        assert!(supported.contains(&name), "{name} is no longer supported");
+    }
+    // ...a few the forward-liveness constraints unlocked...
+    for name in ["cp02ora", "ld0-to-xor", "cp12deca", "unused-ld-any"] {
+        assert!(
+            supported.contains(&name),
+            "{name} should be unlocked by the liveness constraints"
+        );
+    }
+    // ...and a few from the block-local family, which is what takes a rule
+    // with a `*` gap line (`regsNotModified(1, HL, ?reg)`) from unevaluable
+    // to executable.
+    for name in ["unnecessary-intermediate-reg", "unnecessary-ld-after-pop"] {
+        assert!(
+            supported.contains(&name),
+            "{name} should be unlocked by the block-local constraints"
+        );
+    }
+    // ...the whole-instruction-effects one...
+    for name in ["unnecessary-0args", "unnecessary-2args"] {
+        assert!(
+            supported.contains(&name),
+            "{name} should be unlocked by regFlagEffectsNotUsedAfter"
+        );
+    }
+    // ...and the stack/memory ones that close the corpus out.
+    for name in [
+        "unnecessary-push-pop",
+        "tail-recursion",
+        "sdcc-inefficient-index-register-use1"
+    ] {
+        assert!(supported.contains(&name), "{name} should now be supported");
+    }
+}
+
+/// Guard against the matcher degenerating on a long, repetitive input - the
+/// combination of wildcards and variable-count repeats is where a naive
+/// backtracking matcher goes exponential.
+#[test]
+fn matching_a_long_repetitive_input_terminates_promptly() {
+    let rules = RuleSet::parse(UPSTREAM).unwrap();
+    let mut source = String::from("start:\n");
+    for _ in 0..400 {
+        source.push_str("    nop\n");
+        // Deliberately something a *supported* rule matches, so the run is
+        // also proof the matcher keeps working at length rather than just
+        // failing fast everywhere.
+        source.push_str("    ld b, b\n");
+        source.push_str("    inc hl\n");
+    }
+    source.push_str("    ret\n");
+
+    let listing = parse_z80_str(source).expect("source must parse");
+    let tokens: Vec<_> = listing.iter().collect();
+
+    let started = std::time::Instant::now();
+    let found = find_matches(&tokens, &rules);
+    let elapsed = started.elapsed();
+
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "matching 1200 instructions took {elapsed:?} - the matcher is degenerating"
+    );
+    // Sanity: it should still have found the obvious repeated opportunities.
+    assert!(!found.is_empty());
+}

@@ -7,6 +7,7 @@ use cpclib_tokens::symbols::{SourceLocation, Struct, ValueMacro};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
 use crate::Env;
+use crate::parser::context::ExpansionColumnMap;
 use crate::error::AssemblerError;
 use crate::preamble::{Z80ParserError, Z80Span};
 
@@ -14,6 +15,20 @@ use crate::preamble::{Z80ParserError, Z80Span};
 pub trait Expandable {
     /// Returns a string version of the element after expansion
     fn expand(&self, env: &mut Env) -> Result<String, Box<AssemblerError>>;
+
+    /// The same expansion, with a way back to the columns of the text it was
+    /// made from - see [`ExpansionColumnMap`].
+    ///
+    /// `None` where no such way exists: an expansion that rewrites its body
+    /// rather than substituting into it has no column in the file to point at,
+    /// and saying so is what makes the caller record no columns rather than the
+    /// expansion's own.
+    fn expand_with_columns(
+        &self,
+        env: &mut Env
+    ) -> Result<(String, Option<ExpansionColumnMap>), Box<AssemblerError>> {
+        Ok((self.expand(env)?, None))
+    }
 }
 
 use cpclib_tokens::MacroSegment;
@@ -113,7 +128,12 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     msg: format!(
                         "{} arguments provided, but {}{} expected. [{}]",
                         args.len(),
-                        if r#macro.has_variadic() { "at least " } else { "" },
+                        if r#macro.has_variadic() {
+                            "at least "
+                        }
+                        else {
+                            ""
+                        },
                         r#macro.nb_args(),
                         r#macro.params().join(",")
                     )
@@ -140,7 +160,10 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     }
 
     #[inline]
-    fn expand_for_basm(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
+    fn expand_for_basm(
+        &self,
+        env: &mut Env
+    ) -> Result<(String, ExpansionColumnMap), Box<AssemblerError>> {
         let listing = self.r#macro.code();
         let mut expanded_args: Vec<Option<beef::lean::Cow<'_, str>>> = vec![None; self.args.len()];
         let arg_count = self.args.len().to_string();
@@ -152,6 +175,30 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 match *segment {
                     MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
                     MacroSegment::ArgCount => Ok(acc + arg_count.len()),
+                    // `{N:=text}`: the call may legitimately not supply this
+                    // argument, and then the default stands in for it. The
+                    // default is body text, so its length is known without
+                    // expanding anything.
+                    MacroSegment::ArgOr { index, start, end } => {
+                        if index < self.args.len() {
+                            let slot = &mut expanded_args[index];
+                            if slot.is_none() {
+                                let mut expanded = expand_param(&self.args[index], env)?;
+                                if let Some(argname) = self.r#macro.params().get(index) {
+                                    expanded = strip_raw_string_quotes(argname, expanded);
+                                }
+                                let arg_len = expanded.len();
+                                *slot = Some(expanded);
+                                Ok(acc + arg_len)
+                            }
+                            else {
+                                Ok(acc + slot.as_ref().unwrap().len())
+                            }
+                        }
+                        else {
+                            Ok(acc + (end - start))
+                        }
+                    },
                     MacroSegment::Arg { index } => {
                         // `index` comes from the macro's own body, tokenized
                         // once at declaration time - independent of any
@@ -188,16 +235,41 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         )?;
 
         // Second pass: assemble output from pre-expanded arguments.
+        //
+        // The columns of the result are recorded as it is built, because this
+        // is the only place both texts are in hand at once: after this, the
+        // expansion is a source of its own and nothing in it says how far each
+        // substitution moved the text around it. See [`ExpansionColumnMap`].
         let mut output = String::with_capacity(capacity);
+        let mut columns = ExpansionColumnMap::default();
+        // Where the body has got to. A substitution's placeholder starts here,
+        // and only the next literal says where it ended - which is all the map
+        // needs, since it asks for the start of a piece and never its length.
+        let mut source = 0usize;
         for segment in self.r#macro.segments().iter() {
             match *segment {
                 MacroSegment::Lit { start, end } => {
+                    columns.push_piece(output.len(), start, true);
                     output.push_str(&listing[start..end]);
+                    source = end;
                 },
                 MacroSegment::ArgCount => {
+                    columns.push_piece(output.len(), source, false);
                     output.push_str(&arg_count);
                 },
+                MacroSegment::ArgOr { index, start, end } => {
+                    columns.push_piece(output.len(), source, false);
+                    match expanded_args.get(index).and_then(|slot| slot.as_ref()) {
+                        Some(value) => output.push_str(value),
+                        // Emitted verbatim, never re-expanded: a default is
+                        // written by whoever wrote the macro, in the macro's
+                        // own body, so there is nothing caller-specific in it
+                        // to substitute.
+                        None => output.push_str(&listing[start..end])
+                    }
+                },
                 MacroSegment::Arg { index } => {
+                    columns.push_piece(output.len(), source, false);
                     // All in-range arguments were expanded in the first pass
                     // (guaranteed Some) - an out-of-range index already
                     // returned an error there, so this loop never reaches it.
@@ -205,9 +277,13 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 }
             }
         }
+        // A body ending on a substitution has no literal after it to say where
+        // the placeholder stopped, so the end of both texts is recorded as a
+        // piece of its own.
+        columns.push_piece(output.len(), listing.len(), true);
 
         debug_assert_eq!(output.len(), capacity, "Capacity estimation mismatch");
-        Ok(output)
+        Ok((output, columns))
     }
 
     /// A macro body referenced `{index}` (0-based) but this particular call
@@ -303,13 +379,7 @@ impl<'a, P: MacroParamElement> Expandable for MacroWithArgs<'a, P> {
     /// Develop the macro with the given arguments
     #[inline]
     fn expand(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
-        if self.flavor() == AssemblerFlavor::Basm {
-            self.expand_for_basm(env)
-        }
-        else {
-            assert_eq!(self.flavor(), AssemblerFlavor::Orgams);
-            self.expand_for_orgams(env)
-        }
+        Ok(self.expand_with_columns(env)?.0)
 
         // make all replacements in one row :( sadly it is too slow :(
         // let ac = AhoCorasick::builder()
@@ -340,6 +410,24 @@ impl<'a, P: MacroParamElement> Expandable for MacroWithArgs<'a, P> {
         // }
         //
         // Ok(listing)
+    }
+
+    #[inline]
+    fn expand_with_columns(
+        &self,
+        env: &mut Env
+    ) -> Result<(String, Option<ExpansionColumnMap>), Box<AssemblerError>> {
+        if self.flavor() == AssemblerFlavor::Basm {
+            let (code, columns) = self.expand_for_basm(env)?;
+            Ok((code, Some(columns)))
+        }
+        else {
+            // Orgams substitutes bare parameter names anywhere in the body with
+            // a whole-text search and replace, with no record of where the
+            // matches were - so there is nothing to build a map from.
+            assert_eq!(self.flavor(), AssemblerFlavor::Orgams);
+            Ok((self.expand_for_orgams(env)?, None))
+        }
     }
 }
 

@@ -327,6 +327,54 @@ impl BuildFileAnalyzer {
         }
 
         let mut lenses = Vec::new();
+
+        // A second, summary lens per rule, all pinned to line 0 so VS Code
+        // stacks them together in one lens bar above the file - lets the
+        // user run/debug any rule without scrolling to find it. Reuses the
+        // exact same command/arguments as the per-rule lens below; only the
+        // range and title differ.
+        let top_of_file = Range {
+            start: Position { line: 0, character: 0 },
+            end: Position { line: 0, character: 0 }
+        };
+        for (rule_line, syms) in &groups {
+            let names = syms
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let first_name = syms[0].name.clone();
+            lenses.push(CodeLens {
+                range: top_of_file,
+                command: Some(Command {
+                    title: format!("Build: {names}"),
+                    command: "cpclib.runRuleInTerminal".to_string(),
+                    arguments: Some(vec![
+                        serde_json::json!(first_name),
+                        serde_json::json!(file_path),
+                    ])
+                }),
+                data: None
+            });
+            if super::command::task_lines_in_rule(&text, *rule_line)
+                .iter()
+                .any(|(_, content)| rule_launches_an_emulator(content))
+            {
+                lenses.push(CodeLens {
+                    range: top_of_file,
+                    command: Some(Command {
+                        title: format!("Debug: {names}"),
+                        command: "cpclib.debugRule".to_string(),
+                        arguments: Some(vec![
+                            serde_json::json!(names),
+                            serde_json::json!(file_path),
+                        ])
+                    }),
+                    data: None
+                });
+            }
+        }
+
         for (rule_line, syms) in groups {
             let names = syms
                 .iter()
@@ -365,6 +413,27 @@ impl BuildFileAnalyzer {
                 }),
                 data: None
             });
+
+            // A rule that launches an emulator can also be debugged: the same
+            // command is re-issued with `debug` instead of `run`, so the user
+            // does not have to keep a second, drifting rule for it.
+            if super::command::task_lines_in_rule(&text, rule_line)
+                .iter()
+                .any(|(_, content)| rule_launches_an_emulator(content))
+            {
+                lenses.push(CodeLens {
+                    range,
+                    command: Some(Command {
+                        title: format!("🐞 Debug: {names}"),
+                        command: "cpclib.debugRule".to_string(),
+                        arguments: Some(vec![
+                            serde_json::json!(names),
+                            serde_json::json!(file_path),
+                        ])
+                    }),
+                    data: None
+                });
+            }
 
             for (task_idx, (line_idx, _content)) in
                 super::command::task_lines_in_rule(&text, rule_line)
@@ -455,26 +524,53 @@ impl BuildFileAnalyzer {
         file_dir: Option<&std::path::Path>
     ) -> Vec<CodeLens> {
         let (expanded, source_map) = expand_embedded_block_or_identity(yaml_text, file_dir);
-        self.scan_symbols_from_text(&expanded, &source_map, &super::token::TGT_KEY_NAMES)
-            .into_iter()
-            .map(|sym| {
-                let mut sel = sym.selection_range;
-                sel.start.line += line_offset;
-                sel.end.line += line_offset;
-                CodeLens {
+        let mut lenses = Vec::new();
+        for sym in self.scan_symbols_from_text(&expanded, &source_map, &super::token::TGT_KEY_NAMES)
+        {
+            let mut sel = sym.selection_range;
+            sel.start.line += line_offset;
+            sel.end.line += line_offset;
+            lenses.push(CodeLens {
+                range: sel,
+                command: Some(Command {
+                    title: format!("▶ Run: {}", sym.name),
+                    command: "cpclib.runRule".to_string(),
+                    arguments: Some(vec![
+                        serde_json::json!(sym.name),
+                        serde_json::json!(host_file_path),
+                    ])
+                }),
+                data: None
+            });
+
+            // A rule that launches an emulator can be debugged, wherever it is
+            // written. Rules kept in a `.asm` file's own comments are still
+            // rules - offering the button only in a standalone build file made
+            // the feature depend on where you put them.
+            //
+            // The rule's own line inside the block is where its tasks are
+            // looked up, so the same scan the standalone path uses works here
+            // against the block's text.
+            let rule_line = sym.selection_range.start.line as usize;
+            if super::command::task_lines_in_rule(&expanded, rule_line)
+                .iter()
+                .any(|(_, content)| rule_launches_an_emulator(content))
+            {
+                lenses.push(CodeLens {
                     range: sel,
                     command: Some(Command {
-                        title: format!("▶ Run: {}", sym.name),
-                        command: "cpclib.runRule".to_string(),
+                        title: format!("🐞 Debug: {}", sym.name),
+                        command: "cpclib.debugRule".to_string(),
                         arguments: Some(vec![
                             serde_json::json!(sym.name),
                             serde_json::json!(host_file_path),
                         ])
                     }),
                     data: None
-                }
-            })
-            .collect()
+                });
+            }
+        }
+        lenses
     }
 }
 
@@ -586,11 +682,30 @@ mod tests {
             .iter()
             .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runRuleInTerminal")
             .collect();
-        assert_eq!(run_rule_lenses.len(), 1, "{lenses:?}");
+        // One at the rule's own line, one more in the top-of-file summary -
+        // still exactly one per rule at each of those two places, not one
+        // per target name either place.
+        assert_eq!(run_rule_lenses.len(), 2, "{lenses:?}");
+        // The rule is declared on the file's very first line, so both lenses
+        // land on line 0 - the summary one is the exact-zero range, the
+        // per-rule one still spans the symbol's own selection range.
+        let zero = Range {
+            start: Position { line: 0, character: 0 },
+            end: Position { line: 0, character: 0 }
+        };
+        let at_rule = run_rule_lenses
+            .iter()
+            .find(|l| l.range != zero)
+            .unwrap_or_else(|| panic!("no per-rule lens: {lenses:?}"));
         assert_eq!(
-            run_rule_lenses[0].command.as_ref().unwrap().title,
+            at_rule.command.as_ref().unwrap().title,
             "▶ Run: a.asm, b.asm"
         );
+        let summary = run_rule_lenses
+            .iter()
+            .find(|l| l.range == zero)
+            .unwrap_or_else(|| panic!("no top-of-file summary lens: {lenses:?}"));
+        assert_eq!(summary.command.as_ref().unwrap().title, "Build: a.asm, b.asm");
 
         let task_lenses: Vec<_> = lenses
             .iter()
@@ -669,5 +784,157 @@ mod tests {
             .map(|l| l.command.as_ref().unwrap().title.as_str())
             .collect();
         assert_eq!(titles, vec!["▶ Run: imported", "▶ Run: local"]);
+    }
+}
+
+/// Whether a rule's command line launches an emulator with `run`.
+///
+/// Only such a rule can be debugged: the rewrite turns its `run` into `debug`,
+/// and there is nothing to turn if the rule builds a disc or assembles a file.
+///
+/// Two details of bndbuild's own syntax matter here, and getting either wrong
+/// makes the button silently not appear:
+///
+/// * a tool may be prefixed with `-` to ignore its errors (`-emu ... run`);
+/// * a tool has several aliases, and the list belongs to bndbuild rather than
+///   to this file - hence `EMUCTRL_CMDS` rather than a copy that would drift.
+fn rule_launches_an_emulator(command: &str) -> bool {
+    let mut words = command.split_whitespace();
+    let Some(program) = words.next()
+    else {
+        return false;
+    };
+    let program = program.strip_prefix('-').unwrap_or(program);
+    let is_emulator = cpclib_bndbuild::task::EMUCTRL_CMDS.contains(&program);
+    is_emulator && words.any(|word| word == "run")
+}
+
+#[cfg(test)]
+mod debug_lens_tests {
+    use super::rule_launches_an_emulator;
+
+    #[test]
+    fn a_rule_that_runs_an_emulator_can_be_debugged() {
+        assert!(rule_launches_an_emulator("emu --snapshot demo.sna run"));
+        assert!(rule_launches_an_emulator("cpc --drivea test.dsk run"));
+        assert!(rule_launches_an_emulator("emucontrol --emulator ace run"));
+        assert!(rule_launches_an_emulator("emuctrl --snapshot d.sna run"));
+    }
+
+    /// A tool prefixed with `-` ignores its errors - and is still that tool.
+    /// This is the form a real build file uses, and missing it is why the
+    /// button did not appear.
+    #[test]
+    fn an_error_ignoring_prefix_still_counts() {
+        assert!(rule_launches_an_emulator(
+            "-emu --emulator ace   --snapshot demo.sna run"
+        ));
+        assert!(rule_launches_an_emulator("-cpc --drivea test.dsk run"));
+    }
+
+    /// Everything else offers no debug button, because there is nothing to
+    /// rewrite.
+    #[test]
+    fn other_rules_are_left_alone() {
+        assert!(!rule_launches_an_emulator("basm src/main.asm -o demo.sna"));
+        assert!(!rule_launches_an_emulator("dsk demo.dsk format"));
+        assert!(!rule_launches_an_emulator("emu --snapshot demo.sna orgams"));
+        assert!(!rule_launches_an_emulator(""));
+    }
+
+    /// A path that merely contains the word is not the subcommand - the same
+    /// trap the rewrite itself avoids.
+    #[test]
+    fn a_path_containing_run_is_not_enough() {
+        assert!(!rule_launches_an_emulator("basm build/run/main.asm"));
+    }
+}
+
+#[cfg(test)]
+mod embedded_debug_lens_tests {
+    use tower_lsp::lsp_types::Url;
+
+    use super::*;
+    use crate::common::document::Document;
+
+    /// A rule embedded in a `.asm` file's comments gets the Debug button too.
+    ///
+    /// It only appeared for standalone build files, which made the feature
+    /// depend on where the rules were written rather than on what they do.
+    #[test]
+    fn an_embedded_rule_that_launches_an_emulator_offers_the_debug_lens() {
+        let analyzer = BuildFileAnalyzer::new();
+        let yaml = "- tgt: run\n  dep: demo.sna\n  cmd: -emu --snapshot demo.sna run\n";
+        let lenses = analyzer.code_lens_for_embedded_block(yaml, 3, "/p/demo.asm", None);
+
+        let debug: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.debugRule")
+            .collect();
+        assert_eq!(debug.len(), 1, "{lenses:?}");
+        assert_eq!(
+            debug[0].command.as_ref().unwrap().title,
+            "🐞 Debug: run",
+            "{lenses:?}"
+        );
+        // It carries the host `.asm`, which is what the adapter opens to find
+        // the block again.
+        assert_eq!(
+            debug[0]
+                .command
+                .as_ref()
+                .unwrap()
+                .arguments
+                .as_ref()
+                .unwrap()[1],
+            serde_json::json!("/p/demo.asm")
+        );
+        // ...and lands on the rule's own line inside the host file.
+        assert_eq!(debug[0].range.start.line, 3, "{lenses:?}");
+    }
+
+    /// A rule that builds something but launches nothing gets no Debug button -
+    /// the same rule as a standalone build file.
+    #[test]
+    fn an_embedded_rule_that_launches_nothing_offers_no_debug_lens() {
+        let analyzer = BuildFileAnalyzer::new();
+        let yaml = "- tgt: demo.sna\n  cmd: basm demo.asm -o demo.sna\n";
+        let lenses = analyzer.code_lens_for_embedded_block(yaml, 0, "/p/demo.asm", None);
+
+        assert!(
+            lenses
+                .iter()
+                .all(|l| l.command.as_ref().unwrap().command != "cpclib.debugRule"),
+            "{lenses:?}"
+        );
+        assert!(
+            lenses
+                .iter()
+                .any(|l| l.command.as_ref().unwrap().command == "cpclib.runRule"),
+            "the Run button is still there: {lenses:?}"
+        );
+    }
+
+    /// The whole pipeline: a real `.asm` document with a block in its comments.
+    #[test]
+    fn a_real_asm_file_with_an_embedded_rule_shows_both_buttons() {
+        let uri = Url::parse("file:///p/demo.asm").unwrap();
+        let text = "  org 0x4000\n\
+                    ; #!bndbuild\n\
+                    ; - tgt: run\n\
+                    ;   cmd: -emu --snapshot demo.sna run\n\
+                      nop\n";
+        let document = Document::new(uri, text.to_string(), 1);
+        let lenses = crate::basm::AssemblyAnalyzer::new().code_lens(&document);
+
+        let titles: Vec<&str> = lenses
+            .iter()
+            .filter_map(|l| l.command.as_ref().map(|c| c.title.as_str()))
+            .collect();
+        assert!(
+            titles.iter().any(|t| t.starts_with("🐞 Debug")),
+            "{titles:?}"
+        );
+        assert!(titles.iter().any(|t| t.starts_with("▶ Run")), "{titles:?}");
     }
 }

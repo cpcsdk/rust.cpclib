@@ -14,6 +14,7 @@ pub const AT_CMD: &str = "at3";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum At3Version {
     #[default]
+    V3_7,
     V3_5_1,
     V3_5_1A,
     V3_5,
@@ -26,6 +27,7 @@ pub enum At3Version {
 impl Display for At3Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = match self {
+            At3Version::V3_7 => "v3.7",
             At3Version::V3_5_1 => "v3.5.1",
             At3Version::V3_5_1A => "v3.5.1a",
             At3Version::V3_5 => "v3.5",
@@ -42,6 +44,16 @@ impl Display for At3Version {
 impl StaticInformation for At3Version {
     fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
         match self {
+            At3Version::V3_7 => {
+                static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URL.get_or_init(|| {
+                MutiplatformUrls::builder()
+                    .linux("https://www.julien-nevo.com/arkostracker/release/3.7/linux64/ArkosTracker-linux64-3.7.zip")
+                    .windows("https://www.julien-nevo.com/arkostracker/release/3.7/windows/ArkosTracker-windows-3.7.zip")
+                    .macos("https://www.julien-nevo.com/arkostracker/release/3.7/macosx/ArkosTracker-macosx-3.7.zip")
+                    .build()
+                })
+            },
             At3Version::V3_5_1 => {
                 static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URL.get_or_init(|| {
@@ -58,7 +70,7 @@ impl StaticInformation for At3Version {
                 MutiplatformUrls::builder()
                     .linux("https://www.julien-nevo.com/arkostracker/release/3.5.1a/linux64/ArkosTracker-linux64-3.5.1a.zip")
                     .windows("https://www.julien-nevo.com/arkostracker/release/3.5.1a/windows/ArkosTracker-windows-3.5.1a.zip")
-                    .macos("https://www.julien-nevo.com/arkostracker/release/3.5.1a/windows/ArkosTracker-windows-3.5.1a.zip")
+                    .macos("https://www.julien-nevo.com/arkostracker/release/3.5.1a/macosx/ArkosTracker-macosx-3.5.1a.zip")
                     .build()
                 })
             },
@@ -239,6 +251,32 @@ impl At3Version {
             .join("sources")
             .join("z80")
             .join("PlayerAkyStabilized_CPC.asm")
+    }
+
+    /// AT3's experimental single-PSG-channel CPC "SID" player - a
+    /// completely different, cycle-exact engine from the other `PlayerAky*`
+    /// variants, requiring its own macros (see [`Self::aky_sid_macros_path`]).
+    pub fn aky_sid_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAky")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkySid_CPC.asm")
+    }
+
+    /// Macros [`Self::aky_sid_path`]'s player requires the caller to
+    /// `include` and use directly (`AKY_SID_WAIT_AND_CALL_TIMER_CODE` and
+    /// friends) to keep the SID engine's cycle-exact timing grid fed.
+    pub fn aky_sid_macros_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAky")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkySidMacros_CPC.asm")
     }
 }
 

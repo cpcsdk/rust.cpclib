@@ -3,8 +3,12 @@ members = [
   "cpclib",
   "cpclib-asm",
   "cpclib-asmfmt",
+  "cpclib-asmoptim",
+  "cpclib-z80flow",
+  "cpclib-z80flow-tests",
   "cpclib-basic",
   "cpclib-basm", "cpclib-basmdoc",
+  "cpclib-basmopt",
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-catalog",
@@ -14,6 +18,8 @@ members = [
   "cpclib-rasm-basm-tests",
   "cpclib-python",
   "cpclib-common",
+  "cpclib-project",
+  "cpclib-dap",
   "cpclib-cpr",
   "cpclib-cprcli", 
    "cpclib-crunch",
@@ -49,16 +55,22 @@ members = [
 default-members = [
   "cpclib",
   "cpclib-asm",
+  "cpclib-asmoptim",
+  "cpclib-z80flow",
+  "cpclib-z80flow-tests",
   "cpclib-basic",
   "cpclib-basm",
   "cpclib-basmdoc",
+  "cpclib-basmopt",
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-catalog",
   "cpclib-catart",
   "cpclib-common",
+  "cpclib-project",
+  "cpclib-dap",
   "cpclib-cpr",
-  "cpclib-cprcli", 
+  "cpclib-cprcli",
    "cpclib-crunch",
   "cpclib-crunchers",
   "cpclib-csl",
@@ -103,9 +115,13 @@ description = "Amstrad CPC crossdev toolchain"
 cpclib = { version = "0.11.0", path = "cpclib", default-features = false }
 cpclib-asm = { version = "0.11.0", path = "cpclib-asm", default-features = false }
 cpclib-asmfmt = { version = "0.11.0", path = "cpclib-asmfmt", default-features = false }
+cpclib-asmoptim = { version = "0.11.0", path = "cpclib-asmoptim", default-features = false }
+cpclib-z80flow = { version = "0.11.0", path = "cpclib-z80flow", default-features = false }
+cpclib-z80flow-tests = { version = "0.11.0", path = "cpclib-z80flow-tests", default-features = false }
 cpclib-basic = { version = "0.11.0", path = "cpclib-basic", default-features = false }
 cpclib-basm = { version = "0.11.0", path = "cpclib-basm", default-features = false }
 cpclib-basmdoc = { version = "0.11.0", path = "cpclib-basmdoc", default-features = false }
+cpclib-basmopt = { version = "0.11.0", path = "cpclib-basmopt", default-features = false }
 cpclib-bdasm = { version = "0.11.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.11.0", path = "cpclib-bndbuild", default-features = false }
 cpclib-borgams = { version = "0.11.0", path = "cpclib-borgams", default-features = false }
@@ -113,6 +129,8 @@ cpclib-catart = { version = "0.11.0", path = "cpclib-catart", default-features =
 cpclib-catalog = { version = "0.11.0", path = "cpclib-catalog", default-features = false }
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
+cpclib-project = { version = "0.11.0", path = "cpclib-project", default-features = false }
+cpclib-dap = { version = "0.11.0", path = "cpclib-dap", default-features = false }
 cpclib-cpr = { version = "0.11.0", path = "cpclib-cpr", default-features = false }
 cpclib-cprcli = { version = "0.11.0", path = "cpclib-cprcli", default-features = false }
 cpclib-crunch = { version = "0.11.0", path = "cpclib-crunch", default-features = false }
@@ -149,6 +167,7 @@ built = { version = "0.8.0", features = ["chrono"] }
 camino = "1.2.5"
 camino-tempfile = "1.4.1"
 walkdir = "2.5.0"
+ignore = "0.4.23"
 cc = "1.4.0"
 cfg-if = "1.0.4"
 chardetng = { version = "1.0.0", features = ["multithreading"] }
@@ -260,8 +279,12 @@ open = "5.4.0"
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
 cpclib = { path = "./cpclib/" }
 cpclib-asm = { path = "./cpclib-asm/" }
+cpclib-asmoptim = { path = "./cpclib-asmoptim/" }
+cpclib-z80flow = { path = "./cpclib-z80flow/" }
+cpclib-z80flow-tests = { path = "./cpclib-z80flow-tests/" }
 cpclib-basic = { path = "./cpclib-basic/" }
 cpclib-basm = { path = "./cpclib-basm/" }
+cpclib-basmopt = { path = "./cpclib-basmopt/" }
 cpclib-borgams = { path = "./cpclib-borgams/" }
 cpclib-basmdoc = { path = "./cpclib-basmdoc/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }

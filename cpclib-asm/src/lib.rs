@@ -4,12 +4,6 @@
 /// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;
 
-pub(crate) mod cfg;
-
-pub mod branch_balance;
-
-pub mod cost_range;
-
 /// All the stuff to parse z80 code.
 pub mod parser;
 
@@ -17,6 +11,8 @@ pub mod parser;
 pub mod assembler;
 
 pub mod disass;
+
+pub mod flatten;
 
 pub mod preamble;
 
@@ -105,7 +101,16 @@ pub struct AssemblingOptions {
     /// effects" one. See each gated call site (`SaveCommand::execute_on`,
     /// `Env::save_sna`/`save_cpr`, `PauseCommand::execute`) for exactly
     /// what's suppressed.
-    dry_run: bool
+    dry_run: bool,
+    /// When set, `Env` records the real assembled address of every token it
+    /// visits (`Env::visit_located_token`), overwritten pass over pass so it
+    /// converges to the final pass's addresses. Default off: a real `basm`
+    /// build should not pay for a `HashMap` insert per token it never reads
+    /// back. Consumed by `Env::address_of_token_offset` — tooling such as the
+    /// LSP's peephole-optimizer support (`cpclib-asmoptim`) turns this on to
+    /// evaluate address-aware rule constraints (e.g. "is this JP in range for
+    /// a JR").
+    record_token_addresses: bool
 }
 
 impl Default for AssemblingOptions {
@@ -125,7 +130,8 @@ impl Default for AssemblingOptions {
             force_void: true,
             debug: false,
             forbid_memory_override: false,
-            dry_run: false
+            dry_run: false,
+            record_token_addresses: false
         }
     }
 }
@@ -267,6 +273,15 @@ impl AssemblingOptions {
         self
     }
 
+    pub fn record_token_addresses(&self) -> bool {
+        self.record_token_addresses
+    }
+
+    pub fn set_record_token_addresses(&mut self, record: bool) -> &mut Self {
+        self.record_token_addresses = record;
+        self
+    }
+
     /// No-op under `dry_run` (defense in depth: a listing writer given to a
     /// dry-run environment is silently dropped rather than trusted not to
     /// point at a real file), otherwise as `write_listing_output`.
@@ -280,6 +295,38 @@ impl AssemblingOptions {
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
         if let Some(b) = self.output_builder.as_mut() {
             b.write().unwrap().on()
+        }
+        self
+    }
+
+    /// Collect a source map: which address each source line ended up at, and
+    /// how many bytes it emitted.
+    ///
+    /// Independent of the listing *text* - a caller can want the map, the
+    /// listing, or both. Unlike `write_listing_output` this is **not** a no-op
+    /// under `dry_run`, because nothing is written anywhere: the rows are read
+    /// back out of the `Env` afterwards.
+    pub fn record_source_map(&mut self) -> &mut Self {
+        // Whether this call is what put a listing here decides how much work
+        // it costs. If a real listing was already asked for, the text is going
+        // somewhere and gets rendered as usual; if this created one over
+        // `io::sink()`, rendering it would be tens of megabytes of formatting
+        // written to nowhere - which is what made starting a debug session
+        // take ten seconds.
+        let mut ours = false;
+        let builder = self.output_builder.get_or_insert_with(|| {
+            ours = true;
+            Arc::new(RwLock::new(ListingOutput::new(std::io::sink())))
+        });
+        {
+            let mut output = builder.write().unwrap();
+            output.on();
+            if ours {
+                output.collect_source_map_only();
+            }
+            else {
+                output.collect_source_map();
+            }
         }
         self
     }
@@ -763,6 +810,535 @@ mod test_super {
         assert!(rendered[1].contains("ld c, 300"), "{}", rendered[1]);
         assert!(rendered[2].contains("ld d, 300"), "{}", rendered[2]);
         assert!(rendered[3].contains("ld d, 300"), "{}", rendered[3]);
+    }
+
+    #[test]
+    fn assert_failure_inside_repeated_macro_body_can_be_displayed_after_assembling_finishes() {
+        // Regression test for a real-world segfault (`birthtro`'s
+        // `writter_font.asm`, calling a macro whose body asserts that all of
+        // its string-parameter arguments have the same length): a failed
+        // `assert` inside a macro body is recorded as a `FailedAssertCommand`
+        // holding a `Z80Span` into that macro's expansion buffer (owned by
+        // the `ExpandState` stashed in that call's `ProcessedToken::state`).
+        //
+        // A `REPEAT` block visits its body's `ProcessedToken`s more than
+        // once *within the same pass* (`Env::visit_repeat` calls
+        // `inner_visit_repeat` on the very same `&mut [ProcessedToken]`,
+        // `count` times) - so a macro call inside one has
+        // `update_macro_or_struct_state` build a *fresh* `ExpandState` on
+        // each iteration, dropping the previous one. `DelayedCommands` is
+        // only cleared at pass boundaries, not between REPEAT iterations, so
+        // the first iteration's `FailedAssertCommand` - still holding a span
+        // into the now-dropped first `ExpandState`'s buffer - survives
+        // uncleared until `Env::handle_post_actions` -> `handle_assert` ->
+        // `collect_assert_failure` finally formats it. Historically that
+        // span's `'static` lifetime was really an unsafe transmute into a
+        // buffer with nothing keeping it alive past the overwrite, so
+        // formatting it dereferenced a dangling pointer: a `debug_assert!`
+        // panic in winnow's `Offset::offset_from` in a debug build, plain
+        // undefined behavior (observed as a segfault) in release.
+        // `FailedAssertCommand` now keeps the buffer alive itself
+        // (`Env::active_expansions`, cloned into the command when it is
+        // built), so this must render cleanly instead of crashing.
+        let code = r#"
+		org 0x4000
+		MACRO CHECKLEN(a)
+			assert string_len({a}) == 3, "wrong length"
+		ENDM
+		repeat 2
+			CHECKLEN("ab")
+		endrepeat
+		ret
+		"#;
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&tokens) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        // This is the call that used to panic/UB: formatting an error whose
+        // span may point into an already-overwritten macro-expansion buffer.
+        let rendered = err.to_string();
+        assert!(rendered.contains("wrong length"), "{rendered}");
+    }
+
+    #[test]
+    fn assert_failure_inside_macro_body_points_back_to_the_call_site() {
+        // Regression test: a failed `assert` inside a macro body used to be
+        // reported *only* against the assert's own line inside the macro's
+        // body - fine for tracking down a bug in the macro's logic, but
+        // useless for tracking down a bug in *one particular call*'s
+        // arguments (e.g. `birthtro`'s `writter_font.asm`, calling
+        // `WRITTER_CREATE_CHAR` with mismatched-length scanline strings -
+        // the message pointed at the `assert` line inside `writter.asm`,
+        // never at the actual offending call in `writter_font.asm`). An
+        // `assert` never propagates as an `Err` (so every assert in a file
+        // gets collected in one run), so it never went through the
+        // "error in macro call NAME (defined in LOCATION)" wrapping that a
+        // genuinely propagated macro-body error gets automatically
+        // (`ProcessedToken::visited`'s `MacroCallOrBuildStruct` arm).
+        // `Env::active_expansions` now lets `visit_assert` apply that same
+        // wrapping by hand, so the rendered error must show both: the call
+        // site's own source line, and the assert's location inside the
+        // macro body.
+        let code = r#"
+		org 0x4000
+		MACRO CHECKLEN(a)
+			assert string_len({a}) == 3, "wrong length"
+		ENDM
+		CHECKLEN("ab")
+		ret
+		"#;
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&tokens) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("Error in macro call CHECKLEN"),
+            "missing the call-site wrapping: {rendered}"
+        );
+        assert!(
+            rendered.contains("CHECKLEN(\"ab\")"),
+            "missing the actual call site's source line: {rendered}"
+        );
+        assert!(
+            rendered.contains("wrong length"),
+            "missing the assert's own message: {rendered}"
+        );
+
+        // Root cause first, call-chain context after - the same order a
+        // normal stack trace uses (innermost frame first), and the same
+        // "problem, then where it came from" shape as an assert's own
+        // trailing "inside MACRO X, expanded from Y" note.
+        let assert_pos = rendered
+            .find("wrong length")
+            .expect("assert message should be present");
+        let call_site_pos = rendered
+            .find("Error in macro call CHECKLEN")
+            .expect("call-site wrapping should be present");
+        assert!(
+            assert_pos < call_site_pos,
+            "the assert's own message should come before the call-site wrapping: {rendered}"
+        );
+    }
+
+    #[test]
+    fn equ_redefinition_error_points_at_the_original_definition_not_itself() {
+        // Regression test: `visit_equ`'s "already defined" error used to
+        // build its `here: Option<SourceLocation>` from the *current*
+        // (failing) occurrence's own span, instead of looking up the
+        // *original* definition's location from the symbol table (as
+        // `visit_label` already correctly does). The rendered message ended
+        // up saying "already defined ... in FILE:LINE" immediately followed
+        // by a codespan block pointing at that exact same FILE:LINE - twice
+        // the same location, with the real, earlier definition nowhere to
+        // be found. It must report the *first* `equ`'s line, not duplicate
+        // the second (failing) one's.
+        let code = "
+		FOO equ 1
+		FOO equ 2
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let err = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(rendered.contains("already defined"), "{rendered}");
+        // The original `equ` is on line 2, the failing redefinition on line
+        // 3 - the prose must reference the *original*'s line 2, and the
+        // codespan snippet below it must show the *redefinition*'s own
+        // source line, not repeat line 2's.
+        assert!(
+            rendered.contains(":2:"),
+            "should reference the original definition's line 2: {rendered}"
+        );
+        assert!(
+            rendered.contains(":3:"),
+            "should reference the failing redefinition's own line 3: {rendered}"
+        );
+        // Codespan colors just the underlined span (here, the label itself -
+        // locating with the label's own span rather than the whole
+        // `LABEL equ EXPR` line), with an ANSI reset immediately after -
+        // splitting a literal "FOO equ 2" search across the reset, so check
+        // the pieces separately rather than as one contiguous substring.
+        assert!(
+            rendered.contains("FOO") && rendered.contains("equ 2"),
+            "should show the failing redefinition's own source line: {rendered}"
+        );
+    }
+
+    #[test]
+    fn equ_redefinition_error_propagated_out_of_an_included_file_shows_the_include_chain_once() {
+        // Regression test: unlike a delayed `assert`, this "already defined"
+        // error propagates as a genuine `Err` out of the included file's own
+        // token visiting, straight back through `IncludeState::handle`'s
+        // wrapping - a different code path from the delayed-assert case
+        // above, worth covering on its own. It also caught a real bug while
+        // writing it: `WithChainNotes` carries no span of its own (unlike
+        // `MacroError`, always wrapped in a `RelocatedError` instead), so it
+        // must be listed in `AssemblerError::is_located` - otherwise the
+        // *generic* per-token error wrapper every `ProcessedToken::visited()`
+        // call goes through (which calls `.locate()` on whatever it gets)
+        // wraps it a second time: the message's own already-rendered text
+        // becomes the *title* of an outer, second codespan block using the
+        // same span, rendering as a doubled "error: error: ..." header
+        // followed by a stray, textless codespan snippet.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-equ-in-include-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(directory.join("included.asm"), "\tFOO equ 2\n").unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(
+            &main,
+            "\torg 0x4000\n\tFOO equ 1\n\tinclude \"included.asm\"\n\tret\n"
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let err = match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        // Codespan colors "error" and the following ":" separately (an ANSI
+        // reset sits between them), so count the bare word rather than
+        // "error:" - there is only one diagnostic block now (the include
+        // chain is a trailing note on it, not a second block), so exactly
+        // one "error" header - not doubled up.
+        assert_eq!(
+            rendered.matches("error").count(),
+            1,
+            "exactly one \"error\" header - not doubled up: {rendered}"
+        );
+        assert!(
+            rendered.contains("already defined"),
+            "missing the redefinition's own message: {rendered}"
+        );
+        assert!(
+            rendered.contains("included.asm"),
+            "missing the redefinition's own file (included.asm): {rendered}"
+        );
+        assert!(
+            rendered.contains("= included from") && rendered.contains("main.asm"),
+            "missing the compact include-chain note: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn equ_redefinition_across_two_includes_shows_both_include_chains() {
+        // Feature test: knowing the *current* (failing) definition's include
+        // chain isn't enough to find a real duplicate-definition bug -
+        // you also need to know how the *original* definition was reached,
+        // to tell which of the two inclusions is the mistaken one. Only
+        // showing one side (as the previous test in this pair effectively
+        // did) leaves half the picture missing.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-double-include-chain-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
+        std::fs::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(
+            &main,
+            "\torg 0x4000\n\tinclude \"original.asm\"\n\tinclude \"bad.asm\"\n\tret\n"
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let err = match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("original.asm"),
+            "should name the original definition's own file: {rendered}"
+        );
+        assert!(
+            rendered.contains("bad.asm"),
+            "should show the failing redefinition's own source: {rendered}"
+        );
+        // Both the original definition's own chain (a trailing note right
+        // after the "already defined" title) and the failing redefinition's
+        // own chain (a trailing note at the very end, via `WithChainNotes`)
+        // render as compact "= included from ..." notes - one naming
+        // main.asm's line 2 (`include "original.asm"`), the other its line
+        // 3 (`include "bad.asm"`). Only one of the two was ever shown before
+        // this feature.
+        assert_eq!(
+            rendered.matches("= included from").count(),
+            2,
+            "both the original definition's and the failing redefinition's \
+             include-chain notes should be shown: {rendered}"
+        );
+        assert!(
+            rendered.contains("main.asm:2:"),
+            "missing the original definition's own include line (main.asm:2): {rendered}"
+        );
+        assert!(
+            rendered.contains("main.asm:3:"),
+            "missing the failing redefinition's own include line (main.asm:3): {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn already_defined_symbol_message_keeps_the_codespan_line_immediately_after_the_title() {
+        // Regression test for cpclib-vscode's `$basm` problem matcher
+        // (package.json): a fixed-length VS Code multi-line pattern array,
+        // one regex per expected output line, with no support for skipping
+        // a variable number of non-matching lines between two patterns (see
+        // https://github.com/microsoft/vscode/issues/9635 and
+        // https://github.com/microsoft/vscode/issues/112686). Its first
+        // pattern matches the "error: ..." title line; its second expects
+        // the *very next* line to be the "┌─ file:line:col" codespan
+        // header. `AlreadyDefinedSymbol`'s original-definition chain
+        // (`Env::symbol_definition_chains`) must therefore never be
+        // rendered as part of the title (which would insert a variable
+        // number of "= included from ..." lines between the two patterns,
+        // silently losing the diagnostic in VS Code's Problems panel) - it
+        // has to land after the codespan block instead, via
+        // `with_chain_note`, exactly like every other trailing chain note.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-vscode-matcher-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
+        std::fs::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(
+            &main,
+            "\torg 0x4000\n\tinclude \"original.asm\"\n\tinclude \"bad.asm\"\n\tret\n"
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let err = match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        let title_line = rendered
+            .lines()
+            .find(|l| l.contains("already defined"))
+            .expect("title line present");
+        let title_idx = rendered
+            .lines()
+            .position(|l| l == title_line)
+            .expect("title line indexable");
+        let next_line = rendered
+            .lines()
+            .nth(title_idx + 1)
+            .expect("a line follows the title");
+        assert!(
+            next_line.contains("┌─"),
+            "the line right after the \"already defined\" title must be the \
+             codespan header (┌─ file:line:col), with no chain notes in \
+             between, or cpclib-vscode's $basm problem matcher loses this \
+             diagnostic entirely: next line was {next_line:?} in: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn assert_failure_inside_an_included_file_shows_the_include_chain() {
+        // Feature test: a failed `assert` deep inside a file reached via
+        // `INCLUDE` used to report only its own file:line, with no way to
+        // tell *which* `INCLUDE` pulled that file in - a real problem when
+        // the wrong file is included by mistake and the fix is finding that
+        // `INCLUDE`, not the assert itself. `Env::active_frames` now tracks
+        // `INCLUDE` the same way it already tracks macro calls, so
+        // `visit_assert` can append a compact "= included from ..." note
+        // pointing at the `INCLUDE` directive's own line, in addition to the
+        // assert's own location - there's no call-argument content worth a
+        // whole extra codespan block for a plain `INCLUDE "..."` line, unlike
+        // a macro call (see `WithChainNotes`).
+        let directory =
+            std::env::temp_dir().join(format!("cpclib-include-chain-probe-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(
+            directory.join("included.asm"),
+            "\tassert 1 == 2, \"boom\"\n"
+        )
+        .unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&listing) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("boom"),
+            "missing the assert's own message: {rendered}"
+        );
+        assert!(
+            rendered.contains("included.asm"),
+            "missing the assert's own file (included.asm): {rendered}"
+        );
+        assert!(
+            rendered.contains("= included from") && rendered.contains("main.asm"),
+            "should show the INCLUDE directive's own file (main.asm) as a compact note: {rendered}"
+        );
+        // Root cause first, then how it was reached - same convention as
+        // the macro-call chain.
+        let assert_pos = rendered.find("boom").expect("assert message present");
+        let include_pos = rendered
+            .find("= included from")
+            .expect("include-chain note present");
+        assert!(
+            assert_pos < include_pos,
+            "the assert's own message should come before the include note: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn assert_failure_inside_a_macro_inside_an_included_file_shows_the_full_chain_in_order() {
+        // `Env::active_frames` merges macro-expansion and `INCLUDE` frames
+        // into one stack specifically so a macro called from inside an
+        // included file (as here) - or an `INCLUDE` inside a macro body -
+        // interleaves in true nesting order rather than two independent,
+        // wrongly-ordered lists. Verify the whole chain renders, innermost
+        // (the assert) to outermost (the `INCLUDE`), for this direction.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-include-macro-chain-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(
+            directory.join("included.asm"),
+            "\tMACRO CHECKLEN(a)\n\t\tassert string_len({a}) == 3, \"wrong length\"\n\tENDM\n\tCHECKLEN(\"ab\")\n"
+        )
+        .unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&listing) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        let rendered = err.to_string();
+        let assert_pos = rendered
+            .find("wrong length")
+            .expect("assert's own message present");
+        let macro_pos = rendered
+            .find("Error in macro call CHECKLEN")
+            .expect("macro-call wrapping present (included.asm, where CHECKLEN is called)");
+        let include_pos = rendered
+            .find("= included from")
+            .expect("include-chain note present (main.asm, where included.asm is included)");
+        assert!(
+            assert_pos < macro_pos && macro_pos < include_pos,
+            "expected order: assert, then macro call site, then include note: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]

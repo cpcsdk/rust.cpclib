@@ -408,7 +408,6 @@ impl TryInto<char> for BasicTokenNoPrefix {
 impl From<char> for BasicTokenNoPrefix {
     fn from(c: char) -> Self {
         match c {
-            // ':' => (BasicTokenNoPrefix::StatementSeparator),
             ' ' => BasicTokenNoPrefix::CharSpace,
             'A' => BasicTokenNoPrefix::CharUpperA,
             'B' => BasicTokenNoPrefix::CharUpperB,
@@ -636,11 +635,33 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::Division => write!(f, "/"),
             Self::Power => write!(f, "^"),
             Self::IntegerDivision => write!(f, "\\"),
-            Self::And => write!(f, " AND "),
-            Self::Not => write!(f, " NOT "),
-            Self::Mod => write!(f, " MOD "),
-            Self::Or => write!(f, " OR "),
-            Self::Xor => write!(f, " XOR "),
+            // No self-padding for the binary logical operators: confirmed
+            // against a real CPC's own saved bytes
+            // (`mandelbrot_matches_a_real_cpcs_own_save`) that a genuine
+            // space byte is *already* separately stored on each side of
+            // these tokens (`... 20 FA 20 ...` for ` AND `, where `FA` is
+            // And's own token byte) - both when parsed from text (the
+            // parser captures real spaces the same way it does for every
+            // other operator) and when decoded from real tokenised bytes
+            // (the same 0x20 bytes decode to the same `CharSpace` tokens
+            // either way). Self-padding here doubled every space reported
+            // live - the stored space token is not a stand-in this needs
+            // to compensate for, it is the actual spacing.
+            Self::And => write!(f, "AND"),
+            Self::Mod => write!(f, "MOD"),
+            Self::Or => write!(f, "OR"),
+            Self::Xor => write!(f, "XOR"),
+            // `NOT` is not the same shape as the four above: it is parsed
+            // as a unary prefix (`parse_not`-equivalent, matching
+            // `(Caseless("NOT"), alt((' ', '\t', '(')))`), which only peeks
+            // at the following character to disambiguate the keyword from
+            // an identifier starting with "not" - it does not keep that
+            // character as a stored token the way `AND`/`OR`/`XOR`/`MOD`'s
+            // own space-capturing does. Removing this token's own trailing
+            // space the same way turned `NOT a` into `NOTa` (caught by
+            // `roundtrip_and_or_xor_mod_not_do_not_double_space`) - kept
+            // here, deliberately not touched to match the other four.
+            Self::Not => write!(f, "NOT "),
 
             Self::SymbolQuote => write!(f, "'"),
             Self::StatementSeparator => write!(f, ":"),
@@ -697,6 +718,87 @@ impl BasicTokenNoPrefix {
     /// Returns the char representation if any
     pub fn char(&self) -> Option<char> {
         (*self).try_into().ok()
+    }
+
+    /// The type sigil this token conveys when it introduces a variable
+    /// reference (any of the &02-&0D range - see `BasicToken::Variable`).
+    /// `None` for the default/real case, which carries no sigil.
+    pub fn variable_sigil(self) -> Option<char> {
+        match self {
+            Self::StringVariableDefinition => Some('$'),
+            Self::VariableDefinition1 => Some('%'),
+            _ => None
+        }
+    }
+
+    /// The variable-reference token to use for a given type sigil.
+    ///
+    /// `None` (no sigil) or `Some('!')` (the explicit-real sigil, which the
+    /// ROM does not store) both use the default, `VariableDefinition3` -
+    /// confirmed by both the CPCWiki tokenisation write-up and the BASIC
+    /// 1.1 ROM's own `reset_variable_types_and_pointers` routine, which
+    /// resets every variable reference in a program back to exactly this
+    /// marker ("&0d (real)").
+    ///
+    /// `VariableDefinition1` for `%`/DEFINT-implied integer is directly
+    /// confirmed twice: a real CPC's own re-save of both mandelbrot.bas
+    /// (`itmax`, `it`, `px`, `py`, `c`) and magic8b.bas (`q`, DEFINT A-Z)
+    /// use exactly this marker for every DEFINT-typed reference - see
+    /// `BasicProgram`'s DEFINT/DEFSTR/DEFREAL handling. `StringVariableDefinition`
+    /// for `$` is *also* directly confirmed (magic8b.bas's `i$`), and
+    /// notably does *not* follow the same VariableDefinition1/2/3 family
+    /// as integer/real - an earlier guess that it would (`VariableDefinition2`)
+    /// was wrong. There is exactly one code per runtime type regardless of
+    /// how a variable came to have it (explicit sigil or DEFINT/DEFSTR).
+    pub fn for_variable_sigil(sigil: Option<char>) -> Self {
+        match sigil {
+            Some('$') => Self::StringVariableDefinition,
+            Some('%') => Self::VariableDefinition1,
+            _ => Self::VariableDefinition3
+        }
+    }
+
+    /// Whether this token is one of `ConstantNumber0`..`ConstantNumber10` -
+    /// the value is carried in the marker byte itself, with no trailing
+    /// value bytes (see `BasicToken::as_bytes`'s `Constant` arm).
+    pub fn is_small_constant(self) -> bool {
+        matches!(
+            self,
+            Self::ConstantNumber0
+                | Self::ConstantNumber1
+                | Self::ConstantNumber2
+                | Self::ConstantNumber3
+                | Self::ConstantNumber4
+                | Self::ConstantNumber5
+                | Self::ConstantNumber6
+                | Self::ConstantNumber7
+                | Self::ConstantNumber8
+                | Self::ConstantNumber9
+                | Self::ConstantNumber10
+        )
+    }
+
+    /// The dedicated single-byte token for a non-negative literal in
+    /// `0..=10`, if one exists. Confirmed against a real CPC's own
+    /// tokenisation of `l=1`/`sp=0`: it is genuinely shorter than the
+    /// generic decimal-integer encoding, not just an equivalent
+    /// alternative, so a program re-tokenised without it will not match
+    /// what a real CPC itself writes.
+    pub fn for_small_value(value: u16) -> Option<Self> {
+        Some(match value {
+            0 => Self::ConstantNumber0,
+            1 => Self::ConstantNumber1,
+            2 => Self::ConstantNumber2,
+            3 => Self::ConstantNumber3,
+            4 => Self::ConstantNumber4,
+            5 => Self::ConstantNumber5,
+            6 => Self::ConstantNumber6,
+            7 => Self::ConstantNumber7,
+            8 => Self::ConstantNumber8,
+            9 => Self::ConstantNumber9,
+            10 => Self::ConstantNumber10,
+            _ => return None
+        })
     }
 }
 
@@ -1181,8 +1283,11 @@ pub enum BasicToken {
     PrefixedToken(BasicTokenPrefixed),
     /// Encode a RSX call
     Rsx(String),
-    /// Encode a variable set
-    Variable(String, BasicValue),
+    /// Encode a variable reference: which of the &02-&0D "variable"
+    /// tokens introduces it, its name, and the 2-byte runtime resolution
+    /// cache (initially 0 - the ROM fills it in on first use, see
+    /// `as_bytes`'s doc comment).
+    Variable(BasicTokenNoPrefix, String, BasicValue),
     /// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
     Constant(BasicTokenNoPrefix, BasicValue),
     /// Encode a comment or quoted string. The boolean indicates if the string should be closed with a quote when displayed.
@@ -1239,7 +1344,8 @@ impl fmt::Display for BasicToken {
                         constant.int_hexdecimal_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueIntegerDecimal16bits
-                    | BasicTokenNoPrefix::ValueIntegerDecimal8bits => {
+                    | BasicTokenNoPrefix::ValueIntegerDecimal8bits
+                    | BasicTokenNoPrefix::LineNumber => {
                         constant.int_decimal_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueIntegerBinary16bits => {
@@ -1250,13 +1356,28 @@ impl fmt::Display for BasicToken {
                             .float_representation()
                             .unwrap_or_else(|| "<float?>".to_string())
                     },
+                    // Only reached when `BasicProgram::decode` couldn't
+                    // resolve this self-modified GOTO-cache token back to a
+                    // line number (its stored address didn't land exactly
+                    // on a line start in this program) - show the raw
+                    // address rather than a debug placeholder.
+                    BasicTokenNoPrefix::LineMemoryAddressPointer => {
+                        constant
+                            .int_hexdecimal_representation()
+                            .unwrap_or_else(|| "<unresolved line>".to_string())
+                    },
                     _ => format!("<const:{:?}>", kind)
                 };
                 write!(f, "{repr}")?;
             },
-            BasicToken::Variable(name, _value) => {
-                // Just write the variable name
+            BasicToken::Variable(kind, name, _value) => {
+                // The sigil is not part of the stored name bytes - the ROM
+                // conveys type purely through `kind` (see `as_bytes`'s doc
+                // comment) - so it is reattached here for display only.
                 write!(f, "{name}")?;
+                if let Some(sigil) = kind.variable_sigil() {
+                    write!(f, "{sigil}")?;
+                }
             },
             BasicToken::Rsx(name) => {
                 write!(f, "|{name}")?;
@@ -1287,9 +1408,54 @@ impl BasicToken {
                 data
             },
 
+            // `ConstantNumber0`..`ConstantNumber10` carry their value in the
+            // marker byte itself - one byte, nothing after it. Confirmed
+            // against a real CPC's own tokenisation of `l=1`/`sp=0`: the
+            // marker alone (&0f/&0e) is the *entire* encoding, not the
+            // generic [marker, value...] shape every other `Constant` uses.
+            BasicToken::Constant(kind, _constant) if kind.is_small_constant() => {
+                vec![kind.value()]
+            },
+
+            // The "8bits" in the name is not decorative: unlike its 16-bit
+            // sibling, this token's payload really is one byte, the high
+            // byte of `constant` (always 0 for a value that fit in 8 bits
+            // to begin with) is not stored. Using `constant.as_bytes()`
+            // unconditionally here silently wrote a spurious second byte
+            // and desynchronised the line's own length field from its
+            // actual content - caught by `roundtrip_print_string_and_number`
+            // once the encoder started using this token at all.
+            BasicToken::Constant(BasicTokenNoPrefix::ValueIntegerDecimal8bits, constant) => {
+                vec![
+                    BasicTokenNoPrefix::ValueIntegerDecimal8bits.value(),
+                    constant.as_bytes()[0],
+                ]
+            },
+
             BasicToken::Constant(kind, constant) => {
                 let mut data = vec![kind.value()];
                 data.extend_from_slice(&constant.as_bytes());
+                data
+            },
+
+            // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC
+            // "The variable name is stored in the program, with bit 7 of
+            // the last character set to 1"; "the 16-bit byte offset is
+            // initially set to 0, but is set up when the program is RUN" -
+            // confirmed independently by the BASIC 1.1 ROM disassembly at
+            // https://github.com/Bread80/Amstrad-CPC-BASIC-Source
+            // (`reset_variable_types_and_pointers`, which restores exactly
+            // this: token &0d, offset &0000). `kind` is the token that
+            // conveys type (see `BasicTokenNoPrefix::for_variable_sigil`);
+            // the sigil itself is never part of the name bytes.
+            BasicToken::Variable(kind, name, offset) => {
+                let mut data = vec![kind.value()];
+                data.extend_from_slice(&offset.as_bytes());
+                let mut name_bytes = name.as_bytes().to_vec();
+                if let Some(last) = name_bytes.last_mut() {
+                    *last |= 0b1000_0000;
+                }
+                data.extend_from_slice(&name_bytes);
                 data
             },
 
@@ -1301,9 +1467,7 @@ impl BasicToken {
                     data.push(0x22); // Closing quote byte
                 }
                 data
-            },
-
-            _ => unimplemented!()
+            }
         }
     }
 
@@ -1315,9 +1479,19 @@ impl BasicToken {
         }
     }
 
+    /// The variable's name bytes with bit 7 of the last character set -
+    /// exactly what `as_bytes` writes after the token/offset, kept as its
+    /// own method for callers that want the name alone (e.g. matching
+    /// against a runtime variable-chain entry decoded the same way).
     pub fn variable_encoded_name(&self) -> Option<Vec<u8>> {
         match self {
-            BasicToken::Variable(name, _) => Some(Self::encode_string(name)),
+            BasicToken::Variable(_kind, name, _offset) => {
+                let mut bytes = name.as_bytes().to_vec();
+                if let Some(last) = bytes.last_mut() {
+                    *last |= 0b1000_0000;
+                }
+                Some(bytes)
+            },
             _ => None
         }
     }
@@ -1356,5 +1530,107 @@ mod test {
 
         let token: BasicTokenNoPrefix = 0xF7.try_into().unwrap();
         assert_eq!(token, BasicTokenNoPrefix::Division);
+    }
+
+    // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC
+    // "The variable name is stored in the program, with bit 7 of the last
+    // character set to '1'". Before this fix, `BasicToken::Variable` had no
+    // `as_bytes` arm at all (`unimplemented!()`), and nothing in
+    // string_parser.rs ever constructed one - every parsed identifier fell
+    // through to one raw-ASCII `SimpleToken` per character instead, with no
+    // wrapping marker and no bit-7 terminator. A real CPC has no way to
+    // know where such a name ends, which is why a program with any
+    // variable reference showed "Syntax error" on almost every LISTed
+    // line - reported against real hello.bas/pendulum.bas/mandelbrot.bas
+    // fixtures, cross-checked byte-for-byte against a live emulator's RAM.
+    #[test]
+    fn variable_as_bytes_uses_the_marker_offset_name_wire_format() {
+        let token = BasicToken::Variable(
+            BasicTokenNoPrefix::VariableDefinition3,
+            "THETA".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+
+        assert_eq!(
+            token.as_bytes(),
+            vec![0x0D, 0x00, 0x00, b'T', b'H', b'E', b'T', b'A' | 0x80]
+        );
+    }
+
+    #[test]
+    fn variable_as_bytes_preserves_a_nonzero_runtime_cache_offset() {
+        // A decoded-then-re-encoded program (e.g. via `renum`) should not
+        // silently stomp an already-resolved runtime cache back to zero.
+        let token = BasicToken::Variable(
+            BasicTokenNoPrefix::VariableDefinition3,
+            "I".to_string(),
+            BasicValue::new_integer_by_bytes(0x09, 0x00)
+        );
+
+        assert_eq!(token.as_bytes(), vec![0x0D, 0x09, 0x00, b'I' | 0x80]);
+    }
+
+    #[test]
+    fn variable_as_bytes_respects_the_sigil_derived_kind() {
+        let string_var = BasicToken::Variable(
+            BasicTokenNoPrefix::for_variable_sigil(Some('$')),
+            "A".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+        assert_eq!(
+            string_var.as_bytes()[0],
+            BasicTokenNoPrefix::StringVariableDefinition.value()
+        );
+
+        let int_var = BasicToken::Variable(
+            BasicTokenNoPrefix::for_variable_sigil(Some('%')),
+            "A".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+        assert_eq!(
+            int_var.as_bytes()[0],
+            BasicTokenNoPrefix::VariableDefinition1.value()
+        );
+    }
+
+    #[test]
+    fn for_variable_sigil_defaults_to_real_for_no_sigil_and_for_explicit_bang() {
+        // Confirmed both by the CPCWiki write-up and the BASIC 1.1 ROM's
+        // own `reset_variable_types_and_pointers`, which resets every
+        // variable reference in a program back to exactly this marker.
+        assert_eq!(
+            BasicTokenNoPrefix::for_variable_sigil(None),
+            BasicTokenNoPrefix::VariableDefinition3
+        );
+        assert_eq!(
+            BasicTokenNoPrefix::for_variable_sigil(Some('!')),
+            BasicTokenNoPrefix::VariableDefinition3
+        );
+    }
+
+    #[test]
+    fn a_variable_token_round_trips_through_decode() {
+        let token = BasicToken::Variable(
+            BasicTokenNoPrefix::VariableDefinition3,
+            "THETA".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+        let bytes = token.as_bytes();
+
+        use cpclib_common::winnow::Parser;
+        let mut input: &[u8] = &bytes;
+        let decoded = crate::binary_parser::parse_tokens
+            .parse_next(&mut input)
+            .expect("a fresh variable token should decode cleanly");
+
+        assert_eq!(decoded.len(), 1);
+        match &decoded[0] {
+            BasicToken::Variable(kind, name, offset) => {
+                assert_eq!(*kind, BasicTokenNoPrefix::VariableDefinition3);
+                assert_eq!(name, "THETA");
+                assert_eq!(*offset, BasicValue::new_integer_by_bytes(0, 0));
+            },
+            other => panic!("expected a Variable token, got {other:?}")
+        }
     }
 }

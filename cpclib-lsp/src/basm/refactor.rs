@@ -176,6 +176,79 @@ impl AssemblyAnalyzer {
         })
     }
 
+    /// Offer to make the self-modifying-code idiom name the right byte.
+    ///
+    /// Two shapes, one intent. With no `equ` at all the missing half is
+    /// appended, leaving whatever spacing and comment the line already had.
+    /// With an `equ $-N` that misses the operand, only the `N` is rewritten -
+    /// appending a second `equ` would not even assemble.
+    pub(super) fn smc_label_equ_action(
+        &self,
+        document: &Document,
+        range: Range
+    ) -> Option<CodeAction> {
+        if !self.config().warnings.smc_label_without_equ {
+            return None;
+        }
+        let listing = self.parse_document(document).ok()?;
+        let cursor_line = range.start.line;
+
+        let found = super::lint_smc_label::find_suspicious_smc_labels(&listing)
+            .into_iter()
+            .find(|f| f.line == cursor_line)?;
+
+        let line_text = document.line(cursor_line as usize)?;
+        let label_end = line_text.find(&found.name)? + found.name.len();
+        let suggestion = found.suggestion();
+
+        let (edit_range, new_text) = match found.problem {
+            super::lint_smc_label::SmcLabelProblem::Missing => {
+                let position = Position {
+                    line: cursor_line,
+                    character: crate::common::document::byte_offset_to_utf16_col(
+                        &line_text, label_end
+                    ) as u32
+                };
+                (
+                    Range {
+                        start: position,
+                        end: position
+                    },
+                    format!(" {suggestion}")
+                )
+            },
+            super::lint_smc_label::SmcLabelProblem::WrongOffset(_) => {
+                // Rewrite just the number, so `$ - 1` keeps its spacing and a
+                // trailing comment stays put.
+                let (start, end) = offset_literal_span(&line_text, label_end)?;
+                (
+                    Range {
+                        start: Position {
+                            line: cursor_line,
+                            character: crate::common::document::byte_offset_to_utf16_col(
+                                &line_text, start
+                            ) as u32
+                        },
+                        end: Position {
+                            line: cursor_line,
+                            character: crate::common::document::byte_offset_to_utf16_col(
+                                &line_text, end
+                            ) as u32
+                        }
+                    },
+                    found.offset.to_string()
+                )
+            }
+        };
+
+        Some(CodeAction {
+            title: format!("Name the operand byte: '{} {suggestion}'", found.name),
+            kind: Some(CodeActionKind::QUICKFIX),
+            edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
+            ..Default::default()
+        })
+    }
+
     /// Offer to replace a "fake instruction" (accepted by this parser as a
     /// convenience, assembled using several real opcodes, e.g. `ld hl, de`)
     /// with the real instruction(s) it expands to, joined on one line with
@@ -238,6 +311,34 @@ impl AssemblyAnalyzer {
     /// Also prepends `INCLUDE ONCE "<that file>"` at the very top of the
     /// document, unless a matching `INCLUDE` (of any form) is already
     /// present - otherwise the new symbol wouldn't actually resolve.
+    #[allow(clippy::type_complexity)]
+    /// The first number on `line` that names a documented firmware routine.
+    ///
+    /// Scans left to right, trying each position a number could start at, and
+    /// takes the first that resolves. A line has one such address in practice -
+    /// `call 0xBB5A` - and where it has more, the caret decides (the caller
+    /// tries that first).
+    fn firmware_number_on_line(
+        line: &str
+    ) -> Option<(
+        String,
+        i64,
+        usize,
+        &'static crate::common::firmware_docs::FirmwareDoc
+    )> {
+        let bytes = line.as_bytes();
+        let mut at = 0usize;
+        while at < bytes.len() {
+            if let Some((text, value, start)) = super::hover::extract_number_at_position(line, at)
+                && let Some(fw) = crate::common::firmware_docs::lookup_by_value(value)
+            {
+                return Some((text, value, start, fw));
+            }
+            at += 1;
+        }
+        None
+    }
+
     pub(super) fn firmware_symbol_replacement_action(
         &self,
         document: &Document,
@@ -245,9 +346,31 @@ impl AssemblyAnalyzer {
     ) -> Option<CodeAction> {
         let line_text = document.line(range.start.line as usize)?;
         let col = range.start.character as usize;
-        let (num_str, value, byte_start) =
-            super::hover::extract_number_at_position(&line_text, col)?;
-        let fw = crate::common::firmware_docs::lookup_by_value(value)?;
+
+        // The caret is rarely *on* the number. A hover is driven by the mouse,
+        // which is why hovering `0xBB5A` names `TXT_OUTPUT` while the lightbulb
+        // stayed empty: the editor asks for actions wherever the caret happens
+        // to be, and that is usually the end of the line or the mnemonic.
+        //
+        // So the cursor is tried first - it disambiguates a line carrying
+        // several numbers - and the line is then scanned for one that names a
+        // firmware routine. Anything that resolves to nothing is skipped rather
+        // than offered.
+        let (num_str, value, byte_start, fw) =
+            super::hover::extract_number_at_position(&line_text, col)
+                .and_then(|(text, value, start)| {
+                    crate::common::firmware_docs::lookup_by_value(value)
+                        .map(|fw| (text, value, start, fw))
+                })
+                .or_else(|| {
+                    // The line-wide fallback follows the same rule as the
+                    // warning it hangs off: a firmware address is a routine
+                    // only where control is transferred to it.
+                    crate::basm::diagnostics::targets_a_routine(&line_text)
+                        .then(|| Self::firmware_number_on_line(&line_text))
+                        .flatten()
+                })?;
+        let _ = value;
 
         let start_char = byte_offset_to_utf16_col(&line_text, byte_start) as u32;
         let end_char = byte_offset_to_utf16_col(&line_text, byte_start + num_str.len()) as u32;
@@ -1440,4 +1563,77 @@ mod firmware_symbol_replacement_tests {
             "{actions:?}"
         );
     }
+
+    /// The caret is rarely *on* the number.
+    ///
+    /// A hover is driven by the mouse, so hovering `0xBB5A` named `TXT_OUTPUT`
+    /// while the lightbulb stayed empty - the editor asks for actions wherever
+    /// the caret is, which is the end of the line or the mnemonic. Reported
+    /// from real use.
+    #[test]
+    fn the_quickfix_is_offered_from_anywhere_on_the_line() {
+        let d = doc("\tcall 0xBB5A\n");
+        let analyzer = AssemblyAnalyzer::new();
+
+        // Caret at the start of the line, on the mnemonic, and past the end of
+        // the number - every place a caret actually sits.
+        for character in [0u32, 2, 4, 11] {
+            let action = analyzer
+                .firmware_symbol_replacement_action(&d, cursor(0, character))
+                .unwrap_or_else(|| panic!("no quickfix with the caret at {character}"));
+            assert!(action.title.contains("TXT_OUTPUT"), "{}", action.title);
+        }
+    }
+
+    /// ...and it is reachable through the editor's own entry point, with the
+    /// caret where the editor really puts it.
+    #[test]
+    fn the_line_wide_quickfix_is_wired_into_code_actions() {
+        let d = doc("\tcall 0xBB5A\n");
+        let actions = AssemblyAnalyzer::new().code_actions(&d, cursor(0, 0));
+        assert!(
+            actions.iter().any(|a| {
+                a.title
+                    .contains("Replace with firmware symbol 'TXT_OUTPUT'")
+            }),
+            "{actions:?}"
+        );
+    }
+
+    /// A line with no firmware address offers nothing, rather than the first
+    /// number it can find.
+    #[test]
+    fn an_ordinary_number_is_not_offered_as_firmware() {
+        let d = doc("\tld a, 0x12\n");
+        assert!(
+            AssemblyAnalyzer::new()
+                .firmware_symbol_replacement_action(&d, cursor(0, 0))
+                .is_none()
+        );
+    }
+}
+
+/// Byte range of the number in the first `$ - <number>` at or after `from`.
+///
+/// Used to rewrite an offset in place rather than the whole `equ`, so the
+/// author's spacing and any trailing comment survive the fix.
+fn offset_literal_span(line: &str, from: usize) -> Option<(usize, usize)> {
+    let dollar = from + line.get(from..)?.find('$')?;
+    let after = line.get(dollar + 1..)?;
+    let minus = after.find('-')?;
+    if !after[..minus].chars().all(char::is_whitespace) {
+        return None;
+    }
+    let digits_from = dollar + 1 + minus + 1;
+    let rest = line.get(digits_from..)?;
+    let leading = rest.len() - rest.trim_start().len();
+    let start = digits_from + leading;
+    let digits = line.get(start..)?;
+    let len = digits
+        .find(|c: char| !c.is_ascii_digit())?
+        .min(digits.len());
+    if len == 0 {
+        return None;
+    }
+    Some((start, start + len))
 }

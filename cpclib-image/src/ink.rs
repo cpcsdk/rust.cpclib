@@ -3,6 +3,8 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use image as im;
 use nutype::nutype;
 
+use crate::color::AmstradColor;
+
 use self::im::Pixel;
 
 /// Number of inks managed by the system. Do not take into account the few duplicates
@@ -385,11 +387,6 @@ impl Ink {
         }
     }
 
-    /// Get the RGB color value of the ink
-    pub fn color(&self) -> im::Rgb<u8> {
-        INKS_RGB_VALUES[self.firmware_number() as usize]
-    }
-
     /// Give the quantity of red for the given color
     /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn red_quantity(&self) -> InkComponentQuantity {
@@ -547,6 +544,15 @@ impl From<im::Rgba<u8>> for Ink {
     }
 }
 
+impl From<Ink> for im::Rgb<u8> {
+    /// The pixel this ink displays as - the other half of the round trip
+    /// [`AmstradColor`](crate::color::AmstradColor) requires, and the same
+    /// table [`Ink::color`] reads.
+    fn from(ink: Ink) -> Self {
+        ink.color()
+    }
+}
+
 impl From<im::Rgb<u8>> for Ink {
     /// Convert an rgb value to the corresponding ink.
     /// The closest color is provided if the provided color is not strictly corresponding to a CPC color.
@@ -576,12 +582,20 @@ macro_rules! impl_from_ink_integer {
     ( $($t: ty),* ) => {
       $(  impl From<$t> for Ink {
             fn from(item: $t) -> Self {
+                // Compared through i64 rather than `item` itself so this
+                // works identically whether `$t` is signed or unsigned - a
+                // negative signed value used to slip past `item < 32`
+                // unchecked, then get reinterpreted as a large `u8` by the
+                // final `as _` cast, producing an `Ink` outside its own
+                // documented 0..=31 invariant instead of panicking here.
+                let raw = item as i64;
+                assert!(raw >= 0, "Ink value cannot be negative: {raw}");
 
-                let item = if item < 32 {
+                let item = if raw < 32 {
                     // Basic number provided
                     item
                 } else {
-                    assert!((item as i64) < 256);
+                    assert!(raw < 256);
                     // gate array number provided
                     INKS_GA_VALUE.iter()
                         .position(|&ink| ink == item as u8)
@@ -796,6 +810,6 @@ mod tests {
             .cartesian_product(RGB_RATIOS)
             .map(|t| (*t.0.0, *t.0.1, *t.1))
             .map(Ink::from);
-        let _rgb_palette = Palette::from_iter(rgb_palette);
+        let _rgb_palette = Palette::<Ink>::from_iter::<_, Ink>(rgb_palette);
     }
 }

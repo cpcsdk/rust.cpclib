@@ -671,6 +671,26 @@ impl DataAccessElem for LocatedDataAccess {
 
     data_access_impl_most_methods!();
 
+    fn kind(&self) -> cpclib_tokens::OperandKind {
+        use cpclib_tokens::OperandKind;
+        match self {
+            Self::IndexRegister16WithIndex(..) => OperandKind::Indexed,
+            Self::IndexRegister16(reg, ..) => OperandKind::IndexReg16(*reg),
+            Self::IndexRegister8(..) => OperandKind::IndexReg8,
+            Self::Register16(reg, ..) => OperandKind::Reg16(*reg),
+            Self::Register8(reg, ..) => OperandKind::Reg8(*reg),
+            Self::MemoryRegister16(reg, ..) => OperandKind::MemReg16(*reg),
+            Self::MemoryIndexRegister16(..) => OperandKind::MemIndexReg16,
+            Self::Expression(..) => OperandKind::Expression,
+            Self::Memory(..) => OperandKind::Memory,
+            Self::FlagTest(..) => OperandKind::FlagTest,
+            Self::SpecialRegisterI(..) => OperandKind::SpecialI,
+            Self::SpecialRegisterR(..) => OperandKind::SpecialR,
+            Self::PortC(..) => OperandKind::PortC,
+            Self::PortN(..) => OperandKind::PortN
+        }
+    }
+
     fn to_data_access_for_low_register(&self) -> Option<Self> {
         match self {
             Self::IndexRegister16(reg, span) => {
@@ -1299,6 +1319,10 @@ impl ListingElement for LocatedToken {
         fn mnemonic(&self) -> Option<&Mnemonic>;
         fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
         fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
+        fn mnemonic_arg3(&self) -> Option<Register8>;
+        fn multi_push_pop_to_listing(
+            &self
+        ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>;
         fn rorg_expr(&self) -> &Self::Expr;
         fn iterate_counter_name(&self) -> &str;
         fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>;
@@ -1818,6 +1842,25 @@ impl ListingElement for LocatedTokenInner {
                     exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
                 ))
             },
+            // `defs` sat in the catch-all below while its siblings `defb` and
+            // `defw` were converted, so anything asking a located listing what
+            // it costs - the debugger pricing the line at PC, a hover pricing
+            // the line under the cursor - panicked on the raster-timing idiom
+            // `defs 64 - duration(djnz $)-1`. The pair is (count, fill value),
+            // and the fill is optional.
+            Self::Defs(pairs) => {
+                Cow::Owned(Token::Defs(
+                    pairs
+                        .iter()
+                        .map(|(count, fill)| {
+                            (
+                                count.to_expr().into_owned(),
+                                fill.as_ref().map(|e| e.to_expr().into_owned())
+                            )
+                        })
+                        .collect_vec()
+                ))
+            },
             Self::Str(exprs) => {
                 Cow::Owned(Token::Str(
                     exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
@@ -1959,6 +2002,26 @@ impl ListingElement for LocatedTokenInner {
             },
             Self::Section(label) => Cow::Owned(Token::Section(label.as_str().into())),
             Self::SnaSet(flag, value) => Cow::Owned(Token::SnaSet(*flag, value.clone())),
+
+            // Multi-register `push bc, hl` / `pop hl, bc`. `Token` has the
+            // matching variants, so this is a plain operand conversion - it
+            // was simply never reached until a consumer started rendering
+            // arbitrary tokens back to text, at which point the `todo!()`
+            // below turned an ordinary basm statement into a panic.
+            Self::MultiPush(regs) => {
+                Cow::Owned(Token::MultiPush(
+                    regs.iter()
+                        .map(|r| r.to_data_access().into_owned())
+                        .collect()
+                ))
+            },
+            Self::MultiPop(regs) => {
+                Cow::Owned(Token::MultiPop(
+                    regs.iter()
+                        .map(|r| r.to_data_access().into_owned())
+                        .collect()
+                ))
+            },
 
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
@@ -2367,6 +2430,37 @@ impl LocatedToken {
             either::Right((token, _)) => token.inner_mut()
         }
     }
+
+    /// Whether `estimated_duration` may hand this token to `to_token()`.
+    ///
+    /// `to_token()` ends in a `todo!()`, so asking it to convert a shape it
+    /// does not cover is a panic rather than an error. Timing is asked for on
+    /// arbitrary source - the line a debugger has stopped on, the line under an
+    /// editor's cursor - so the set is stated positively here: exactly the
+    /// shapes `Token::estimated_duration` knows how to price. A directive
+    /// outside it has no duration to report anyway, so refusing it loses
+    /// nothing and costs no panic.
+    fn can_be_priced_as_a_token(&self) -> bool {
+        match &self.inner {
+            either::Right((token, _)) => token.can_be_priced_as_a_token(),
+            either::Left(inner) => {
+                matches!(
+                    inner,
+                    LocatedTokenInner::OpCode(..)
+                        | LocatedTokenInner::Defb(..)
+                        | LocatedTokenInner::Defw(..)
+                        | LocatedTokenInner::Defs(..)
+                        | LocatedTokenInner::Repeat(..)
+                        | LocatedTokenInner::Assert(..)
+                        | LocatedTokenInner::Breakpoint { .. }
+                        | LocatedTokenInner::Comment(..)
+                        | LocatedTokenInner::Label(..)
+                        | LocatedTokenInner::Equ { .. }
+                        | LocatedTokenInner::Protect(..)
+                )
+            },
+        }
+    }
 }
 
 impl LocatedToken {
@@ -2448,7 +2542,46 @@ where T: Locate
 // }
 
 impl TokenExt for LocatedToken {
+    /// An opcode's duration is read straight off this token.
+    ///
+    /// This used to be `self.to_token().estimated_duration()` - a full clone of
+    /// the token, every time, only to read one number back out. The rules moved
+    /// to `cpclib-z80flow` and became generic over `DataAccessElem`, so they
+    /// now run on a `LocatedDataAccess` as readily as on a `DataAccess` and the
+    /// clone is gone. `cpclib-z80flow-tests`'s `duration.rs` checks the two
+    /// token types get identical answers across ~100 instructions.
+    ///
+    /// Everything that is *not* a plain opcode (a `REPEAT`, a `DEFB` that has
+    /// to be disassembled first, ...) still goes the long way, because those
+    /// really do need the owned tree.
     fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
+        if let Some(mnemonic) = self.mnemonic()
+            // `NOP n` needs its expression evaluated, which `Token`'s own
+            // implementation does.
+            && !(*mnemonic == Mnemonic::Nop && self.mnemonic_arg1().is_some())
+            && let Some(duration) = cpclib_z80flow::cost::opcode_duration(
+                mnemonic,
+                self.mnemonic_arg1(),
+                self.mnemonic_arg2()
+            )
+        {
+            return Ok(duration as usize);
+        }
+        // Everything else needs the owned tree, and `to_token` is not total:
+        // its catch-all is a `todo!()`. Reaching it turns "what does this line
+        // cost?" - a question the debugger and the editor ask about whatever
+        // line the user happens to be on - into a process-ending panic, and no
+        // `catch_unwind` can help since the release profile aborts. So the
+        // conversion is only attempted for the shapes `Token::estimated_duration`
+        // can actually price; anything else is refused as an error, which every
+        // caller of a `Result` already knows how to survive.
+        if !self.can_be_priced_as_a_token() {
+            return Err(Box::new(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!("Duration computation for {self:?} not yet coded")
+            }));
+        }
         self.to_token().estimated_duration()
     }
 
@@ -2911,8 +3044,22 @@ impl ListingExt for LocatedListing {
         Ok(env.produced_bytes())
     }
 
+    /// Sum of what the tokens cost, in NOPs.
+    ///
+    /// The same rule as a plain `Listing`'s, and for the same reason it is
+    /// wanted: a debugger showing the cost of the line at `PC`, and a hover
+    /// showing the cost of the line under the cursor, are both asking a
+    /// *located* listing what it costs. This used to answer `todo!()` and
+    /// panic.
     fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
-        todo!()
+        if let Some(duration) = self.duration() {
+            return Ok(duration);
+        }
+        let mut duration = 0;
+        for token in self.listing().iter() {
+            duration += token.estimated_duration()?;
+        }
+        Ok(duration)
     }
 
     fn to_string(&self) -> String {

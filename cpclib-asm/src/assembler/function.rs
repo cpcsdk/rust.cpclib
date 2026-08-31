@@ -9,6 +9,7 @@ use cpclib_tokens::{
     CrunchType, Expr, ExprResult, ExpressionTypeError, ListingElement, TestKindElement,
     ToSimpleToken, Token
 };
+use cpclib_z80flow::regflag::Flag::H;
 use either::Either;
 
 use super::list::{
@@ -24,7 +25,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::list::{list_extend, list_reverse};
+use crate::list::{list_extend, list_filter, list_fold, list_map, list_position_predicate, list_position_value, list_reverse, list_split_by_value, string_filter, string_get, string_len, string_map, string_upper_case};
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
@@ -135,10 +136,10 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder + Clone
 {
-    pub fn eval(
+    pub fn eval<E: AsRef<ExprResult> + Clone>(
         &self,
         env: &mut Env,
-        params: &[ExprResult]
+        params: &[E]
     ) -> Result<ExprResult, Box<AssemblerError>> {
         if self.args.len() != params.len() {
             return Err(Box::new(
@@ -156,7 +157,7 @@ where
                 // TODO modify the code according to the value
                 env.add_function_parameter_to_symbols_table(
                     format!("{{{}}}", param.0),
-                    param.1.clone()
+                    param.1.as_ref().clone()
                 )
                 .unwrap();
             }
@@ -235,14 +236,23 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_reverse": Function::HardCoded(HardCodedFunction::ListReverse),
         "list_push": Function::HardCoded(HardCodedFunction::ListPush),
         "list_extend": Function::HardCoded(HardCodedFunction::ListExtend),
+        "list_filter": Function::HardCoded(HardCodedFunction::ListFilter),
+        "list_map": Function::HardCoded(HardCodedFunction::ListMap),
+        "list_fold": Function::HardCoded(HardCodedFunction::ListFold),
+        "list_position_predicate": Function::HardCoded(HardCodedFunction::ListPositionPredicate),
+        "list_position_value": Function::HardCoded(HardCodedFunction::ListPositionValue),
+        "list_split_by_value": Function::HardCoded(HardCodedFunction::ListSplitByValue),
 
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
         "string_from_list": Function::HardCoded(HardCodedFunction::StringFromList),
         "string_format": Function::HardCoded(HardCodedFunction::StringFormat),
-        "string_len": Function::HardCoded(HardCodedFunction::ListLen),
-        "string_get": Function::HardCoded(HardCodedFunction::ListGet),
+        "string_len": Function::HardCoded(HardCodedFunction::StringLen),
+        "string_get": Function::HardCoded(HardCodedFunction::StringGet),
+        "string_map": Function::HardCoded(HardCodedFunction::StringMap),
+        "string_filter": Function::HardCoded(HardCodedFunction::StringFilter),
+        "string_uppercase": Function::HardCoded(HardCodedFunction::StringUpperCase),
 
 
         "assemble": Function::HardCoded(HardCodedFunction::Assemble),
@@ -336,6 +346,12 @@ pub enum HardCodedFunction {
     ListSort,
     ListArgsort,
     ListReverse,
+    ListFilter,
+    ListMap,
+    ListFold,
+    ListPositionPredicate,
+    ListPositionValue,
+    ListSplitByValue,
 
     MatrixNew,
     MatrixSet,
@@ -358,6 +374,11 @@ pub enum HardCodedFunction {
     StringConcat,
     StringFromList,
     StringFormat,
+    StringLen,
+    StringGet,
+    StringMap,
+    StringFilter,
+    StringUpperCase,
 
     Load,
     Assemble,
@@ -514,11 +535,39 @@ impl ExpectedNbArgs {
 impl HardCodedFunction {
     pub fn expected_nb_args(&self) -> ExpectedNbArgs {
         match self {
-            HardCodedFunction::Clamp => ExpectedNbArgs::Fixed(3),
+            // The template alone (no placeholders) is a legitimate call.
+            HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::Min => ExpectedNbArgs::AtLeast(1),
+            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Clamp => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListFilter => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListFold => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListGet => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListLen => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListMap => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListNew => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListPositionPredicate => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListPositionValue => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListSet => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListSort => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListSublist => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListSplitByValue => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixHeight => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]),
+            HardCodedFunction::MatrixRow => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixSetCol => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixSetRow => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixWidth => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Max => ExpectedNbArgs::AtLeast(1),
+            HardCodedFunction::Min => ExpectedNbArgs::AtLeast(1),
             HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Mode1ByteToPenAt => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Mode2ByteToPenAt => ExpectedNbArgs::Fixed(2),
@@ -528,39 +577,23 @@ impl HardCodedFunction {
             HardCodedFunction::PensToMode0Byte => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::PensToMode1Byte => ExpectedNbArgs::Fixed(4),
             HardCodedFunction::PensToMode2Byte => ExpectedNbArgs::Fixed(8),
-            HardCodedFunction::ListNew => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::ListSet => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::ListGet => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::ListSublist => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::ListLen => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::ListSort => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]),
-            HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::MatrixRow => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::MatrixSetRow => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::MatrixSetCol => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::MatrixWidth => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::MatrixHeight => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::SectionLength => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStart => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStop => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::SectionLength => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionUsed => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
+            HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
+            HardCodedFunction::StringFilter => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringFormat => ExpectedNbArgs::AtLeast(1),
+            HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::StringGet => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringLen => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::StringMap => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(0),
             HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
-            HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
-            // The template alone (no placeholders) is a legitimate call.
-            HardCodedFunction::StringFormat => ExpectedNbArgs::AtLeast(1),
-            HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1)
+            HardCodedFunction::StringUpperCase => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
         }
     }
 
@@ -587,10 +620,10 @@ impl HardCodedFunction {
             .unwrap() // Cannot fail by definition
     }
 
-    pub fn eval(
+    pub fn eval<E: AsRef<ExprResult>+Clone>(
         &self,
-        env: &Env,
-        params: &[ExprResult]
+        env: &mut Env,
+        params: &[E]
     ) -> Result<ExprResult, Box<AssemblerError>> {
         let expected_nb_args = self.expected_nb_args();
         let nb_args = params.len();
@@ -598,172 +631,188 @@ impl HardCodedFunction {
         expected_nb_args.validate(nb_args, self.name())?;
 
         match self {
-            HardCodedFunction::Clamp => Ok(maths::clamp(&params[0], &params[1], &params[2])?),
+            HardCodedFunction::Clamp => Ok(maths::clamp(params[0].as_ref(), &params[1].as_ref(), &params[2].as_ref())?),
             HardCodedFunction::BinaryFunction(bf) => {
                 match bf {
-                    BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
-                    BinaryFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
-                    BinaryFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
-                    BinaryFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
-                    BinaryFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
-                    BinaryFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
-                    BinaryFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
-                    BinaryFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
-                    BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
-                    BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
-                    BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
-                    BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?)
+                    BinaryFunction::Pow => Ok(maths::pow(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Fmod => Ok(maths::fmod(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Atan2 => Ok(maths::atan2(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Hypot => Ok(maths::hypot(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Ldexp => Ok(maths::ldexp(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Fdim => Ok(maths::fdim(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Fstep => Ok(maths::fstep(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Fmax => Ok(maths::fmax(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Fmin => Ok(maths::fmin(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::IsGreater => Ok(maths::isgreater(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::IsLess => Ok(maths::isless(params[0].as_ref(), params[1].as_ref())?),
+                    BinaryFunction::Fremain => Ok(maths::fremain(params[0].as_ref(), params[1].as_ref())?)
                 }
             },
             // ...existing code...
             HardCodedFunction::Mode0ByteToPenAt => {
                 Ok(
-                    cpclib_image::pixels::mode0::byte_to_pens(params[0].int()? as _)
-                        [params[1].int()? as usize % 2]
+                    cpclib_image::pixels::mode0::byte_to_pens(params[0].as_ref().int()? as _)
+                        [params[1].as_ref().int()? as usize % 2]
                         .number()
                         .into()
                 )
             },
             HardCodedFunction::Mode1ByteToPenAt => {
                 Ok(
-                    cpclib_image::pixels::mode1::byte_to_pens(params[0].int()? as _)
-                        [params[1].int()? as usize % 4]
+                    cpclib_image::pixels::mode1::byte_to_pens(params[0].as_ref().int()? as _)
+                        [params[1].as_ref().int()? as usize % 4]
                         .number()
                         .into()
                 )
             },
             HardCodedFunction::Mode2ByteToPenAt => {
                 Ok(
-                    cpclib_image::pixels::mode2::byte_to_pens(params[0].int()? as _)
-                        [params[1].int()? as usize % 8]
+                    cpclib_image::pixels::mode2::byte_to_pens(params[0].as_ref().int()? as _)
+                        [params[1].as_ref().int()? as usize % 8]
                         .number()
                         .into()
                 )
             },
             HardCodedFunction::PenAtToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pen_to_pixel_byte(
-                    (params[0].int()? as u8 % 16).into(),
-                    (params[1].int()? as u8 % 2).into()
+                    (params[0].as_ref().int()? as u8 % 16).into(),
+                    (params[1].as_ref().int()? as u8 % 2).into()
                 )
                 .into())
             },
             HardCodedFunction::PenAtToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pen_to_pixel_byte(
-                    (params[0].int()? as u8 % 4).into(),
-                    params[1].int()? as u8 % 4
+                    (params[0].as_ref().int()? as u8 % 4).into(),
+                    params[1].as_ref().int()? as u8 % 4
                 )
                 .into())
             },
             HardCodedFunction::PenAtToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pen_to_pixel_byte(
-                    (params[0].int()? as u8 % 2).into(),
-                    (params[1].int()? as u8 % 8).into()
+                    (params[0].as_ref().int()? as u8 % 2).into(),
+                    (params[1].as_ref().int()? as u8 % 8).into()
                 )
                 .into())
             },
             HardCodedFunction::PensToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pens_to_byte(
-                    params[0].int()?.into(),
-                    params[1].int()?.into()
+                    params[0].as_ref().int()?.into(),
+                    params[1].as_ref().int()?.into()
                 )
                 .into())
             },
             HardCodedFunction::PensToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pens_to_byte(
-                    params[0].int()?.into(),
-                    params[1].int()?.into(),
-                    params[2].int()?.into(),
-                    params[3].int()?.into()
+                    params[0].as_ref().int()?.into(),
+                    params[1].as_ref().int()?.into(),
+                    params[2].as_ref().int()?.into(),
+                    params[3].as_ref().int()?.into()
                 )
                 .into())
             },
             HardCodedFunction::PensToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pens_to_byte(
-                    params[0].int()?.into(),
-                    params[1].int()?.into(),
-                    params[2].int()?.into(),
-                    params[3].int()?.into(),
-                    params[4].int()?.into(),
-                    params[5].int()?.into(),
-                    params[6].int()?.into(),
-                    params[7].int()?.into()
+                    params[0].as_ref().int()?.into(),
+                    params[1].as_ref().int()?.into(),
+                    params[2].as_ref().int()?.into(),
+                    params[3].as_ref().int()?.into(),
+                    params[4].as_ref().int()?.into(),
+                    params[5].as_ref().int()?.into(),
+                    params[6].as_ref().int()?.into(),
+                    params[7].as_ref().int()?.into()
                 )
                 .into())
             },
-            HardCodedFunction::ListNew => Ok(list_new(params[0].int()? as _, params[1].clone())),
+            HardCodedFunction::ListNew => Ok(list_new(params[0].as_ref().int()? as _, params[1].as_ref().clone())),
             HardCodedFunction::ListSet => {
-                list_set(params[0].clone(), params[1].int()? as _, params[2].clone())
+                list_set(params[0].as_ref().clone(), params[1].as_ref().int()? as _, params[2].as_ref().clone())
             },
-            HardCodedFunction::ListGet => list_get(&params[0], params[1].int()? as _),
-            HardCodedFunction::ListPush => list_push(params[0].clone(), params[1].clone()),
-            HardCodedFunction::ListExtend => list_extend(params[0].clone(), params[1].clone()),
-            HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
-            HardCodedFunction::ListLen => list_len(&params[0]),
-            HardCodedFunction::ListReverse => list_reverse(params[0].clone()),
-
+            HardCodedFunction::ListGet => list_get(params[0].as_ref(), params[1].as_ref().int()? as _),
+            HardCodedFunction::ListPush => list_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
+            HardCodedFunction::ListExtend => list_extend(params[0].as_ref().clone(), params[1].as_ref().clone()),
+            HardCodedFunction::ListLen => list_len(params[0].as_ref()),
+            HardCodedFunction::ListReverse => list_reverse(params[0].as_ref().clone()),
+            HardCodedFunction::ListFilter => list_filter(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::ListMap => list_map(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::ListFold => list_fold(env, params[0].as_ref(), params[1].as_ref(), params[2].as_ref()),
+            HardCodedFunction::ListPositionPredicate => list_position_predicate(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::ListPositionValue => {
+                list_position_value(env, params[0].as_ref(), params[1].as_ref())
+            },  
+            
             HardCodedFunction::ListSublist => {
-                list_sublist(&params[0], params[1].int()? as _, params[2].int()? as _)
+                list_sublist(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
             },
-            HardCodedFunction::StringPush => string_push(params[0].clone(), params[1].clone()),
-            HardCodedFunction::StringFromList => string_from_list(params[0].clone()),
+            HardCodedFunction::ListSplitByValue => {
+                list_split_by_value( params[0].as_ref(), params[1].as_ref())
+            },
+            HardCodedFunction::StringPush => string_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
+            HardCodedFunction::StringFromList => string_from_list(params[0].as_ref().clone()),
             HardCodedFunction::StringFormat => string_format(params),
-            HardCodedFunction::Assemble => assemble(params[0].clone(), env),
+            HardCodedFunction::Assemble => assemble(params[0].as_ref().clone(), env),
             HardCodedFunction::StringConcat => {
-                let mut base = params[0].clone();
+                let mut base = params[0].as_ref().clone();
                 for i in 1..params.len() {
-                    base = string_push(base, params[i].clone())?
+                    base = string_push(base, params[i].as_ref().clone())?
                 }
                 Ok(base)
             },
-            HardCodedFunction::ListSort => list_sort(params[0].clone()),
-            HardCodedFunction::ListArgsort => list_argsort(&params[0]),
+            HardCodedFunction::ListSort => list_sort(params[0].as_ref().clone()),
+            HardCodedFunction::ListArgsort => list_argsort(params[0].as_ref()),
+
+            HardCodedFunction::StringNew => string_new(params[0].as_ref().int()? as _, params[1].as_ref().clone()),
+            HardCodedFunction::StringFilter => string_filter(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::StringMap => string_map(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::StringLen => string_len(params[0].as_ref()),
+            HardCodedFunction::StringGet => string_get(params[0].as_ref(), params[1].as_ref().int()? as _),
+            HardCodedFunction::StringUpperCase => string_upper_case(params[0].as_ref()),
             HardCodedFunction::MatrixNew => {
                 if nb_args == 3 {
                     Ok(matrix_new(
-                        params[0].int()? as _,
-                        params[1].int()? as _,
-                        params[2].clone()
+                        params[0].as_ref().int()? as _,
+                        params[1].as_ref().int()? as _,
+                        params[2].as_ref().clone()
                     ))
                 }
                 else {
                     debug_assert!(nb_args == 1);
-                    matrix_from_list(&params[0])
+                    matrix_from_list(params[0].as_ref())
                 }
             },
             HardCodedFunction::MatrixSet => {
                 matrix_set(
-                    params[0].clone(),
-                    params[1].int()? as _,
-                    params[2].int()? as _,
-                    params[3].clone()
+                    params[0].as_ref().clone(),
+                    params[1].as_ref().int()? as _,
+                    params[2].as_ref().int()? as _,
+                    params[3].as_ref().clone()
                 )
             },
             HardCodedFunction::MatrixGet => {
-                matrix_get(&params[0], params[1].int()? as _, params[2].int()? as _)
+                matrix_get(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
             },
-            HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _),
-            HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _),
+            HardCodedFunction::MatrixCol => matrix_col(params[0].as_ref(), params[1].as_ref().int()? as _),
+            HardCodedFunction::MatrixRow => matrix_row(params[0].as_ref(), params[1].as_ref().int()? as _),
             HardCodedFunction::MatrixSetRow => {
-                matrix_set_row(params[0].clone(), params[1].int()? as _, &params[2])
+                matrix_set_row(params[0].as_ref().clone(), params[1].as_ref().int()? as _, params[2].as_ref())
             },
             HardCodedFunction::MatrixSetCol => {
-                matrix_set_col(params[0].clone(), params[1].int()? as _, &params[2])
+                matrix_set_col(params[0].as_ref().clone(), params[1].as_ref().int()? as _, params[2].as_ref())
             },
-            HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
-            HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
+            HardCodedFunction::MatrixWidth => matrix_width(params[0].as_ref()),
+            HardCodedFunction::MatrixHeight => matrix_height(params[0].as_ref()),
             HardCodedFunction::Load => {
-                let fname = params[0].string()?;
-                let (data, _) = file::load_file((fname, env), env.options().parse_options())?;
+                let fname = params[0].as_ref().string()?;
+                let (data, _) = file::load_file((fname, env.as_ref()), env.options().parse_options())?;
                 let data = Vec::from(data);
                 Ok(ExprResult::from(data.as_slice()))
             },
-            HardCodedFunction::SectionStart => section_start(params[0].string()?, env),
-            HardCodedFunction::SectionStop => section_stop(params[0].string()?, env),
-            HardCodedFunction::SectionLength => section_length(params[0].string()?, env),
-            HardCodedFunction::SectionUsed => section_used(params[0].string()?, env),
-            HardCodedFunction::SectionMmr => section_mmr(params[0].string()?, env),
+            HardCodedFunction::SectionStart => section_start(params[0].as_ref().string()?, env),
+            HardCodedFunction::SectionStop => section_stop(params[0].as_ref().string()?, env),
+            HardCodedFunction::SectionLength => section_length(params[0].as_ref().string()?, env),
+            HardCodedFunction::SectionUsed => section_used(params[0].as_ref().string()?, env),
+            HardCodedFunction::SectionMmr => section_mmr(params[0].as_ref().string()?, env),
             HardCodedFunction::BinaryTransform => {
-                let crunch_type = params[1].string()?;
+                let crunch_type = params[1].as_ref().string()?;
                 let crunch_type = match crunch_type.to_uppercase().as_bytes() {
                     #[cfg(not(target_arch = "wasm32"))]
                     b"LZEXO" => CrunchType::LZEXO,
@@ -803,7 +852,7 @@ impl HardCodedFunction {
                     }
                 };
 
-                let (oks, errs): (Vec<u8>, Vec<ExpressionTypeError>) = params[0]
+                let (oks, errs): (Vec<u8>, Vec<ExpressionTypeError>) = params[0].as_ref()
                     .list_content()
                     .iter()
                     .map(|item| item.int().map(|v| v as u8))
@@ -833,23 +882,23 @@ impl HardCodedFunction {
             },
             HardCodedFunction::UnaryFunction(unary_function) => {
                 match unary_function {
-                    UnaryFunction::High => Ok(maths::high(&params[0])?),
-                    UnaryFunction::Low => Ok(maths::low(&params[0])?),
-                    UnaryFunction::Char => Ok(maths::char(&params[0])?),
-                    UnaryFunction::Floor => Ok(maths::floor(&params[0])?),
-                    UnaryFunction::Ceil => Ok(maths::ceil(&params[0])?),
-                    UnaryFunction::Frac => Ok(maths::frac(&params[0])?),
-                    UnaryFunction::Int => Ok(maths::int(&params[0])?),
-                    UnaryFunction::Sin => Ok(maths::sin(&params[0], env)?),
-                    UnaryFunction::Cos => Ok(maths::cos(&params[0])?),
-                    UnaryFunction::ASin => Ok(maths::asin(&params[0])?),
-                    UnaryFunction::ACos => Ok(maths::acos(&params[0])?),
-                    UnaryFunction::Abs => Ok(maths::abs(&params[0])?),
-                    UnaryFunction::Ln => Ok(maths::ln(&params[0])?),
-                    UnaryFunction::Log10 => Ok(maths::log10(&params[0])?),
-                    UnaryFunction::Exp => Ok(maths::exp(&params[0])?),
-                    UnaryFunction::Sqrt => Ok(maths::sqrt(&params[0])?),
-                    UnaryFunction::Peek => Ok(maths::peek(&params[0], env)?)
+                    UnaryFunction::High => Ok(maths::high(params[0].as_ref())?),
+                    UnaryFunction::Low => Ok(maths::low(params[0].as_ref())?),
+                    UnaryFunction::Char => Ok(maths::char(params[0].as_ref())?),
+                    UnaryFunction::Floor => Ok(maths::floor(params[0].as_ref())?),
+                    UnaryFunction::Ceil => Ok(maths::ceil(params[0].as_ref())?),
+                    UnaryFunction::Frac => Ok(maths::frac(params[0].as_ref())?),
+                    UnaryFunction::Int => Ok(maths::int(params[0].as_ref())?),
+                    UnaryFunction::Sin => Ok(maths::sin(params[0].as_ref(), env)?),
+                    UnaryFunction::Cos => Ok(maths::cos(params[0].as_ref())?),
+                    UnaryFunction::ASin => Ok(maths::asin(params[0].as_ref())?),
+                    UnaryFunction::ACos => Ok(maths::acos(params[0].as_ref())?),
+                    UnaryFunction::Abs => Ok(maths::abs(params[0].as_ref())?),
+                    UnaryFunction::Ln => Ok(maths::ln(params[0].as_ref())?),
+                    UnaryFunction::Log10 => Ok(maths::log10(params[0].as_ref())?),
+                    UnaryFunction::Exp => Ok(maths::exp(params[0].as_ref())?),
+                    UnaryFunction::Sqrt => Ok(maths::sqrt(params[0].as_ref())?),
+                    UnaryFunction::Peek => Ok(maths::peek(params[0].as_ref(), env)?)
                 }
             },
             HardCodedFunction::Min => Ok(maths::min(params)?),
@@ -898,10 +947,10 @@ impl Function {
 
     /// Be sure the function lives shorter than inner
 
-    pub fn eval(
+    pub fn eval<E: AsRef<ExprResult>+Clone>(
         &self,
         env: &mut Env,
-        params: &[ExprResult]
+        params: &[E]
     ) -> Result<ExprResult, Box<AssemblerError>> {
         match self {
             Self::Located(f) => f.eval(env, params),

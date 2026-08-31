@@ -1,0 +1,281 @@
+//! Colours as the Amstrad Plus's ASIC stores them.
+//!
+//! Where the Gate Array offers 27 fixed [`Ink`]s, the ASIC stores a 12-bit RGB
+//! value per pen - 4 bits per component, 4096 colours. A palette entry occupies
+//! two bytes, laid out as
+//!
+//! ```text
+//! byte 0:  RRRR BBBB
+//! byte 1:  0000 GGGG
+//! ```
+//!
+//! i.e. red at bits 12-15 of the little-endian `u16`, blue at 8-11, green at
+//! 0-3, with bits 4-7 unused. This is the layout `.kit` palette files use (see
+//! [`crate::kit`]).
+
+use std::{fmt::{Debug, Formatter, Result}, hash::Hash};
+
+use image as im;
+use owo_colors::OwoColorize;
+
+use crate::{color::AmstradColor, ink::{Ink, InkComponentQuantity}};
+
+/// One 4-bit colour component, 0 (off) to 15 (full).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AsicColorComponent(u8);
+
+impl AsicColorComponent {
+    pub  const MAX: u8 = 0xf;
+    pub fn value(self) -> u8 {
+        self.0
+    }
+}
+
+
+
+impl From<u8> for AsicColorComponent {
+    /// This is from a real rgb componenet
+    fn from(value: u8) -> Self {
+        AsicColorComponent(value & Self::MAX)
+    }
+}
+
+impl From<AsicColorComponent> for u8 {
+    fn from(value: AsicColorComponent) -> Self {
+        value.0
+    }
+}
+
+impl From<InkComponentQuantity> for AsicColorComponent {
+    /// The three levels a Gate Array ink can express, on the ASIC's 0-15 scale.
+    fn from(value: InkComponentQuantity) -> Self {
+        let value = match value {
+            InkComponentQuantity::Zero => 0x0,
+            InkComponentQuantity::Half => 0x6,
+            InkComponentQuantity::Full => 0xF
+        };
+        AsicColorComponent(value)
+    }
+}
+
+/// A 12-bit RGB colour in the ASIC's own packing - see the module comment.
+///
+/// Written by hand rather than with `bitfield!`: three nibbles at fixed offsets
+/// is less code this way than the macro's conversion syntax, and it keeps the
+/// packing visible right next to the layout it documents.
+#[derive(Clone, Copy, Eq,  Ord, Default)]
+pub struct AsicColor(u16);
+
+impl PartialEq for AsicColor {
+    fn eq(&self, other: &Self) -> bool {
+        AmstradColor::color(self) == AmstradColor::color(other)
+    }
+}
+
+impl PartialOrd for AsicColor {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        AmstradColor::color(self).0.partial_cmp(&AmstradColor::color(other).0)
+    }
+}
+
+impl Hash for AsicColor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        AmstradColor::color(self).hash(state)
+    }
+}
+
+impl AsicColor {
+    /// The bits the hardware actually uses - 4-7 are unused.
+    pub const VALID_BITS: u16 = 0b1111_1111_0000_1111;
+
+    pub fn new(
+        red: impl Into<AsicColorComponent>,
+        green: impl Into<AsicColorComponent>,
+        blue: impl Into<AsicColorComponent>
+    ) -> Self {
+        let red = red.into().value() as u16;
+        let green = green.into().value() as u16;
+        let blue = blue.into().value() as u16;
+        AsicColor((red << 12) | (blue << 8) | green)
+    }
+
+    pub fn get_red(self) -> AsicColorComponent {
+        AsicColorComponent(((self.0 >> 12) & 0xF) as u8)
+    }
+
+    pub fn get_blue(self) -> AsicColorComponent {
+        AsicColorComponent(((self.0 >> 8) & 0xF) as u8)
+    }
+
+    pub fn get_green(self) -> AsicColorComponent {
+        AsicColorComponent((self.0 & 0xF) as u8)
+    }
+
+    pub fn set_red(&mut self, value: impl Into<AsicColorComponent>) {
+        *self = Self::new(value, self.get_green(), self.get_blue());
+    }
+
+    pub fn set_green(&mut self, value: impl Into<AsicColorComponent>) {
+        *self = Self::new(self.get_red(), value, self.get_blue());
+    }
+
+    pub fn set_blue(&mut self, value: impl Into<AsicColorComponent>) {
+        *self = Self::new(self.get_red(), self.get_green(), value);
+    }
+
+    /// The packed value, as it is stored in a `.kit` file or written to the
+    /// ASIC palette at `&6400`.
+    pub fn value(self) -> u16 {
+        self.0
+    }
+
+    /// The two bytes of a `.kit` entry, in file order.
+    pub fn to_bytes(self) -> [u8; 2] {
+        [(self.0 >> 8) as u8, (self.0 & 0xFF) as u8]
+    }
+
+    /// Read one `.kit` entry.
+    pub fn from_bytes(bytes: [u8; 2]) -> Self {
+        Self::from(((bytes[0] as u16) << 8) | (bytes[1] as u16))
+    }
+}
+
+impl From<Ink> for AsicColor {
+    fn from(ink: Ink) -> Self {
+        AsicColor::new(
+            AsicColorComponent::from(ink.red_quantity()),
+            AsicColorComponent::from(ink.green_quantity()),
+            AsicColorComponent::from(ink.blue_quantity())
+        )
+    }
+}
+
+impl From<im::Rgb<u8>> for AsicColor {
+    /// Quantise a 24-bit pixel to the ASIC's 4 bits per component.
+    ///
+    /// Unlike [`Ink`]'s own conversion, which searches the 27 fixed hardware
+    /// colours for the nearest one, this is exact arithmetic: the ASIC's space
+    /// is a regular grid, so the closest representable value of an 8-bit
+    /// component is simply the nearest sixteenth. Rounding (`+ 8`), not
+    /// truncation - truncating biases every colour darker, which is visible
+    /// across a whole image.
+    fn from(color: im::Rgb<u8>) -> Self {
+        fn quantise(component: u8) -> u8 {
+            component >> 4
+        }
+        AsicColor::new(
+            quantise(color[0]),
+            quantise(color[1]),
+            quantise(color[2])
+        )
+    }
+}
+
+impl From<AsicColor> for im::Rgb<u8> {
+    /// The pixel an ASIC colour displays as - each component scaled back up so
+    /// that 0 stays 0 and 15 becomes 255.
+    fn from(color: AsicColor) -> Self {
+        fn expand(component: AsicColorComponent) -> u8 {
+            component.value() << 4
+        }
+        im::Rgb([
+            expand(color.get_red()),
+            expand(color.get_green()),
+            expand(color.get_blue())
+        ])
+    }
+}
+
+impl From<u16> for AsicColor {
+    fn from(value: u16) -> Self {
+        AsicColor(value & Self::VALID_BITS)
+    }
+}
+
+impl std::fmt::Display for AsicColor {
+    /// The `#RGB` form a Plus user writes in a palette editor - three hex
+    /// nibbles, red first.
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "#{:X}{:X}{:X}",
+            self.get_red().value(),
+            self.get_green().value(),
+            self.get_blue().value()
+        )
+    }
+}
+
+impl Debug for AsicColor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "AsicColor({:X}, {:X}, {:X})",
+            self.get_red().value(),
+            self.get_green().value(),
+            self.get_blue().value()
+        )
+    }
+}
+
+impl std::str::FromStr for AsicColor {
+    type Err = String;
+
+    /// Two spellings, because both are natural in different places.
+    ///
+    /// * `4A5` or `0x4A5` - the packed 12-bit value, exactly as it appears in a
+    ///   `.kit` file, red nibble first.
+    /// * `4,10,5` - red, green, blue, each 0-15, which is what someone reading
+    ///   a colour off a palette editor has in front of them.
+    ///
+    /// The comma is what tells them apart; it cannot appear in a hex number.
+    fn from_str(raw: &str) -> std::result::Result<Self, Self::Err> {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            return Err("empty colour".to_owned());
+        }
+
+        if raw.contains(',') {
+            let parts: Vec<&str> = raw.split(',').map(str::trim).collect();
+            if parts.len() != 3 {
+                return Err(format!(
+                    "{raw:?}: an R,G,B colour needs exactly 3 components, got {}",
+                    parts.len()
+                ));
+            }
+            let mut components = [0u8; 3];
+            for (component, (name, text)) in components
+                .iter_mut()
+                .zip(["red", "green", "blue"].into_iter().zip(parts))
+            {
+                let value: u8 = text
+                    .parse()
+                    .map_err(|_| format!("{text:?} is not a number ({name} component)"))?;
+                if value > AsicColorComponent::MAX {
+                    return Err(format!(
+                        "{name} is {value}; an ASIC component is 0-{}",
+                        AsicColorComponent::MAX
+                    ));
+                }
+                *component = value;
+            }
+            return Ok(AsicColor::new(components[0], components[1], components[2]));
+        }
+
+        let digits = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")).unwrap_or(raw);
+        let value = u16::from_str_radix(digits, 16)
+            .map_err(|_| format!("{raw:?} is not a hexadecimal colour (expected e.g. 4A5)"))?;
+        if value > 0xFFF {
+            return Err(format!(
+                "{raw:?} is out of range; an ASIC colour is 3 hex digits (0x000-0xFFF)"
+            ));
+        }
+        // `4A5` reads red-green-blue left to right, which is *not* the order the
+        // bits sit in - green is the low nibble on the hardware.
+        Ok(AsicColor::new(
+            ((value >> 8) & 0xF) as u8,
+            ((value >> 4) & 0xF) as u8,
+            (value & 0xF) as u8
+        ))
+    }
+}

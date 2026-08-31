@@ -1,7 +1,7 @@
 //! Goto-definition and references for assembly files: labels/symbols,
 //! include-file navigation, embedded-BASIC line targets.
 
-use cpclib_asm::parser::obtained::MayHaveSpan;
+use cpclib_asm::parser::obtained::{LocatedExpr, MayHaveSpan};
 use cpclib_tokens::{ListingElement, Token};
 use tower_lsp::lsp_types::*;
 
@@ -14,14 +14,9 @@ impl AssemblyAnalyzer {
     /// Find the definition of a symbol — looks up the word under the cursor in the parsed listing.
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
         let line = document.line(position.line as usize)?;
-        // `resolve_include_at` indexes by byte (it scans `line.as_bytes()`
-        // directly), while `extract_word_at_position` below indexes by
-        // `char` — these are two different conversions of the same UTF-16
-        // `position.character`, not interchangeable.
-        let byte_col = document.byte_column(position);
 
         // CTRL+CLICK on a filename string inside INCLUDE / INCBIN / BINCLUDE.
-        if let Some(target_uri) = resolve_include_at(&line, byte_col, &document.uri) {
+        if let Some(target_uri) = self.resolve_include_at(document, position) {
             return Some(Location {
                 uri: target_uri,
                 range: Range {
@@ -1070,60 +1065,72 @@ fn find_scoped_local_matches(
 
 // ─── Include file navigation ──────────────────────────────────────────────────
 
-const INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE", "INCBIN", "BINCLUDE"];
+// The walk itself, the include resolution and the directive scan now live in
+// `cpclib-project::root`, shared with the debug adapter. What stays in this
+// file is the `Url` boundary: the LSP speaks document URIs, the shared crate
+// speaks paths, and the conversion happens once, here.
+pub(crate) use cpclib_project::root::{INCLUDE_DIRECTIVES, PROJECT_ROOT_MARKERS};
 
-/// Directory-level markers that indicate the project root.  We stop walking
-/// up the ancestor tree when we find one of these in the current directory.
-const PROJECT_ROOT_MARKERS: &[&str] = &[
-    ".git",
-    ".hg",
-    "Cargo.toml",
-    "Cargo.lock",
-    "Makefile",
-    "makefile"
-];
-
-/// If `col` is inside a double-quoted string on a line that starts with an
-/// include-like directive, return the resolved file URI.
-fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
-    let filename = include_filename_at(line, col)?;
-    let path = resolve_include_path(&filename, doc_uri)?;
-    Url::from_file_path(path).ok()
-}
-
-/// If `col` is inside a double-quoted string on a line that starts with an
-/// include-like directive (`INCLUDE`/`INCBIN`/`BINCLUDE`), return the raw
-/// filename text (unresolved — may be a relative on-disk path or an
-/// `inner://...` embedded-resource reference). Shared by ctrl+click
-/// navigation (`resolve_include_at`) and hover content preview.
-pub(super) fn include_filename_at(line: &str, col: usize) -> Option<String> {
-    include_directive_and_filename_at(line, col).map(|(_directive, filename)| filename)
-}
-
-/// As [`include_filename_at`], but also reports which directive matched
-/// (`"INCLUDE"`/`"INCBIN"`/`"BINCLUDE"`) — hover needs to tell them apart:
-/// `INCBIN` targets are raw binary data and get a hex/ASCII dump instead of
-/// a text preview.
-pub(super) fn include_directive_and_filename_at(
-    line: &str,
-    col: usize
-) -> Option<(&'static str, String)> {
-    let bytes = line.as_bytes();
-    if col >= bytes.len() {
-        return None;
+impl AssemblyAnalyzer {
+    /// If `position` is on a line holding an INCLUDE/INCBIN/BINCLUDE
+    /// directive, resolve its target to a file `Url`.
+    fn resolve_include_at(&self, document: &Document, position: Position) -> Option<Url> {
+        let (_directive, filename) = self.include_directive_and_filename_at(document, position)?;
+        let path = resolve_include_path(&filename, &document.uri)?;
+        Url::from_file_path(path).ok()
     }
 
-    // Find the `"..."` string that contains (or starts at) `col`.
-    let (str_start, str_end) = find_quoted_string(bytes, col)?;
-    let filename = &line[str_start + 1..str_end]; // strip surrounding quotes
-
-    // The part before the string must end with a recognised include keyword.
-    let before = line[..str_start].trim().to_uppercase();
-    let directive = INCLUDE_DIRECTIVES.iter().find(|d| {
-        before == **d || before.ends_with(&format!(" {d}")) || before.ends_with(&format!("\t{d}"))
-    })?;
-
-    Some((directive, filename.to_string()))
+    /// If `position` is on a line holding an INCLUDE/INCBIN/BINCLUDE
+    /// directive with a literal string filename, return which directive
+    /// matched (`"INCLUDE"` or `"INCBIN"` — hover needs to tell them apart:
+    /// `INCBIN` targets are binary data and get a hex/ASCII dump instead of
+    /// a text preview) and the raw filename text (unresolved — may be a
+    /// relative on-disk path or an `inner://...` embedded-resource
+    /// reference). Shared by ctrl+click navigation (`resolve_include_at`)
+    /// and hover content preview.
+    ///
+    /// Reads the already-parsed listing's own `Include`/`Incbin` token
+    /// directly (`ListingElement::include_fname`/`incbin_fname`) rather than
+    /// re-scanning the line's raw text for a directive keyword before a
+    /// quoted string - the real parser (`cpclib-asm/src/parser/directives.rs`'s
+    /// `parse_include`) already knows every real form the directive can
+    /// take (e.g. the `ONCE` modifier, or a `namespace`/`module`/`as`
+    /// suffix), so there's no hand-maintained keyword list to keep in sync
+    /// as that grammar evolves - a text-based version of this previously
+    /// went silently blind on `INCLUDE ONCE "file"` specifically because
+    /// nothing before the quote matched bare `"INCLUDE"` anymore.
+    pub(super) fn include_directive_and_filename_at(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<(&'static str, String)> {
+        let listing = self.parse_document(document).ok()?;
+        for token in super::token::flatten_listing(listing.iter()) {
+            if !(token.is_include() || token.is_incbin()) {
+                continue;
+            }
+            let (line_1based, _) = token.span().relative_line_and_column();
+            if line_1based.saturating_sub(1) as u32 != position.line {
+                continue;
+            }
+            let fname_expr = if token.is_include() {
+                token.include_fname()
+            }
+            else {
+                token.incbin_fname()
+            };
+            if let LocatedExpr::String(unescaped) = fname_expr {
+                let directive = if token.is_include() {
+                    "INCLUDE"
+                }
+                else {
+                    "INCBIN"
+                };
+                return Some((directive, unescaped.as_ref().to_string()));
+            }
+        }
+        None
+    }
 }
 
 /// Every ancestor directory of `doc_uri`'s own directory, closest first, up
@@ -1136,50 +1143,26 @@ pub(super) fn include_directive_and_filename_at(
 /// `linking/src/hbl_inner.asm` doing `include 'src/demosystem/foo.asm'`
 /// means relative to `linking/`, not `linking/src/`. A single directory
 /// (just the file's own) isn't enough to resolve that.
-pub(super) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathBuf> {
-    let mut dirs = Vec::new();
-    let Ok(doc_path) = doc_uri.to_file_path()
-    else {
-        return dirs;
-    };
-    let Some(mut dir) = doc_path.parent().map(std::path::Path::to_path_buf)
-    else {
-        return dirs;
-    };
-    loop {
-        let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
-        dirs.push(dir.clone());
-        if at_root {
-            break;
-        }
-        match dir.parent() {
-            Some(parent) => dir = parent.to_path_buf(),
-            None => break
-        }
+pub(crate) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathBuf> {
+    match doc_uri.to_file_path() {
+        Ok(path) => cpclib_project::root::ancestor_directories(&path),
+        Err(_) => Vec::new()
     }
-    dirs
 }
 
 /// Walk up from `doc_uri`'s directory, trying each ancestor as a base for
 /// `filename`, stopping once a project-root marker or the filesystem root is
 /// reached. Shared by ctrl+click include navigation and the eager
 /// cross-file goto-definition fallback.
+/// Whether `dir` looks like the top of a project, by the same markers
+/// `resolve_include_path`/`ancestor_search_directories` already stop at.
+pub(super) fn is_project_root(dir: &std::path::Path) -> bool {
+    cpclib_project::root::is_project_root(dir)
+}
+
 pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::PathBuf> {
-    let doc_path = doc_uri.to_file_path().ok()?;
-    let mut dir = doc_path.parent()?;
-    loop {
-        let candidate = dir.join(filename);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-        // If this directory contains a project-root marker, don't go further up.
-        let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
-        match dir.parent() {
-            Some(parent) if !at_root => dir = parent,
-            _ => break
-        }
-    }
-    None
+    let path = doc_uri.to_file_path().ok()?;
+    cpclib_project::root::resolve_include_path(filename, &path)
 }
 
 /// Every filename referenced by an `INCLUDE`/`INCBIN`/`BINCLUDE` directive in
@@ -1187,32 +1170,7 @@ pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::
 /// directives as `resolve_include_at`, but line-anchored rather than
 /// cursor-anchored so the whole file can be scanned in one pass).
 pub fn extract_include_filenames(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        let upper = trimmed.to_uppercase();
-
-        let Some(directive) = INCLUDE_DIRECTIVES.iter().find(|d| {
-            upper == **d
-                || upper.starts_with(&format!("{d} "))
-                || upper.starts_with(&format!("{d}\t"))
-        })
-        else {
-            continue;
-        };
-
-        let after = &trimmed[directive.len()..];
-        let Some(q1) = after.find('"')
-        else {
-            continue;
-        };
-        let Some(q2_rel) = after[q1 + 1..].find('"')
-        else {
-            continue;
-        };
-        out.push(after[q1 + 1..q1 + 1 + q2_rel].to_string());
-    }
-    out
+    cpclib_project::root::extract_include_filenames(text)
 }
 
 /// The nearest ancestor directory of `doc_uri` containing a project-root
@@ -1221,34 +1179,8 @@ pub fn extract_include_filenames(text: &str) -> Vec<String> {
 /// base for the eager cross-file goto-definition fallback when the LSP
 /// client didn't report any workspace folder.
 pub fn project_root_for(doc_uri: &Url) -> Option<std::path::PathBuf> {
-    let doc_path = doc_uri.to_file_path().ok()?;
-    let own_dir = doc_path.parent()?.to_path_buf();
-    let mut dir = own_dir.clone();
-    loop {
-        if PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists()) {
-            return Some(dir);
-        }
-        match dir.parent() {
-            Some(parent) => dir = parent.to_path_buf(),
-            None => return Some(own_dir)
-        }
-    }
-}
-
-/// Find the byte range of the quoted string `"..."` that covers position `col`.
-/// Returns `(open_quote_pos, close_quote_pos)` where both positions are byte indices.
-fn find_quoted_string(bytes: &[u8], col: usize) -> Option<(usize, usize)> {
-    // Scan leftward to find the opening quote.
-    let open = (0..=col).rev().find(|&i| bytes[i] == b'"')?;
-    // Scan rightward to find the closing quote.
-    let close = (col + 1..bytes.len()).find(|&i| bytes[i] == b'"')?;
-    // `col` must be inside or on the opening/closing quote.
-    if col >= open && col <= close {
-        Some((open, close))
-    }
-    else {
-        None
-    }
+    let path = doc_uri.to_file_path().ok()?;
+    cpclib_project::root::project_root_or_own_dir(&path)
 }
 
 #[cfg(test)]
@@ -1277,6 +1209,56 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
             loc.range.start.line, 7,
             "definition is the label line, not the call reference"
         );
+    }
+
+    /// Real user-reported repro: ctrl+click on the filename in
+    /// `INCLUDE ONCE "macros.asm"` did nothing, while a plain `INCLUDE
+    /// "..."` (no `ONCE`) on another line worked. Root cause: the previous
+    /// text-scanning implementation matched the directive keyword by
+    /// checking what came right before the opening quote, and "INCLUDE
+    /// ONCE" never matched bare "INCLUDE" - fixed by reading the parsed
+    /// `Include` token's own `include_fname()` directly instead, which
+    /// already understands every real form the grammar accepts.
+    #[test]
+    fn goto_definition_on_include_once_resolves_the_filename() {
+        let dir = std::env::temp_dir().join(format!(
+            "cpclib_lsp_test_{}_include_once",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("macros.asm"), "; macros\n").unwrap();
+        std::fs::write(dir.join("plain.asm"), "; plain\n").unwrap();
+
+        let text = "include once \"macros.asm\"\ninclude \"plain.asm\"\n";
+        let uri = tower_lsp::lsp_types::Url::from_file_path(dir.join("main.asm")).unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let loc = analyzer.goto_definition(
+            &doc,
+            Position {
+                line: 0,
+                character: 20 // inside "macros.asm"
+            }
+        );
+        assert!(loc.is_some(), "INCLUDE ONCE should resolve, got None");
+        assert!(loc.unwrap().uri.as_str().ends_with("macros.asm"));
+
+        // The plain INCLUDE (no ONCE) on the next line must keep working too.
+        let loc = analyzer.goto_definition(
+            &doc,
+            Position {
+                line: 1,
+                character: 12 // inside "plain.asm"
+            }
+        );
+        assert!(
+            loc.is_some(),
+            "plain INCLUDE should still resolve, got None"
+        );
+        assert!(loc.unwrap().uri.as_str().ends_with("plain.asm"));
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

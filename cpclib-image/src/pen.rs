@@ -132,7 +132,7 @@ impl Pen {
     }
 
     pub fn wrapping_add_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
-        self.inner_wrapping_add(delta.into(), 17)
+        self.inner_wrapping_add(delta.into(), 16)
     }
 
     pub fn saturating_add_border_included<P: Into<i8>>(&self, delta: P) -> Self {
@@ -140,7 +140,7 @@ impl Pen {
     }
 
     pub fn saturating_add_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
-        self.inner_saturating_add(delta.into(), 16)
+        self.inner_saturating_add(delta.into(), 15)
     }
 
     pub fn wrapping_sub_border_included<P: Into<i8>>(&self, delta: P) -> Self {
@@ -148,7 +148,7 @@ impl Pen {
     }
 
     pub fn wrapping_sub_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
-        self.inner_wrapping_sub(delta.into(), 17)
+        self.inner_wrapping_sub(delta.into(), 16)
     }
 
     pub fn saturating_sub_border_included<P: Into<i8>>(&self, delta: P) -> Self {
@@ -156,7 +156,7 @@ impl Pen {
     }
 
     pub fn saturating_sub_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
-        self.inner_saturating_sub(delta.into(), 16)
+        self.inner_saturating_sub(delta.into(), 15)
     }
 
     fn inner_wrapping_add(&self, delta: i8, max: u8) -> Self {
@@ -164,8 +164,13 @@ impl Pen {
         value.into()
     }
 
+    /// Clamps to `0..=max` - unlike the wrapping variant, there is no need
+    /// for the "add `max` first" trick here, since clamping (not modulo)
+    /// tolerates the intermediate value going outside `0..=max` in either
+    /// direction; `i16` keeps that intermediate value away from `i8`'s own
+    /// overflow.
     fn inner_saturating_add(&self, delta: i8, max: u8) -> Self {
-        let value = ((self.number() as i8 + max as i8 + delta) as u8).max(max);
+        let value = (self.number() as i16 + delta as i16).clamp(0, max as i16) as u8;
         value.into()
     }
 
@@ -175,7 +180,7 @@ impl Pen {
     }
 
     fn inner_saturating_sub(&self, delta: i8, max: u8) -> Self {
-        let value = ((self.number() as i8 + max as i8 - delta) as u8).max(max);
+        let value = (self.number() as i16 - delta as i16).clamp(0, max as i16) as u8;
         value.into()
     }
 }

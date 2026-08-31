@@ -2398,8 +2398,7 @@ pub fn parse_macro_inner(
         let content = (*input).update_slice(content);
 
         let content: Z80Span = content.into();
-        let tokenized_content =
-            tokenize_macro_body(content.as_str(), &arguments, has_variadic);
+        let tokenized_content = tokenize_macro_body(content.as_str(), &arguments, has_variadic);
         Ok(LocatedTokenInner::Macro {
             name: name.into(),
             params: arguments,

@@ -864,7 +864,7 @@ async fn test_goto_definition_finds_symbol_in_an_unopened_included_file() {
 
     let tmp = camino_tempfile::tempdir().unwrap();
     // helper.asm is never opened by the editor - only INCLUDEd from main.asm.
-    std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+    std::fs::write(tmp.path().join("helper.asm"), "helper_label:\n    ret\n").unwrap();
 
     backend
         .initialize(InitializeParams {
@@ -923,6 +923,75 @@ async fn test_goto_definition_finds_symbol_in_an_unopened_included_file() {
     assert_eq!(location.range.start.line, 0);
 }
 
+/// Symbol lookup is **case-sensitive**, matching basm's own default
+/// (`AsmConfig::case_sensitive`, true).
+///
+/// This is the behaviour the three cross-file navigation tests above were
+/// quietly asserting the opposite of: each defined `HELPER_LABEL:`/`SOME_LABEL:`
+/// and looked up `helper_label`/`some_label`, so they had been failing ever
+/// since the lookup stopped uppercasing. Their fixtures now use one casing, and
+/// this test covers the distinction they used to straddle.
+#[tokio::test]
+async fn test_goto_definition_does_not_match_a_symbol_differing_only_in_case() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                // Lowercase reference, uppercase definition: a different
+                // symbol as far as basm is concerned.
+                text: "    include \"helper.asm\"\n    call helper_label\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .goto_definition(GotoDefinitionParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                position: Position {
+                    line: 1,
+                    character: 11
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap();
+
+    assert!(
+        result.is_none(),
+        "a case-differing symbol is a different symbol: {result:?}"
+    );
+}
+
 #[tokio::test]
 async fn test_goto_definition_finds_symbol_via_workspace_scan_without_an_include() {
     let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
@@ -931,7 +1000,7 @@ async fn test_goto_definition_finds_symbol_via_workspace_scan_without_an_include
     let tmp = camino_tempfile::tempdir().unwrap();
     // other.asm is never opened and never INCLUDEd by main.asm - only
     // findable by scanning the workspace for .asm files.
-    std::fs::write(tmp.path().join("other.asm"), "SOME_LABEL:\n    ret\n").unwrap();
+    std::fs::write(tmp.path().join("other.asm"), "some_label:\n    ret\n").unwrap();
 
     backend
         .initialize(InitializeParams {
@@ -1009,7 +1078,7 @@ async fn test_goto_definition_workspace_scan_finds_the_one_match_among_many_cand
         )
         .unwrap();
     }
-    std::fs::write(tmp.path().join("real.asm"), "SOME_LABEL:\n    ret\n").unwrap();
+    std::fs::write(tmp.path().join("real.asm"), "some_label:\n    ret\n").unwrap();
 
     backend
         .initialize(InitializeParams {
@@ -1131,15 +1200,25 @@ async fn test_cycle_count_for_selection_command() {
         .unwrap()
         .expect("expected a cycle count result");
 
-    // djnz loop: 3 (not taken) or 4 (taken), plus nop's own fixed 1.
+    // The `djnz`'s taken side is a *back*-edge: it goes backward, so it never
+    // competes with the not-taken side for the cost of a path running forward
+    // to the selection's exit (`cost_range`'s own doc comment argues this).
+    // So both min and max are the not-taken 3, plus nop's own fixed 1 - and
+    // the real worst case, an unknown iteration count, is reported by
+    // `max_unbounded` rather than by pretending `max` is one taken iteration.
     assert_eq!(result["min_nops"], 4);
-    assert_eq!(result["max_nops"], 5);
+    assert_eq!(result["max_nops"], 4);
+    assert_eq!(
+        result["max_unbounded"], true,
+        "a djnz loop's real worst case is unbounded, and saying so is the \
+         whole point of this answer: {result}"
+    );
     assert_eq!(result["instruction_count"], 2);
     assert_eq!(result["unrecognized_count"], 0);
 }
 
 #[tokio::test]
-async fn test_cycle_count_for_selection_command_with_no_selection_returns_none() {
+async fn test_cycle_count_for_selection_command_with_no_selection_reports_the_cursor_line() {
     let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
     let backend = service.inner();
 
@@ -1193,7 +1272,13 @@ async fn test_cycle_count_for_selection_command_with_no_selection_returns_none()
         .await
         .unwrap();
 
-    assert!(result.is_none());
+    // A bare cursor with no selection reports the cost of the line it sits on,
+    // so the status bar stays live as the cursor moves rather than blanking
+    // out whenever nothing is dragged out. Pinned at the unit level by
+    // `command.rs::cycle_count_for_selection_shows_the_cursor_lines_own_cost_with_no_real_selection`.
+    let result = result.expect("a cursor position reports its own line's cost");
+    assert_eq!(result["min_nops"], 1, "{result}");
+    assert_eq!(result["max_nops"], 1, "{result}");
 }
 
 #[tokio::test]
@@ -1225,10 +1310,14 @@ async fn test_code_lens_appears_for_an_asm_file_with_an_embedded_bndbuild_block(
         .unwrap()
         .expect("expected a code lens for the embedded rule");
 
-    assert_eq!(lenses.len(), 1);
-    let command = lenses[0].command.as_ref().expect("expected a command");
+    // The file's own "▶ Run in emulator" lens is there too; the rule's is the
+    // one this test is about.
+    let rule_lens = lenses
+        .iter()
+        .find(|l| l.command.as_ref().unwrap().command == "cpclib.runRule")
+        .unwrap_or_else(|| panic!("no rule lens: {lenses:?}"));
+    let command = rule_lens.command.as_ref().expect("expected a command");
     assert_eq!(command.title, "▶ Run: test");
-    assert_eq!(command.command, "cpclib.runRule");
     let args = command.arguments.as_ref().unwrap();
     assert_eq!(args[0], serde_json::json!("test"));
     assert_eq!(
@@ -1237,7 +1326,7 @@ async fn test_code_lens_appears_for_an_asm_file_with_an_embedded_bndbuild_block(
     );
     // The lens sits on the "- tgt: test" line inside the embedded block
     // (line 1), not on the "#!bndbuild" marker line (line 0).
-    assert_eq!(lenses[0].range.start.line, 1);
+    assert_eq!(rule_lens.range.start.line, 1);
 }
 
 #[tokio::test]
@@ -1395,9 +1484,18 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
         })
         .await
         .unwrap();
-    assert!(
-        asm_lenses.is_none(),
-        "expected no code lens for a plain .asm file"
+    // A plain `.asm` file gets the two lenses every assembly file offers -
+    // run and debug - and none of the per-rule lenses an embedded
+    // `#!bndbuild` block would add.
+    let asm_lenses = asm_lenses.expect("every .asm file offers to run itself");
+    let commands: Vec<&str> = asm_lenses
+        .iter()
+        .map(|l| l.command.as_ref().unwrap().command.as_str())
+        .collect();
+    assert_eq!(
+        commands,
+        vec!["cpclib.runAsm", "cpclib.debugAssembly"],
+        "{asm_lenses:?}"
     );
 
     let bnd_lenses = backend
@@ -1409,13 +1507,20 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
         .await
         .unwrap()
         .expect("a real .bnd file should still get its own code lens");
-    // One "▶ Run: real" rule lens, plus one "▶ Run this command" lens for
-    // its single task (`cmd: echo hi`).
-    assert_eq!(bnd_lenses.len(), 2, "{bnd_lenses:?}");
+    // One "▶ Run: real" rule lens, one "▶ Run this command" lens for its
+    // single task (`cmd: echo hi`), and one "Build: real" top-of-file
+    // summary lens (the rule is declared on line 0 here, same as its own
+    // lens, but titled differently).
+    assert_eq!(bnd_lenses.len(), 3, "{bnd_lenses:?}");
     assert!(
         bnd_lenses
             .iter()
             .any(|l| l.command.as_ref().unwrap().title == "▶ Run: real")
+    );
+    assert!(
+        bnd_lenses
+            .iter()
+            .any(|l| l.command.as_ref().unwrap().title == "Build: real")
     );
     assert!(
         bnd_lenses

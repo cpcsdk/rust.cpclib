@@ -48,7 +48,7 @@ pub struct CpcLspBackend {
     /// merges an entry in here into every analyze/publish cycle for that URI
     /// until `execute_command`'s `"cpclib.runRule"` handler clears it (on the
     /// next successful run) or overwrites it (on the next failing one).
-    build_error_diagnostics: Arc<DashMap<Url, Diagnostic>>,
+    build_error_diagnostics: Arc<DashMap<Url, Vec<Diagnostic>>>,
     /// `.asm` files known (from having been opened/analyzed at least once
     /// this session) to declare at least one `#!bndbuild`-embedded rule,
     /// each mapped to its target names - backs `cpclib.getEmbeddedBndbuildFiles`
@@ -105,6 +105,74 @@ impl CpcLspBackend {
         );
         self.publish_diagnostics(document.uri.clone(), diagnostics)
             .await;
+    }
+
+    /// Analyse `uri`@`version` in the background, after `delay` (zero for
+    /// `did_open`/`did_save`, `DID_CHANGE_DEBOUNCE` for `did_change`'s own
+    /// burst-of-keystrokes coalescing) - never on the caller's own task.
+    ///
+    /// `analyze_document` can mean a real, full, multi-pass assemble of the
+    /// document's whole include tree (`dry_run_env`, when the document looks
+    /// like a project's own entry point) - tens of seconds on a real demo,
+    /// the same cost `cached_for_debug`'s own doc comment describes for the
+    /// DAP side. Awaiting that inline on `did_open`/`did_save`'s own request-
+    /// handling task used to block the LSP entirely for the whole duration:
+    /// opening a project's main file (which restoring previous tabs, or just
+    /// opening the folder, routinely does first) made every other feature
+    /// look frozen until it finished.
+    ///
+    /// `pending_versions` is the one piece of shared state every caller must
+    /// set to `version` *before* calling this (`did_change` already did;
+    /// `did_open`/`did_save` do it right before spawning) - it is what lets
+    /// a second edit arriving mid-analysis make this run a no-op instead of
+    /// publishing stale diagnostics after the newer one's own analysis.
+    fn spawn_deferred_analysis(&self, uri: Url, version: i32, delay: Duration) {
+        let client = self.client.clone();
+        let documents = Arc::clone(&self.documents);
+        let pending_versions = Arc::clone(&self.pending_versions);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let workspace_roots = self.workspace_roots();
+        let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
+        let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
+
+        tokio::spawn(async move {
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+
+            // A newer edit/open/save arrived while this waited - that one's
+            // own (already-scheduled) task will publish instead.
+            if pending_versions.get(&uri).map(|v| *v) != Some(version) {
+                return;
+            }
+            let Some(document) = documents.get(&uri).map(|d| d.value().clone())
+            else {
+                return; // closed in the meantime
+            };
+            // Guards a close-then-reopen race: same URI, but the version
+            // sequence restarted.
+            if document.version != version {
+                return;
+            }
+
+            let diagnostics = compute_diagnostics(
+                &asm_analyzer,
+                &build_analyzer,
+                &basic_analyzer,
+                &document,
+                &workspace_roots,
+                &build_error_diagnostics
+            );
+            update_embedded_bndbuild_index(
+                &asm_analyzer,
+                &build_analyzer,
+                &document,
+                &embedded_bndbuild_index
+            );
+            client.publish_diagnostics(uri, diagnostics, None).await;
+        });
     }
 
     /// Symbol defined in a file explicitly `INCLUDE`/`INCBIN`/`BINCLUDE`d by
@@ -194,24 +262,19 @@ impl CpcLspBackend {
 
         tokio::task::spawn_blocking(move || {
             let mut paths = Vec::new();
-            for root in roots {
-                let walker = walkdir::WalkDir::new(&root)
-                    .into_iter()
-                    .filter_entry(|e| !is_ignored_dir(e));
-                for entry in walker.filter_map(|e| e.ok()) {
-                    if !entry.file_type().is_file() {
-                        continue;
-                    }
-                    let path = entry.path();
-                    let is_asm = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
-                    if !is_asm || from_path.as_deref() == Some(path) {
-                        continue;
-                    }
-                    paths.push(path.to_path_buf());
+            // `files_under_all` rather than a walk per root: workspace roots
+            // nest, and a file reached through two of them must not be
+            // searched twice.
+            for entry in crate::common::walk::files_under_all(&roots) {
+                let path = entry.path();
+                let is_asm = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
+                if !is_asm || from_path.as_deref() == Some(path) {
+                    continue;
                 }
+                paths.push(path.to_path_buf());
             }
             paths
         })
@@ -657,7 +720,7 @@ fn compute_diagnostics(
     basic_analyzer: &BasicAnalyzer,
     document: &Document,
     workspace_roots: &[PathBuf],
-    build_error_diagnostics: &DashMap<Url, Diagnostic>
+    build_error_diagnostics: &DashMap<Url, Vec<Diagnostic>>
 ) -> Vec<Diagnostic> {
     let mut diagnostics = match document.doc_type {
         DocumentType::Assembly => asm_analyzer.analyze(document),
@@ -694,8 +757,8 @@ fn compute_diagnostics(
     }
 
     relativize_diagnostic_messages(&mut diagnostics, workspace_roots);
-    if let Some(build_error) = build_error_diagnostics.get(&document.uri) {
-        diagnostics.push(build_error.clone());
+    if let Some(build_errors) = build_error_diagnostics.get(&document.uri) {
+        diagnostics.extend(build_errors.iter().cloned());
     }
     diagnostics
 }
@@ -854,17 +917,6 @@ fn non_empty_workspace_edit(
     }
 }
 
-/// Directories never worth descending into while scanning the workspace for
-/// `.asm` files: VCS metadata and build output can be huge and are never
-/// where hand-written assembly sources live.
-pub(crate) fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
-    entry.file_type().is_dir()
-        && matches!(
-            entry.file_name().to_str(),
-            Some(".git" | ".hg" | ".svn" | "target" | "node_modules")
-        )
-}
-
 /// A version for a not-open-in-the-editor document, derived from the
 /// file's own mtime rather than a fixed `0` - `parse_document`'s cache is
 /// keyed on `(uri, version)`, and a fixed version would serve a stale
@@ -882,6 +934,41 @@ fn disk_file_version(path: &std::path::Path) -> i32 {
         .map(|d| d.as_secs() as i32)
         .unwrap_or(0)
 }
+
+/// Every command this server advertises in its `executeCommandProvider`
+/// capability.
+///
+/// A named list rather than an inline `vec!` because it is also the thing a
+/// VS Code extension must **not** re-register: `vscode-languageclient`
+/// auto-registers a bridge command for each of these, and a second
+/// `registerCommand` with the same id throws "command already exists" and
+/// aborts the client start - which the user sees as "Client is not running"
+/// on the next command they invoke, with no hint of the real cause. See
+/// `no_advertised_command_is_also_registered_by_the_vscode_extension`.
+pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
+    "cpclib.getTargets",
+    "cpclib.getTargetsForFile",
+    "cpclib.getEmbeddedBndbuildFiles",
+    "cpclib.selectRange",
+    "cpclib.runRule",
+    "cpclib.runTask",
+    "cpclib.runBasic",
+    "cpclib.runAssembly",
+    "cpclib.resolveEntry",
+    "cpclib.cycleCountForSelection",
+    "cpclib.registersAtPosition",
+    "cpclib.removeUnusedParameter",
+    crate::basm::peephole::FIX_ALL_COMMAND,
+    crate::basm::peephole::ANALYZE_COMMAND,
+    crate::basm::peephole::CLEAR_COMMAND,
+    "cpclib.assembleFile",
+    "cpclib.breakpointEdit",
+    "cpclib.breakpointLines",
+    "cpclib.getDebuggableRules",
+    "cpclib.musicPlay",
+    "cpclib.musicBuildDsk",
+    "cpclib.musicSidInfo"
+];
 
 #[tower_lsp::async_trait]
 impl LanguageServer for CpcLspBackend {
@@ -965,18 +1052,7 @@ impl LanguageServer for CpcLspBackend {
                     resolve_provider: Some(false)
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec![
-                        "cpclib.getTargets".to_string(),
-                        "cpclib.getTargetsForFile".to_string(),
-                        "cpclib.getEmbeddedBndbuildFiles".to_string(),
-                        "cpclib.selectRange".to_string(),
-                        "cpclib.runRule".to_string(),
-                        "cpclib.runTask".to_string(),
-                        "cpclib.runBasic".to_string(),
-                        "cpclib.cycleCountForSelection".to_string(),
-                        "cpclib.registersAtPosition".to_string(),
-                        "cpclib.removeUnusedParameter".to_string(),
-                    ],
+                    commands: EXECUTE_COMMANDS.iter().map(|c| c.to_string()).collect(),
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
@@ -1038,6 +1114,10 @@ impl LanguageServer for CpcLspBackend {
         Ok(())
     }
 
+    /// Inserts the document immediately (needed right away by hover/
+    /// completion/etc., same as `did_change`), then defers analysis to
+    /// `spawn_deferred_analysis` - see its own doc comment for why this
+    /// must never be awaited inline here.
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         tracing::info!("Document opened: {}", params.text_document.uri);
 
@@ -1047,18 +1127,17 @@ impl LanguageServer for CpcLspBackend {
             params.text_document.version,
             Some(params.text_document.language_id.as_str())
         );
-
-        self.analyze_document(&document).await;
-        self.documents.insert(params.text_document.uri, document);
+        let uri = params.text_document.uri;
+        let version = document.version;
+        self.documents.insert(uri.clone(), document);
+        self.pending_versions.insert(uri.clone(), version);
+        self.spawn_deferred_analysis(uri, version, Duration::ZERO);
     }
 
     /// Applies the edit immediately (needed right away by hover/completion/
-    /// etc.), but defers the actual re-analysis + diagnostics publish by
-    /// `DID_CHANGE_DEBOUNCE` — a rapid burst of keystrokes would otherwise
-    /// re-run full analysis on every single one. `pending_versions` lets a
-    /// task scheduled by an edit that's since been superseded detect that
-    /// and no-op, rather than publish stale diagnostics after a newer edit's
-    /// own (possibly still-pending) analysis.
+    /// etc.), but defers the actual re-analysis + diagnostics publish (via
+    /// `spawn_deferred_analysis`) by `DID_CHANGE_DEBOUNCE` - a rapid burst of
+    /// keystrokes would otherwise re-run full analysis on every single one.
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         tracing::info!("Document changed: {}", params.text_document.uri);
 
@@ -1075,63 +1154,26 @@ impl LanguageServer for CpcLspBackend {
         }
 
         self.pending_versions.insert(uri.clone(), version);
-
-        let client = self.client.clone();
-        let documents = Arc::clone(&self.documents);
-        let pending_versions = Arc::clone(&self.pending_versions);
-        let asm_analyzer = Arc::clone(&self.asm_analyzer);
-        let build_analyzer = Arc::clone(&self.build_analyzer);
-        let basic_analyzer = Arc::clone(&self.basic_analyzer);
-        let workspace_roots = self.workspace_roots();
-        let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
-        let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
-
-        tokio::spawn(async move {
-            tokio::time::sleep(DID_CHANGE_DEBOUNCE).await;
-
-            // A newer edit arrived while we slept - that edit's own
-            // (already-scheduled) task will publish instead.
-            if pending_versions.get(&uri).map(|v| *v) != Some(version) {
-                return;
-            }
-
-            let Some(document) = documents.get(&uri).map(|d| d.value().clone())
-            else {
-                return; // closed in the meantime
-            };
-            // Guards a close-then-reopen race: same URI, but the version
-            // sequence restarted.
-            if document.version != version {
-                return;
-            }
-
-            let diagnostics = compute_diagnostics(
-                &asm_analyzer,
-                &build_analyzer,
-                &basic_analyzer,
-                &document,
-                &workspace_roots,
-                &build_error_diagnostics
-            );
-            update_embedded_bndbuild_index(
-                &asm_analyzer,
-                &build_analyzer,
-                &document,
-                &embedded_bndbuild_index
-            );
-            client.publish_diagnostics(uri, diagnostics, None).await;
-        });
+        self.spawn_deferred_analysis(uri, version, DID_CHANGE_DEBOUNCE);
     }
 
+    /// Same reason `did_open` no longer awaits its own analysis inline:
+    /// saving a project's entry file is exactly the case that can mean a
+    /// real, full assemble, and doing that on the request-handling task
+    /// made every other feature look frozen for however long it took.
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         tracing::info!("Document saved: {}", params.text_document.uri);
 
-        if let Some(entry) = self.documents.get(&params.text_document.uri) {
-            let document = entry.value().clone();
-            drop(entry);
+        let Some(entry) = self.documents.get(&params.text_document.uri)
+        else {
+            return;
+        };
+        let version = entry.value().version;
+        drop(entry);
+        let uri = params.text_document.uri;
 
-            self.analyze_document(&document).await;
-        }
+        self.pending_versions.insert(uri.clone(), version);
+        self.spawn_deferred_analysis(uri, version, Duration::ZERO);
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -1759,10 +1801,12 @@ impl LanguageServer for CpcLspBackend {
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
             match document.doc_type {
-                DocumentType::Assembly => {
+                DocumentType::Assembly if self.asm_analyzer.config().inlay_hints => {
                     return Ok(Some(self.asm_analyzer.inlay_hints(document, params.range)));
                 },
-                DocumentType::Basic | DocumentType::CatartBasic => {
+                DocumentType::Basic | DocumentType::CatartBasic
+                    if self.basic_analyzer.config().inlay_hints =>
+                {
                     return Ok(Some(
                         self.basic_analyzer.inlay_hints(document, params.range)
                     ));
@@ -1779,10 +1823,18 @@ impl LanguageServer for CpcLspBackend {
 
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
+            // Each language decides for itself: a project may well want the
+            // bndbuild "▶ Run" buttons and not the ones on every `.bas`.
             let lenses = match document.doc_type {
-                DocumentType::BuildFile => self.build_analyzer.code_lens(document),
-                DocumentType::Assembly => self.asm_analyzer.code_lens(document),
-                DocumentType::Basic | DocumentType::CatartBasic => {
+                DocumentType::BuildFile if self.build_analyzer.config().code_lens => {
+                    self.build_analyzer.code_lens(document)
+                },
+                DocumentType::Assembly if self.asm_analyzer.config().code_lens => {
+                    self.asm_analyzer.code_lens(document)
+                },
+                DocumentType::Basic | DocumentType::CatartBasic
+                    if self.basic_analyzer.config().code_lens =>
+                {
                     self.basic_analyzer.code_lens(document)
                 },
                 _ => Vec::new()
@@ -1878,7 +1930,7 @@ impl LanguageServer for CpcLspBackend {
                                         "No embedded bndbuild rule '{rule}' found in this file"
                                     ),
                                     diagnostics: Vec::new(),
-                                    build_error: None,
+                                    build_errors: Vec::new(),
                                     success: false
                                 }
                             },
@@ -1929,9 +1981,17 @@ impl LanguageServer for CpcLspBackend {
                 // until the next successful build, not just this file's own
                 // next edit. Stored, then republished immediately so it's
                 // visible without waiting for that.
-                if let Some((target_uri, diagnostic)) = outcome.build_error {
+                // One entry per file, holding every error that landed in it -
+                // a build reports as many as it hit, and keeping only the
+                // last would mean fixing one to be shown the next.
+                let mut per_file: std::collections::HashMap<Url, Vec<Diagnostic>> =
+                    std::collections::HashMap::new();
+                for (target_uri, diagnostic) in outcome.build_errors {
+                    per_file.entry(target_uri).or_default().push(diagnostic);
+                }
+                for (target_uri, diagnostics) in per_file {
                     self.build_error_diagnostics
-                        .insert(target_uri.clone(), diagnostic);
+                        .insert(target_uri.clone(), diagnostics);
                     if let Some(target_document) = self.load_document(&target_uri) {
                         self.analyze_document(&target_document).await;
                     }
@@ -1967,6 +2027,102 @@ impl LanguageServer for CpcLspBackend {
                 )
                 .await;
             return Ok(None);
+        }
+
+        if params.command == "cpclib.assembleFile" {
+            let mut arguments = params.arguments.into_iter();
+            let Some(uri) = arguments
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()))
+            else {
+                return Ok(None);
+            };
+            // Whatever the user typed into the prompt - the same arguments the
+            // real build would pass. Absent is fine; most files need none.
+            let extra = arguments
+                .next()
+                .and_then(|v| v.as_str().map(|s| s.to_owned()))
+                .unwrap_or_default();
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            // Live output, same as a build: assembling a big source is not
+            // instant and silence looks like a hang.
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            // On the blocking pool: assembling is real CPU work and must not
+            // occupy an async worker the rest of the server shares.
+            let outcome = tokio::task::spawn_blocking(move || {
+                crate::bndbuild::command::assemble_file(&document, &extra, Some(tx))
+            })
+            .await
+            .unwrap_or_else(|_| {
+                crate::bndbuild::command::AssembleOutcome {
+                    message: "the assemble task panicked".to_owned(),
+                    errors: Vec::new(),
+                    success: false
+                }
+            });
+            let _ = log_task.await;
+
+            // Stored the same way a failing build's errors are: sticky on the
+            // target file until the next successful assemble or build, so the
+            // user can navigate away and back.
+            let previously = self.build_error_diagnostics.get(&uri).is_some();
+            if outcome.success {
+                if previously {
+                    self.build_error_diagnostics.remove(&uri);
+                }
+            }
+            else {
+                let mut per_file: std::collections::HashMap<Url, Vec<Diagnostic>> =
+                    std::collections::HashMap::new();
+                for (target_uri, diagnostic) in outcome.errors {
+                    per_file.entry(target_uri).or_default().push(diagnostic);
+                }
+                for (target_uri, diagnostics) in per_file {
+                    self.build_error_diagnostics.insert(target_uri, diagnostics);
+                }
+            }
+            for target in [uri.clone()] {
+                if let Some(target_document) = self.load_document(&target) {
+                    self.analyze_document(&target_document).await;
+                }
+            }
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    outcome.message.lines().next().unwrap_or("").to_owned()
+                )
+                .await;
+            return Ok(Some(serde_json::json!(outcome.success)));
         }
 
         if params.command == "cpclib.runTask" {
@@ -2106,6 +2262,337 @@ impl LanguageServer for CpcLspBackend {
                 let config = self.basic_analyzer.config();
                 tokio::task::spawn_blocking(move || {
                     crate::locomotive::run::run_document_in_emulator(&document, &config, tx)
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("run task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // Lets the VS Code extension decide, *before* actually launching the
+        // heavier `cpclib.musicPlay`/`cpclib.musicBuildDsk` commands, whether
+        // to prompt the user for a SID wait-line-count override: editing
+        // `cpclib-lsp.toml` by hand is not something a musician using this
+        // feature should have to do (see `MusicConfig::sid_wait_line_count`'s
+        // own doc comment for what the value controls). Only ever a quick
+        // ZIP+XML scan of the song file plus a config read, no external
+        // process - no need for `spawn_blocking` here.
+        if params.command == "cpclib.musicSidInfo" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let song_path = camino::Utf8PathBuf::from(fname);
+
+            let is_sid = cpclib_bndbuild::pipeline::song_uses_sid(&song_path)
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("could not inspect {song_path}: {e}").into(),
+                        data: None
+                    }
+                })?;
+            let default_wait_line_count = crate::common::config::load_config(
+                self.workspace_roots().first().map(|p| p.as_path())
+            )
+            .config
+            .music
+            .sid_wait_line_count;
+
+            return Ok(Some(serde_json::json!({
+                "isSid": is_sid,
+                "defaultWaitLineCount": default_wait_line_count
+            })));
+        }
+
+        // File-browser "▶ Play music in emulator" - unlike `runBasic`/
+        // `runAssembly`, this takes a raw file path straight from an Explorer
+        // click, not an open text document: an Arkos Tracker source file is
+        // typically binary, a poor fit for `self.load_document`'s
+        // text-document assumption, and `SongToAkg` reads the file itself
+        // anyway, so there is nothing to gain from loading it as a `Document`.
+        if params.command == "cpclib.musicPlay" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            // Second argument: a SID wait-line-count the user was prompted
+            // for client-side (see `cpclib.musicSidInfo` above) - overrides
+            // the config default when present. Absent for a non-SID song
+            // (the client only prompts/sends this when `musicSidInfo` said
+            // `isSid`) or when this is invoked some other way.
+            let sid_wait_line_count_override =
+                args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
+            let song_path = camino::Utf8PathBuf::from(fname);
+            let name_hint = song_path
+                .file_stem()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "SONG".to_string());
+
+            self.client
+                .log_message(MessageType::INFO, "Converting and launching music...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let music_config = crate::common::config::load_config(
+                self.workspace_roots().first().map(|p| p.as_path())
+            )
+            .config
+            .music;
+            let sid_wait_line_count =
+                sid_wait_line_count_override.unwrap_or(music_config.sid_wait_line_count);
+
+            let outcome = tokio::task::spawn_blocking(move || {
+                let observer = std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
+                cpclib_bndbuild::pipeline::music_run::run_music_in_emulator(
+                    &song_path,
+                    &name_hint,
+                    &music_config.run_emulator,
+                    sid_wait_line_count,
+                    &observer
+                )
+            })
+            .await
+            .map_err(|e| {
+                tower_lsp::jsonrpc::Error {
+                    code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                    message: format!("run task panicked: {e}").into(),
+                    data: None
+                }
+            })?;
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // File-browser "💿 Build DSK with music" - same input shape as
+        // `cpclib.musicPlay` above, no emulator launch. The pipeline itself
+        // only ever returns a path inside a temp directory (fine for
+        // `cpclib.musicPlay`, which consumes it immediately) - since this
+        // command's whole point is a deliverable the user keeps, the built
+        // DSK is copied next to the source song file before reporting success.
+        if params.command == "cpclib.musicBuildDsk" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            // See `cpclib.musicPlay`'s identical second argument.
+            let sid_wait_line_count_override =
+                args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
+            let song_path = camino::Utf8PathBuf::from(fname);
+            let name_hint = song_path
+                .file_stem()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "SONG".to_string());
+            let dest_path = song_path.with_extension("dsk");
+
+            self.client
+                .log_message(MessageType::INFO, "Converting and building DSK...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let sid_wait_line_count = sid_wait_line_count_override.unwrap_or_else(|| {
+                crate::common::config::load_config(
+                    self.workspace_roots().first().map(|p| p.as_path())
+                )
+                .config
+                .music
+                .sid_wait_line_count
+            });
+
+            let result = {
+                let dest_path = dest_path.clone();
+                tokio::task::spawn_blocking(move || {
+                    let observer =
+                        std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
+                    let dsk_path = cpclib_bndbuild::pipeline::music_run::build_music_dsk(
+                        &song_path,
+                        &name_hint,
+                        sid_wait_line_count,
+                        &observer
+                    )?;
+                    std::fs::copy(&dsk_path, &dest_path)
+                        .map_err(|e| format!("Could not write {dest_path}: {e}"))?;
+                    Ok::<(), String>(())
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("build task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if result.is_ok() {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    match &result {
+                        Ok(()) => format!("Built {dest_path}"),
+                        Err(e) => e.clone()
+                    }
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // Which program a document belongs to, so the editor can ask the user
+        // when more than one includes it.
+        if params.command == "cpclib.resolveEntry" {
+            let fname = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let document = std::path::PathBuf::from(&fname);
+            return Ok(Some(match crate::basm::run::resolve_entry(&document) {
+                crate::basm::run::EntryChoice::Program(entry) => {
+                    serde_json::json!({ "entry": entry.to_string_lossy() })
+                },
+                crate::basm::run::EntryChoice::Ask(candidates) => {
+                    serde_json::json!({
+                        "candidates": candidates
+                            .iter()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect::<Vec<_>>()
+                    })
+                }
+            }));
+        }
+
+        // The "▶ Run in emulator" lens on a `.asm` file. Same build as F5 -
+        // `assemble_for_debug` - handed to the emulator the project names
+        // rather than to the debuggable one.
+        if params.command == "cpclib.runAssembly" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let Ok(uri) = Url::from_file_path(&fname)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            self.client
+                .log_message(MessageType::INFO, "Assembling and launching...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let outcome = {
+                let document = document.clone();
+                let config = self.asm_analyzer.config();
+                tokio::task::spawn_blocking(move || {
+                    crate::basm::run::run_document_in_emulator(&document, &config, tx)
                 })
                 .await
                 .map_err(|e| {
@@ -2318,6 +2805,151 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         }
 
+        if params.command == crate::basm::peephole::ANALYZE_COMMAND {
+            let mut arguments = params.arguments.into_iter();
+            let Some(uri) = arguments
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()))
+            else {
+                return Ok(None);
+            };
+            // A second argument narrows the *report* to a selection. Anything
+            // unparseable is treated as "no selection" rather than as an
+            // error: the useful thing to do with a malformed range is still to
+            // analyse the file.
+            let scope = arguments
+                .next()
+                .and_then(|v| serde_json::from_value::<Range>(v).ok());
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            self.asm_analyzer.request_peephole(&uri, scope);
+
+            // An open document already shows a full set of diagnostics;
+            // replacing them with peephole-only findings would silently drop
+            // the rest. A file the editor never opened has nothing to
+            // preserve, so it gets the cheap scan - which matters because
+            // that one skips assembling a project file on its own, and a
+            // client-driven project sweep is almost entirely such files.
+            let open = self.documents.contains_key(&uri);
+            let diagnostics = if open {
+                compute_diagnostics(
+                    &self.asm_analyzer,
+                    &self.build_analyzer,
+                    &self.basic_analyzer,
+                    &document,
+                    &self.workspace_roots(),
+                    &self.build_error_diagnostics
+                )
+            }
+            else {
+                self.asm_analyzer.peephole_scan(&document)
+            };
+            // Where each finding is, not just how many - a count alone leaves
+            // the user to go looking. Warnings only: this module also emits an
+            // INFORMATION notice when address-aware analysis had to sit out,
+            // and that is not an optimization to jump to.
+            let findings: Vec<serde_json::Value> = diagnostics
+                .iter()
+                .filter(|d| {
+                    d.source.as_deref() == Some(crate::basm::peephole::DIAGNOSTIC_SOURCE)
+                        && d.severity == Some(DiagnosticSeverity::WARNING)
+                })
+                .map(|d| {
+                    serde_json::json!({
+                        "uri": uri.to_string(),
+                        "line": d.range.start.line,
+                        "character": d.range.start.character,
+                        "message": d.message
+                    })
+                })
+                .collect();
+            self.publish_diagnostics(uri, diagnostics).await;
+            return Ok(Some(serde_json::json!(findings)));
+        }
+
+        if params.command == crate::basm::peephole::CLEAR_COMMAND {
+            // No argument means "everywhere" - the natural reading of a
+            // palette command with nothing selected.
+            let uri = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()));
+            self.asm_analyzer.clear_peephole_request(uri.as_ref());
+
+            // Re-publish so the diagnostics actually disappear: nothing else
+            // will ask for this document until the user next edits it.
+            let refresh: Vec<Url> = match uri {
+                Some(uri) => vec![uri],
+                None => self.documents.iter().map(|e| e.key().clone()).collect()
+            };
+            for target in refresh {
+                if let Some(document) = self.load_document(&target) {
+                    self.analyze_document(&document).await;
+                }
+            }
+            return Ok(None);
+        }
+
+        if params.command == crate::basm::peephole::FIX_ALL_COMMAND {
+            let Some(uri) = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()))
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            let Some((edit, count)) = self.asm_analyzer.fix_all_peephole_edit(&document)
+            else {
+                return Ok(None);
+            };
+            match self.client.apply_edit(edit).await {
+                Ok(response) if response.applied => {
+                    self.client
+                        .show_message(
+                            MessageType::INFO,
+                            format!(
+                                "Applied {count} peephole-optimization fix{}.",
+                                if count == 1 { "" } else { "es" }
+                            )
+                        )
+                        .await;
+                },
+                Ok(response) => {
+                    self.client
+                        .show_message(
+                            MessageType::ERROR,
+                            format!(
+                                "The peephole-optimization fixes were not applied{}.",
+                                response
+                                    .failure_reason
+                                    .map(|r| format!(": {r}"))
+                                    .unwrap_or_default()
+                            )
+                        )
+                        .await;
+                },
+                Err(_) => {
+                    self.client
+                        .show_message(
+                            MessageType::ERROR,
+                            "Failed to apply the edit to the client."
+                        )
+                        .await;
+                }
+            }
+            return Ok(None);
+        }
+
         if params.command == "cpclib.getTargetsForFile" {
             let mut args = params.arguments.into_iter();
             let build_uri_str = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
@@ -2337,6 +2969,109 @@ impl LanguageServer for CpcLspBackend {
                 None => vec![]
             };
             return Ok(Some(serde_json::json!(targets)));
+        }
+
+        // The editor's red dot, written into the source. Arguments are
+        // `[uri, line (0-based), enable]`; the reply is a single `TextEdit`
+        // for the client to apply, or `null` when the line cannot carry one
+        // (nothing executes on it) or already says what is being asked for.
+        //
+        // The client could not compute this itself: deciding where the first
+        // *instruction* on a line starts means knowing whether the word at the
+        // front is a label or a mnemonic, which in basm is a parsing question,
+        // not a lexical one.
+        if params.command == "cpclib.breakpointEdit" {
+            let mut args = params.arguments.into_iter();
+            let uri = args
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()));
+            let line = args.next().and_then(|v| v.as_u64()).map(|l| l as u32);
+            let enable = args.next().and_then(|v| v.as_bool()).unwrap_or(true);
+            let (Some(uri), Some(line)) = (uri, line)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            let edit = crate::basm::breakpoint::breakpoint_edit(
+                &self.asm_analyzer,
+                &document,
+                line,
+                enable
+            );
+            return Ok(edit.map(|e| serde_json::json!(e)));
+        }
+
+        // Which lines of a file already carry a `breakpoint` directive, so the
+        // editor can draw their red dots when it opens the file rather than
+        // only after a click. Argument: `[uri]`.
+        // The rules of a build file that end in an emulator command, so the
+        // editor can offer a list instead of asking the user to remember rule
+        // names. Argument: `[buildFileUri]`, or none for every open build file.
+        if params.command == "cpclib.getDebuggableRules" {
+            let build_files: Vec<std::path::PathBuf> = match params
+                .arguments
+                .first()
+                .and_then(|v| v.as_str())
+                .and_then(|s| Url::parse(s).ok())
+                .and_then(|u| u.to_file_path().ok())
+            {
+                Some(path) => vec![path],
+                None => {
+                    // Assembly files count too: a project small enough not to
+                    // want a separate build file keeps its rules in its
+                    // source's own `#!bndbuild` comments, and those are still
+                    // rules. `debuggable_rules` reads either shape, and
+                    // answers nothing for a file with no block - so offering
+                    // every open assembly file costs a read and no wrong
+                    // entries.
+                    self.documents
+                        .iter()
+                        .filter(|entry| {
+                            matches!(
+                                entry.value().doc_type,
+                                DocumentType::BuildFile | DocumentType::Assembly
+                            )
+                        })
+                        .filter_map(|entry| entry.key().to_file_path().ok())
+                        .collect()
+                }
+            };
+
+            let rules: Vec<serde_json::Value> = build_files
+                .into_iter()
+                .flat_map(|file| {
+                    cpclib_dap::launch::debuggable_rules(&file)
+                        .into_iter()
+                        .map(move |rule| {
+                            serde_json::json!({
+                                "rule": rule,
+                                "buildFile": file.to_string_lossy()
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            return Ok(Some(serde_json::json!(rules)));
+        }
+
+        if params.command == "cpclib.breakpointLines" {
+            let Some(uri) = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()))
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            let lines = crate::basm::breakpoint::breakpoint_lines(&self.asm_analyzer, &document);
+            return Ok(Some(serde_json::json!(lines)));
         }
 
         if params.command == "cpclib.getEmbeddedBndbuildFiles" {
@@ -2407,6 +3142,7 @@ impl LanguageServer for CpcLspBackend {
             DocumentType::Basic | DocumentType::CatartBasic => {
                 self.basic_analyzer.code_actions(entry.value(), range)
             },
+            DocumentType::BuildFile => self.build_analyzer.code_actions(entry.value(), range),
             _ => vec![]
         };
 
@@ -2552,6 +3288,185 @@ impl LanguageServer for CpcLspBackend {
             }
         }
         Ok(None)
+    }
+}
+
+/// The VS Code extension and the server both name commands, and the two name
+/// spaces are not allowed to overlap.
+#[cfg(test)]
+mod vscode_command_tests {
+    use super::*;
+
+    /// `vscode-languageclient` registers a bridge command for every name the
+    /// server advertises in `executeCommandProvider`. A `registerCommand` in
+    /// the extension using one of those same names throws "command already
+    /// exists", which aborts `client.start()` entirely - so the *next* thing
+    /// the user does reports "Client is not running", and nothing points at
+    /// the duplicate name that actually caused it.
+    ///
+    /// This has now happened twice (`cpclib.runRule`, then the peephole
+    /// commands), and the symptom never resembles the cause. Extension-side
+    /// ids therefore differ from the server-side ones they forward to
+    /// (`cpclib.findPeepholeInFile` -> `cpclib.analyzePeephole`), and this
+    /// test holds that line by reading the extension's own manifest.
+    #[test]
+    fn no_advertised_command_is_also_registered_by_the_vscode_extension() {
+        let manifest =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../cpclib-vscode/package.json");
+        let Ok(text) = std::fs::read_to_string(&manifest)
+        else {
+            // The extension is not part of every checkout; nothing to check.
+            return;
+        };
+        let json: serde_json::Value =
+            serde_json::from_str(&text).expect("the extension manifest must be valid JSON");
+
+        let contributed: Vec<&str> = json["contributes"]["commands"]
+            .as_array()
+            .map(|commands| {
+                commands
+                    .iter()
+                    .filter_map(|c| c["command"].as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            !contributed.is_empty(),
+            "the manifest declares no commands - the shape this test reads must have changed"
+        );
+
+        // `cpclib.runRule` is the documented exception: the extension
+        // contributes it (so it appears in the palette) but deliberately does
+        // *not* `registerCommand` it, leaving the bridge to handle it.
+        let clashes: Vec<&&str> = contributed
+            .iter()
+            .filter(|c| **c != "cpclib.runRule" && EXECUTE_COMMANDS.contains(c))
+            .collect();
+        assert!(
+            clashes.is_empty(),
+            "these ids are both advertised by the server and contributed by the extension, \
+             which aborts the client start: {clashes:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod peephole_command_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    fn init_params() -> InitializeParams {
+        InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        }
+    }
+
+    /// The command answers with *where*, not just how many.
+    ///
+    /// A count on its own is not actionable - it leaves the user to go looking
+    /// for something the analysis already located exactly. The client turns
+    /// these into `file:line` labels and a jumpable list, so the positions have
+    /// to survive the round trip.
+    #[tokio::test]
+    async fn analyze_reports_the_location_of_every_finding() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        backend.initialize(init_params()).await.unwrap();
+
+        let uri = Url::parse("file:///t.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".into(),
+                    version: 1,
+                    // `ld b, b` on line 2 (0-based 1) is a no-op the built-in
+                    // rules recognise; the `jp` gives the address-aware rules
+                    // something to be quiet about.
+                    text: "org 0x4000\n ld b, b\n jp done\ndone\n ret\n".into()
+                }
+            })
+            .await;
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: crate::basm::peephole::ANALYZE_COMMAND.to_string(),
+                arguments: vec![serde_json::json!(uri.to_string())],
+                work_done_progress_params: WorkDoneProgressParams::default()
+            })
+            .await
+            .unwrap()
+            .expect("the command must answer");
+
+        // Two: the redundant `ld b, b`, and the `jp` that reaches as a `jr`
+        // now that the file is short enough to have real addresses.
+        let findings = result.as_array().expect("an array of findings");
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(
+            findings
+                .iter()
+                .all(|f| f["uri"] == serde_json::json!(uri.to_string())),
+            "{findings:?}"
+        );
+        let lines: Vec<&serde_json::Value> = findings.iter().map(|f| &f["line"]).collect();
+        assert_eq!(lines, vec![&serde_json::json!(1), &serde_json::json!(2)]);
+        assert!(
+            findings[0]["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("ld b,b") || m.contains("ld b, b")),
+            "{findings:?}"
+        );
+    }
+
+    /// The "addresses unavailable" notice shares this module's diagnostic
+    /// source but is not an optimization - counting it told the user there
+    /// were findings to jump to when there were none.
+    #[tokio::test]
+    async fn the_skipped_analysis_notice_is_not_reported_as_a_finding() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        backend.initialize(init_params()).await.unwrap();
+
+        // An unresolvable `include` means the assemble never completes, so no
+        // address is trustworthy: `jp2jr` must stay quiet and the notice is
+        // all that is left.
+        let uri = Url::parse("file:///nowhere/t.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".into(),
+                    version: 1,
+                    text: "    include \"no_such_file.asm\"\nstart\n jp target\ntarget\n ret\n"
+                        .into()
+                }
+            })
+            .await;
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: crate::basm::peephole::ANALYZE_COMMAND.to_string(),
+                arguments: vec![serde_json::json!(uri.to_string())],
+                work_done_progress_params: WorkDoneProgressParams::default()
+            })
+            .await
+            .unwrap()
+            .expect("the command must answer");
+
+        assert_eq!(
+            result.as_array().map(|a| a.len()),
+            Some(0),
+            "the notice is not something to jump to: {result:?}"
+        );
     }
 }
 
@@ -3099,11 +4014,11 @@ mod build_error_diagnostics_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
-        let build_error_diagnostics: DashMap<Url, Diagnostic> = DashMap::new();
+        let build_error_diagnostics: DashMap<Url, Vec<Diagnostic>> = DashMap::new();
 
         let uri = Url::parse("file:///sna.asm").unwrap();
         let stored = build_error_diag("Build error (from rule 'x'): boom");
-        build_error_diagnostics.insert(uri.clone(), stored.clone());
+        build_error_diagnostics.insert(uri.clone(), vec![stored.clone()]);
 
         // Clean, valid code - live analysis alone finds nothing.
         let document = Document::new(uri, "org 0x8000\n    ret\n".to_string(), 1);
@@ -3124,11 +4039,11 @@ mod build_error_diagnostics_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
-        let build_error_diagnostics: DashMap<Url, Diagnostic> = DashMap::new();
+        let build_error_diagnostics: DashMap<Url, Vec<Diagnostic>> = DashMap::new();
 
         build_error_diagnostics.insert(
             Url::parse("file:///other.asm").unwrap(),
-            build_error_diag("Build error (from rule 'x'): boom")
+            vec![build_error_diag("Build error (from rule 'x'): boom")]
         );
 
         let document = Document::new(
@@ -3170,7 +4085,7 @@ mod build_error_diagnostics_tests {
         let target_uri = Url::parse("file:///sna.asm").unwrap();
         backend.build_error_diagnostics.insert(
             target_uri,
-            build_error_diag("Build error (from rule 'x'): stale")
+            vec![build_error_diag("Build error (from rule 'x'): stale")]
         );
 
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -3910,6 +4825,11 @@ ORG 0x8000\n";
                 }
             })
             .await;
+        // did_open only inserts the document and spawns its analysis now
+        // (see spawn_deferred_analysis) rather than awaiting it inline - the
+        // embedded-bndbuild index this test reads is populated by that
+        // spawned task, so it needs a moment to run.
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         let result = backend
             .execute_command(ExecuteCommandParams {

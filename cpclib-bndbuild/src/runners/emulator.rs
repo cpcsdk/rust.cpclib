@@ -76,6 +76,13 @@ impl Emulator {
         ))
     }
 
+    /// The portable AMSpiriT build - a separate emulator, not a variant.
+    pub fn new_amspiritlite_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::AmspiritLite(
+            Default::default()
+        ))
+    }
+
     pub fn new_sugarbox_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::SugarBoxV2(
             Default::default()

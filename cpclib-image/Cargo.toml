@@ -16,7 +16,7 @@ independent = true
 
 [dependencies]
 cpclib-common.workspace = true
-
+cpclib-files.workspace = true
 anyhow.workspace = true
 as-slice.workspace = true
 log.workspace = true
@@ -27,7 +27,8 @@ image.workspace = true
 nutype = {workspace = true, features = ["serde", "new_unchecked"]}
 serde.workspace = true
 #arrays = "0.2.0"
-
+owo-colors.workspace = true
+delegate = { workspace = true}
 rayon = { version = "1.12", optional = true }
 
 [features]

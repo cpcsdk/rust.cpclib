@@ -417,6 +417,15 @@ impl Default for Snapshot {
 }
 
 impl Snapshot {
+    /// The snapshots shipped inside this library, by the name they are known by.
+    ///
+    /// A program that wants the firmware set up - so `CALL &BB5A` does
+    /// something - has to start from a snapshot of a booted machine. Requiring
+    /// every project to carry its own copy of one made a build depend on a
+    /// binary blob sitting next to the source; these are already compiled in,
+    /// so `snainit "inner://cpc6128.sna"` can just work.
+    pub const EMBEDDED: [&'static str; 2] = ["cpc6128.sna", "cpc6128_v2.sna"];
+
     pub fn new_6128() -> Result<Self, String> {
         let content = include_bytes!("cpc6128.sna").to_vec();
         Self::from_buffer(content)
@@ -425,6 +434,19 @@ impl Snapshot {
     pub fn new_6128_v2() -> Result<Self, String> {
         let content = include_bytes!("cpc6128_v2.sna").to_vec();
         Self::from_buffer(content)
+    }
+
+    /// Load one of [`Snapshot::EMBEDDED`] by name.
+    ///
+    /// `None` for a name that is not one of them - the caller can then say
+    /// which names *do* exist, which is more use than "file not found" about a
+    /// file that was never on disc.
+    pub fn from_embedded(name: &str) -> Option<Result<Self, String>> {
+        match name {
+            "cpc6128.sna" => Some(Self::new_6128()),
+            "cpc6128_v2.sna" => Some(Self::new_6128_v2()),
+            _ => None
+        }
     }
 }
 

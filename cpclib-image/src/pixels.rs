@@ -6,7 +6,15 @@ pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item = Pen>> {
         Mode::Zero => Box::new(mode0::byte_to_pens(byte).into_iter()),
         Mode::One => Box::new(mode1::byte_to_pens(byte).into_iter()),
         Mode::Two => Box::new(mode2::byte_to_pens(byte).into_iter()),
-        _ => unimplemented!()
+        // "Mode 3 - 4 colors / same resolution than Mode 0" (see `Mode`'s
+        // own doc comment): the bit layout in a byte is Mode 0's, but the
+        // Gate Array only wires up 4 of the 16 resulting pens - confirmed by
+        // the user: a Mode 3 pen is a Mode 0 pen number, ANDed with 0b11.
+        Mode::Three => Box::new(
+            mode0::byte_to_pens(byte)
+                .into_iter()
+                .map(|pen| Pen::from(pen.number() & 0b11))
+        )
     }
 }
 
@@ -22,7 +30,8 @@ pub fn pens_to_bytes(pens: &[Pen], mode: Mode) -> Vec<u8> {
         Mode::Zero => mode0::pens_to_bytes_with_crop(pens),
         Mode::One => mode1::pens_to_bytes_with_crop(pens),
         Mode::Two => mode2::pens_to_bytes_with_crop(pens),
-        _ => unimplemented!()
+        // Same bit layout as Mode 0 - see `byte_to_pens`'s own comment.
+        Mode::Three => mode0::pens_to_bytes_with_crop(pens)
     }
 }
 

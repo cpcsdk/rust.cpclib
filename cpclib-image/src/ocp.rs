@@ -81,6 +81,7 @@ pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D, o: &dyn EventObserv
 
 const NB_PAL: usize = 12;
 
+/// Standard OCP palette strcuture for Amstrad old
 pub struct OcpPalette {
     #[allow(dead_code)]
     screen_mode: Mode,
@@ -88,7 +89,7 @@ pub struct OcpPalette {
     cycling: bool,
     #[allow(dead_code)]
     cycling_delay: u8,
-    palettes: [Palette; NB_PAL],
+    palettes: [Palette<Ink>; NB_PAL],
     #[allow(dead_code)]
     excluded: [u8; 16],
     #[allow(dead_code)]
@@ -97,12 +98,12 @@ pub struct OcpPalette {
 
 impl OcpPalette {
     /// Get the palette of interest (0..12)
-    pub fn palette(&self, nb: usize) -> &Palette {
+    pub fn palette(&self, nb: usize) -> &Palette<Ink> {
         assert!(nb < 12);
         &self.palettes[nb]
     }
 
-    pub fn palettes(&self) -> &[Palette; NB_PAL] {
+    pub fn palettes(&self) -> &[Palette<Ink>; NB_PAL] {
         &self.palettes
     }
 
@@ -113,7 +114,7 @@ impl OcpPalette {
         let cycling = data.next().unwrap() == 0xFF;
         let cycling_delay = data.next().unwrap();
 
-        let mut palettes: [Palette; NB_PAL] = Default::default(); // arrays::from_iter((0..NB_PAL).into_iter().map(|_| Palette::default())).unwrap();
+        let mut palettes: [Palette<Ink>; NB_PAL] = Default::default(); // arrays::from_iter((0..NB_PAL).into_iter().map(|_| Palette::default())).unwrap();
         for pen in 0..=16i32 {
             for (_idx, palette) in palettes.iter_mut().enumerate().take(NB_PAL) {
                 let ga_ink = data.next().unwrap();
@@ -143,3 +144,4 @@ impl OcpPalette {
         }
     }
 }
+

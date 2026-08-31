@@ -165,6 +165,12 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: AMSPIRITLITE_CMDS,
+        description: "Run in AMSpiriT Lite, the portable AMSpiriT build",
+        synopsis: "amspiritlite [OPTIONS] <FILE>",
+        example: "amspiritlite --autorun demo.dsk"
+    },
+    TaskType {
         names: CPCEMU_CMDS,
         description: "Run in CPCEmu emulator",
         synopsis: "TODO",
@@ -355,6 +361,18 @@ pub const TASK_TYPES: &[TaskType] = &[
         description: "Print a message",
         synopsis: "TODO",
         example: "echo watched.txt as been modified"
+    },
+    TaskType {
+        names: ASMFMT_CMDS,
+        description: "Format Z80 assembly source code (basm-fmt)",
+        synopsis: "basm-fmt [OPTIONS] [FILES]...",
+        example: "asmfmt -i main.asm"
+    },
+    TaskType {
+        names: BASMOPT_CMDS,
+        description: "Detect (and optionally fix) suboptimal Z80 instruction sequences",
+        synopsis: "basmopt [OPTIONS] <SOURCE>",
+        example: "basmopt -i main.asm"
     },
     TaskType {
         names: EXTERN_CMDS,

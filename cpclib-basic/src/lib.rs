@@ -16,9 +16,16 @@ use cpclib_common::winnow::ascii::space0;
 use cpclib_sna::Snapshot;
 use string_parser::parse_basic_program;
 use thiserror::Error;
-use tokens::BasicToken;
+use tokens::{BasicToken, BasicTokenNoPrefix, BasicValue};
 
-use crate::tokens::BasicTokenNoPrefix;
+/// Where a `LOAD`ed BASIC program's first byte sits in memory - matches
+/// `cpclib-dap`'s own `PROGRAM_START` (`cpclib-dap/src/basic.rs`), which
+/// reads live program bytes from exactly this address. Used both to place
+/// bytes in a snapshot (`as_sna`) and, in the other direction, to resolve
+/// [`BasicTokenNoPrefix::LineMemoryAddressPointer`] tokens back to line
+/// numbers when decoding bytes read from real (possibly already-`RUN`)
+/// memory - see [`BasicProgram::resolve_line_memory_address_pointers`].
+pub const PROGRAM_START: u16 = 0x170;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Basic line index represtation. Can be by line number of position in the list
@@ -56,7 +63,20 @@ pub struct BasicLine {
 impl fmt::Display for BasicLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.line_number)?;
-        for token in self.tokens().iter() {
+        // `IF ... THEN <linenum>` (and the same after `ELSE`) is an
+        // implicit GOTO: the parser (`parse_if`/`string_parser.rs`) stores
+        // a bare `LineNumber` constant there directly, no separate `Goto`
+        // token and no synthesised "GO TO"/"GOTO" text at display time -
+        // same dedicated token an *explicit* `GOTO 80` uses, so it needs
+        // no special-casing here either. An earlier version of this parser
+        // inserted a synthetic `Goto` token for the implicit form and this
+        // `Display` impl special-cased it back into literal "GO TO " text -
+        // reported live as wrong (a real CPC never stores or shows a
+        // "GOTO"/"GO TO" word the user never typed) and traced to the
+        // synthesised token never having been verified against real
+        // hardware for this specific construct (see `parse_if`'s own doc
+        // comment).
+        for token in self.tokens() {
             write!(f, "{token}")?;
         }
         Ok(())
@@ -209,7 +229,10 @@ impl BasicProgram {
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
         let input = code.as_ref();
         match (parse_basic_program, space0).parse(input) {
-            Ok((prog, _)) => Ok(prog),
+            Ok((mut prog, _)) => {
+                prog.apply_def_type_declarations();
+                Ok(prog)
+            },
             Err(e) => {
                 Err(BasicError::ParseError {
                     msg: format!("Error while parsing the Basic content: {e}")
@@ -218,15 +241,107 @@ impl BasicProgram {
         }
     }
 
+    /// After a `DEFINT`/`DEFSTR`/`DEFREAL` statement, every *later*
+    /// reference to a variable whose name starts with one of the declared
+    /// letters uses that type's marker, even with no explicit sigil at the
+    /// reference site - confirmed against a real CPC's own re-save of
+    /// mandelbrot.bas (`DEFINT c,i,p` makes every later `it`/`itmax`/
+    /// `px`/`py`/`c` reference use `VariableDefinition1`, not the
+    /// sigil-less default `VariableDefinition3` the parser gives it
+    /// locally). An explicit `$`/`%` sigil at the reference site always
+    /// wins - recognisable because it never parses to the sigil-less
+    /// default this only patches.
+    ///
+    /// Line-granularity, not token-granularity: a declaration takes effect
+    /// starting the *next* line, not partway through its own line. Every
+    /// real program only ever has one declaration per line with nothing
+    /// else on it (as does this one), so this is not a meaningful
+    /// simplification in practice - and getting the same-line ordering
+    /// exactly right would need threading position through the token
+    /// stream for no evidenced benefit.
+    fn apply_def_type_declarations(&mut self) {
+        let mut default_kind = [BasicTokenNoPrefix::VariableDefinition3; 26];
+
+        for line in &mut self.lines {
+            patch_sigil_less_variable_kinds(&mut line.tokens, &default_kind);
+            record_type_declarations(&line.tokens, &mut default_kind);
+        }
+    }
+
     /// Create the program from a binary content
     pub fn decode(bytes: &[u8]) -> Result<Self, BasicError> {
         match binary_parser::program.parse(bytes) {
-            Ok(prog) => Ok(prog),
+            Ok(mut prog) => {
+                prog.resolve_line_memory_address_pointers();
+                Ok(prog)
+            },
             Err(e) => {
                 Err(BasicError::ParseError {
                     msg: format!("Error while parsing the Basic content: {e}")
                 })
             },
+        }
+    }
+
+    /// A GOTO/GOSUB/RESTORE/... target starts out as a plain
+    /// [`BasicTokenNoPrefix::LineNumber`] (&1E) - but the real ROM
+    /// self-modifies it, the first time it actually runs, into a
+    /// [`BasicTokenNoPrefix::LineMemoryAddressPointer`] (&1D) whose payload
+    /// is no longer the line number but the absolute memory address the
+    /// target line's own length-prefix starts at, so later jumps skip the
+    /// line-number search (see cpctech.cpcwiki.de/docs/bastech.html, &1D
+    /// vs &1E). Bytes freshly encoded by this crate's own `parse`/`as_bytes`
+    /// never contain this token - it only shows up when decoding real,
+    /// possibly-already-`RUN` memory (e.g. read live from an emulator).
+    ///
+    /// This walks the decoded program once to map each line's own address
+    /// (assuming it starts at [`PROGRAM_START`], same as `as_sna`/
+    /// cpclib-dap's own live memory reads) to its line number, then
+    /// rewrites every `LineMemoryAddressPointer` constant it can resolve
+    /// into an ordinary `LineNumber` constant carrying that line number -
+    /// after which it displays and behaves exactly like any other
+    /// unmodified GOTO target. A pointer whose address doesn't land exactly
+    /// on a line start (a stale/foreign snapshot, or a base other than
+    /// `PROGRAM_START`) is left as-is; `Display` still shows something
+    /// readable for that case (the raw address), never a debug placeholder.
+    ///
+    /// The cached payload itself is one byte *short* of the target line's
+    /// own record start - confirmed live (a real, already-`RUN` 1984js
+    /// session, target line 80 starting at &26B in this crate's own byte
+    /// layout, cached as &26A) - so the map is keyed one below each line's
+    /// address, not the address itself. Plausible ROM-internal reason: the
+    /// interpreter's line search leaves its pointer one byte short of the
+    /// match (matching the found line's own *previous* byte) and whatever
+    /// consumes the cached value re-adds the 1 itself; not documented
+    /// anywhere found so far, so treat the exact mechanism as inferred from
+    /// this one live example, not as an authoritative citation.
+    fn resolve_line_memory_address_pointers(&mut self) {
+        let mut address_to_line = std::collections::HashMap::new();
+        let mut address = PROGRAM_START;
+        for line in &self.lines {
+            address_to_line.insert(address.wrapping_sub(1), line.line_number);
+            address = address.wrapping_add(line.public_bytes_length());
+        }
+
+        for line in &mut self.lines {
+            for token in &mut line.tokens {
+                if let BasicToken::Constant(BasicTokenNoPrefix::LineMemoryAddressPointer, value) =
+                    token
+                {
+                    if let Some(target_line) = value
+                        .as_integer()
+                        .and_then(|addr| address_to_line.get(&addr))
+                    {
+                        *token = BasicToken::Constant(
+                            BasicTokenNoPrefix::LineNumber,
+                            BasicValue::new_integer_by_bytes(
+                                (*target_line % 256) as u8,
+                                (*target_line / 256) as u8
+                            )
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -375,7 +490,8 @@ impl BasicProgram {
         let bytes = self.as_bytes();
         let mut sna = Snapshot::new_6128()?;
         sna.unwrap_memory_chunks();
-        sna.add_data(&bytes, 0x170).map_err(|e| format!("{e:?}"))?;
+        sna.add_data(&bytes, PROGRAM_START as usize)
+            .map_err(|e| format!("{e:?}"))?;
         Ok(sna)
     }
 
@@ -385,6 +501,96 @@ impl BasicProgram {
             .iter_mut()
             .for_each(|line| line.remove_useless_space());
     }
+}
+
+/// Rewrites every `BasicToken::Variable` still carrying the sigil-less
+/// default marker (`VariableDefinition3`) to whatever `default_kind` says
+/// its first letter currently resolves to - see
+/// `BasicProgram::apply_def_type_declarations`.
+fn patch_sigil_less_variable_kinds(
+    tokens: &mut [BasicToken],
+    default_kind: &[BasicTokenNoPrefix; 26]
+) {
+    for token in tokens {
+        if let BasicToken::Variable(kind, name, _offset) = token {
+            if *kind == BasicTokenNoPrefix::VariableDefinition3 {
+                if let Some(idx) = letter_index(name) {
+                    *kind = default_kind[idx];
+                }
+            }
+        }
+    }
+}
+
+/// If `tokens` contains a `DEFINT`/`DEFSTR`/`DEFREAL` statement, updates
+/// `default_kind` for every letter (or letter range, e.g. `A-Z`) it names.
+fn record_type_declarations(tokens: &[BasicToken], default_kind: &mut [BasicTokenNoPrefix; 26]) {
+    for (i, token) in tokens.iter().enumerate() {
+        let BasicToken::SimpleToken(tok) = token
+        else {
+            continue;
+        };
+        let target = match tok {
+            BasicTokenNoPrefix::Defint => BasicTokenNoPrefix::VariableDefinition1,
+            BasicTokenNoPrefix::Defstr => BasicTokenNoPrefix::StringVariableDefinition,
+            BasicTokenNoPrefix::Defreal => BasicTokenNoPrefix::VariableDefinition3,
+            _ => continue
+        };
+        for letter in declared_letters(&tokens[i + 1..]) {
+            if let Some(idx) = letter_index(&letter.to_string()) {
+                default_kind[idx] = target;
+            }
+        }
+    }
+}
+
+/// The letters a `DEFINT`/`DEFSTR`/`DEFREAL` statement's own tail names -
+/// `parse_defint`/`parse_defstr`/`parse_defreal` encode `C-P` as the plain
+/// characters `C`, `SubstractionOrUnaryMinus`, `P`, so a run of single
+/// letters and `-`-joined pairs is all that needs recognising here, up to
+/// the statement separator (or end of line) that ends the declaration.
+fn declared_letters(tail: &[BasicToken]) -> Vec<char> {
+    let mut chars = Vec::new();
+    for token in tail {
+        let BasicToken::SimpleToken(tok) = token
+        else {
+            break;
+        };
+        if *tok == BasicTokenNoPrefix::StatementSeparator {
+            break;
+        }
+        if let Some(c) = tok.char() {
+            if c.is_ascii_alphabetic() || c == '-' {
+                chars.push(c.to_ascii_uppercase());
+            }
+        }
+    }
+
+    let mut letters = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '-' {
+            i += 1;
+            continue;
+        }
+        if i + 2 < chars.len() && chars[i + 1] == '-' {
+            for b in (chars[i] as u8)..=(chars[i + 2] as u8) {
+                letters.push(b as char);
+            }
+            i += 3;
+        }
+        else {
+            letters.push(chars[i]);
+            i += 1;
+        }
+    }
+    letters
+}
+
+/// `name`'s first letter as a 0-25 index, if it has one.
+fn letter_index(name: &str) -> Option<usize> {
+    let first = name.chars().next()?.to_ascii_uppercase();
+    first.is_ascii_uppercase().then(|| first as usize - 'A' as usize)
 }
 
 #[allow(clippy::let_unit_value)]

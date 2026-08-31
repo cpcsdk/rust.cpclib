@@ -623,6 +623,9 @@ impl EmulatorConf {
                 | Emulator::Cpcec(_)
                 | Emulator::RetroVm(_)
                 | Emulator::Cadence(_) => args.push(drive_a.to_string()),
+                // `amspirit-lite [OPTION...] [FILE]` - the medium is the
+                // trailing positional argument, whatever kind it is.
+                Emulator::AmspiritLite(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) | Emulator::Amspirit(_) => {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
@@ -646,6 +649,7 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::AmspiritLite(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => {
                     args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
@@ -671,6 +675,9 @@ impl EmulatorConf {
                     let fname = emu.wine_compatible_fname(sna)?;
                     args.push(format!("--file={fname}"));
                 },
+                // Not `--file=`: the Lite build takes the medium as its
+                // trailing positional argument and has no such option.
+                Emulator::AmspiritLite(_) => args.push(sna.to_string()),
                 Emulator::CpcEmuPower(_v) => {
                     args.push(format!("--sna={sna}"));
                 },
@@ -699,6 +706,14 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!(),
                 Emulator::Amspirit(_) => todo!(),
+                Emulator::AmspiritLite(_) => {
+                    // `-R/--rom-path` points at a directory of ROMs rather than
+                    // naming them one by one, so a per-slot configuration has
+                    // nowhere to go.
+                    return Err("AMSpiriT Lite takes a ROM *directory* (--rom-path), not \
+                         individual ROM slots"
+                        .to_owned());
+                },
                 Emulator::SugarBoxV2(_) => todo!(),
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
                 Emulator::CapriceForever(_caprice_forever_version) => todo!(),
@@ -805,6 +820,11 @@ impl EmulatorConf {
                     // is it automatic ?
                 },
                 Emulator::Amspirit(_) => {
+                    args.push(format!("--run={run}"));
+                },
+                // `-T/--run <name>` types `RUN"<name>`; the short `-A` form
+                // runs the first program on the medium instead.
+                Emulator::AmspiritLite(_) => {
                     args.push(format!("--run={run}"));
                 },
                 Emulator::SugarBoxV2(_) => unimplemented!(),
@@ -1438,6 +1458,11 @@ impl Robot {
             Emulator::Amspirit(_) => {
                 RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
             },
+            // Driven by the same window automation as its bigger sibling: the
+            // Lite build presents the same CPC screen and keyboard.
+            Emulator::AmspiritLite(_) => {
+                RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::SugarBoxV2(_) => {
                 RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
             },
@@ -1883,9 +1908,12 @@ pub struct EmuCli {
     command: Commands
 }
 
-#[derive(ValueEnum, Clone, Debug, PartialEq)]
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Emu {
     Ace,
+    /// The portable AMSpiriT build - a different emulator from `Amspirit`,
+    /// with its own releases and its own command line.
+    Amspiritlite,
     Winape,
     Cpcec,
     Amspirit,
@@ -1896,8 +1924,176 @@ pub enum Emu {
     Cadence,
     #[value(alias = "1984")]
     Emulator1984,
+    /// The emscripten build of 1984, served in a browser rather than spawned.
+    ///
+    /// The only emulator that can be debugged today, because it is the only one
+    /// that speaks the Debug Adapter Protocol. `run` cannot use it - there is
+    /// no process to run - so it is accepted here and refused there, with a
+    /// message that says which command to use instead.
+    #[value(alias = "1984js")]
+    Emulator1984Js,
     #[value(alias = "retrovm")]
     Rvm
+}
+
+/// One emulator, as an editor integration would want to offer it in a
+/// picker: the exact CLI string this crate's own `--emulator` flag accepts
+/// (via [`clap::ValueEnum`], never hand-derived, so it can't drift from
+/// what `EmuCli` actually parses), a display label, whether it is one of
+/// the two the Debug Adapter Protocol layer (`cpclib-dap`) can debug, and
+/// whether it is already installed - so a caller can show a "needs
+/// installing" hint before spending the time to fetch it.
+pub struct EmulatorListEntry {
+    pub id: String,
+    pub label: &'static str,
+    pub debuggable: bool,
+    pub installed: bool,
+    /// The exact string `cpclib-dap`'s own launch-time `emulator` property
+    /// wants (`lib.rs`'s `chosen_emulator.eq_ignore_ascii_case(...)` checks)
+    /// - a *different* naming scheme from `id` above (this crate's own
+    /// `--emulator` flag), so a caller driving the DAP layer directly (an
+    /// editor's debug launch) needs this instead of `id`. `None` for every
+    /// non-`debuggable` entry, since the DAP layer has no name for those at
+    /// all.
+    pub dap_id: Option<&'static str>
+}
+
+/// Every emulator this crate knows how to run, for an editor integration to
+/// list (e.g. a "run/debug with..." picker) - see [`EmulatorListEntry`].
+///
+/// `debuggable` here means "the DAP layer (`cpclib-dap`) can debug it" -
+/// 1984js and AMSpiriT Lite, same set `cpclib-dap/src/lib.rs`'s own launch
+/// path checks against. That is a *different* question from what this
+/// crate's own `emu ... debug` CLI command accepts (only 1984js, served as
+/// a debug-armed web page - see [`Dispatch::of`]) - this list is for an
+/// editor driving `cpclib-dap` directly, not for this CLI's own `debug`
+/// subcommand.
+pub fn list_emulators() -> Vec<EmulatorListEntry> {
+    fn id(value: Emu) -> String {
+        value
+            .to_possible_value()
+            .expect("every Emu variant has a possible value")
+            .get_name()
+            .to_string()
+    }
+
+    vec![
+        EmulatorListEntry {
+            id: id(Emu::Ace),
+            label: "ACE-DL",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::Ace(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Amspirit),
+            label: "AMSpiriT",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::Amspirit(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Amspiritlite),
+            label: "AMSpiriT Lite",
+            debuggable: true,
+            dap_id: Some("amspiritlite"),
+            installed: Emulator::AmspiritLite(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Winape),
+            label: "WinAPE",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::Winape(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Cpcec),
+            label: "CPCEC",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::Cpcec(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Sugarbox),
+            label: "SugarBox v2",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::SugarBoxV2(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Cpcemupower),
+            label: "CPCEmuPower",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::CpcEmuPower(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Cpcemu),
+            label: "CPCEmu",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::CpcEmu(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Caprice),
+            label: "CaPriCe Forever",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::CapriceForever(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Cadence),
+            label: "Cadence",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::Cadence(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Emulator1984),
+            label: "1984 (native)",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::Emulator1984(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Emulator1984Js),
+            label: "1984js (browser)",
+            debuggable: true,
+            dap_id: Some("1984js"),
+            installed: crate::web::js1984::is_installed()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Rvm),
+            label: "Retro Virtual Machine",
+            debuggable: false,
+            dap_id: None,
+            installed: Emulator::RetroVm(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+    ]
 }
 
 use clap::Args;
@@ -1976,10 +2172,62 @@ pub enum Commands {
     Run {
         #[arg(short, long, help = "Simple text to type")]
         text: Option<String>
+    },
+
+    /// Serve the web emulator with the snapshot loaded, for debugging.
+    ///
+    /// Unlike `run`, this does not spawn a native process: the emulator is a
+    /// web application, so it is served on a loopback port and opened in a
+    /// browser. An editor's debug adapter uses the same server for the Debug
+    /// Adapter Protocol channel; on this command line it is simply a way to
+    /// run a snapshot in the debuggable emulator without an editor at all.
+    Debug {
+        #[arg(long, help = "Do not open a browser, just print the URL")]
+        no_open: bool
     }
 }
 
 pub const EMUCTRL_CMD: &str = "cpc";
+
+/// Serve the web emulator and hold the process open.
+///
+/// Separate from `start_emulator` because nothing is shared: there is no
+/// process, no window to find, no argv translation - just files on a loopback
+/// port and the snapshot the user named.
+fn serve_web_emulator<E: EventObserver>(
+    conf: &EmulatorConf,
+    no_open: bool,
+    debuggable: bool,
+    o: &E
+) -> Result<(), String> {
+    let snapshot = match conf.snapshot.as_ref() {
+        Some(path) => Some(std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?),
+        None => None
+    };
+
+    let root = crate::web::js1984::install()?;
+    let server = crate::web::serve(&root, snapshot)
+        .map_err(|e| format!("cannot serve the emulator: {e}"))?;
+    // `/debug` is the only page the server injects a session token into, so
+    // this *is* the difference between the two commands: `run` gets the plain
+    // emulator with the bridge dormant, `debug` gets one an editor can attach
+    // to.
+    let url = if debuggable {
+        server.debug_url()
+    }
+    else {
+        server.plain_url()
+    };
+
+    o.emit_stdout(&format!("1984js is serving at {url}\n"));
+    if !no_open && let Err(problem) = webbrowser::open(&url) {
+        o.emit_stderr(&format!("could not open a browser: {problem}\n"));
+    }
+    o.emit_stdout("Press Ctrl-C to stop.\n");
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+}
 
 pub struct EmulatorFacadeRunner<E: EventObserver> {
     command: Command,
@@ -2017,6 +2265,46 @@ impl<E: EventObserver + Clone + 'static> RunnerWithClap for EmulatorFacadeRunner
     }
 }
 
+/// What a command line asks for, decided before anything is installed, served
+/// or spawned.
+///
+/// Pulled out of `handle_arguments` because it is the whole of a bug worth a
+/// test: `run --emulator 1984js` used to fall past this decision into the
+/// emulator table, whose `Emulator1984Js` entry quietly handed back the
+/// *desktop* 1984. It started the native emulator and said nothing about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dispatch {
+    /// Serve 1984js on loopback. `debuggable` selects the page that carries a
+    /// session token, which is the only difference between `run` and `debug`.
+    ServeWeb { debuggable: bool, no_open: bool },
+    /// Install and spawn a desktop emulator.
+    Native,
+    /// `debug` was asked of an emulator that cannot be debugged. Substituting
+    /// 1984js would make a rule that says `ace` behave as something else.
+    RefuseDebug
+}
+
+impl Dispatch {
+    pub fn of(emulator: Emu, command: &Commands) -> Self {
+        let debuggable = matches!(command, Commands::Debug { .. });
+        if matches!(emulator, Emu::Emulator1984Js) {
+            return Self::ServeWeb {
+                debuggable,
+                no_open: match command {
+                    Commands::Debug { no_open } => *no_open,
+                    _ => false
+                }
+            };
+        }
+        if debuggable {
+            Self::RefuseDebug
+        }
+        else {
+            Self::Native
+        }
+    }
+}
+
 pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     mut cli: EmuCli,
     o: &E
@@ -2039,17 +2327,42 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .break_on_bad_vbl(cli.break_on_bad_vbl);
     let conf = builder.build();
 
+    // Answered before anything native happens: a web emulator is *served*, not
+    // spawned, and falling through would install and start the desktop 1984 as
+    // well.
+    match Dispatch::of(cli.emulator, &cli.command) {
+        Dispatch::ServeWeb {
+            debuggable,
+            no_open
+        } => {
+            return serve_web_emulator(&conf, no_open, debuggable, o);
+        },
+        Dispatch::RefuseDebug => {
+            return Err(format!(
+                "{:?} cannot be debugged: only 1984js speaks the Debug Adapter Protocol. \
+                 Use `--emulator 1984js`.",
+                cli.emulator
+            ));
+        },
+        Dispatch::Native => {}
+    }
+
     let emu = match cli.emulator {
         Emu::Ace => Emulator::Ace(Default::default()),
         Emu::Winape => Emulator::Winape(Default::default()),
         Emu::Cpcec => Emulator::Cpcec(Default::default()),
         Emu::Caprice => Emulator::CapriceForever(Default::default()),
         Emu::Amspirit => Emulator::Amspirit(Default::default()),
+        Emu::Amspiritlite => Emulator::AmspiritLite(Default::default()),
         Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
         Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
         Emu::Cadence => Emulator::Cadence(Default::default()),
         Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
+        // Unreachable: every command with this emulator is served above. It
+        // used to fall through to the desktop 1984, which is the bug that
+        // comment claimed could not happen.
+        Emu::Emulator1984Js => unreachable!("1984js is served, never spawned"),
         Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 
@@ -2255,6 +2568,8 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     }
 
     let res = match cli.command {
+        // Handled at the top of this function, before anything native starts.
+        Commands::Debug { .. } => unreachable!("the debug path returns earlier"),
         #[cfg(feature = "screenshot")]
         Commands::Orgams(OrgamsCli {
             src,
@@ -2444,7 +2759,7 @@ mod tests {
         // Verify DiskInsert for drive A
         assert!(
             script.instructions().iter().any(|inst| {
-                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename } 
+                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename }
                     if *drive == cpclib_csl::Drive::A && filename == &Utf8PathBuf::from("test.dsk"))
             }),
             "Expected DiskInsert for drive A with test.dsk"
@@ -2453,7 +2768,7 @@ mod tests {
         // Verify DiskInsert for drive B
         assert!(
             script.instructions().iter().any(|inst| {
-                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename } 
+                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename }
                     if *drive == cpclib_csl::Drive::B && filename == &Utf8PathBuf::from("data.dsk"))
             }),
             "Expected DiskInsert for drive B with data.dsk"
@@ -2471,7 +2786,7 @@ mod tests {
         // Verify SnapshotLoad
         assert!(
             script.instructions().iter().any(|inst| {
-                matches!(inst, cpclib_csl::CslInstruction::SnapshotLoad(path) 
+                matches!(inst, cpclib_csl::CslInstruction::SnapshotLoad(path)
                     if path == &Utf8PathBuf::from("game.sna"))
             }),
             "Expected SnapshotLoad with game.sna"
@@ -2503,5 +2818,67 @@ mod tests {
             }),
             "Expected CrtcSelect with Type1"
         );
+    }
+
+    /// `run --emulator 1984js` serves the web emulator.
+    ///
+    /// It used to fall through to the emulator table and get the *desktop*
+    /// 1984 instead - silently, because the substituting match arm carried a
+    /// comment claiming this could not happen.
+    #[test]
+    fn asking_for_1984js_never_spawns_the_desktop_emulator() {
+        for command in [
+            Commands::Run { text: None },
+            Commands::Run {
+                text: Some("call &4000".into())
+            }
+        ] {
+            assert_eq!(
+                Dispatch::of(Emu::Emulator1984Js, &command),
+                Dispatch::ServeWeb {
+                    debuggable: false,
+                    no_open: false
+                },
+                "run must be served, not spawned"
+            );
+        }
+    }
+
+    /// `debug` serves the page that carries a session token; `run` serves the
+    /// plain one. That is the only difference between them.
+    #[test]
+    fn only_debug_serves_the_debuggable_page() {
+        assert_eq!(
+            Dispatch::of(Emu::Emulator1984Js, &Commands::Debug { no_open: true }),
+            Dispatch::ServeWeb {
+                debuggable: true,
+                no_open: true
+            }
+        );
+    }
+
+    /// Every other emulator is still spawned for `run`...
+    #[test]
+    fn other_emulators_are_still_spawned() {
+        for emulator in [Emu::Ace, Emu::Winape, Emu::Cpcec, Emu::Emulator1984] {
+            assert_eq!(
+                Dispatch::of(emulator, &Commands::Run { text: None }),
+                Dispatch::Native,
+                "{emulator:?}"
+            );
+        }
+    }
+
+    /// ...and refused for `debug`, rather than quietly becoming 1984js. A rule
+    /// that says `ace` must not behave as something else.
+    #[test]
+    fn debugging_another_emulator_is_refused_not_substituted() {
+        for emulator in [Emu::Ace, Emu::Amspirit, Emu::Emulator1984] {
+            assert_eq!(
+                Dispatch::of(emulator, &Commands::Debug { no_open: false }),
+                Dispatch::RefuseDebug,
+                "{emulator:?}"
+            );
+        }
     }
 }

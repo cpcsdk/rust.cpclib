@@ -22,7 +22,7 @@ use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
 use cpclib_runner::runner::emulator::emulator1984::EMULATOR_1984_CMD;
 use cpclib_runner::runner::emulator::retrovm::RETROVM_CMD;
 use cpclib_runner::runner::emulator::{
-    ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
+    ACE_CMD, AMSPIRIT_CMD, AMSPIRIT_LITE_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
 use cpclib_runner::runner::grafx2::GRAFX2_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
@@ -100,6 +100,7 @@ pub enum InnerTask {
     Xfer(StandardTaskArguments),
     YmCruncher(YmCruncher, StandardTaskArguments),
     AsmFmt(StandardTaskArguments),
+    BasmOpt(StandardTaskArguments),
     Vlink(StandardTaskArguments)
 }
 
@@ -195,6 +196,9 @@ pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
 pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
 pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
 pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
+// `AMSPIRIT_LITE_CMD` *is* "amspiritlite", so listing it again as a literal
+// made the name appear twice in `TASK_TYPES`.
+pub const AMSPIRITLITE_CMDS: &[&str] = &[AMSPIRIT_LITE_CMD, "amspirit-lite", "lite"];
 pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
 pub const CPCEMU_CMDS: &[&str] = &[CPCEMU_CMD, "cpc-emu"];
 pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];
@@ -204,6 +208,7 @@ pub const EMULATOR_1984_CMDS: &[&str] = &[EMULATOR_1984_CMD];
 pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
 
 pub const ASMFMT_CMDS: &[&str] = &["asmfmt", "basm-fmt"];
+pub const BASMOPT_CMDS: &[&str] = &["basmopt"];
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
@@ -310,6 +315,7 @@ impl Display for InnerTask {
             Self::Tracker(t, s) => (t.get_command(), s),
             Self::Vlink(s) => (VLINK_CMDS[0], s),
             Self::AsmFmt(s) => (ASMFMT_CMDS[0], s),
+            Self::BasmOpt(s) => (BASMOPT_CMDS[0], s),
             Self::Xfer(s) => (XFER_CMDS[0], s)
         };
 
@@ -339,8 +345,9 @@ macro_rules! is_some_cmd {
 
 #[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit, asmfmt, at, ayt, archive,
+    ace, amspirit, amspiritlite, asmfmt, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
+    basmopt,
     catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
     cadence, emulator_1984,
     disark, disc,
@@ -502,6 +509,10 @@ impl InnerTask {
 
     pub fn with_asmfmt(std: StandardTaskArguments) -> Self {
         Self::AsmFmt(std)
+    }
+
+    pub fn with_basmopt(std: StandardTaskArguments) -> Self {
+        Self::BasmOpt(std)
     }
 
     pub fn with_echo(std: StandardTaskArguments) -> Self {
@@ -682,6 +693,12 @@ impl InnerTask {
         else if is_cpcec_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_cpcec_default(), std))
         }
+        else if is_amspiritlite_cmd(code) {
+            Ok(Self::with_emulator(
+                Emulator::new_amspiritlite_default(),
+                std
+            ))
+        }
         else if is_amspirit_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_amspirit_default(), std))
         }
@@ -800,6 +817,9 @@ impl InnerTask {
         }
         else if is_asmfmt_cmd(code) {
             Ok(Self::with_asmfmt(std))
+        }
+        else if is_basmopt_cmd(code) {
+            Ok(Self::with_basmopt(std))
         }
         else if is_echo_cmd(code) {
             Ok(Self::with_echo(std))
@@ -932,6 +952,7 @@ impl InnerTask {
             | InnerTask::Csl(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::AsmFmt(t)
+            | InnerTask::BasmOpt(t)
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
@@ -975,6 +996,7 @@ impl InnerTask {
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
             | InnerTask::AsmFmt(t)
+            | InnerTask::BasmOpt(t)
             | InnerTask::Vlink(t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
@@ -1037,6 +1059,7 @@ impl InnerTask {
             InnerTask::Xfer(_) => true,
             InnerTask::Cpr(_) => false,
             InnerTask::AsmFmt(_) => false,
+            InnerTask::BasmOpt(_) => false,
             InnerTask::Csl(_) => false
         }
     }
@@ -1091,6 +1114,7 @@ impl InnerTask {
 
             // Utilities
             InnerTask::AsmFmt(_) => TaskKind::Embedded,
+            InnerTask::BasmOpt(_) => TaskKind::Embedded,
             InnerTask::Echo(_) => TaskKind::Embedded,
             InnerTask::Extern(_) => TaskKind::Delegated
         }
@@ -1166,6 +1190,7 @@ impl InnerTask {
             Self::Mv(empty_args.clone()),
             Self::Rm(empty_args.clone()),
             Self::AsmFmt(empty_args.clone()),
+            Self::BasmOpt(empty_args.clone()),
             Self::Snapshot(empty_args.clone()),
             Self::Vlink(empty_args.clone()),
             Self::Xfer(empty_args.clone()),
@@ -1598,5 +1623,42 @@ mod test {
         let std = StandardTaskArguments::from((&outer, &matches));
         let expected = argv[1..].join(" ");
         assert_eq!(std.args(), expected.as_str());
+    }
+}
+
+#[cfg(test)]
+mod amspiritlite_tests {
+    use super::*;
+
+    /// A build rule can name the Lite emulator, by any of its spellings.
+    #[test]
+    fn a_rule_can_ask_for_amspirit_lite() {
+        for name in ["amspiritlite", "amspirit-lite", "lite"] {
+            let task: Task = format!("{name} demo.sna")
+                .parse()
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(
+                format!("{task:?}").contains("Emulator"),
+                "{name} is an emulator task: {task:?}"
+            );
+        }
+    }
+
+    /// ...and it is *not* the same emulator as AMSpiriT proper. They ship
+    /// separately, take different arguments, and must not share a cache.
+    #[test]
+    fn amspirit_lite_is_not_amspirit() {
+        let lite: Task = "amspiritlite demo.sna".parse().unwrap();
+        let full: Task = "amspirit demo.sna".parse().unwrap();
+
+        assert_ne!(format!("{lite:?}"), format!("{full:?}"));
+        assert!(format!("{lite:?}").contains("Lite"), "{lite:?}");
+    }
+
+    /// The name that starts with the other's must not be swallowed by it.
+    #[test]
+    fn the_longer_name_is_not_matched_as_the_shorter_one() {
+        assert!(is_amspiritlite_cmd("amspiritlite"));
+        assert!(!is_amspirit_cmd("amspiritlite"));
     }
 }

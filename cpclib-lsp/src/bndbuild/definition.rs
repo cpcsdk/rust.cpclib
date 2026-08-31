@@ -574,17 +574,6 @@ pub(crate) fn jinja_word_at(line: &str, col: usize) -> Option<(String, usize, us
 
 // ─── `{% include %}` graph (for workspace-wide Jinja variable rename) ────────
 
-/// Directories never worth descending into while scanning the workspace:
-/// VCS metadata and build output can be huge and are never where hand-
-/// written build files live. Mirrors `server::backend::is_ignored_dir`.
-fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
-    entry.file_type().is_dir()
-        && matches!(
-            entry.file_name().to_str(),
-            Some(".git" | ".hg" | ".svn" | "target" | "node_modules")
-        )
-}
-
 /// `true` when `path` is worth scanning for `{% include %}` directives: its
 /// name exactly matches a conventional bndbuild entry-point filename
 /// (`cpclib_bndbuild::builder::EXPECTED_FILENAMES`, e.g. `build.bnd`), or
@@ -609,13 +598,7 @@ fn is_bndbuild_candidate(path: &Path) -> bool {
 pub(crate) fn build_include_graph(roots: &[PathBuf]) -> HashMap<PathBuf, Vec<PathBuf>> {
     let mut graph: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
     for root in roots {
-        let walker = walkdir::WalkDir::new(root)
-            .into_iter()
-            .filter_entry(|e| !is_ignored_dir(e));
-        for entry in walker.filter_map(|e| e.ok()) {
-            if !entry.file_type().is_file() {
-                continue;
-            }
+        for entry in crate::common::walk::files_under(root) {
             let path = entry.path();
             if !is_bndbuild_candidate(path) {
                 continue;

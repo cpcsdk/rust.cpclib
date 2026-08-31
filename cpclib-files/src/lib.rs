@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_disc::amsdos::{
@@ -129,9 +131,10 @@ impl FileAndSupport {
         }
     }
 
-    pub fn build<P: Into<Utf8PathBuf>>(p: P) -> Self {
-        let fname = p.into();
-        let content = fs_err::read(&fname).unwrap();
+    pub fn build<P: AsRef<Utf8Path>>(p: P) -> Result<Self, String> {
+        let fname = p.as_ref();
+        let content =
+            fs_err::read(fname).map_err(|e| format!("Failed to read file {}: {}", fname, e))?;
         let has_header = content.len() >= AmsdosHeader::HEADER_SIZE
             && AmsdosHeader::from_buffer(&content).represent_a_valid_file();
         let mut file = Self::new_auto(fname, has_header);
@@ -139,25 +142,25 @@ impl FileAndSupport {
         match file.file.0 {
             FileType::AmsdosBin | FileType::AmsdosBas => {
                 if !has_header {
-                    panic!(
+                    return Err(format!(
                         "File {} is expected to have an Amsdos header, but it does not have one.",
                         file.filename()
-                    );
+                    ));
                 }
                 file.content = Some(content[AmsdosHeader::HEADER_SIZE..].to_vec());
             },
             FileType::Ascii | FileType::NoHeader => {
                 if has_header {
-                    panic!(
+                    return Err(format!(
                         "File {} is not expected to have an Amsdos header, but it has one.",
                         file.filename()
-                    );
+                    ));
                 }
                 file.content = Some(content);
             },
             FileType::Auto => unreachable!()
         }
-        file
+        Ok(file)
     }
 
     pub fn content(&self) -> Vec<u8> {
@@ -377,4 +380,9 @@ impl FileAndSupport {
             other => *other
         }
     }
+}
+
+pub fn load_content<P: AsRef<Utf8Path>>(path: P) -> Result<Vec<u8>, String> {
+    let file = FileAndSupport::build(path)?;
+    Ok(file.content())
 }

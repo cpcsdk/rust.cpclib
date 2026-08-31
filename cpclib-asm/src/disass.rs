@@ -166,9 +166,63 @@ pub fn string_to_token(representation: &str) -> Result<Token, String> {
     }
 }
 
+/// The absolute address a JR/DJNZ's relative offset targets.
+///
+/// `disass.rs`'s own decoder already folds the +2 bias into `offset_expr`
+/// before this is called, so the arithmetic here is exactly
+/// `current_address + offset` - and `$` (the assembler's own spelling for
+/// "this instruction") targets `current_address` itself, offset zero.
+///
+/// Shared by `cpclib-bdasm` (which resolves it further, into a label, using
+/// its own whole-binary symbol table - that part stays bdasm-specific) and
+/// `cpclib-dap` (which prints the plain address here and lets the existing
+/// `-dv` labelling pipeline in `inspect.rs::name_operand_addresses` supply a
+/// label from the debugger's own project map, if one exists).
+pub fn resolve_jr_djnz_target(offset_expr: &Expr, current_address: Option<u16>) -> Option<u16> {
+    let current_address = current_address?;
+    match offset_expr {
+        Expr::Label(l) if l == "$" => Some(current_address),
+        Expr::Value(v) => Some(current_address.wrapping_add(*v as u16)),
+        _ => None
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn resolve_jr_djnz_target_forward_offset() {
+        // JR +8 from 0x4000: 0x4000 + 8 = 0x4008.
+        assert_eq!(
+            resolve_jr_djnz_target(&Expr::Value(8), Some(0x4000)),
+            Some(0x4008)
+        );
+    }
+
+    #[test]
+    fn resolve_jr_djnz_target_backward_offset() {
+        // JR -8 from 0x4000: 0x4000 - 8 = 0x3ff8, via wrapping arithmetic
+        // rather than raw two's-complement hex.
+        assert_eq!(
+            resolve_jr_djnz_target(&Expr::Value(-8), Some(0x4000)),
+            Some(0x3FF8)
+        );
+    }
+
+    #[test]
+    fn resolve_jr_djnz_target_dollar() {
+        // JR $ targets the instruction itself, offset zero.
+        assert_eq!(
+            resolve_jr_djnz_target(&Expr::Label("$".into()), Some(0x4000)),
+            Some(0x4000)
+        );
+    }
+
+    #[test]
+    fn resolve_jr_djnz_target_no_current_address() {
+        assert_eq!(resolve_jr_djnz_target(&Expr::Value(8), None), None);
+    }
 
     #[test]
     fn disass_from_bytes() {

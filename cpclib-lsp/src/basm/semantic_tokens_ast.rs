@@ -39,7 +39,7 @@ use cpclib_tokens::symbols::SymbolsTableTrait;
 use super::token::{
     DIRECTIVE_SET, MOD_DECLARATION, MOD_INACTIVE, MOD_READONLY, RawSemanticToken, TT_ENUM_MEMBER,
     TT_FUNCTION, TT_KEYWORD, TT_LABEL, TT_MACRO, TT_NAMESPACE, TT_NUMBER, TT_VARIABLE,
-    flatten_listing, locate_name_in_statement, span_line
+    flatten_listing, locate_name_in_statement, span_line, span_lines
 };
 
 type Tokens<'a> = Box<dyn Iterator<Item = RawSemanticToken> + 'a>;
@@ -124,7 +124,7 @@ fn collect_inactive_lines<'a>(
                 let (_, body) = token.if_test(i);
                 if all_known && Some(i) != selected {
                     for t in flatten_listing(body.iter()) {
-                        out.insert(span_line(t));
+                        out.extend(span_lines(t));
                     }
                 }
                 else {
@@ -139,7 +139,7 @@ fn collect_inactive_lines<'a>(
             if let Some(else_body) = token.if_else() {
                 if all_known && selected.is_some() {
                     for t in flatten_listing(else_body.iter()) {
-                        out.insert(span_line(t));
+                        out.extend(span_lines(t));
                     }
                 }
                 else {

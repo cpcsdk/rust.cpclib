@@ -8,5 +8,6 @@ pub mod delegated;
 pub mod embedded;
 pub mod emucontrol;
 pub mod runner;
+pub mod web;
 pub use child_registry::kill_all_children;
 pub use cpclib_common::event;

@@ -139,6 +139,48 @@ macro_rules! listing_element_impl_most_methods {
         }
 
         #[inline]
+        fn mnemonic_arg3(&self) -> Option<$crate::Register8> {
+            match self.unwrapped() {
+                Self::OpCode(_, _, _, arg3) => *arg3,
+                _ => None
+            }
+        }
+
+        #[inline]
+        fn multi_push_pop_to_listing(
+            &self
+        ) -> Option<
+            Vec<(
+                $crate::Mnemonic,
+                Option<$crate::DataAccess>,
+                Option<$crate::DataAccess>
+            )>
+        > {
+            let (mnemonic, regs) = match self.unwrapped() {
+                Self::MultiPush(regs) => ($crate::Mnemonic::Push, regs),
+                Self::MultiPop(regs) => ($crate::Mnemonic::Pop, regs),
+                _ => return None
+            };
+            // Same order the assembler emits them in (`visit_multi_pushes`
+            // walks the list front to back), so the expansion really is the
+            // sequence that executes.
+            Some(
+                regs.iter()
+                    .map(|reg| {
+                        (
+                            mnemonic,
+                            Some(
+                                <Self::DataAccess as $crate::DataAccessElem>::to_data_access(reg)
+                                    .into_owned()
+                            ),
+                            None
+                        )
+                    })
+                    .collect()
+            )
+        }
+
+        #[inline]
         fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
             match self.unwrapped_mut() {
                 Self::OpCode(_, arg1, ..) => arg1.as_mut(),

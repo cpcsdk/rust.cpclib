@@ -25,6 +25,7 @@ use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::ay::YmCruncher;
 #[cfg(feature = "basmdoc-generator")]
 use crate::runners::basmdoc::BasmDocRunner;
+use crate::runners::basmopt::BasmOptRunner;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cpc2img::CpcToImgRunner;
 use crate::runners::cprcli::CprCliRunner;
@@ -215,6 +216,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Mv(_) => MvRunner::default().run(task.args(), observer),
         InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),
         InnerTask::AsmFmt(_) => AsmFmtRunner::default().run(task.args(), observer),
+        InnerTask::BasmOpt(_) => BasmOptRunner::default().run(task.args(), observer),
         InnerTask::Echo(_) => EchoRunner::default().run(task.args(), observer),
         InnerTask::Extern(_) => ExternRunner::default().run(task.args(), observer),
         InnerTask::Fade(_) => FadeRunner::<E>::default().run(task.args(), observer),

@@ -49,6 +49,17 @@ Generate a sprite file to be included inside an application.
 
 See `img2cpc sprite --help` for detailed usage.
 
+Every subcommand that produces data can also write the palette out beside it:
+
+- `-p, --palette <FILE>` - the 17 Gate Array bytes
+- `--kit <FILE>` - the 32 Amstrad Plus bytes
+- `-i, --inks <FILE>` - the ink numbers
+- `--palette_fadeout <FILE>`, `--ink_fadeout <FILE>` - every step of a fade to black
+
+`--palette`, `--inks` and the fade-outs describe Gate Array inks, so they are
+refused for an Amstrad Plus palette and point at `--kit` instead. `--kit` works
+for either: the 27 inks all have an exact ASIC colour.
+
 ### `tile`
 Generate a list of sprites (tile map).
 
@@ -82,13 +93,48 @@ img2cpc image.png m4
 - `--linestart <PIXEL_LINE_START>` - Number of pixel lines to skip
 - `--lineskept <PIXEL_LINES_KEPT>` - Number of pixel lines to keep
 
-### Palette Control
+### Palette Control (Gate Array)
 - `--pal <OCP_PAL>` - OCP PAL file. The first palette among 12 is used
 - `--pens <PENS>` - Separated list of ink number. Use ',' as a separator
 - `--pen0` to `--pen15 <PEN>` - Ink number for each pen (0-15)
 - `--pen16 <PEN16>` - Ink number of the pen 16 (border)
 - `--unlock-pens` - When some pens are manually provided, allows to also use the other ones by automatically assigning them missing inks. By default, this is forbidden
 - `--missing-pen <MISSING_PEN>` - Pen to use when the byte is too small
+
+### Amstrad Plus palettes
+
+The Gate Array offers 27 fixed inks; the Plus's ASIC offers 12 bits of RGB - 4096
+colours. A palette is one or the other, never a mixture, so every option below
+conflicts with every `--penN`/`--pens`/`--pal`/`--ga-pal`.
+
+- `--plus` - Target the Amstrad Plus: build the palette out of ASIC colours taken
+  from the image itself, rather than quantising it to the 27 inks
+- `--colb0` to `--colb16 <COLOUR>` - ASIC colour for one pen, written either packed
+  (`4A5`, `0x4A5`) or as `R,G,B` components 0-15 (`4,10,5`). Both spellings are the
+  same colour. As with `--penN`, naming some pens locks the palette unless
+  `--unlock-pens` is also given
+- `--kit <FILE>` - Load a 32-byte `.kit` palette file (two bytes per colour:
+  `RRRRBBBB`, then `0000GGGG`)
+
+An Amstrad Plus palette cannot travel through a snapshot's Gate Array registers,
+so the display code generated for `sna`/`dsk`/`exec` installs it itself: it
+unlocks the ASIC, copies the 32 bytes to `&6400`, and locks it again.
+
+A snapshot built this way also announces the machine it needs - CRTC type 3 (the
+6845 inside the ASIC) and CPC type 4 (6128 Plus). Those fields only exist from
+version 3 of the snapshot format, so a Plus snapshot is written as V3 where a CPC
+one stays V2.
+
+```bash
+# Let the converter pick 16 twelve-bit colours from the image
+img2cpc --mode 0 --plus artwork.png sprite -o artwork.spr --kit artwork.kit
+
+# Or state them
+img2cpc --mode 0 --colb0 4,10,5 --colb1 0xF0F --unlock-pens artwork.png sna PLUS.SNA
+
+# Or reuse a palette made elsewhere
+img2cpc --mode 0 --kit artwork.kit artwork.png sprite -o artwork.spr
+```
 
 ### Other Options
 - `-h, --help` - Print help

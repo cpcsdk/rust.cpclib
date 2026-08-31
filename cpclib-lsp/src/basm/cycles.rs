@@ -22,13 +22,13 @@
 //! .ok()`, so this module joining that established convention isn't a
 //! special exception).
 
-use cpclib_asm::branch_balance::InstructionCost;
-use cpclib_asm::cost_range::{self};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, LocatedTokenInner};
 use cpclib_tokens::{ExprElement, ListingElement};
+use cpclib_z80flow::cost_range::{self};
+use cpclib_z80flow::{CostModel, InstructionCost};
 use tower_lsp::lsp_types::{Position, Range};
 
-use super::timing::{find_timings, split_head};
+use super::timing::{nops_of, split_head};
 use super::token::{tokens_in_lines, tokens_in_range};
 
 /// Total NOP-count summary for a selected line range.
@@ -53,7 +53,15 @@ pub struct SelectionCycleCount {
     /// token this feature doesn't specifically recognize as zero-cost,
     /// e.g. a macro invocation) - the total is a lower bound when this is
     /// nonzero.
-    pub unrecognized_count: u32
+    pub unrecognized_count: u32,
+    /// A `CALL` in range reaches a routine defined outside the analysed
+    /// tokens, so only the call instruction itself could be priced.
+    ///
+    /// The counts are for a selection the user can see; this one is about
+    /// what they *cannot*: a routine in another file, or above the selection
+    /// they made. Worth saying out loud, because the number looks complete
+    /// either way.
+    pub incomplete: bool
 }
 
 impl SelectionCycleCount {
@@ -117,33 +125,24 @@ fn waitnops_cost(token: &LocatedToken) -> Option<InstructionCost> {
 /// non-executing (a comment, or a bookkeeping directive) - everything
 /// else with no recognized timing entry is `Unknown`, incrementing
 /// `unrecognized_count` instead of vanishing silently.
-fn strict_cost_from_timing(token: &LocatedToken) -> InstructionCost {
-    if token.mnemonic().is_none() {
-        if token.is_directive()
-            && let Some(cost) = waitnops_cost(token)
-        {
-            return cost;
-        }
-        return if token.is_comment() || token.is_directive() {
-            InstructionCost::Fixed(0)
-        }
-        else {
-            InstructionCost::Unknown
-        };
-    }
-    match find_timings(&token.to_string()).first() {
-        Some(entry) => {
-            match entry.nops_alt {
-                Some(alt) => {
-                    InstructionCost::Conditional {
-                        taken: entry.nops as u32,
-                        not_taken: alt as u32
-                    }
-                },
-                None => InstructionCost::Fixed(entry.nops as u32)
+struct StrictTimingCosts;
+
+impl CostModel<LocatedToken> for StrictTimingCosts {
+    fn cost(&self, token: &LocatedToken) -> InstructionCost {
+        if token.mnemonic().is_none() {
+            if token.is_directive()
+                && let Some(cost) = waitnops_cost(token)
+            {
+                return cost;
             }
-        },
-        None => InstructionCost::Unknown
+            return if token.is_comment() || token.is_directive() {
+                InstructionCost::Fixed(0)
+            }
+            else {
+                InstructionCost::Unknown
+            };
+        }
+        nops_of(&token.to_string())
     }
 }
 
@@ -159,13 +158,14 @@ pub(super) fn count_cycles_in_selection(
     range: Range
 ) -> SelectionCycleCount {
     let tokens = tokens_in_range(listing.iter(), range);
-    let Ok(result) = cost_range::cost_range(&tokens, strict_cost_from_timing)
+    let Ok(result) = cost_range::cost_range(&tokens, StrictTimingCosts)
     else {
         return SelectionCycleCount::default();
     };
     SelectionCycleCount {
         min_nops: result.min,
         max_nops: result.max,
+        incomplete: result.incomplete,
         max_unbounded: result.unbounded,
         instruction_count: result.instruction_count,
         unrecognized_count: result.unrecognized_count
@@ -226,6 +226,12 @@ pub(super) fn format_title(summary: &SelectionCycleCount) -> String {
             }
         ));
     }
+    if summary.incomplete {
+        // The cost of a `call` now includes the routine it calls - so when
+        // one of them could not be found, the total is short by an unknown
+        // amount and the user should not read it as final.
+        title.push_str(", a called routine is outside the selection");
+    }
     title
 }
 
@@ -239,6 +245,96 @@ mod tests {
         let listing = parse_z80_str(text).unwrap();
         let end_line = text.lines().count().saturating_sub(1);
         count_cycles_in_lines(&listing, 0, end_line)
+    }
+
+    /// The end-to-end check that call-following is driven by the *real*
+    /// timing table and not by any number written into the code.
+    ///
+    /// `data/timings.txt` says `call nn` is 5 and `ret` is 3, so `call go` +
+    /// `ret` + a body of `nop` + `ret` is 5 + (1 + 3) + 3 = 12. The number
+    /// that matters is that it is not 8 - which is what the old behaviour
+    /// gave, charging the `call` and ignoring what it called.
+    #[test]
+    fn a_call_is_priced_with_its_callee_using_the_real_timing_table() {
+        let s = summary("    call go\n    ret\ngo\n    nop\n    ret\n");
+        assert_eq!(s.min_nops, 12, "{s:?}");
+        assert_eq!(s.max_nops, 12, "{s:?}");
+        assert!(!s.incomplete, "{s:?}");
+    }
+
+    /// `call ccc,nn` is `5 or 3 if /ccc/ not met` in `data/timings.txt`, and
+    /// that `nops_alt` is what makes a conditional call bound the two ends
+    /// differently: 3 without the callee, 5 + the body with it.
+    #[test]
+    fn a_conditional_call_reads_both_of_its_timings_from_the_table() {
+        let s = summary("    call nz,go\n    ret\ngo\n    nop\n    ret\n");
+        assert_eq!(s.min_nops, 3 + 3, "not taken, then ret: {s:?}");
+        assert_eq!(s.max_nops, 5 + 4 + 3, "taken, callee body, then ret: {s:?}");
+        assert!(s.is_conditional(), "{s:?}");
+    }
+
+    /// A routine that is not in view cannot be priced, and the summary says
+    /// so rather than quietly reporting a total that is short.
+    #[test]
+    fn a_call_to_a_routine_outside_the_selection_is_reported_incomplete() {
+        let s = summary("    call elsewhere\n    ret\n");
+        assert_eq!(s.min_nops, 5 + 3, "{s:?}");
+        assert!(s.incomplete, "{s:?}");
+        assert!(
+            format_title(&s).contains("outside the selection"),
+            "{}",
+            format_title(&s)
+        );
+    }
+
+    /// `ld hl, de` is not a Z80 opcode - basm assembles it to `ld h, d` /
+    /// `ld l, e`, two real instructions at 1 NOP each. The timing table is
+    /// keyed by instruction text and has no entry for the written form, so
+    /// before the cost model could ask about an expansion this contributed
+    /// **zero** and merely bumped `unrecognized_count`. The corpus has 29 of
+    /// these across 15 files.
+    #[test]
+    fn a_fake_instruction_costs_what_it_assembles_to() {
+        let s = summary("    ld hl, de\n    nop\n");
+        assert_eq!(s.min_nops, 3, "ld h,d + ld l,e + nop: {s:?}");
+        assert_eq!(s.max_nops, 3, "{s:?}");
+        assert_eq!(
+            s.unrecognized_count, 0,
+            "the expansion is fully priced, so nothing is unrecognized: {s:?}"
+        );
+    }
+
+    /// The control: a real 16-bit load is a single opcode with its own entry,
+    /// so the test above is not just measuring "any ld costs 2".
+    #[test]
+    fn a_real_sixteen_bit_load_is_still_one_instruction() {
+        let s = summary("    ld hl, 0x4000\n    nop\n");
+        assert_eq!(s.min_nops, 4, "ld hl,nn is 3 NOPs, plus nop: {s:?}");
+        assert_eq!(s.unrecognized_count, 0, "{s:?}");
+    }
+
+    /// `jq` is basm's "assembler picks JR or JP" form, absent from the timing
+    /// table for the same reason a fake instruction is. Unconditionally both
+    /// candidates cost 3, so the answer does not depend on which one basm
+    /// picks - and the cost model asks for both rather than assuming that.
+    #[test]
+    fn an_unconditional_jq_costs_what_both_candidates_agree_on() {
+        let s = summary("    jq elsewhere\n");
+        assert_eq!(s.min_nops, 3, "jr and jp are both 3 NOPs: {s:?}");
+        assert_eq!(s.unrecognized_count, 0, "{s:?}");
+    }
+
+    /// A *conditional* `jq` genuinely differs between the two candidates
+    /// (`jr cc` is "3 or 2", `jp cc` is always 3), so it stays unknown rather
+    /// than picking one. Which it is depends on a distance only a real
+    /// assemble knows.
+    #[test]
+    fn a_conditional_jq_stays_unknown_because_the_candidates_disagree() {
+        let s = summary("    jq nz, elsewhere\n");
+        assert_eq!(
+            s.unrecognized_count, 1,
+            "the two candidates disagree, so this must not be guessed: {s:?}"
+        );
     }
 
     #[test]
@@ -305,7 +401,8 @@ mod tests {
             max_nops: 12,
             max_unbounded: false,
             instruction_count: 4,
-            unrecognized_count: 0
+            unrecognized_count: 0,
+            incomplete: false
         };
         assert_eq!(
             format_title(&s),
@@ -320,7 +417,8 @@ mod tests {
             max_nops: 4,
             max_unbounded: false,
             instruction_count: 2,
-            unrecognized_count: 1
+            unrecognized_count: 1,
+            incomplete: false
         };
         assert_eq!(
             format_title(&s),

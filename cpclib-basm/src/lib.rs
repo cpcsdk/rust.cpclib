@@ -181,11 +181,15 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
         options.set_flavor(AssemblerFlavor::Orgams);
     }
 
-    match std::env::current_dir() {
-        Ok(cwd) => {
-            options.add_search_path(cwd)?;
-        },
-        Err(_) => todo!()
+    // The working directory is *a* search path, not a required one - the
+    // file's own directory and every `-I` are added just below. A process can
+    // legitimately have no valid working directory: `bndbuild` chdirs into a
+    // build file's directory (`BndBuilder::from_path`), and if that directory
+    // is later removed or renamed, `current_dir` fails for every call after
+    // it. Panicking there took down whatever asked to assemble - in the LSP,
+    // any assemble at all from that point on.
+    if let Ok(cwd) = std::env::current_dir() {
+        options.add_search_path(cwd)?;
     }
     let _ = options.add_search_path_from_file(filename); // we ignore the potential error
     if let Some(directories) = matches.get_many::<String>("INCLUDE_DIRECTORIES") {
@@ -392,6 +396,14 @@ pub fn assemble(
         }
     }
 
+    // *After* the listing, never before: installing a listing writer replaces
+    // the whole output builder, collector and all, so asking for the map first
+    // loses it. Asking second means both are wanted and both come out - the
+    // text through the real writer, the map alongside it.
+    if matches.get_one::<String>("SOURCE_MAP_OUTPUT").is_some() && !dry_run {
+        assemble_options.record_source_map();
+    }
+
     let options = EnvOptions::new(parse_options, assemble_options, o);
 
     let (_tokens, mut env) =
@@ -465,7 +477,89 @@ pub fn assemble(
         })?;
     }
 
+    if let Some(dest) = matches.get_one::<String>("SOURCE_MAP_OUTPUT")
+        && !dry_run
+    {
+        save_source_map(dest, &env, matches)?;
+    }
+
     Ok(env)
+}
+
+/// Write the source map and the symbol table, as JSON.
+///
+/// The point of the file is to be read *instead of* assembling: a debug
+/// session that has this does not need to build the same program a second time
+/// to learn where its lines went.
+fn save_source_map(
+    dest: &str,
+    env: &Env,
+    matches: &ArgMatches
+) -> Result<(), BasmError> {
+    use cpclib_asm::assembler::listing_output::SourceMapFile;
+
+    let Some(map) = env.source_map()
+    else {
+        return Err(BasmError::ListingGeneration {
+            msg: "no source map was collected".to_owned()
+        });
+    };
+
+    // `integer()` answers for an address as well as for an `equ`, which is what
+    // a debugger wants in a watch expression - but only a label is a *place*,
+    // so which is which is recorded alongside.
+    let mut symbols = std::collections::HashMap::new();
+    let mut address_symbols = std::collections::BTreeSet::new();
+    for (name, value) in env.symbols().expression_symbol().iter() {
+        let Some(address) = value.integer().and_then(|v| u32::try_from(v).ok())
+        else {
+            continue;
+        };
+        let name = name.value().to_string();
+        if value.address().is_some() {
+            address_symbols.insert(name.clone());
+        }
+        symbols.insert(name, address);
+    }
+
+    // Recorded verbatim: the same source tree with different `-D` values is a
+    // different program, and nothing else in the file would show it.
+    let definitions = SourceMapFile::definitions_from_arguments(
+        matches
+            .get_many::<String>("DEFINE_SYMBOL")
+            .into_iter()
+            .flatten()
+    );
+
+    // Everything a debugger would otherwise assemble this program to learn:
+    // its own `BREAKPOINT` directives (no emulator adopts the ones a `.sna`
+    // carries), the assembled bytes (for telling two pages apart by what is
+    // really in memory), and where it starts.
+    let entry_point = match env.sna().get_value(&cpclib_sna::SnapshotFlag::Z80_PC) {
+        cpclib_sna::FlagValue::Word(pc) => Some(pc),
+        cpclib_sna::FlagValue::Byte(pc) => Some(pc as u16),
+        _ => None
+    };
+    let file = SourceMapFile::new(map, symbols, definitions)
+        .with_address_symbols(address_symbols)
+        .with_program(
+        env.assembled_breakpoints(),
+        &env.sna().memory_dump(),
+        entry_point
+    );
+
+    let text = serde_json::to_string(&file).map_err(|e| {
+        BasmError::ListingGeneration {
+            msg: format!("could not encode the source map: {e}")
+        }
+    })?;
+    fs_err::write(dest, text).map_err(|e| {
+        BasmError::Io {
+            io: e,
+            ctx: format!("creating {dest}")
+        }
+    })?;
+    Ok(())
 }
 
 /// Helper function to save binary data to a file
@@ -849,6 +943,16 @@ pub fn build_args_parser() -> clap::Command {
                     .arg(Arg::new("LISTING_OUTPUT")
                         .help("Filename of the listing output.")
                         .long("lst")
+                        .value_hint(ValueHint::FilePath)
+                    )
+                    .arg(Arg::new("SOURCE_MAP_OUTPUT")
+                        .help("Filename of the source map output (JSON).")
+                        .long_help("Filename of the source map output (JSON).\n\
+\n\
+Records which address every source line was assembled to, with its columns and \
+page, plus the symbol table. A debugger given this file does not have to \
+assemble the program again to know where its lines went.")
+                        .long("sourcemap")
                         .value_hint(ValueHint::FilePath)
                     )
                     .arg(Arg::new("LISTING_LINE_TEMPLATE")

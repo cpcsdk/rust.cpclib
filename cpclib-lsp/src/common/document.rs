@@ -169,9 +169,17 @@ impl Document {
         self.version = version;
 
         if let Some(range) = change.range {
-            // Incremental change
-            let start_idx = self.offset_from_position(range.start);
-            let end_idx = self.offset_from_position(range.end);
+            // Incremental change. `offset_from_position` returns a byte
+            // offset (see its own doc comment), but `Rope::insert`/`remove`
+            // are char-indexed - passing bytes straight through is silently
+            // correct for ASCII (byte index == char index) and splices at
+            // the wrong position anywhere a multi-byte UTF-8 character
+            // (accented letters, smart quotes, ...) appears earlier in the
+            // document, which is what made edits land at the wrong offset.
+            let start_idx = self
+                .rope
+                .byte_to_char(self.offset_from_position(range.start));
+            let end_idx = self.rope.byte_to_char(self.offset_from_position(range.end));
 
             self.rope.remove(start_idx..end_idx);
             self.rope.insert(start_idx, &change.text);
@@ -180,6 +188,21 @@ impl Document {
             // Full document sync
             self.rope = Rope::from_str(&change.text);
         }
+
+        // Kept for future reports of the same symptom (edits landing at the
+        // wrong offset): the root cause here was `offset_from_position`
+        // returning bytes into a char-indexed `Rope::insert`/`remove`, now
+        // fixed above, but a transcript of every change beats re-deriving
+        // one from a bug report. Enable with the top-level `log` setting in
+        // `cpclib-lsp.toml` (see `LspConfig::log`) or `RUST_LOG=debug`.
+        tracing::debug!(
+            uri = %self.uri,
+            version,
+            range = ?change.range,
+            text = %change.text,
+            rope_after = %self.rope,
+            "apply_change"
+        );
     }
 
     pub fn text(&self) -> String {
@@ -353,6 +376,37 @@ mod tests {
                 character: 2
             }),
             1
+        );
+    }
+
+    #[test]
+    fn apply_change_inserts_correctly_past_a_multi_byte_char_on_an_earlier_line() {
+        // Regression test: `offset_from_position` returns a byte offset, but
+        // `Rope::insert`/`remove` are char-indexed. A multi-byte UTF-8 char
+        // (e.g. this French comment's accented "é") on an earlier line used
+        // to push every later byte offset ahead of its true char index,
+        // splicing edits into the wrong place.
+        let mut d = doc("; commentaire en français\nline two\n");
+        d.apply_change(
+            &TextDocumentContentChangeEvent {
+                range: Some(Range {
+                    start: Position {
+                        line: 1,
+                        character: 0
+                    },
+                    end: Position {
+                        line: 1,
+                        character: 0
+                    }
+                }),
+                range_length: None,
+                text: "ld sp, 0\n".to_string()
+            },
+            2
+        );
+        assert_eq!(
+            d.text(),
+            "; commentaire en français\nld sp, 0\nline two\n"
         );
     }
 }

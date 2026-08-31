@@ -190,7 +190,7 @@ pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextEr
                 }
                 
                 let name = String::from_utf8_lossy(&name_bytes).to_string();
-                let token = BasicToken::Variable(name, offset);
+                let token = BasicToken::Variable(code, name, offset);
                 tokens.push(token);
             },
 

@@ -1,9 +1,11 @@
-node_modules/**
 src/**
 .gitignore
 tsconfig.json
 **/*.ts
 **/*.map
+
+# vsce automatically includes production dependencies from node_modules/
+# and excludes devDependencies, so we don't list node_modules here.
 
 # Include bin/ directory with platform-specific LSP binaries
 # (explicitly listed here to document that it MUST be packaged)

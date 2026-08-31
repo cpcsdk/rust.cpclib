@@ -17,6 +17,7 @@ cpclib-basic.workspace = true
 cpclib-crunchers.workspace = true
 cpclib-sna.workspace = true
 cpclib-tokens.workspace = true
+cpclib-z80flow.workspace = true
 cpclib-disc.workspace = true
 fs-err.workspace = true
 cpclib-common.workspace = true
@@ -45,6 +46,8 @@ paste.workspace = true
 regex.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
+# Already in the lockfile via cpclib-dap; used to write/read `--sourcemap`.
+serde_json = "1"
 smallvec = {workspace = true}
 #smartstring.workspace = true
 substring.workspace = true

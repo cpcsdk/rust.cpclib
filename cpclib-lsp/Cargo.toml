@@ -17,12 +17,16 @@ path = "src/main.rs"
 # Workspace dependencies
 cpclib-asm.workspace = true
 cpclib-asmfmt.workspace = true
+cpclib-asmoptim.workspace = true
+cpclib-z80flow.workspace = true
 cpclib-basmdoc = { workspace = true, default-features = false }
-cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon", "basmdoc-generator", "tape"] }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon", "basmdoc-generator", "tape", "fap", "archive-7z", "apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"] }
 cpclib-runner = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
 cpclib-catart.workspace = true
 cpclib-common = { workspace = true, features = ["cmdline"] }
+cpclib-project.workspace = true
+cpclib-dap.workspace = true
 cpclib-tokens.workspace = true
 cpclib-z80emu.workspace = true
 camino.workspace = true
@@ -52,9 +56,6 @@ ropey = "1.6"
 thiserror = "2"
 anyhow = "1"
 
-# Parsing
-winnow = "0.6"
-
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -64,6 +65,7 @@ dashmap = "6"
 
 # Cross-file goto-definition: walking the workspace for .asm files
 walkdir.workspace = true
+ignore.workspace = true
 rayon.workspace = true
 
 [build-dependencies]

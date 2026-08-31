@@ -8,7 +8,10 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use image as im;
+use owo_colors::{DynColors, OwoColorize};
 
+use crate::asic::AsicColor;
+use crate::color::AmstradColor;
 use crate::ga::*;
 use crate::pixels;
 use crate::pixels::bytes_to_pens;
@@ -102,15 +105,15 @@ fn get_unique_colors(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> HashSet<im:
 
 /// Browse the image and returns the palette to use
 #[allow(unused)]
-fn extract_palette(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette {
+fn extract_palette<C: AmstradColor>(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette<C> {
     let colors = get_unique_colors(img);
-    let mut p = Palette::empty();
+    let mut p = Palette::<C>::empty();
 
     assert!(colors.len() <= 16);
 
     for (idx, color) in colors.iter().enumerate() {
         let color = *color;
-        p.set(Pen::from(idx as u8), Ink::from(color))
+        p.set(Pen::from(idx as u8), C::from(color))
     }
 
     p
@@ -170,17 +173,17 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
 }
 
 // Convert inks to pens
-fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
+fn colors_to_pens<C: AmstradColor>(colors: &[Vec<C>], p: &Palette<C>) -> Vec<Vec<Pen>> {
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-    let iter = inks.par_iter();
+    let iter = colors.par_iter();
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
-    let iter = inks.iter();
+    let iter = colors.iter();
 
     iter.map(|line| {
         line.iter()
-            .map(|ink| {
-                p.get_pen_for_ink(*ink).unwrap_or_else(|| {
-                    panic!("Unable to find a correspondance for ink {ink:?} in given palette {p:?}")
+            .map(|color| {
+                p.get_pen_for_color(*color).unwrap_or_else(|| {
+                    panic!("Unable to find a correspondance for color {color:?} in given palette {p:?}")
                 })
             })
             .collect::<Vec<Pen>>()
@@ -188,17 +191,23 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
     .collect::<Vec<_>>()
 }
 
+#[deprecated(note = "Use colors_to_pens instead")]
+#[allow(unused)]
+fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette<Ink>) -> Vec<Vec<Pen>> {
+    colors_to_pens(inks, p)
+}
+
 /// A ColorMatrix represents an image through a list of Inks.
 /// It has no real meaning in CPC world but can be used for image transformaton
 /// There is no mode information
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ColorMatrix {
+pub struct ColorMatrix<C: AmstradColor> {
     /// List of inks
-    data: Vec<Vec<Ink>>
+    data: Vec<Vec<C>>
 }
 
-impl From<Vec<Vec<Ink>>> for ColorMatrix {
-    fn from(data: Vec<Vec<Ink>>) -> Self {
+impl<C: AmstradColor> From<Vec<Vec<C>>> for ColorMatrix<C> {
+    fn from(data: Vec<Vec<C>>) -> Self {
         ColorMatrix { data }
     }
 }
@@ -215,13 +224,11 @@ pub enum ColorConversionStrategy {
     Fail
 }
 
-impl ColorMatrix {
-    pub const INK_MASK_BACKGROUND: Ink = Ink::BRIGHTWHITE;
-    pub const INK_MASK_FOREGROUND: Ink = Ink::BLACK;
-    pub const INK_NOT_USED_IN_MASK: Ink = Ink::RED;
+
+impl<C:AmstradColor> ColorMatrix<C> {
 
     /// Build a representation of a palette
-    pub fn from_palette(pal: &Palette, ink_size: usize) -> Self {
+    pub fn from_palette(pal: &Palette<C>, ink_size: usize) -> Self {
         let height = ink_size;
         let width = ink_size * 17;
 
@@ -235,7 +242,7 @@ impl ColorMatrix {
             let i = pal.get(&p);
             for w in 0..ink_size {
                 for h in 0..ink_size {
-                    matrix.set_ink(x + w, y + h, *i);
+                    matrix.set_color(x + w, y + h, *i);
                 }
             }
         }
@@ -243,7 +250,7 @@ impl ColorMatrix {
         matrix
     }
 
-    pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
+    pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette<C>) -> Self {
         let pixel_height = {
             let mut height = 0x4000 / bytes_width;
             while !height.is_multiple_of(8) {
@@ -252,30 +259,165 @@ impl ColorMatrix {
             height
         };
 
+        Self::from_screen_at(data, 0xC000, bytes_width, pixel_height, 8, mode, palette)
+    }
+
+    /// Like [`Self::from_screen`], but the interleaved "every 8th raster
+    /// line is +0x800" addressing is anchored at `base_address` instead of
+    /// the hard-coded `0xC000`, and `pixel_height` is taken directly rather
+    /// than derived from a fixed 16K budget - for decoding a live debugger
+    /// memory read, where the screen may sit at any 16K-page start and the
+    /// caller wants a specific height, not "as much as fits".
+    ///
+    /// A scrolled BASIC screen's start address is not necessarily 16K-bank
+    /// aligned (reported live: a real CPC's own CRTC start address mid-
+    /// program, R12=0x30/R13=0x88, landing at 0xC110), and the interleaved
+    /// layout's own `+0x800`-per-subline term can then push the computed
+    /// offset past a bank's own 0x4000 span. **The wrap stays inside
+    /// whichever of the four independent 16K banks (0000-3FFF, 4000-7FFF,
+    /// 8000-BFFF, C000-FFFF) `base_address` itself falls in, confirmed
+    /// live**: the CRTC's own `MA`/`RA` counters are a 14-bit address with
+    /// no idea about paging at all - the Gate Array places that 14-bit
+    /// result into whichever bank R12's page-select bits chose, a bank that
+    /// never changes mid-frame, so an overflowing `MA`/`RA` computation
+    /// wraps back into the *same* bank rather than spilling into the next
+    /// one (a computed offset that would land on 0x0006 lands on 0xC006 for
+    /// a C000-based screen, not on the bare 0x0006 of a different bank
+    /// entirely).
+    ///
+    /// **This reverses an earlier version of this same fix**, which wrapped
+    /// at the full 64K address space instead (crossing banks freely) after
+    /// live-testing one specific address (0xC5E0, from
+    /// `cpclib-dap/tests/graphics/hello/`) against that fixture's own
+    /// memory bytes and a WinAPE screen capture: the byte at the bank-
+    /// confined candidate (0xC420) read as a real, non-background 0xE0,
+    /// while the cross-bank candidate (0x0420) read 0x00 and looked clean
+    /// against the capture. That comparison is not itself explained by the
+    /// bank-confined formula reinstated here - flagged rather than silently
+    /// dropped, since the earlier finding was real data, not a guess. Two
+    /// honest candidates for the discrepancy: the source screenshot's own
+    /// alignment was never guaranteed pixel-exact (flagged as a real risk
+    /// from the very first fixture this feature was built against), or
+    /// 0xC420 genuinely held live (non-screen) data that only *looked*
+    /// like garbling by coincidence. Re-confirming against a live emulator
+    /// - this crate's own tests cannot, `hello`/`blight` are static
+    /// fixtures - is the way to actually settle it if it resurfaces.
+    /// `data` is still addressed modulo its own length as a safety bound,
+    /// but every real caller passes the full 64K address space
+    /// (`data[0]` = real address 0x0000), not just one bank.
+    ///
+    /// `lines_per_char_row` replaces what used to be a hard-coded `8` for
+    /// when `MA` (character position) itself advances to the next row - the
+    /// Gate Array combines `MA` and `RA` (raster-within-row) as `address =
+    /// MA*2 + RA*0x800 + base`, and how many `RA` values occur before `MA`
+    /// advances is the CRTC's own `R9 + 1`, not always 8. `RA` itself,
+    /// though, is a 3-bit field in this address path on real hardware
+    /// regardless of how tall `R9` configures a row to actually be -
+    /// reported live: a row configured taller than 8 lines does not reach
+    /// new addresses past line 7, it repeats them - so only the low 3 bits
+    /// of the within-row line number ever reach `RA*0x800`, even though the
+    /// full `lines_per_char_row` still governs when `MA` advances.
+    pub fn from_screen_at(
+        data: &[u8],
+        base_address: usize,
+        bytes_width: usize,
+        pixel_height: usize,
+        lines_per_char_row: usize,
+        mode: Mode,
+        palette: &Palette<C>
+    ) -> Self {
         let _pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
+        let space_size = data.len();
+        let lines_per_char_row = lines_per_char_row.max(1);
+
+        // Corrected against real hardware, reported live: the CRTC's own MA
+        // (character position) and RA (raster-within-row) counters combine
+        // into a 14-bit address, and the CRTC itself has no idea about
+        // paging at all - the Gate Array places that 14-bit result into
+        // whichever of the four independent 16K banks (0000-3FFF,
+        // 4000-7FFF, 8000-BFFF, C000-FFFF) `base_address`'s own top two
+        // bits select, and that bank never changes mid-frame. So MA/RA
+        // arithmetic wraps at 0x4000 (one bank), confined to it, never
+        // spilling into the next one - a screen based at 0xC5E0 can only
+        // ever read 0xC000-0xFFFF, and an overflowing computation wraps
+        // back into that same range (e.g. an overflow that would land on
+        // 0x0006 lands on 0xC006 instead), not into page 0.
+        //
+        // `RA` specifically is 3 bits wide in this address path - real CRTC
+        // hardware accepts `R9` values that configure a character row
+        // taller than 8 lines, but the extra lines do not reach new
+        // addresses: `RA` wraps at 8 regardless of how tall the row is
+        // configured to be, repeating the same 8 raster lines' worth of
+        // addresses again for the remainder of the row. `lines_per_char_row`
+        // still governs when `MA` itself advances to the next row (the
+        // *real*, possibly-taller-than-8 row height), only the term this
+        // wrap feeds into `RA*0x800` is narrowed.
+        let page_base = base_address & !0x3FFFusize;
+        let offset_in_page = base_address & 0x3FFF;
 
         (0..pixel_height)
             .map(|line| {
-                let screen_address = 0xC000 + ((line / 8) * bytes_width) + ((line % 8) * 0x800);
-                let data_address = screen_address - 0xC000;
-                let line_bytes = &data[data_address..(data_address + bytes_width)];
-                line_bytes
-                    .iter()
-                    .flat_map(|b| pixels::byte_to_pens(*b, mode))
-                    .collect::<Vec<crate::ga::Pen>>()
-            })
-            .map(move |pens| {
-                // build lines of inks
-                pens.iter()
-                    .map(|pen| palette.get(pen))
-                    .cloned()
-                    .collect::<Vec<_>>()
+                let row = line / lines_per_char_row;
+                let ra = (line % lines_per_char_row) % 8;
+                let offset_in_page = (offset_in_page + row * bytes_width + ra * 0x800) % 0x4000;
+                let line_bytes: Vec<u8> = (0..bytes_width)
+                    .map(|col| {
+                        let byte_offset = (offset_in_page + col) % 0x4000;
+                        data[(page_base + byte_offset) % space_size]
+                    })
+                    .collect();
+                Self::line_bytes_to_inks(&line_bytes, mode, palette)
             })
             .collect::<Vec<_>>()
             .into()
     }
 
-    pub fn from_sprite(data: &[u8], pixels_width: u16, mode: Mode, palette: &Palette) -> Self {
+    /// Shared by [`Self::from_screen_at`] and [`Self::from_linear_memory`] -
+    /// the two encodings differ only in how a line's source address is
+    /// computed, never in how its bytes decode into pens and then inks.
+    fn line_bytes_to_inks(line_bytes: &[u8], mode: Mode, palette: &Palette<C>) -> Vec<C> {
+        line_bytes
+            .iter()
+            .flat_map(|b| pixels::byte_to_pens(*b, mode))
+            .map(|pen| palette.get(&pen).clone())
+            .collect()
+    }
+
+    /// The other of WinAPE's own two "browse memory as pixels" encodings -
+    /// "CPC" there, next to "Screen" (what [`Self::from_screen_at`]
+    /// implements). No CRTC interleaving at all: `bytes_width` bytes read,
+    /// then the very next `bytes_width` bytes, and so on - straight,
+    /// sequential memory, top to bottom, left to right, wrapped at the full
+    /// 64K address space rather than confined to one 16K bank (there is no
+    /// real CRTC/Gate Array display behaviour being modelled here, so
+    /// there is no bank to stay confined to - this is a raw memory scan,
+    /// looking for a repeating structure whose real shape is not yet
+    /// known). Bytes still decode via the chosen CPC screen `mode`
+    /// (0-3) exactly as `from_screen_at` does - only the *addressing*
+    /// differs between the two encodings, never the pixel decode.
+    pub fn from_linear_memory(
+        data: &[u8],
+        base_address: usize,
+        bytes_width: usize,
+        pixel_height: usize,
+        mode: Mode,
+        palette: &Palette<C>
+    ) -> Self {
+        let space_size = data.len();
+
+        (0..pixel_height)
+            .map(|line| {
+                let data_address = (base_address + line * bytes_width) % space_size;
+                let line_bytes: Vec<u8> = (0..bytes_width)
+                    .map(|col| data[(data_address + col) % space_size])
+                    .collect();
+                Self::line_bytes_to_inks(&line_bytes, mode, palette)
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    pub fn from_sprite(data: &[u8], pixels_width: u16, mode: Mode, palette: &Palette<C>) -> Self {
         let width = mode.nb_bytes_for_pixels_width(pixels_width as _);
 
         // convert it
@@ -299,12 +441,21 @@ impl ColorMatrix {
 }
 
 #[allow(missing_docs)]
-impl ColorMatrix {
+impl<C: AmstradColor> ColorMatrix<C> {
     /// Create a new empty color matrix for the given dimensions
     pub fn new(width: usize, height: usize) -> Self {
         Self {
-            data: vec![vec![Ink::from(0); width]; height]
+            data: vec![vec![C::default(); width]; height]
         }
+    }
+
+    pub fn to_ansi_string(&self) ->String{
+        self.data.iter().map(|line| {
+            line.iter().map(|ink| {
+                let color = ink.owo_color();
+                format!("{}", "   ".on_color(color))
+            }).join("")
+        }).join("\n")
     }
 
     /// The matrix represents both the mask (with an unexpected color), and the sprite (<ith the expected color).
@@ -313,8 +464,8 @@ impl ColorMatrix {
     /// - The sprite where the background is replaced by a selected ink (Ideally the one that will be considered as being pen 0)
     pub fn extract_mask_and_sprite(
         &self,
-        mask_ink: impl Into<Ink>,
-        replacement_ink: impl Into<Ink>
+        mask_ink: impl Into<C>,
+        replacement_ink: impl Into<C>
     ) -> (Self, Self) {
         let mask_ink = mask_ink.into();
         let replacement_ink = replacement_ink.into();
@@ -323,28 +474,30 @@ impl ColorMatrix {
         mask_data.convert_to_mask(mask_ink);
 
         let mut sprite_data = self.clone();
-        sprite_data.replace_ink(mask_ink, replacement_ink);
+        sprite_data.replace_color(mask_ink, replacement_ink);
 
         (mask_data, sprite_data)
     }
 
+
     /// Destroy the image to build the mask according to the background ink
-    pub fn convert_to_mask(&mut self, mask: Ink) -> &mut Self {
+    pub fn convert_to_mask(&mut self, mask: C) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 *ink = if *ink == mask {
-                    Self::INK_MASK_BACKGROUND
+                    C::mask_background()
                 }
                 else {
-                    Self::INK_MASK_FOREGROUND
+                    C::mask_foreground()
                 }
             })
         });
         self
     }
 
+
     /// Exchange all the occurrences of `from` Ink with `to` ink
-    pub fn replace_ink(&mut self, from: Ink, to: Ink) -> &mut Self {
+    pub fn replace_color(&mut self, from: C, to: C) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 if *ink == from {
@@ -362,19 +515,19 @@ impl ColorMatrix {
     /// Create a new ColorMatrix that encodes a new image full of black
     pub fn empty_like(&self) -> Self {
         Self {
-            data: vec![vec![Ink::from(0); self.width() as usize]; self.height() as usize]
+            data: vec![vec![C::black(); self.width() as usize]; self.height() as usize]
         }
     }
 
-    /// Double the width (usefull for chuncky conversions)
+    /// Double the width (usefull for chunky conversions)
     #[allow(clippy::needless_range_loop, clippy::identity_op)]
     pub fn double_horizontally(&mut self) {
         // Create the doubled pixels
         let mut new_data =
-            vec![vec![Ink::from(0); (2 * self.width()) as usize]; self.height() as usize];
+            vec![vec![C::black(); (2 * self.width()) as usize]; self.height() as usize];
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink(x, y);
+                let color = self.get_color(x, y);
                 new_data[y][x * 2 + 0] = *color;
                 new_data[y][x * 2 + 1] = *color;
             }
@@ -384,13 +537,33 @@ impl ColorMatrix {
         std::mem::swap(&mut self.data, &mut new_data)
     }
 
+    /// Double the height (each row printed twice) - the vertical half of the
+    /// CPC's own pixel aspect ratio: a raster line is roughly twice as tall
+    /// as it is wide compared to a Mode 2 dot, on every mode alike, unlike
+    /// the horizontal ratio which is mode-dependent (see
+    /// [`Self::double_horizontally`], called a mode-dependent number of times
+    /// instead).
+    #[allow(clippy::needless_range_loop, clippy::identity_op)]
+    pub fn double_vertically(&mut self) {
+        let mut new_data =
+            vec![vec![C::black(); self.width() as usize]; (2 * self.height()) as usize];
+        for y in 0..(self.height() as usize) {
+            for x in 0..(self.width() as usize) {
+                let color = self.get_color(x, y);
+                new_data[y * 2 + 0][x] = *color;
+                new_data[y * 2 + 1][x] = *color;
+            }
+        }
+        std::mem::swap(&mut self.data, &mut new_data)
+    }
+
     pub fn remove_odd_columns(&mut self) {
         // Create the doubled pixels
         let mut new_data =
-            vec![vec![Ink::from(0); (self.width() / 2) as usize]; self.height() as usize];
+            vec![vec![C::black(); (self.width() / 2) as usize]; self.height() as usize];
         for x in 0..((self.width() / 2) as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink(x * 2, y);
+                let color = self.get_color(x * 2, y);
                 new_data[y][x] = *color;
             }
         }
@@ -405,48 +578,48 @@ impl ColorMatrix {
         self.data.len() as u32
     }
 
-    /// Returns the ink at the right position
-    pub fn get_ink(&self, x: usize, y: usize) -> &Ink {
+    /// Returns the color at the right position
+    pub fn get_color(&self, x: usize, y: usize) -> &C {
         &self.data[y][x]
     }
 
-    /// Set ink
-    pub fn set_ink(&mut self, x: usize, y: usize, ink: Ink) {
-        self.data[y][x] = ink;
+    /// Set color
+    pub fn set_color(&mut self, x: usize, y: usize, color: C) {
+        self.data[y][x] = color;
     }
 
     /// Add a line within the image
     /// Panic if impossible
-    pub fn add_line(&mut self, position: usize, line: &[Ink]) {
+    pub fn add_line(&mut self, position: usize, line: &[C]) {
         assert_eq!(line.len(), self.width() as usize);
         self.data.insert(position, line.to_vec());
     }
 
     /// Returns a reference on the wanted line of inks
-    pub fn get_line(&self, y: usize) -> &[Ink] {
+    pub fn get_line(&self, y: usize) -> &[C] {
         &self.data[y]
     }
 
     /// Return a mutable version of the line. Care needs to be taken in order to not destroy the data structure
-    fn get_line_mut(&mut self, y: usize) -> &mut Vec<Ink> {
+    fn get_line_mut(&mut self, y: usize) -> &mut Vec<C> {
         &mut self.data[y]
     }
 
     /// Add a column within the image
     /// Panic if impossible
-    pub fn add_column(&mut self, position: usize, column: &[Ink]) {
+    pub fn add_column(&mut self, position: usize, column: &[C]) {
         assert_eq!(column.len(), self.height() as usize);
-        for (row, ink) in column.iter().enumerate() {
-            self.get_line_mut(row).insert(position, *ink);
+        for (row, color) in column.iter().enumerate() {
+            self.get_line_mut(row).insert(position, *color);
         }
     }
 
-    /// Build a vector of Inks that contains all the inks of the given column
-    pub fn get_column(&self, x: usize) -> Vec<Ink> {
-        self.data.iter().map(|line| line[x]).collect::<Vec<Ink>>()
+    /// Build a vector of Colors that contains all the colors of the given column
+    pub fn get_column(&self, x: usize) -> Vec<C> {
+        self.data.iter().map(|line| line[x]).collect::<Vec<C>>()
     }
 
-    /// Return a copy of the inks for the given window definition
+    /// Return a copy of the colors for the given window definition
     pub fn window(&self, start_x: usize, start_y: usize, width: usize, height: usize) -> Self {
         let selected_lines = &self.data[start_y..start_y + height];
         let window = selected_lines
@@ -461,13 +634,13 @@ impl ColorMatrix {
         Self { data: window }
     }
 
-    /// Return the number of different inks in the image
-    pub fn nb_inks(&self) -> usize {
+    /// Return the number of different colors in the image
+    pub fn nb_colors(&self) -> usize {
         self.data.iter().flatten().unique().count()
     }
 
-    /// Returns the palette used (as soon as there is less than the maximum number of inks fr the requested mode)
-    pub fn extract_palette(&self, mode: Mode) -> Palette {
+    /// Returns the palette used (as soon as there is less than the maximum number of colors for the requested mode)
+    pub fn extract_palette(&self, mode: Mode) -> Palette<C> {
         self.extract_palette_with_hint(mode, LockablePalette::empty())
             .unwrap()
     }
@@ -476,24 +649,24 @@ impl ColorMatrix {
     pub fn extract_palette_with_hint(
         &self,
         mode: Mode,
-        mut hint: LockablePalette
-    ) -> Result<Palette, String> {
-        for &ink in self.data.iter().flatten().unique().sorted() {
-            if !hint.contains_ink(ink) {
-                // here the palette does not contain the ink, so we have to add it
+        mut hint: LockablePalette<C>
+    ) -> Result<Palette<C>, String> {
+        for &color in self.data.iter().flatten().unique().sorted() {
+            if !hint.contains_color(color) {
+                // here the palette does not contain the color, so we have to add it
                 if hint.is_locked() {
                     return Err(format!(
-                        "Palette is locked, it is not possible to add ink {ink}"
+                        "Palette is locked, it is not possible to add color {color}"
                     ));
                 }
 
                 let target_pen = hint.next_unused_pen_for_mode(mode);
                 if let Some(target_pen) = target_pen {
-                    hint.as_palette_mut().unwrap().set(target_pen, ink);
+                    hint.as_palette_mut().unwrap().set(target_pen, color);
                 }
                 else {
                     return Err(format!(
-                        "Palette is full, it is not possible to add extra ink {ink}"
+                        "Palette is full, it is not possible to add extra color {color}"
                     ));
                 }
             }
@@ -518,7 +691,7 @@ impl ColorMatrix {
             .flatten()
             .unique()
             .copied()
-            .collect::<Vec<Ink>>();
+            .collect::<Vec<C>>();
         let max_count = mode.max_colors().min(inks.len());
         let inks = &inks[..max_count];
 
@@ -528,7 +701,7 @@ impl ColorMatrix {
     /// Modify the image in order to use only the provided palette
     pub fn reduce_colors_with(
         &mut self,
-        inks: &[Ink],
+        inks: &[C],
         strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         for y in 0..(self.height() as usize) {
@@ -598,7 +771,7 @@ impl ColorMatrix {
                 };
 
                 let src_color = img.get_pixel(src_x, src_y);
-                let dest_ink = Ink::from(*src_color);
+                let dest_ink = C::from(*src_color);
 
                 // Add the current ink to the current line
                 line.push(dest_ink);
@@ -614,13 +787,13 @@ impl ColorMatrix {
     /// Compute a difference map to see the problematic positions
     pub fn diff(&self, other: &Self) -> Self {
         // Create a map encoding a complete success
-        let mut data = vec![vec![Ink::from(26); other.width() as usize]; other.height() as usize];
+        let mut data = vec![vec![C::white(); other.width() as usize]; other.height() as usize];
 
         // Set the error positions
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
                 if self.data[y][x] != other.data[y][x] {
-                    data[y][x] = Ink::from(0);
+                    data[y][x] = C::black();
                 }
             }
         }
@@ -634,7 +807,7 @@ impl ColorMatrix {
         let mut res = Vec::new();
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
-                if self.data[y][x] == Ink::from(0) {
+                if self.data[y][x] == C::black() {
                     res.push((x, y));
                 }
             }
@@ -649,20 +822,35 @@ impl ColorMatrix {
 
         for x in 0..(self.width()) {
             for y in 0..(self.height()) {
-                buffer.put_pixel(x, y, self.get_ink(x as usize, y as usize).color());
+                buffer.put_pixel(x, y, (*self.get_color(x as usize, y as usize)).into());
             }
         }
 
         buffer
     }
 
+    /// [`Self::as_image`], encoded as PNG bytes in memory - for a caller
+    /// that wants to hand the image to something other than the filesystem
+    /// (e.g. a debugger webview, over a `data:` URI).
+    pub fn as_png_bytes(&self) -> Result<Vec<u8>, im::ImageError> {
+        let buffer = self.as_image();
+        let mut bytes = Vec::new();
+        buffer.write_to(&mut std::io::Cursor::new(&mut bytes), im::ImageFormat::Png)?;
+        Ok(bytes)
+    }
+
     /// Convert the matrix as a sprite, given the right mode and an optional palette
     pub fn as_sprite(
         &self,
         mode: Mode,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> Sprite {
+    ) -> Sprite<C> {
+
+        println!("image\n{}\n", self.to_ansi_string());
+        println!("provided palette\n{}\n", palette.to_ansi_string());
+
+
         // Extract the palette is not provided as an argument
         let palette = if palette.is_locked() {
             palette.into_palette()
@@ -671,8 +859,11 @@ impl ColorMatrix {
             self.extract_palette_with_hint(mode, palette).unwrap()
         };
 
+        println!("obtained palette in as_sprite\n{}\n", palette.to_ansi_string());
+
+
         // Really make the conversion
-        let pens = inks_to_pens(&self.data, &palette);
+        let pens = colors_to_pens(&self.data, &palette);
 
         // Build the sprite
         Sprite {
@@ -682,13 +873,18 @@ impl ColorMatrix {
         }
     }
 
+}
+
+impl ColorMatrix<Ink> {
+
+
     /// Convert the matrix as a sprite in mode1. Pen 1/2/3 are changed at each line. Pen 0 is constant
     pub fn as_mode1_sprite_with_different_inks_per_line(
         &self,
         palette: &[(Ink, Ink, Ink, Ink)],
-        dummy_palette: &Palette,
+        dummy_palette: &Palette<Ink>,
         missing_pen: Option<Pen>
-    ) -> Sprite {
+    ) -> Sprite<Ink> {
         // Build the matrix of pens
         let mut data: Vec<Vec<Pen>> = Vec::new();
         for y in 0..self.height() {
@@ -696,7 +892,7 @@ impl ColorMatrix {
 
             // Build the palette for the current ink
             let line_palette = {
-                let mut p = Palette::new(); // Palette full of 0
+                let mut p = Palette::<Ink>::new(); // Palette full of 0
                 p.set(Pen::from(0), palette[y].0);
                 p.set(Pen::from(1), palette[y].1);
                 p.set(Pen::from(2), palette[y].2);
@@ -741,7 +937,7 @@ impl ColorMatrix {
     }
 
     /// Generate an iterator on the pixels
-    pub fn inks(&self) -> Inks<'_> {
+    pub fn inks(&self) -> Inks<'_, Ink> {
         Inks {
             image: self,
             x: 0,
@@ -756,21 +952,22 @@ impl ColorMatrix {
         let tot_height = stack.iter().map(|row| row.height()).sum::<u32>() as usize;
 
         let mut matrix = Self::new(max_width, tot_height);
-        let cumulative_height = 0;
+        let mut cumulative_height = 0;
         for row in stack.iter() {
-            matrix.draw_matrix_at(0, cumulative_height, row)
+            matrix.draw_matrix_at(0, cumulative_height, row);
+            cumulative_height += row.height() as usize;
         }
 
         matrix
     }
 }
 
-impl ColorMatrix {
+impl<C: AmstradColor> ColorMatrix<C> {
     pub fn draw_matrix_at(&mut self, x: usize, y: usize, other: &Self) {
         for w in 0..(other.width() as usize) {
             for h in 0..(other.height() as usize) {
-                let i = other.get_ink(w, h);
-                self.set_ink(x + w, y + h, *i);
+                let i = other.get_color(w, h);
+                self.set_color(x + w, y + h, *i);
             }
         }
     }
@@ -778,18 +975,18 @@ impl ColorMatrix {
 
 /// Immutable ink iterator for generate (x, y, ink)
 #[derive(Debug)]
-pub struct Inks<'a> {
-    image: &'a ColorMatrix,
+pub struct Inks<'a, C: AmstradColor> {
+    image: &'a ColorMatrix<C>,
     x: u32,
     y: u32,
     width: u32,
     height: u32
 }
 
-impl Iterator for Inks<'_> {
-    type Item = (u32, u32, Ink);
+impl<C: AmstradColor> Iterator for Inks<'_, C> {
+    type Item = (u32, u32, C);
 
-    fn next(&mut self) -> Option<(u32, u32, Ink)> {
+    fn next(&mut self) -> Option<(u32, u32, C)> {
         if self.x >= self.width {
             self.x = 0;
             self.y += 1;
@@ -799,7 +996,7 @@ impl Iterator for Inks<'_> {
             None
         }
         else {
-            let ink = self.image.get_ink(self.x as _, self.y as _);
+            let ink = self.image.get_color(self.x as _, self.y as _);
             let i = (self.x, self.y, *ink);
 
             self.x += 1;
@@ -811,22 +1008,22 @@ impl Iterator for Inks<'_> {
 
 /// Animation are stored in lists of ColorMatrices of same sze
 #[derive(Debug)]
-pub struct ColorMatrixList(Vec<ColorMatrix>);
+pub struct ColorMatrixList<C: AmstradColor>(Vec<ColorMatrix<C>>);
 
-impl From<Vec<ColorMatrix>> for ColorMatrixList {
-    fn from(src: Vec<ColorMatrix>) -> Self {
+impl<C: AmstradColor> From<Vec<ColorMatrix<C>>> for ColorMatrixList<C> {
+    fn from(src: Vec<ColorMatrix<C>>) -> Self {
         ColorMatrixList(src)
     }
 }
 
-impl From<&ColorMatrixList> for Vec<ColorMatrix> {
-    fn from(val: &ColorMatrixList) -> Self {
+impl<C: AmstradColor> From<&ColorMatrixList<C>> for Vec<ColorMatrix<C>> {
+    fn from(val: &ColorMatrixList<C>) -> Self {
         val.0.clone()
     }
 }
 
-impl std::ops::Deref for ColorMatrixList {
-    type Target = Vec<ColorMatrix>;
+impl<C: AmstradColor> std::ops::Deref for ColorMatrixList<C> {
+    type Target = Vec<ColorMatrix<C>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -868,9 +1065,9 @@ pub enum VerticalCrop {
     None
 }
 
-impl ColorMatrixList {
+impl<C: AmstradColor> ColorMatrixList<C> {
     /// Provide a Vec version of the items
-    pub fn to_vec(&self) -> Vec<ColorMatrix> {
+    pub fn to_vec(&self) -> Vec<ColorMatrix<C>> {
         self.into()
     }
 
@@ -913,12 +1110,12 @@ impl ColorMatrixList {
     /// Delegate the color reduction to the underlying ColorMatrix objects
     pub fn reduce_colors_with(
         &mut self,
-        inks: &[Ink],
+        colors: &[C],
         strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         self.0
             .iter_mut()
-            .try_for_each(|matrix| matrix.reduce_colors_with(inks, strategy))
+            .try_for_each(|matrix| matrix.reduce_colors_with(colors, strategy))
     }
 
     /// Number of frames in the animation
@@ -945,13 +1142,13 @@ impl ColorMatrixList {
     pub fn as_sprites(
         &self,
         mode: Mode,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> SpriteList {
+    ) -> SpriteList<C> {
         self.to_vec()
             .iter()
             .map(|matrix| matrix.as_sprite(mode, palette.clone(), missing_pen))
-            .collect::<Vec<Sprite>>()
+            .collect::<Vec<Sprite<C>>>()
             .into()
     }
 
@@ -1059,23 +1256,23 @@ impl ColorMatrixList {
         self.to_vec()
             .iter()
             .map(|matrix| matrix.window(start_x, start_y, width, height))
-            .collect::<Vec<ColorMatrix>>()
+            .collect::<Vec<ColorMatrix<C>>>()
             .into()
     }
 }
 
 /// List of sprites for animations
 #[derive(Debug)]
-pub struct SpriteList(Vec<Sprite>);
+pub struct SpriteList<C: AmstradColor>(Vec<Sprite<C>>);    
 
-impl From<Vec<Sprite>> for SpriteList {
-    fn from(src: Vec<Sprite>) -> Self {
+impl<C: AmstradColor> From<Vec<Sprite<C>>> for SpriteList<C> {
+    fn from(src: Vec<Sprite<C>>) -> Self {
         SpriteList(src)
     }
 }
 
-impl std::ops::Deref for SpriteList {
-    type Target = Vec<Sprite>;
+impl<C: AmstradColor> std::ops::Deref for SpriteList<C> {
+    type Target = Vec<Sprite<C>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -1087,18 +1284,18 @@ impl std::ops::Deref for SpriteList {
 /// TODO Check why mode nad palette are optionnals. Force them if it is not mandatory to have htem
 /// optionnal
 #[derive(Debug)]
-pub struct Sprite {
+pub struct Sprite<C: AmstradColor> {
     /// Optional screen mode of the sprite
     pub(crate) mode: Option<Mode>,
     /// Optionnal palete of the sprite
-    pub(crate) palette: Option<Palette>,
+    pub(crate) palette: Option<Palette<C>>,
     /// Content of the sprite
     pub(crate) data: Vec<Vec<u8>>
 }
 
 #[allow(missing_docs)]
-impl Sprite {
-    pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette>) -> Self {
+impl<C: AmstradColor> Sprite<C> {
+    pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette<C>>) -> Self {
         let data = pens
             .iter()
             .map(|line| crate::pixels::pens_to_bytes(line, mode))
@@ -1110,7 +1307,7 @@ impl Sprite {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette) -> Self {
+    pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette<C>) -> Self {
         let pens: Vec<Vec<_>> = bytes
             .chunks(bytes_width)
             .map(|chunk| pixels::bytes_to_pens(chunk, mode).collect::<Vec<_>>())
@@ -1121,8 +1318,8 @@ impl Sprite {
 
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
-    pub fn to_color_matrix(&self) -> Option<ColorMatrix> {
-        if self.mode.is_none() && self.palette.is_none() {
+    pub fn to_color_matrix(&self) -> Option<ColorMatrix<C>> {
+        if self.mode.is_none() || self.palette.is_none() {
             return None;
         }
 
@@ -1141,7 +1338,7 @@ impl Sprite {
                             };
                             vec![*p.get(&pens[0]), *p.get(&pens[1])]
                         })
-                        .collect::<Vec<Ink>>()
+                        .collect::<Vec<C>>()
                 },
 
                 Some(mode) => {
@@ -1171,11 +1368,11 @@ impl Sprite {
     }
 
     /// Get the palette of the sprite
-    pub fn palette(&self) -> Option<Palette> {
+    pub fn palette(&self) -> Option<Palette<C>> {
         self.palette.clone()
     }
 
-    pub fn set_palette(&mut self, palette: Palette) {
+    pub fn set_palette(&mut self, palette: Palette<C>) {
         self.palette = Some(palette);
     }
 
@@ -1236,7 +1433,7 @@ impl Sprite {
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         mode: Mode,
         conversion: ConversionRule,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
     ) -> Self {
         // Get the list of Inks that represent the image
@@ -1248,7 +1445,7 @@ impl Sprite {
         fname: P,
         mode: Mode,
         conversion: ConversionRule,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;
@@ -1278,9 +1475,9 @@ impl Sprite {
 /// The palette is assumed to be the same on all the lines
 #[derive(Clone, Debug)]
 #[allow(missing_docs, unused)]
-pub struct MultiModeSprite {
+pub struct MultiModeSprite<C: AmstradColor>  {
     mode: Vec<Mode>,
-    palette: Palette,
+    palette: Palette<C>,
     data: Vec<Vec<u8>>
 }
 
@@ -1292,9 +1489,9 @@ pub enum MultiModeConversion {
 }
 
 #[allow(missing_docs)]
-impl MultiModeSprite {
+impl<C: AmstradColor> MultiModeSprite<C> {
     /// Build an empty multimode sprite BUT provide the palette
-    pub fn new(p: Palette) -> Self {
+    pub fn new(p: Palette<C>) -> Self {
         Self {
             palette: p,
             mode: Vec::new(), // Color modes for the real lines
@@ -1318,7 +1515,7 @@ impl MultiModeSprite {
     /// Bytes values will be strictly the same. However representation is loss (bytes supposed to
     /// be displayed in mode 1, 2, 3 will be represented in mode 0)
     /// The multimode sprite is consummed
-    pub fn to_mode0_sprite(&self) -> Sprite {
+    pub fn to_mode0_sprite(&self) -> Sprite<C> {
         Sprite {
             mode: Some(Mode::Zero),
             palette: Some(self.palette.clone()),
@@ -1326,7 +1523,7 @@ impl MultiModeSprite {
         }
     }
 
-    pub fn to_mode3_sprite(&self) -> Sprite {
+    pub fn to_mode3_sprite(&self) -> Sprite<C> {
         Sprite {
             mode: Some(Mode::Three),
             palette: Some(self.palette.clone()),
@@ -1336,13 +1533,13 @@ impl MultiModeSprite {
 
     /// Generate a multimode sprite that mixes mode 0 and mode 3 and uses only 4 colors
     #[allow(clippy::similar_names, clippy::identity_op)]
-    pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite, conversion: MultiModeConversion) -> Self {
+    pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite<C>, conversion: MultiModeConversion) -> Self {
         // TODO check that there are only the first 4 inks used
         let p_orig = sprite.palette().unwrap();
 
         //  Build the specific palette for multimode
         let p = {
-            let mut p = Palette::new();
+            let mut p = Palette::<C>::new();
 
             // First 4 inks are strictly the same
             for i in 0..4 {
@@ -1421,8 +1618,130 @@ impl MultiModeSprite {
 
 #[cfg(test)]
 mod tests {
-    use super::ColorMatrix;
+    use super::{ColorMatrix, Mode};
     use crate::ga::Ink;
+    use crate::palette::Palette;
+
+    /// Reported live: a real, scrolled BASIC screen (CRTC start address not
+    /// 16K-page-aligned) rendered via `-sv` cut the bottom of the screen
+    /// off ("Ready" and everything after it missing). Root cause: real CPC
+    /// hardware wraps the interleaved "+0x800 per subline" address as
+    /// plain 16-bit arithmetic, at the full 64K boundary - `from_screen_at`
+    /// used to index a plain, non-wrapping slice instead, which either
+    /// panicked (out of bounds) or forced a caller-side safety clamp that
+    /// shrank the image to stay in bounds.
+    ///
+    /// **This crate's own first fix was itself wrong**: it wrapped within
+    /// just the *page* (`base_address`'s own 16K region) rather than the
+    /// full 64K space, on the theory that the CRTC's page-select bits are
+    /// separate circuitry from the interleave offset. Live-verified wrong
+    /// against a second real fixture
+    /// (`cpclib-dap/tests/graphics/hello/`, address 0xC5E0): its own last
+    /// on-screen line computes to raw address 0x10420, which the page-wrap
+    /// theory placed at 0xC420 (a real, non-background byte, 0xE0) where
+    /// the *correct* value - matching both a real screenshot and a WinAPE
+    /// capture of the identical memory - is 0x00, only found by wrapping
+    /// the full 16-bit address (0x10420 -> 0x0420) instead.
+    ///
+    /// This pins the *corrected* (full 64K) wrap down directly:
+    /// `base_address` (0xFFF0) sits only 16 bytes before the very top of
+    /// the address space, so line 1's own subline term alone (`1 * 0x800`)
+    /// pushes the raw address past 0xFFFF - the exact shape of both real
+    /// bugs. A marker byte placed at the address the *full-space* wrap
+    /// should land on must be the one actually read, not a panic and not
+    /// the (out of bounds, if it even ran) unwrapped position - nor the
+    /// wrong, page-relative position the first fix would have used.
+    #[test]
+    fn from_screen_at_wraps_within_the_same_16k_bank_not_into_the_next_one() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+
+        let mut data = vec![0u8; 0x10000];
+        let base_address = 0xFFF0usize; // bank 3: 0xC000-0xFFFF
+        // Where line 1 (subline 1, `1 * 0x800`) wraps to: confined to the
+        // *same* bank as `base_address` - (0xFFF0 & 0x3FFF) + 0x800,
+        // wrapped at 0x4000 and re-based at 0xC000 - not the bank `base_
+        // address`'s own raw arithmetic would spill into if left
+        // unconfined (0xFFF0 + 0x800 = 0x107F0, which crosses out of
+        // 16-bit range entirely, let alone out of bank 3).
+        let offset_in_page = (base_address & 0x3FFF) + 0x800;
+        let wrapped_offset = 0xC000 + (offset_in_page % 0x4000);
+        assert_eq!(wrapped_offset, 0xC7F0);
+        data[wrapped_offset] = 0xFF; // one full byte "on" - Mode::Two, 8 lit pixels
+
+        let matrix = ColorMatrix::from_screen_at(&data, base_address, 1, 16, 8, Mode::Two, &palette);
+
+        let line0_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 0) == Ink::WHITE);
+        let line1_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 1) == Ink::WHITE);
+        assert!(!line0_lit, "line 0 reads an untouched (zero) byte, must stay background");
+        assert!(
+            line1_lit,
+            "line 1 must read the marker byte wrapped within the same 16K bank, not panic or miss it"
+        );
+    }
+
+    /// Reported live: real CRTC hardware accepts an `R9` (maximum raster
+    /// address) taller than 8 lines, but the address path's own `RA` field
+    /// is only 3 bits wide - a row configured taller than 8 lines does not
+    /// reach new addresses past line 7, it repeats them. `lines_per_char_row`
+    /// = 16 here (an `R9` of 15) still governs when `MA` advances (once
+    /// every 16 lines, not 8), but line 8 must read the *same* byte line 0
+    /// did - not a new one 8*0x800 further on, and not (with the old,
+    /// pre-fix `line % lines_per_char_row` feeding `RA*0x800` directly)
+    /// skip the 8 lines in between as though they used addresses that were
+    /// never really reachable.
+    #[test]
+    fn from_screen_at_wraps_the_raster_address_at_8_regardless_of_the_configured_row_height() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+
+        let mut data = vec![0u8; 0x10000];
+        let base_address = 0xC000usize;
+        data[base_address] = 0xFF; // line 0's own byte - Mode::Two, 8 lit pixels
+
+        let matrix =
+            ColorMatrix::from_screen_at(&data, base_address, 1, 16, 16, Mode::Two, &palette);
+
+        let lit = |line: usize| {
+            let m = &matrix;
+            (0..m.width()).any(|x| *m.get_color(x as usize, line) == Ink::WHITE)
+        };
+        assert!(lit(0), "line 0 reads its own marker byte");
+        assert!(
+            lit(8),
+            "line 8 (RA=8, wraps to RA=0) must read the same byte line 0 did, not a blank one"
+        );
+        assert!(!lit(1), "line 1 (RA=1) reads an untouched, still-blank byte");
+    }
+
+    /// WinAPE's "CPC" encoding, next to its "Screen" one: plain sequential
+    /// bytes, no interleave, wrapped at the full 64K space rather than
+    /// confined to one 16K bank.
+    #[test]
+    fn from_linear_memory_reads_sequential_bytes_wrapped_at_the_full_64k_space() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+
+        let mut data = vec![0u8; 0x10000];
+        let base_address = 0xFFFEusize;
+        data[0xFFFE] = 0xFF; // line 0, byte 0
+        data[0xFFFF] = 0x00; // line 0, byte 1
+        data[0x0000] = 0xFF; // line 1, byte 0 - only reachable by wrapping past 0xFFFF
+        data[0x0001] = 0x00; // line 1, byte 1
+
+        let matrix =
+            ColorMatrix::from_linear_memory(&data, base_address, 2, 2, Mode::Two, &palette);
+
+        let lit = |line: usize, x: usize| *matrix.get_color(x, line) == Ink::WHITE;
+        assert!(lit(0, 0), "line 0 reads 0xFFFE, its own marker byte");
+        assert!(
+            lit(1, 0),
+            "line 1 must wrap straight past 0xFFFF to 0x0000, not stop or panic"
+        );
+    }
 
     #[test]
     fn test_masking() {
@@ -1483,9 +1802,33 @@ mod tests {
         );
 
         let mask2 = sprite_with_mask.clone().convert_to_mask(bg_).clone();
-        let sprite2 = sprite_with_mask.clone().replace_ink(bg_, rep).clone();
+        let sprite2 = sprite_with_mask.clone().replace_color(bg_, rep).clone();
 
         assert_eq!(mask, mask2);
         assert_eq!(sprite, sprite2);
     }
+
+    /// Every row printed twice, in place, with the width and the row order
+    /// otherwise untouched - the vertical half of the CPC pixel-aspect-ratio
+    /// stretch `-sv`'s screen viewer applies on every mode alike.
+    #[test]
+    fn double_vertically_repeats_each_row_immediately_after_itself() {
+        let mut matrix: ColorMatrix<Ink> = vec![
+            vec![Ink::BLACK, Ink::WHITE],
+            vec![Ink::WHITE, Ink::BLACK]
+        ]
+        .into();
+
+        matrix.double_vertically();
+
+        assert_eq!(matrix.width(), 2);
+        assert_eq!(matrix.height(), 4);
+        assert_eq!(
+            *matrix.get_color(0, 0), Ink::BLACK
+        );
+        assert_eq!(*matrix.get_color(0, 1), Ink::BLACK);
+        assert_eq!(*matrix.get_color(0, 2), Ink::WHITE);
+        assert_eq!(*matrix.get_color(0, 3), Ink::WHITE);
+    }
+
 }

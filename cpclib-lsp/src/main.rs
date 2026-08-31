@@ -1,7 +1,10 @@
 use cpclib_common::clap;
 use cpclib_common::clap::{Parser, Subcommand};
 use cpclib_lsp::CpcLspBackend;
-use cpclib_lsp::config::{CONFIG_FILE_NAME, EXAMPLE_CONFIG_TOML, merge_missing_config_fields};
+use cpclib_lsp::config::{
+    CONFIG_FILE_NAME, EXAMPLE_CONFIG_TOML, find_config_file, load_config,
+    merge_missing_config_fields
+};
 use tower_lsp::{LspService, Server};
 
 #[derive(Parser, Debug)]
@@ -47,7 +50,32 @@ enum Command {
     Bndbuild {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>
-    }
+    },
+    /// Run as the debug adapter, speaking DAP on stdin/stdout.
+    ///
+    /// Same reasoning as `bndbuild` above: the editor already knows where this
+    /// binary is, so exposing the adapter as a subcommand saves shipping and
+    /// locating a second one. Stdout carries protocol frames only.
+    Dap,
+    /// Run as `cpclib-runner`'s own `emu` CLI (launch a `.sna`/`.dsk` in any
+    /// installed or installable emulator), instead of starting the language
+    /// server. Same reasoning as `bndbuild`/`dap` above - cpclib-lsp already
+    /// links cpclib-runner in full, so this saves shipping a third binary
+    /// just for an editor's "run/debug with a specific emulator" picker to
+    /// invoke. Every argument after `emu` is passed straight through to
+    /// `cpclib_runner::emucontrol::EmuCli`'s own parser unchanged (e.g.
+    /// `cpclib-lsp emu --emulator winape --snapshot game.sna run`).
+    Emu {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>
+    },
+    /// Print every emulator `cpclib-runner` knows how to run, as a JSON
+    /// array, for an editor's "run/debug with..." picker to render without
+    /// needing to link `cpclib-runner` itself - each entry names the exact
+    /// string `emu --emulator` accepts, a display label, whether the DAP
+    /// layer (this same binary's own `dap` subcommand) can debug it, and
+    /// whether it is already installed.
+    EmuList
 }
 
 /// A real, isolated clap subcommand (rather than a hand-rolled pre-`Cli::parse()`
@@ -94,11 +122,72 @@ fn run_as_bndbuild(args: Vec<String>) -> ! {
     }
 }
 
+/// A real, isolated clap subcommand for the same reason `run_as_bndbuild`'s
+/// own doc comment gives - `args` is everything after `emu`, passed straight
+/// through to `EmuCli`'s own parser, with a synthetic program-name slot
+/// prepended the same way.
+fn run_as_emu(args: Vec<String>) -> ! {
+    use cpclib_runner::emucontrol::{EmuCli, handle_arguments};
+
+    let cli = match EmuCli::try_parse_from(std::iter::once("emu".to_string()).chain(args)) {
+        Ok(cli) => cli,
+        Err(e) => {
+            e.print().ok();
+            let code = match e.kind() {
+                cpclib_common::clap::error::ErrorKind::DisplayHelp
+                | cpclib_common::clap::error::ErrorKind::DisplayVersion => 0,
+                _ => 2
+            };
+            std::process::exit(code);
+        }
+    };
+
+    match handle_arguments(cli, &()) {
+        Ok(_) => std::process::exit(0),
+        Err(e) => {
+            eprintln!("Failure\n{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_as_emu_list() -> ! {
+    let entries = cpclib_runner::emucontrol::list_emulators();
+    let json = serde_json::json!(
+        entries
+            .iter()
+            .map(|e| serde_json::json!({
+                "id": e.id,
+                "label": e.label,
+                "debuggable": e.debuggable,
+                "installed": e.installed,
+                "dapId": e.dap_id
+            }))
+            .collect::<Vec<_>>()
+    );
+    println!("{json}");
+    std::process::exit(0);
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     if let Some(Command::Bndbuild { args }) = cli.command {
         run_as_bndbuild(args);
+    }
+    if let Some(Command::Emu { args }) = cli.command {
+        run_as_emu(args);
+    }
+    if let Some(Command::EmuList) = cli.command {
+        run_as_emu_list();
+    }
+    if let Some(Command::Dap) = cli.command {
+        // Diagnostics to stderr: stdout is the protocol.
+        if let Err(problem) = cpclib_dap::run_stdio() {
+            eprintln!("cpclib-lsp dap: {problem}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
     }
     if let Some(dir) = cli.init_config {
         let path = dir.join(CONFIG_FILE_NAME);
@@ -152,11 +241,61 @@ async fn main() {
         return;
     }
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
+    // Initialize tracing. `cpclib-lsp.toml`'s top-level `log` field (mirroring
+    // `[dap] log`, see `LspConfig::log`'s doc comment) can point tracing at a
+    // file instead of relying on `RUST_LOG` and a stderr that a GUI-launched
+    // editor has nowhere to show. This runs before `initialize` is received,
+    // so the workspace root isn't known from the LSP handshake yet - the
+    // current directory is used instead, which is why `cpclib-vscode` sets it
+    // to the workspace folder when it spawns this process.
+    let workspace_root = std::env::current_dir().ok();
+    let found_config = find_config_file(workspace_root.as_deref());
+    let log_setting = load_config(workspace_root.as_deref()).config.log;
+
+    let log_path = (!log_setting.trim().is_empty()).then(|| {
+        let configured = std::path::Path::new(log_setting.trim());
+        if configured.is_absolute() {
+            configured.to_path_buf()
+        }
+        else {
+            found_config
+                .as_deref()
+                .and_then(std::path::Path::parent)
+                .map(|dir| dir.join(configured))
+                .unwrap_or_else(|| {
+                    workspace_root.clone().unwrap_or_default().join(configured)
+                })
+        }
+    });
+
+    match log_path {
+        Some(path) => match std::fs::File::create(&path) {
+            Ok(file) => {
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"))
+                    )
+                    .with_writer(std::sync::Mutex::new(file))
+                    .with_ansi(false)
+                    .init();
+                tracing::info!("cpclib-lsp: writing trace log to {}", path.display());
+            },
+            Err(e) => {
+                tracing_subscriber::fmt()
+                    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                    .with_writer(std::io::stderr)
+                    .init();
+                tracing::warn!("cpclib-lsp: cannot write log file {}: {e}", path.display());
+            }
+        },
+        None => {
+            tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .with_writer(std::io::stderr)
+                .init();
+        }
+    }
 
     tracing::info!("Starting cpclib-lsp server");
 
@@ -207,6 +346,12 @@ mod tests {
             },
             other => panic!("expected the bndbuild subcommand, got {other:?}")
         }
+    }
+
+    #[test]
+    fn the_dap_subcommand_is_recognised() {
+        let cli = Cli::try_parse_from(["cpclib-lsp", "dap"]).expect("dap parses");
+        assert!(matches!(cli.command, Some(Command::Dap)));
     }
 
     #[test]

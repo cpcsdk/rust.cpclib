@@ -1,0 +1,5860 @@
+//! The BASIC-flavoured translating session.
+//!
+//! Deliberately not a mode of [`crate::session::Session`]: that type is
+//! shaped around Z80 addresses, registers and a call stack reconstructed
+//! from memory - none of which describe "where a BASIC program is" the way
+//! a line number does. This session is built on the same [`DapPeer`]
+//! primitives (`readMemory`, `setInstructionBreakpoints`, `continue`) that
+//! `Session` uses, interpreted through [`crate::basic`] instead - so it
+//! works identically against 1984js and AMSpiriT Lite, with nothing
+//! backend-specific here.
+//!
+//! The whole feature rests on one fact: the ROM calls
+//! [`crate::basic::EXECUTE_STATEMENT_ENTRY`] once per **statement** - every
+//! `:`-separated one on a line, not just its first. One instruction
+//! breakpoint at [`crate::basic::STATEMENT_BREAKPOINT_TARGET`] (a few bytes
+//! into that same routine - see its own doc comment for why not the entry
+//! point itself), left armed for the whole session, plus reading
+//! [`crate::basic::PTR_CURRENT_LINE_NUMBER_FIELD`] on every hit to compare
+//! against the user's actual breakpoints, is the entire stepping/breakpoint
+//! mechanism - no per-breakpoint address computation, unlike a Z80 session
+//! or the reference `amspirit-basic` extension's own address-mapped
+//! approach.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use serde_json::{Value, json};
+
+use crate::basic::{
+    self, BasicVariableValue, STATEMENT_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
+    PTR_VARIABLES_START, VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
+};
+use crate::peer::DapPeer;
+use crate::protocol::{self, address_reference};
+use crate::session::decode_base64;
+
+/// How many bytes of the variable storage area to read in one go - matches
+/// the reference `amspirit-basic` extension's own cap for the same bulk
+/// read, a reasonable safety limit rather than a measured one.
+const MAX_VARIABLE_BYTES: u16 = 8192;
+
+/// The user's own BASIC variables.
+const VARIABLES_REFERENCE: i64 = 1000;
+/// Program size, variable/array zone boundaries, free RAM, BASIC version -
+/// what AMSpiriT Lite's own UI shows in a dedicated info panel
+/// ("TXTTOP.../Taille.../Zone variables..."), asked for inside the
+/// Variables pane instead: no dedicated webview to build, and the editor
+/// already refreshes this scope on every stop for free.
+const WORKSPACE_REFERENCE: i64 = 1001;
+
+const THREAD_ID: i64 = 1;
+
+/// `prog_size` at or below this is AMSpiriT Lite's own empty-program
+/// baseline (confirmed live: exactly 2 bytes fresh off a cold boot) - both
+/// the injection-landing check and the mid-run corruption recovery treat
+/// dropping to or below it as "no program is actually loaded right now",
+/// never as a legitimately tiny program (the shortest real BASIC program
+/// still tokenises to more than this).
+const EMPTY_PROGRAM_BASELINE: u16 = 2;
+
+/// How many times `Purpose::NativeAwaitRunState` will re-inject the program
+/// to recover from the corruption its own doc comment describes before
+/// giving up and falling back to the pre-recovery behaviour (poll forever,
+/// stuck in direct mode). A peer that corrupts the injection on every single
+/// retry is not something re-injecting a third or fourth time is going to
+/// fix.
+const MAX_NATIVE_REINJECTION_ATTEMPTS: u32 = 3;
+
+/// See the Z80 session's own `CONSOLE_HELP` (`session.rs`) - same idea, only
+/// the commands this session actually has.
+const BASIC_CONSOLE_HELP: &str = "\
+BASIC debug console commands:
+  -mv <address> [count]   a memory view at a fixed address (count defaults
+                          to 64 bytes) - re-type the command to refresh it
+  -dv <address> [count]   disassemble memory at a fixed address (count
+                          defaults to 32 instructions)
+  -bv                     the live BASIC listing, straight from the
+                          emulator's own memory
+  -sv [a] [w] [h] [mode] [rowheight] [palette] [encoding]
+                          render video memory as an image, opening an
+                          interactive panel; each argument overrides the
+                          live CRTC/Gate Array value it replaces (default
+                          address/width from R12R13/R1, height 200);
+                          `rowheight` is read as R9+1 for the 'Screen'
+                          encoding's own address math (default the live R9,
+                          not always 8 - real CRTC hardware wraps the
+                          raster-address term at 8 regardless of a taller
+                          configured row) and, for either encoding, is how
+                          many real lines make up one tile of the panel's
+                          own grid layout; `palette`
+                          overrides individual pens for the window only
+                          (never written to the Gate Array) - a comma-
+                          separated list of ink numbers 0-26, one per pen
+                          from pen 0, empty entries left live; `encoding`
+                          picks WinAPE's own 'Screen' (0, default: CRTC-
+                          interleaved, confined to the screen's own 16K
+                          bank) or 'CPC' (1: plain sequential bytes, wrapped
+                          at the full 64K space, `rowheight` a pure layout
+                          value with no effect on which bytes are read)
+  -help                   this list";
+
+/// AMSpiriT's own `cpclib/basicListing` response into readable text - each
+/// line's number followed by its statements' own `text`, colon-joined
+/// exactly the way the line reads on screen. Trusts AMSpiriT's tokeniser
+/// completely: no re-parsing, no column resolution, nothing this crate's own
+/// (different) tokeniser could disagree with it about. Shared between
+/// `BasicSession`'s and the Z80 `Session`'s own `-bv` command - the exact
+/// same response shape either way, whichever kind of program is being
+/// debugged.
+pub(crate) fn format_amspirit_basic_listing(body: &Value) -> String {
+    let mut out = String::new();
+    let Some(lines) = body.get("lines").and_then(Value::as_array) else {
+        return out;
+    };
+    for line in lines {
+        let Some(num) = line.get("num").and_then(Value::as_u64) else {
+            continue;
+        };
+        let stmts: Vec<&str> = line
+            .get("stmts")
+            .and_then(Value::as_array)
+            .map(|stmts| {
+                stmts
+                    .iter()
+                    .filter_map(|s| s.get("text").and_then(Value::as_str))
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push_str(&format!("{num} {}\n", stmts.join(":")));
+    }
+    out
+}
+
+/// An address or count typed at `-mv`/`-dv` - `0x`/`&`/`#`/`$`-prefixed hex,
+/// `0o`/`@`-prefixed octal, `%`/`0b`-prefixed binary, or plain decimal.
+/// Reuses `cpclib_common`'s own number parser (the same one the assembler's
+/// own source-level number literals go through) rather than a second,
+/// narrower implementation - the Z80 session's own console commands
+/// (`session.rs`) predate this being available and still have their own,
+/// which this deliberately does not copy.
+fn parse_address(text: &str) -> Option<u32> {
+    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::error::ContextError;
+    use cpclib_common::winnow::stream::AsBStr;
+    cpclib_common::parse_value::<_, ContextError>
+        .parse(text.trim().as_bstr())
+        .ok()
+}
+
+#[derive(Debug, Clone)]
+enum Purpose {
+    Plain,
+    /// The peer's own `attach` handshake, for a peer that needs one.
+    Attach,
+    /// The very first `continue`, sent right after `configurationDone`. Its
+    /// answer is the earliest point the machine is confirmed genuinely
+    /// running (AMSpiritLite's own `continue` handling blocks on exactly
+    /// that) - the right moment to auto-type `RUN`, on a peer that can.
+    LaunchResumed,
+    /// The one `setInstructionBreakpoints` this session ever sends. Its
+    /// answer used to be discarded (`Purpose::Plain`) - a peer that refused
+    /// or failed to verify it (an exhausted breakpoint-channel table, an
+    /// address it rejects) left every breakpoint and step silently inert for
+    /// the rest of the session, with nothing in the Debug Console to say so.
+    BreakpointArmed,
+    /// Reading [`basic::PTR_CURRENT_LINE_NUMBER_FIELD`] itself - its value
+    /// is a pointer to dereference next, or the direct-mode sentinel.
+    CurrentLinePointer,
+    /// Dereferencing that pointer to get the actual line number.
+    CurrentLineValue,
+    /// [`basic::PTR_VARIABLES_START`] dereferenced live, on the generic
+    /// peer only - see `known_txttop`'s own doc comment for why the
+    /// computed estimate is not trusted for this. Sent once per session
+    /// (`begin_variables` skips it once `known_txttop` is set), ahead of
+    /// [`Purpose::VariableChainHeads`].
+    GenericVariablesBase,
+    /// The 27 chain heads, on the way to decoding variables.
+    VariableChainHeads,
+    /// The bulk variable-storage read, once the chain heads are known.
+    VariableStorage,
+    /// `cpclib/basicState`, answered after a genuine stop on a peer with
+    /// native BASIC debugging - carries `cur_linenum`/`stmt_addr` directly,
+    /// replacing the two-round-trip readMemory dance the generic path
+    /// needs.
+    NativeBasicState,
+    /// `cpclib/basicStep` (`stepIn`/`next`/`stepOut` on a peer with native
+    /// BASIC debugging) - the emulator has already paused and stepped by
+    /// the time this answers, so what is left is reading where it landed.
+    NativeStepDone,
+    /// The `cpclib/basicState` read [`Purpose::NativeStepDone`] itself
+    /// triggers, to learn where the completed step actually landed.
+    NativeStateAfterStep,
+    /// A second `cpclib/basicState` read, sent only when
+    /// [`Purpose::NativeStateAfterStep`]'s own answer looked stale - see
+    /// [`Purpose::NativeContinueStateRetry`]'s doc comment for the same
+    /// mechanism on the `Continue` loop. Reported live as the *last*
+    /// statement of a multi-statement line never getting highlighted while
+    /// single-stepping through one with "Step Into": stepping onto it
+    /// echoed the position from *before* that step (still the
+    /// second-to-last statement), and stepping again from there moved
+    /// straight past it to the next line, so the last statement's own
+    /// position was never the one actually shown.
+    NativeStateAfterStepRetry,
+    /// `Continue` on a native peer, and the launch's own first run
+    /// (`autotype_run`) alike: `cpclib/basicStep` answering one statement
+    /// of the loop that drives either - see `cpclib/basicSetBreakpoints`'s
+    /// own doc comment for why neither trusts `/api/basic_bp` to decide
+    /// when to stop.
+    NativeContinueStep,
+    /// The `cpclib/basicState` read [`Purpose::NativeContinueStep`] itself
+    /// triggers, to decide whether this statement is a breakpoint, a
+    /// pending pause, or another one to step past.
+    NativeContinueState,
+    /// A second `cpclib/basicState` read, sent only when
+    /// [`Purpose::NativeContinueState`]'s own answer looked stale (see its
+    /// doc comment) - decided the same way, but never retried a second time:
+    /// a real self-loop (`10 GOTO 10`) legitimately revisits the exact same
+    /// address on every step, and this is what stops that case from polling
+    /// forever mistaking it for staleness.
+    NativeContinueStateRetry,
+    /// Reading [`crate::basic::PTR_ARRAYS_START`] for the Workspace scope,
+    /// on a peer without native BASIC debugging - `PTR_VARIABLES_START`
+    /// itself is not read at all: this session already knows it locally,
+    /// having chosen it when it built the boot snapshot.
+    WorkspaceArraysStart,
+    /// `cpclib/basicState`, answered for the Workspace scope on a peer
+    /// with native BASIC debugging - the same call
+    /// [`Purpose::NativeBasicState`] uses for a stop, but read here purely
+    /// for its workspace fields (`vartop`/`arrend`/`var_size`/`basic_ver`),
+    /// not to decide whether to report a stop at all.
+    NativeWorkspaceInfo,
+    /// `cpclib/basicInject` answering at attach time, on a native peer -
+    /// with `{"ok":true}`, unconditionally, whether or not the write has
+    /// actually landed yet: reported live and directly reproduced, a
+    /// `basicListing`/`basicState` read taken immediately after can still
+    /// describe the machine as it was *before* injection (`prog_size`
+    /// staying at the empty-program baseline for dozens of polls, ~1.5s,
+    /// before finally reflecting the real program) - the same "the API
+    /// answers before its own state catches up" pattern this session kept
+    /// finding for pause and step, now for injection. Kicks off
+    /// [`Purpose::NativeAwaitInjectionState`] to poll for it landing before
+    /// doing anything that depends on the program actually being there.
+    NativeInjected,
+    /// `cpclib/basicState`, polled (throttled, no `basicStep` - same
+    /// reasoning as [`Purpose::NativeAwaitRunState`]) until `prog_size`
+    /// moves off the empty-program baseline - confirming the injection this
+    /// session just sent has actually landed, not merely been acknowledged.
+    /// Reported live as the launch silently never running anything: `RUN`
+    /// was typed (successfully) before the program was actually in memory,
+    /// found nothing there, and left the machine sitting in direct mode
+    /// forever - `cur_linenum` never once left `0xffff` for the rest of the
+    /// session, despite the program eventually loading correctly moments
+    /// later. Once confirmed landed, proceeds exactly as
+    /// [`Purpose::NativeInjected`] used to unconditionally: fetch
+    /// `cpclib/basicListing` if the peer offers it, otherwise go straight to
+    /// `start_if_ready`.
+    NativeAwaitInjectionState,
+    /// `cpclib/basicListing` fetched once right after injection is confirmed
+    /// landed, on a peer that supports it - decoded into `native_listing`,
+    /// then `start_if_ready` runs.
+    NativeListingFetched,
+    /// `cpclib/autotype`'s own answer, on a native peer, right after typing
+    /// `RUN\n` - kicks off the poll loop ([`Purpose::NativeAwaitRunState`]).
+    /// No breakpoint/step machinery is armed yet on purpose: the user's own
+    /// framing is exactly right - there is nothing to debug before `RUN` has
+    /// even been typed, direct mode has no statements of the program to stop
+    /// on, and stepping through it is what broke autotype in the first
+    /// place (see `autotype_run`'s own doc comment).
+    NativeAwaitRun,
+    /// `cpclib/basicState`, polled back to back (no `basicStep` in between)
+    /// while still waiting for `RUN` to leave direct mode. Loops on itself
+    /// (same purpose) while `cur_linenum` is still the direct-mode sentinel;
+    /// once a real line shows up, pauses the machine
+    /// ([`Purpose::NativeAwaitRunPaused`]) and only *then* does this session
+    /// start caring about breakpoints/statements - see `autotype_run`.
+    NativeAwaitRunState,
+    /// The `pause` sent once [`Purpose::NativeAwaitRunState`] finally saw a
+    /// real line. Re-reads `cpclib/basicState` next
+    /// ([`Purpose::NativeAwaitRunSettled`]) to see where the (asynchronous,
+    /// not instant - confirmed live: it can still land several lines further
+    /// than the one that triggered it) pause actually landed.
+    NativeAwaitRunPaused,
+    /// The `cpclib/basicState` [`Purpose::NativeAwaitRunPaused`] re-reads
+    /// once actually paused. Reports a stop right here on whatever real line
+    /// this is - breakpoint if it happens to be one, entry otherwise -
+    /// rather than feeding it to [`Purpose::NativeContinueState`]'s own
+    /// "not a line I care about, keep stepping" logic: reusing that here
+    /// was tried and reproduced the exact same hang this whole chain exists
+    /// to avoid, live - a non-breakpoint line right after launch restarted
+    /// the very `cpclib/basicStep` loop `autotype_run`'s doc comment
+    /// documents as interfering with the machine, which then ran the
+    /// program right back into direct mode before ever reporting anything
+    /// sensible to the editor.
+    NativeAwaitRunSettled,
+    /// One chip's own endpoint (`cpclib/crtc`/`ga`/`psg`/`fdc`) answering a
+    /// `variables` request against that scope - `reference` says which one,
+    /// `request` is what to reply to. Carries its own data rather than going
+    /// through a `pending_*` field like `Workspace` does: unlike the Z80
+    /// session's `chip_scope` (which batches every expanded chip pane behind
+    /// one shared `machineState` snapshot fetch), each chip here has its own
+    /// endpoint and its own round trip, so there is nothing to batch and no
+    /// reason to force them to serialize through one shared slot.
+    NativeChipScope { reference: i64, request: Value },
+    /// A chip scope on the generic peer, which has no per-chip endpoint of
+    /// its own - `cpclib/machineState`'s answer is a whole snapshot,
+    /// decoded the exact same way the Z80 session's own `Purpose::MachineState`
+    /// already does (`cpclib_sna::Snapshot::from_buffer` +
+    /// `crate::inspect::chip_variables`), reused rather than reimplemented.
+    /// One round trip per scope expanded, unlike the Z80 session's own
+    /// batching across every pane opened at once - this session does not
+    /// open them in bulk the way that one's `-chips` console command does,
+    /// so there is nothing worth batching here.
+    GenericChipScope { reference: i64, request: Value },
+    /// `-mv <address> [count]` - see the Z80 session's own `Purpose::MemoryView`
+    /// for the same idea. No `,follow`/register-anchored flavour here: unlike
+    /// the Z80 session, this one has no register scope to resolve one
+    /// against, so every view is a fixed-address snapshot, re-read by typing
+    /// the command again rather than tracked automatically.
+    MemoryView {
+        address: u32,
+        label: Option<String>,
+        request: Value
+    },
+    /// `-dv <address> [count]` - same idea as [`Purpose::MemoryView`], for
+    /// disassembly. Decoded with the exact same `crate::disassemble`
+    /// functions the Z80 session uses, but without its symbol annotation or
+    /// data-row overlay (both need a sourcemap this session does not have) -
+    /// still genuinely useful for a BASIC program that `CALL`s machine code,
+    /// just plainer.
+    DisassemblyView {
+        address: u32,
+        count: usize,
+        label: Option<String>,
+        request: Value
+    },
+    /// `-bv` on a peer with `cpclib/basicListing` - see `basic_listing_view`'s
+    /// own doc comment for why AMSpiriT's own answer is trusted directly
+    /// rather than re-derived.
+    AmspiritBasicListingText { request: Value },
+    /// `-bv` on the generic peer - the raw program bytes read live, decoded
+    /// with `cpclib_basic::BasicProgram` once they arrive.
+    GenericBasicListingRead { request: Value },
+    /// `-sv [address] [width] [height] [mode]` - see the Z80 session's own
+    /// `Purpose::ScreenViewCrtc` for the same two-mechanism idea and
+    /// override semantics. Each step here carries everything accumulated
+    /// so far in the variant itself, rather than a separate `pending_*`
+    /// field: unlike memory/disassembly views, this chain has no in-flight
+    /// -request bookkeeping to share with anything else.
+    ScreenViewCrtc {
+        address_override: Option<usize>,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode_override: Option<u8>,
+        row_height_override: Option<usize>,
+        /// The window's own per-pen overrides, never sent anywhere near the
+        /// Gate Array - see `crate::session::OpenScreenView`'s own doc
+        /// comment for why.
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        /// WinAPE's own "Screen"/"CPC" encoding choice - see
+        /// `crate::inspect::ScreenEncoding`'s own doc comment. `None` means
+        /// `Screen`, the existing/default behaviour.
+        encoding_override: Option<u8>,
+        request: Value
+    },
+    /// The Gate Array read, once `ScreenViewCrtc` answered.
+    ScreenViewGa {
+        crtc_regs: [u8; 18],
+        address_override: Option<usize>,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode_override: Option<u8>,
+        row_height_override: Option<usize>,
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        encoding_override: Option<u8>,
+        request: Value
+    },
+    /// The pixel bytes, once address/width/height/mode/palette are all known.
+    ScreenViewMemory {
+        address: usize,
+        width: Option<usize>,
+        height: Option<usize>,
+        row_height_override: Option<usize>,
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        encoding_override: Option<u8>,
+        /// Carried through from `ScreenViewGa` purely for
+        /// `crtc_screen_defaults` - width/lines-per-char-row default
+        /// resolution needs live `R1`/`R9`, and by this last step nothing
+        /// else still has them in scope.
+        crtc_regs: [u8; 18],
+        mode: u8,
+        palette: cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
+        request: Value
+    },
+    /// `-sv` on the generic peer - a single `cpclib/machineState` snapshot
+    /// carries CRTC/GA state *and* full memory together, so this is the
+    /// only round trip that path ever needs.
+    ScreenViewSnapshot {
+        address_override: Option<usize>,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode_override: Option<u8>,
+        row_height_override: Option<usize>,
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        encoding_override: Option<u8>,
+        request: Value
+    }
+}
+
+#[derive(Debug, Clone)]
+struct OwnRequest {
+    purpose: Purpose
+}
+
+/// Why the program is being resumed - decides which of the (now
+/// statement-granular) breakpoint hits actually gets reported.
+///
+/// `next`/`stepOut` stay line-granular on purpose - "it is ok for me that
+/// step over execute the whole line, but not step into" - so a
+/// multi-statement line is still one step for them, exactly as before this
+/// session went statement-granular for everything else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResumeKind {
+    /// `stepIn`: stop at the very next statement, whatever line it is on -
+    /// several stops on one multi-statement line, matching the Z80
+    /// session's own per-instruction stepping.
+    StepStatement,
+    /// `next`/`stepOut`: stop only once execution reaches a *different*
+    /// line than `from_line` - a multi-statement line is one step.
+    StepLine { from_line: Option<u16> },
+    Continue
+}
+
+/// Variable-storage reads gathered on the way to answering one `variables`
+/// request - both must be in before anything can be decoded.
+#[derive(Debug, Clone, Default)]
+struct PendingVariables {
+    request: Option<Value>,
+    chain_heads: Option<Vec<u8>>,
+    storage: Option<Vec<u8>>,
+    variables_base: u16
+}
+
+pub struct BasicSession<P: DapPeer> {
+    peer: P,
+    source_path: PathBuf,
+    /// The source text itself, kept only for `cpclib/basicInject` (AMSpiriT
+    /// Lite's own tokeniser - see `native_amspirit`); nothing else here
+    /// needs it, since `line_index`/`statement_index` already extracted
+    /// what they need from it once at launch.
+    source_text: String,
+    /// BASIC line number -> 0-based index into the source file's own
+    /// lines, computed once at launch by parsing the source text directly
+    /// - exact, unlike the reference extension's own regex-based
+    /// line-number-prefix heuristic.
+    line_index: Vec<(u16, usize)>,
+    /// Where the tokenised program starts in RAM. Known outright, not read
+    /// back from the emulator: the launch flow chose this address itself
+    /// when it built the boot snapshot (see `lib.rs`), so there is nothing
+    /// to ask.
+    program_start: u16,
+    /// The tokenised program's own byte length, known locally since this
+    /// session built the bytes itself - `variables_base` is just
+    /// `program_start + program_len`, needing no round trip to recompute.
+    program_len: u16,
+    /// Every statement's RAM address and source-text column span, built
+    /// once at launch (see [`basic::build_statement_index`]) - what makes a
+    /// stop on a multi-statement line point at the one statement that
+    /// actually ran rather than the line's first token every time.
+    statement_index: Vec<basic::StatementPosition>,
+    /// Each BASIC line's own statements, in address order, as AMSpiriT
+    /// Lite's own tokeniser laid them out - `(addr, end)` per statement,
+    /// straight from `GET /api/basic_listing` (`cpclib/basicListing`),
+    /// fetched once after injection on a peer that supports it. `None` on a
+    /// peer without it (nothing to fall back to but `statement_index`'s own
+    /// address-based guess), or before the fetch answers.
+    ///
+    /// Exists because `statement_index` - this session's *own*, independent
+    /// tokeniser - does not agree with AMSpiriT Lite's on byte addresses: a
+    /// live session showed the drift compounding within a single
+    /// multi-statement line, misattributing a later statement's `stmt_addr`
+    /// to an earlier one every time (see `apply_native_basic_state`'s doc
+    /// comment). This is addressed by position, not address: the *n*th
+    /// entry here for a line and the *n*th `statement_index` entry for the
+    /// same line are the same statement, whichever addresses either
+    /// tokeniser happened to give it - matching by index sidesteps needing
+    /// the two to agree on bytes at all, only on how many statements a line
+    /// splits into, which just depends on counting colons.
+    native_listing: Option<HashMap<u16, Vec<(u16, u16)>>>,
+    /// The current statement's source column span, once known - `None`
+    /// before the first stop, or when the current statement address does
+    /// not appear in `statement_index` (should not happen for a line this
+    /// session's own launch flow tokenised, but stack traces still need a
+    /// column either way).
+    current_statement_column: Option<(u32, u32)>,
+    /// The current statement's own RAM address, for the "current
+    /// instruction" line of the Workspace scope - the address itself,
+    /// unlike `current_statement_column`, which is already resolved to a
+    /// source position.
+    current_statement_address: Option<u16>,
+    /// The real, live start of variable storage, once known - AMSpiriT
+    /// Lite's own `txttop` (cached from the first `cpclib/basicState` body
+    /// that carries it), or, on the generic peer, [`basic::PTR_VARIABLES_START`]
+    /// dereferenced live (see `begin_variables`). `variables_base` prefers
+    /// this over computing the same address from `program_start +
+    /// program_len` - live-confirmed against a real AMSpiriT instance to
+    /// disagree by 8 bytes for a real program (`program_len`, this
+    /// session's own tokeniser's byte count, landed on 516 for a source
+    /// AMSpiriT's own tokeniser placed at 508), which silently shifted
+    /// every variable read 8 bytes short of where the real data starts -
+    /// reported live as decoded variable names full of stray control
+    /// characters and most of the program's variables missing outright, not
+    /// a cosmetic drift. The generic peer has no equivalent self-reported
+    /// value, but the same drift applies to it too (the estimate is wrong
+    /// the same way for both peers) - only the way of learning the real
+    /// address differs.
+    known_txttop: Option<u16>,
+    /// The launch's own `stopOnEntry` argument - mirrors the generic Z80
+    /// session's own handling of the same DAP argument (`session.rs`),
+    /// which only arms a stop-at-entry breakpoint when this is explicitly
+    /// requested. Set via `set_stop_on_entry`, since `BasicSession::new`
+    /// does not otherwise see the launch's own arguments. Checked by
+    /// `Purpose::NativeAwaitRunState`'s own free-run poll - see its doc
+    /// comment for why unconditionally pausing at the first real line
+    /// regardless of this was a real, reported bug, not the intended
+    /// design.
+    stop_on_entry: bool,
+    /// BASIC line numbers with a user breakpoint.
+    breakpoints: Vec<u16>,
+    /// Whether the peer answers `cpclib/basicState` - AMSpiriT Lite's own
+    /// native BASIC debugging (`/api/basic_bp`/`/api/basic_step`/
+    /// `/api/basic_state`), discovered once at `on_attached`. On a peer
+    /// that does, the generic setInstructionBreakpoints/&AE1B mechanism
+    /// (built for 1984js, which has nothing BASIC-aware to ask) is not
+    /// used at all: AMSpiriT Lite resolves BASIC line numbers to statement
+    /// addresses itself and only ever pauses on a real match, so there is
+    /// nothing here to arm, filter, or read memory for.
+    native_amspirit: bool,
+    seq: i64,
+    own_requests: HashMap<i64, OwnRequest>,
+    own_seq: i64,
+    attached: bool,
+    configured: bool,
+    started: bool,
+    /// `true` unless a native peer's own injection is still in flight -
+    /// see `Purpose::NativeAwaitInjectionState`'s own doc comment. Not
+    /// enough on its own to gate `start_if_ready` by *sequencing*
+    /// (`NativeInjected`'s own chain already only calls it once landing is
+    /// confirmed): `configurationDone`'s handler calls `start_if_ready`
+    /// directly and independently, on the editor's own timing, with no idea
+    /// injection is still pending - reported live, it almost always won
+    /// that race, since it does not wait on anything. `start_if_ready`
+    /// checks this explicitly so *whichever* of the two paths runs last is
+    /// the one that actually starts the machine, not whichever runs first.
+    injection_landed: bool,
+    /// Set while resuming, until the next line boundary is reported or
+    /// filtered past.
+    resuming_as: Option<ResumeKind>,
+    /// The line the program is stopped at, once known.
+    current_line: Option<u16>,
+    pending_variables: Option<PendingVariables>,
+    /// The editor's own `variables` request for the Workspace scope, held
+    /// until whichever single read answering it (generic or native) comes
+    /// back.
+    pending_workspace: Option<Value>,
+    /// Set when the editor asks to pause, cleared once a stop is actually
+    /// reported for it.
+    ///
+    /// Neither path trusts the peer to decide `Continue`'s own stopping
+    /// point: the generic (1984js) path has no per-line breakpoint of its
+    /// own (one shared instruction breakpoint fires on *every* statement,
+    /// and Rust decides whether it matters), and AMSpiriT Lite's own
+    /// `/api/basic_bp` turned out not to be trustworthy either (a live
+    /// session saw it report a breakpoint stop with none armed, and resume
+    /// on its own unasked) - both loop their own "keep going" step/continue
+    /// themselves. A `pause` sent by the editor while that loop's own next
+    /// step was already in flight was getting raced by it: both land at the
+    /// emulator, ours last, and the pause is undone before the editor ever
+    /// sees a stop. This flag is checked at the same point the loop would
+    /// otherwise send its next step/continue, so pausing takes effect at the
+    /// very next statement boundary instead of never.
+    pause_requested: bool,
+    /// Set while a native peer's own step/continue mechanism has a
+    /// `cpclib/basicStep` in flight, cleared centrally in `report_stopped`
+    /// alongside `pause_requested`.
+    ///
+    /// `cpclib/basicStep`'s own internal mechanism resumes the machine and
+    /// re-pauses it - and fires the *same* `basic_bp` SSE event as a side
+    /// effect of that, on *every* call, whether or not the line it lands on
+    /// is one the user actually armed (confirmed directly: injecting a
+    /// program and stepping through it live showed `basic_bp` firing once
+    /// per step, addresses matching exactly, entirely independent of what
+    /// was armed). A live session showed the cost of not knowing that: every
+    /// step this session's own Rust-driven loop takes - one `Continue`
+    /// click, dozens of statements - reached the generic unsolicited
+    /// `stopped`/`continued` handling too, which cannot tell "our own step
+    /// just resumed and re-paused the machine, as designed" apart from "the
+    /// peer decided to stop or resume on its own" - and reported *both*, one
+    /// spurious stop/continue pair per internal step, on top of whatever the
+    /// loop's own tracked chain (`NativeStepDone`/`NativeStateAfterStep`/
+    /// `NativeContinueStep`/`NativeContinueState`) already reports correctly
+    /// on its own. The editor saw the debug session flicker between paused
+    /// and running continuously - exactly what it looked like happening.
+    /// This flag tells that generic handling "a Purpose-tracked chain is
+    /// already answering for this, stay quiet" - it does not suppress a
+    /// genuine unsolicited stop (a manual pause with nothing of ours in
+    /// flight, say), only the noise this session's own in-flight request
+    /// causes as a side effect of itself.
+    native_operation_pending: bool,
+    /// Set alongside `native_operation_pending` at every one of the same
+    /// sites, but on a longer clock: `native_operation_pending` clears the
+    /// moment *this session's own* tracked chain reports a stop
+    /// (`report_stopped`), while this stays set straight through that and
+    /// only clears at the next resume. Needed because the emulator does not
+    /// stop signalling once: reported live, a single real pause produced
+    /// three separate `stopped` events reaching the editor as three
+    /// separate "unwanted breakpoints" for one actual stop - our own tracked
+    /// chain answers the first one and clears `native_operation_pending`
+    /// right there, but the straggler `basic_bp`/`stopped` events the
+    /// emulator keeps sending for that same pause (its own `pause` SSE
+    /// event, `basic_bp`'s own side effect, sometimes both) arrive in
+    /// *later* poll cycles, by which point nothing was suppressing them any
+    /// more and each got read and reported as if it were a brand new stop.
+    /// The editor already knows the machine is stopped once this is set -
+    /// nothing unsolicited it hears before the next resume is new
+    /// information.
+    native_already_stopped: bool,
+    /// How many times this session has re-injected the program to recover
+    /// from the corruption `Purpose::NativeAwaitRunState` watches for -
+    /// live-observed on AMSpiriT Lite (never reproduced in isolation, only
+    /// in a real session under real host load): `prog_size` correctly shows
+    /// the injected program's real size for a number of polls while the
+    /// program runs, then, with no corresponding request from this crate
+    /// (confirmed via AMSpiriT's own `--debug-webapi` log: exactly one
+    /// `POST /api/basic` is ever sent, at injection time), spontaneously
+    /// reverts to the empty-program baseline (2 bytes, the same constant
+    /// `Purpose::NativeAwaitInjectionState` checks against) and
+    /// `cur_linenum` gets stuck in direct mode for the rest of the session.
+    /// Capped so a peer that corrupts on every single re-injection attempt
+    /// does not retry forever - after the cap, this session gives up
+    /// recovering and falls back to the pre-recovery behaviour (poll
+    /// forever, machine stuck in direct mode), just with the attempts logged
+    /// to the Debug Console instead of silently.
+    native_reinjection_attempts: u32
+}
+
+impl<P: DapPeer> BasicSession<P> {
+    pub fn new(
+        peer: P,
+        source_path: PathBuf,
+        source_text: &str,
+        program_start: u16,
+        program_bytes: &[u8]
+    ) -> Self {
+        let line_index = line_index_from_source(source_text);
+        let statement_index = basic::build_statement_index(program_bytes, program_start, source_text);
+        Self {
+            peer,
+            source_path,
+            source_text: source_text.to_string(),
+            line_index,
+            program_start,
+            program_len: program_bytes.len() as u16,
+            statement_index,
+            native_listing: None,
+            current_statement_column: None,
+            current_statement_address: None,
+            known_txttop: None,
+            stop_on_entry: false,
+            breakpoints: Vec::new(),
+            native_amspirit: false,
+            seq: 1,
+            own_requests: HashMap::new(),
+            own_seq: 100_000,
+            attached: false,
+            configured: false,
+            started: false,
+            // No native injection has even been sent yet - nothing to wait
+            // on until `on_attached` sends one.
+            injection_landed: true,
+            resuming_as: None,
+            current_line: None,
+            pending_variables: None,
+            pending_workspace: None,
+            pause_requested: false,
+            native_operation_pending: false,
+            native_already_stopped: false,
+            native_reinjection_attempts: 0
+        }
+    }
+
+    pub fn peer_mut(&mut self) -> &mut P {
+        &mut self.peer
+    }
+
+    /// Call before `attach`, from the launch's own `stopOnEntry` argument -
+    /// see `stop_on_entry`'s own doc comment.
+    pub fn set_stop_on_entry(&mut self, value: bool) {
+        self.stop_on_entry = value;
+    }
+
+    /// Sends the peer's own `initialize`/`attach` handshake. Called once,
+    /// right after construction, regardless of whether this particular peer
+    /// actually needs either - one that does not just answers immediately.
+    ///
+    /// `initialize` first is not optional for 1984js: its embedded DAP
+    /// server (`dap.js`) is a real, independent DAP implementation with its
+    /// own protocol state machine, and refuses *every* request - including
+    /// `attach` itself - with "initialize must be the first request" until
+    /// it has seen one. `Session` (the Z80 launch flow, `lib.rs`) already
+    /// does this; missing it here left every peer-directed request this
+    /// session ever sends failing the same way, confirmed against a real
+    /// transcript - `attach`, `setInstructionBreakpoints` and `continue` all
+    /// rejected identically, with only `cpclib/autotype` appearing to work
+    /// because the bridge script answers that one itself, before it ever
+    /// reaches `dap.js`.
+    pub fn attach(&mut self) -> std::io::Result<()> {
+        self.send_own(
+            "initialize",
+            json!({ "supportsMemoryEvent": true }),
+            Purpose::Plain
+        )?;
+        self.send_own("attach", json!({}), Purpose::Attach)
+    }
+
+    /// Where variable storage actually starts. Prefers AMSpiriT's own live
+    /// `txttop` (`known_txttop`) when it is known - see that field's own
+    /// doc comment for why the `program_len`-based fallback below cannot be
+    /// trusted on a native peer. The fallback itself is still correct and
+    /// necessary for the generic (1984js) peer, which has no `txttop` of its
+    /// own to report.
+    fn variables_base(&self) -> u16 {
+        self.known_txttop
+            .unwrap_or_else(|| self.program_start.wrapping_add(self.program_len))
+    }
+
+    fn next_seq(&mut self) -> i64 {
+        let seq = self.seq;
+        self.seq += 1;
+        seq
+    }
+
+    fn send_own(&mut self, command: &str, arguments: Value, purpose: Purpose) -> std::io::Result<()> {
+        let seq = self.own_seq;
+        self.own_seq += 1;
+        self.own_requests.insert(seq, OwnRequest { purpose });
+        self.peer.send(protocol::request(command, arguments, seq))
+    }
+
+    fn is_our_answer(&mut self, response: &Value) -> Option<OwnRequest> {
+        let request_seq = response.get("request_seq").and_then(Value::as_i64)?;
+        self.own_requests.remove(&request_seq)
+    }
+
+    fn read_memory_bytes(response: &Value) -> Vec<u8> {
+        response
+            .get("body")
+            .and_then(|b| b.get("data"))
+            .and_then(Value::as_str)
+            .map(decode_base64)
+            .unwrap_or_default()
+    }
+
+    /// Arms the one breakpoint this whole session ever needs, and starts
+    /// the program if the editor has already finished configuring.
+    ///
+    /// On a native peer, `start_if_ready` is not called here directly - it
+    /// waits for injection to answer (and, on a peer that also offers it,
+    /// for `cpclib/basicListing` too) so the very first run already has
+    /// `native_listing` in place, the same as any later one. Injection's
+    /// own request is otherwise a plain, synchronous "tokenise and place
+    /// this" - nothing here needs the fire-and-forget timing the generic
+    /// path's own arm-then-start still uses.
+    fn on_attached(&mut self) -> std::io::Result<()> {
+        self.attached = true;
+        self.native_amspirit = self.peer.supports("cpclib/basicState");
+        if self.native_amspirit {
+            // Injects the program through the emulator's own tokeniser and
+            // workspace bookkeeping - the machine was booted cold, with no
+            // snapshot at all (see `amspiritlite::launch_without_snapshot`'s
+            // own doc comment for why), so this is the only thing that ever
+            // puts a program in it. See `Purpose::NativeAwaitInjectionState`
+            // for why `start_if_ready` must not run until this is confirmed
+            // to have actually landed, not merely acknowledged.
+            self.injection_landed = false;
+            self.send_own(
+                "cpclib/basicInject",
+                json!({ "source": self.source_text }),
+                Purpose::NativeInjected
+            )?;
+            return Ok(());
+        }
+        self.send_own(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
+            Purpose::BreakpointArmed
+        )?;
+        self.start_if_ready()
+    }
+
+    /// `None` if the peer verified the one breakpoint this session lives or
+    /// dies by; otherwise a message worth putting in front of the user,
+    /// since a silently-unarmed breakpoint looks identical to "stepping and
+    /// breakpoints just don't work" - which is exactly the bug report this
+    /// exists to rule in or out on the next attempt.
+    fn breakpoint_arm_warning(response: &Value) -> Option<String> {
+        if response.get("success").and_then(Value::as_bool) == Some(false) {
+            let message = response
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("the emulator refused it");
+            return Some(format!(
+                "could not arm the line breakpoint at {}: {message} - \
+                 breakpoints and stepping will not work this session",
+                address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
+            ));
+        }
+        let verified = response
+            .get("body")
+            .and_then(|b| b.get("breakpoints"))
+            .and_then(Value::as_array)
+            .and_then(|list| list.first())
+            .and_then(|bp| bp.get("verified"))
+            .and_then(Value::as_bool);
+        match verified {
+            Some(false) => {
+                let message = response
+                    .get("body")
+                    .and_then(|b| b.get("breakpoints"))
+                    .and_then(Value::as_array)
+                    .and_then(|list| list.first())
+                    .and_then(|bp| bp.get("message"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("not verified");
+                Some(format!(
+                    "the line breakpoint at {} did not verify: {message} - \
+                     breakpoints and stepping will not work this session",
+                    address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
+                ))
+            },
+            // `Some(true)`: verified. `None`: a peer that answers this
+            // request with no `body.breakpoints` at all (not one this crate
+            // has seen) - nothing to warn about from the shape alone.
+            Some(true) | None => None
+        }
+    }
+
+    fn start_if_ready(&mut self) -> std::io::Result<()> {
+        if self.attached && self.configured && self.injection_landed && !self.started {
+            self.started = true;
+            self.resuming_as = Some(ResumeKind::Continue);
+            self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::LaunchResumed)?;
+        }
+        Ok(())
+    }
+
+    /// Once injection is confirmed landed (`Purpose::NativeAwaitInjectionState`):
+    /// fetch `cpclib/basicListing` if the peer offers it, otherwise go
+    /// straight to `start_if_ready` - this is what `Purpose::NativeInjected`
+    /// used to do unconditionally, right after the injection request's own
+    /// answer, before that was found to be too early to trust.
+    fn proceed_once_injection_landed(&mut self) -> Vec<Value> {
+        if self.peer.supports("cpclib/basicListing") {
+            let _ = self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
+        }
+        else if let Err(problem) = self.resume_after_injection_landed() {
+            return vec![protocol::event(
+                "output",
+                json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                1
+            )];
+        }
+        Vec::new()
+    }
+
+    /// What to do once injection is confirmed landed - covers both the
+    /// launch's very first injection (nothing started yet: `start_if_ready`)
+    /// and a *recovery* re-injection sent mid-session by
+    /// `Purpose::NativeAwaitRunState` after the corruption its own doc
+    /// comment describes (`self.started` is already `true` by then, so
+    /// `start_if_ready` itself would be a silent no-op - what actually needs
+    /// to happen instead is retyping `RUN`, exactly as the original launch
+    /// did).
+    fn resume_after_injection_landed(&mut self) -> std::io::Result<()> {
+        if self.started {
+            self.autotype_run()
+        }
+        else {
+            self.start_if_ready()
+        }
+    }
+
+    /// Types `RUN` into the emulator, on a peer that can - the emulator's
+    /// own keyboard, not a firmware trick: AMSpiritLite exposes exactly this
+    /// as `POST /api/keytype` (confirmed against its bundled documentation
+    /// and its own web UI, which uses the identical call to auto-run an
+    /// injected BASIC program), and 1984js's bridge script drives the same
+    /// keyboard-matrix simulation its own UI's keydown handler uses. Neither
+    /// is a ROM-internals trick like jumping `PC` into `RUN_from_HL` or
+    /// forging its caller's stack - both were investigated and rejected
+    /// earlier for exactly that reason.
+    ///
+    /// Silently does nothing on a peer that answers neither: the launch
+    /// flow's own notice (`lib.rs`) covers that case by telling the user to
+    /// type it themselves, checked against this same `supports()` call so
+    /// the two do not disagree.
+    ///
+    /// On a native peer, typing `RUN` alone would leave the machine running
+    /// freely from here on, trusting `/api/basic_bp` to catch a breakpoint -
+    /// the exact mechanism `cpclib/basicSetBreakpoints`'s own doc comment
+    /// documents as unreliable, reproduced live: a breakpoint set *before*
+    /// this very first run went uncaught, the program simply finished, and
+    /// only a later manual pause (on an unrelated line) ever stopped
+    /// anything.
+    ///
+    /// This does *not* start the Rust-driven `cpclib/basicStep` loop an
+    /// editor-requested `continue` uses (the native `"continue"` arm in
+    /// `on_editor_message`) - that was tried first and made things *worse*,
+    /// reproduced live and confirmed directly against a real instance:
+    /// `basic_step`'s own pause/resume cycling, called back to back while
+    /// the machine is still processing the typed keystrokes, seems to
+    /// interfere with the firmware's own keyboard-scan timing - it took
+    /// hundreds of steps and never actually left direct mode, live-testing
+    /// showed, exactly matching a user having to finish typing RUN
+    /// themselves because the automatic version never got there. Left
+    /// running completely untouched instead (no step, no poll in between),
+    /// the same program reached its very first real line in well under a
+    /// second. So this starts `Purpose::NativeAwaitRun` instead: poll
+    /// `cpclib/basicState` alone, back to back, no `basicStep` in between,
+    /// until `cur_linenum` leaves direct mode, then pause
+    /// (`Purpose::NativeAwaitRunPaused`) and report a stop right on whatever
+    /// real line the pause actually lands on
+    /// (`Purpose::NativeAwaitRunSettled`) - breakpoint if it is one, entry
+    /// otherwise. It does *not* hand off into `NativeContinueState`'s own
+    /// "keep stepping past lines I don't care about" loop: that was tried
+    /// too and reproduced the same hang one level down, live - `pause` is
+    /// itself asynchronous (confirmed live: the state read right after a
+    /// successful `pause` response can already be several lines past the
+    /// one the poll saw), so a non-breakpoint landing line would restart
+    /// exactly the `basicStep` cycling this function exists to avoid, and it
+    /// did, running the program straight back into direct mode before
+    /// anything sensible ever reached the editor. There is nothing to debug
+    /// yet at this point anyway (the user's own framing) - Continue/step
+    /// only need to start caring about breakpoints once the editor actually
+    /// asks for one, not during this handoff. The real cost is precision:
+    /// the program is not observed statement by statement during the poll
+    /// window the way a later `Continue` is, so a breakpoint on a line
+    /// reached very early (before the first poll catches a real line at
+    /// all, or between the poll and the pause actually landing) can still be
+    /// run straight past - a narrower version of the same problem this
+    /// function's own launch fix exists for, traded deliberately for not
+    /// hanging the launch itself.
+    fn autotype_run(&mut self) -> std::io::Result<()> {
+        if !self.peer.supports("cpclib/autotype") {
+            return Ok(());
+        }
+        let purpose = if self.native_amspirit {
+            // See `native_operation_pending`'s own doc comment - this is a
+            // separate trigger site from the editor's own "continue" (the
+            // launch's first run, not requested through it), so it needs
+            // the same flag set here too. `native_already_stopped` has
+            // nothing to clear yet at this specific site (nothing has been
+            // reported stopped before the very first run) but is reset here
+            // anyway for the same reason `resuming_as`/`pause_requested` are
+            // reset at every resume site: this being the one that is ever
+            // skipped is how a stale `true` survives to cause the next
+            // straggler to be dropped.
+            self.native_operation_pending = true;
+            self.native_already_stopped = false;
+            // The freshly-loaded snapshot is captured at the Ready prompt,
+            // firmware already set up - `continue` here is a plain unpause,
+            // not a cold boot, so there is no boot sequence to wait out. But
+            // "the CPU is executing" (confirmed synchronously inside
+            // `continue`'s own `send`, see `wait_until_it_is_really_running`)
+            // is not the same guarantee as "the keyboard-scan interrupt has
+            // actually run at least once since" - reported live, and
+            // directly visible in a captured screenshot: characters typed
+            // this early landed as if the line editor had *already* been mid
+            // multi-key-scan (a bare digit or two, then `RUN"` with a stray
+            // quote, echoed exactly the way BASIC's own line editor echoes
+            // real keystrokes it received - not garbled screen memory, real
+            // input landing before the machine had settled long enough to
+            // scan it correctly). A short settle here, before the very first
+            // keystroke of the whole session, costs one launch's worth of
+            // latency to avoid it.
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            Purpose::NativeAwaitRun
+        }
+        else {
+            Purpose::Plain
+        };
+        self.send_own("cpclib/autotype", json!({ "text": "RUN\n" }), purpose)
+    }
+
+    pub fn on_editor_message(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
+        let command = message
+            .get("command")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+
+        match command {
+            "setBreakpoints" => self.set_breakpoints(message),
+            "configurationDone" => {
+                self.configured = true;
+                self.start_if_ready()?;
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, json!({}), seq)])
+            },
+            "continue" | "next" | "stepIn" | "stepOut" if self.native_amspirit => {
+                // See `native_operation_pending`'s own doc comment: every
+                // one of these makes `cpclib/basicStep` fire the same
+                // `basic_bp` SSE event as a side effect, and the generic
+                // unsolicited handling needs to know not to report that
+                // itself while this session's own tracked chain already
+                // will. `native_already_stopped` clears here too - see its
+                // own doc comment: the machine is about to actually resume,
+                // so anything unsolicited from here on is new again.
+                self.native_operation_pending = true;
+                self.native_already_stopped = false;
+                if command == "continue" {
+                    // AMSpiriT Lite's own `/api/basic_bp` cannot be trusted
+                    // to decide this: a live session showed it reporting a
+                    // "breakpoint" stop with zero breakpoints armed, and
+                    // resuming on its own with nothing having asked it to.
+                    // Its statement stepper is already proven correct
+                    // (stepIn/next already run on it) - looping that
+                    // ourselves and deciding the stop here, exactly like the
+                    // generic path already does, is simpler and more
+                    // trustworthy than a second, independent breakpoint
+                    // mechanism living entirely on the peer's side.
+                    self.resuming_as = Some(ResumeKind::Continue);
+                    self.send_own(
+                        "cpclib/basicStep",
+                        json!({ "mode": "stmt" }),
+                        Purpose::NativeContinueStep
+                    )?;
+                }
+                else {
+                    // The emulator's own stepper: it pauses (if not
+                    // already) and steps in the one call, so there is no
+                    // loop to run here - `mode=stmt`/`mode=line` already
+                    // encode the stepIn/next distinction the generic path
+                    // otherwise needs `ResumeKind` for.
+                    let mode = if command == "stepIn" { "stmt" } else { "line" };
+                    self.send_own(
+                        "cpclib/basicStep",
+                        json!({ "mode": mode }),
+                        Purpose::NativeStepDone
+                    )?;
+                }
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, json!({}), seq)])
+            },
+            "continue" | "next" | "stepIn" | "stepOut" => {
+                // `stepIn` stops at the very next statement - several stops
+                // on one multi-statement line. `next`/`stepOut` stay
+                // line-granular: "step over the whole line" is the point of
+                // them, so they keep filtering by line the way this session
+                // always has, just now against a statement-granular stream
+                // of hits instead of a line-granular one.
+                self.resuming_as = Some(match command {
+                    "continue" => ResumeKind::Continue,
+                    "stepIn" => ResumeKind::StepStatement,
+                    _ => {
+                        ResumeKind::StepLine {
+                            from_line: self.current_line
+                        }
+                    }
+                });
+                self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, json!({}), seq)])
+            },
+            "pause" => {
+                // Both paths now drive their own "keep going" loop for
+                // Continue (see `pause_requested`'s own doc comment) and can
+                // race a pause the same way. Forwarded to the peer either
+                // way - harmless on the native path, where the CPU is
+                // already effectively paused between our own `basicStep`
+                // calls, but there is no reason to withhold it.
+                self.pause_requested = true;
+                self.peer.send(message.clone())?;
+                Ok(Vec::new())
+            },
+            // `-mv`/`-dv`, DeZog's spelling, same as the Z80 session's own
+            // console commands - non-dash expressions fall through to the
+            // catch-all below unchanged (this session has no watch/hover
+            // evaluation of its own to intercept them for).
+            "evaluate"
+                if message
+                    .get("arguments")
+                    .and_then(|a| a.get("expression"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|e| e.trim().starts_with('-')) =>
+            {
+                let expression = message
+                    .get("arguments")
+                    .and_then(|a| a.get("expression"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                self.console_command(message, &expression)
+            },
+            "stackTrace" => Ok(vec![self.stack_trace(message)]),
+            "scopes" => Ok(vec![self.scopes(message)]),
+            "variables"
+                if message
+                    .get("arguments")
+                    .and_then(|a| a.get("variablesReference"))
+                    .and_then(Value::as_i64)
+                    == Some(VARIABLES_REFERENCE) =>
+            {
+                self.begin_variables(message)?;
+                Ok(Vec::new())
+            },
+            "variables"
+                if message
+                    .get("arguments")
+                    .and_then(|a| a.get("variablesReference"))
+                    .and_then(Value::as_i64)
+                    == Some(WORKSPACE_REFERENCE) =>
+            {
+                self.begin_workspace(message)?;
+                Ok(Vec::new())
+            },
+            "variables"
+                if (self.native_amspirit || self.peer.supports("cpclib/machineState"))
+                    && message
+                        .get("arguments")
+                        .and_then(|a| a.get("variablesReference"))
+                        .and_then(Value::as_i64)
+                        .is_some_and(crate::inspect::is_chip_scope) =>
+            {
+                self.begin_chip_scope(message)
+            },
+            "threads" => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(
+                    message,
+                    json!({ "threads": [{ "id": THREAD_ID, "name": "BASIC" }] }),
+                    seq
+                )])
+            },
+            "disconnect" | "terminate" => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, json!({}), seq)])
+            },
+            _ => {
+                if self.peer.quirks().rejects_unknown_requests && !self.peer.supports(command) {
+                    let seq = self.next_seq();
+                    return Ok(vec![protocol::failure(
+                        message,
+                        &format!("the emulator being debugged does not implement '{command}'."),
+                        seq
+                    )]);
+                }
+                self.peer.send(message.clone())?;
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    /// A `-command` typed in the debug console - see the Z80 session's own
+    /// `console_command` for the same dispatch. No registers/CRTC-view/
+    /// timer console commands of the Z80 session's own to mirror, but `-sv`
+    /// is - the WinAPE-style screen viewer works identically here, it just
+    /// has no register scope to resolve a `,follow` anchor against (not
+    /// needed: `-sv` never had one).
+    fn console_command(&mut self, request: &Value, line: &str) -> std::io::Result<Vec<Value>> {
+        let mut words = line.split_whitespace();
+        let command = words.next().unwrap_or_default();
+        let arguments: Vec<&str> = words.collect();
+        match command {
+            "-mv" | "-memoryview" => self.memory_view(request, &arguments),
+            "-dv" | "-disassemble" => self.disassembly_view(request, &arguments),
+            "-bv" | "-listing" => self.basic_listing_view(request),
+            "-sv" | "-screen" => self.screen_view_command(request, &arguments),
+            "-help" | "-h" => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(
+                    request,
+                    json!({ "result": BASIC_CONSOLE_HELP, "variablesReference": 0 }),
+                    seq
+                )])
+            },
+            other => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::failure(
+                    request,
+                    &format!("unknown command '{other}'. Type -help for the list."),
+                    seq
+                )])
+            }
+        }
+    }
+
+    /// `-mv <address> [count]` - opens the same memory-view panel the Z80
+    /// session's own `-mv` does (`cpclib/memoryView`, reused verbatim), just
+    /// without its `,follow`-a-register flavour: this session has no
+    /// register scope to resolve one against, so every view here is a
+    /// fixed-address snapshot. Re-type the command to refresh it.
+    fn memory_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
+        let seq = self.next_seq();
+        let Some(where_) = arguments.first() else {
+            return Ok(vec![protocol::failure(
+                request,
+                "-mv needs an address: -mv 0xC000 [count]",
+                seq
+            )]);
+        };
+        let Some(address) = parse_address(where_) else {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("'{where_}' is not a number - BASIC debugging has no labels to look up"),
+                seq
+            )]);
+        };
+        let count = arguments
+            .get(1)
+            .and_then(|c| parse_address(c))
+            .unwrap_or(0x40)
+            .clamp(1, 0x1000);
+        self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(address), "count": count }),
+            Purpose::MemoryView {
+                address,
+                label: None,
+                request: request.clone()
+            }
+        )?;
+        Ok(Vec::new())
+    }
+
+    /// `-dv <address> [count]` - same idea as `memory_view`, decoded through
+    /// `crate::disassemble` (the assembler's own instruction tables, not the
+    /// peer's) and emitted as the same `cpclib/disassemblyView` event the
+    /// Z80 session's own panel already renders.
+    fn disassembly_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
+        let seq = self.next_seq();
+        let Some(where_) = arguments.first() else {
+            return Ok(vec![protocol::failure(
+                request,
+                "-dv needs an address: -dv 0x4000 [count]",
+                seq
+            )]);
+        };
+        let Some(address) = parse_address(where_) else {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("'{where_}' is not a number - BASIC debugging has no labels to look up"),
+                seq
+            )]);
+        };
+        let count = arguments
+            .get(1)
+            .and_then(|c| parse_address(c))
+            .unwrap_or(32)
+            .clamp(1, 512) as usize;
+        // Four bytes per instruction is the Z80's worst case - see the Z80
+        // session's own `ask_for_disassembly` for the same reasoning.
+        let bytes = (count * 4).clamp(1, 0x1000);
+        self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(address), "count": bytes }),
+            Purpose::DisassemblyView {
+                address,
+                count,
+                label: None,
+                request: request.clone()
+            }
+        )?;
+        Ok(Vec::new())
+    }
+
+    /// `-bv` - the live BASIC listing, straight from the emulator's own
+    /// memory rather than the source file this session was launched with
+    /// (which may have changed, or moved, since - `RENUM`, a direct-mode
+    /// edit, a program the user typed in by hand). AMSpiriT Lite's own
+    /// `cpclib/basicListing` already tokenises and renders it, so this
+    /// trusts that directly rather than re-deriving it; the generic peer
+    /// has no such endpoint, so its raw program bytes are read instead and
+    /// decoded with `cpclib_basic::BasicProgram` - the same crate this
+    /// session's own launch-time tokenising already goes through.
+    fn basic_listing_view(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        if self.peer.supports("cpclib/basicListing") {
+            return self
+                .send_own(
+                    "cpclib/basicListing",
+                    json!({}),
+                    Purpose::AmspiritBasicListingText {
+                        request: request.clone()
+                    }
+                )
+                .map(|()| Vec::new());
+        }
+        let base = self.program_start;
+        let end = self.variables_base();
+        let count = end.saturating_sub(base);
+        self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(base as u32), "count": count }),
+            Purpose::GenericBasicListingRead {
+                request: request.clone()
+            }
+        )?;
+        Ok(Vec::new())
+    }
+
+    /// `-sv [address] [width] [height] [mode]` - render CPC video memory
+    /// as an actual image (WinAPE-style) in an interactive panel, auto-
+    /// detecting the current screen address/mode from the CRTC and Gate
+    /// Array unless a given argument overrides it (width/height default
+    /// to the CPC's own standard 80x200; the palette is never
+    /// overridable, always live from the Gate Array). Same two-mechanism
+    /// fallback as the chip scopes just above (`self.native_amspirit`): a
+    /// peer with its own CRTC/GA endpoints is asked directly (three round
+    /// trips: CRTC, then GA, then the pixel bytes - its direct endpoints
+    /// carry chip state only, never memory); the generic peer gets a
+    /// single `cpclib/machineState` snapshot instead, since a `.sna`
+    /// already carries CRTC/GA state *and* full memory together.
+    /// Rendering itself is `crate::inspect::render_screen_view`, shared
+    /// with the Z80 session's own identically-named method.
+    fn screen_view_command(
+        &mut self,
+        request: &Value,
+        arguments: &[&str]
+    ) -> std::io::Result<Vec<Value>> {
+        let address_override = arguments.first().and_then(|a| parse_address(a)).map(|a| a as usize);
+        let width_override = arguments.get(1).and_then(|a| parse_address(a)).map(|a| a as usize);
+        let height_override = arguments.get(2).and_then(|a| parse_address(a)).map(|a| a as usize);
+        let mode_override = arguments.get(3).and_then(|a| parse_address(a)).map(|a| a as u8);
+        let row_height_override =
+            arguments.get(4).and_then(|a| parse_address(a)).map(|a| a as usize);
+        let palette_override = arguments
+            .get(5)
+            .map(|a| crate::inspect::parse_palette_override(a))
+            .unwrap_or_default();
+        let encoding_override = arguments.get(6).and_then(|a| parse_address(a)).map(|a| a as u8);
+        if self.native_amspirit {
+            self.send_own(
+                "cpclib/crtc",
+                json!({}),
+                Purpose::ScreenViewCrtc {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    request: request.clone()
+                }
+            )?;
+        }
+        else {
+            self.send_own(
+                "cpclib/machineState",
+                json!({}),
+                Purpose::ScreenViewSnapshot {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    request: request.clone()
+                }
+            )?;
+        }
+        Ok(Vec::new())
+    }
+
+    /// Turns a known screen address, mode and palette plus a raw memory
+    /// window into the `cpclib/screenView` event and its console receipt -
+    /// see the Z80 session's own identically-named method.
+    fn screen_view_answer(
+        &mut self,
+        request: &Value,
+        address: usize,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        row_height_override: Option<usize>,
+        palette_override: &[Option<cpclib_image::ink::Ink>],
+        encoding_override: Option<u8>,
+        regs: &[u8; 18],
+        mode: u8,
+        palette: &cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
+        memory: &[u8]
+    ) -> Vec<Value> {
+        let (default_width, live_lines_per_char_row) = crate::inspect::crtc_screen_defaults(regs);
+        let width = width_override.unwrap_or(default_width);
+        let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
+        let lines_per_char_row =
+            crate::inspect::resolve_char_row_height(row_height_override, live_lines_per_char_row);
+        let encoding = crate::inspect::ScreenEncoding::from_wire(encoding_override.unwrap_or(0));
+        match crate::inspect::render_screen_view(
+            address,
+            width,
+            height,
+            mode,
+            palette,
+            memory,
+            lines_per_char_row,
+            palette_override,
+            encoding
+        ) {
+            Ok(body) => {
+                let seq = self.next_seq();
+                let event = protocol::event("cpclib/screenView", body, seq);
+                let seq = self.next_seq();
+                let receipt = protocol::response(
+                    request,
+                    json!({ "result": "screen view opened", "variablesReference": 0 }),
+                    seq
+                );
+                vec![event, receipt]
+            },
+            Err(problem) => {
+                let seq = self.next_seq();
+                vec![protocol::failure(request, &problem, seq)]
+            }
+        }
+    }
+
+    fn set_breakpoints(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
+        let requested = message
+            .get("arguments")
+            .and_then(|a| a.get("breakpoints"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        // VS Code sends one `setBreakpoints` request per source file that
+        // carries a breakpoint, to every active debug session regardless of
+        // which file it is actually debugging - normal DAP behaviour for a
+        // client that does not know a given session is single-file.
+        // Reported live: a leftover breakpoint on an unrelated file
+        // (`hello.bas` line 2, never cleared from an earlier session) got
+        // silently reinterpreted against *this* session's own line index
+        // (built for `mandelbrot.bas`) - line 2 there resolves to BASIC
+        // line 20, so the session armed a breakpoint nobody asked for on
+        // this program, with nothing to explain why it stopped there. Any
+        // request naming a different file is answered as unverified and
+        // never touches `self.breakpoints` at all.
+        let source_path = message
+            .get("arguments")
+            .and_then(|a| a.get("source"))
+            .and_then(|s| s.get("path"))
+            .and_then(Value::as_str);
+        if let Some(source_path) = source_path
+            && self.source_path != Path::new(source_path)
+        {
+            let verified = vec![
+                json!({ "verified": false, "message": "not part of this debug session" });
+                requested.len()
+            ];
+            let seq = self.next_seq();
+            return Ok(vec![protocol::response(
+                message,
+                json!({ "breakpoints": verified }),
+                seq
+            )]);
+        }
+
+        let mut verified = Vec::new();
+        let mut lines = Vec::new();
+        for bp in &requested {
+            let Some(source_line) = bp.get("line").and_then(Value::as_i64) else {
+                verified.push(json!({ "verified": false }));
+                continue;
+            };
+            // The editor's lines are 1-based; `line_index` keys by 0-based
+            // source-line index.
+            let idx = (source_line - 1).max(0) as usize;
+            match self.line_index.iter().find(|(_, i)| *i == idx) {
+                Some((basic_line, _)) => {
+                    lines.push(*basic_line);
+                    verified.push(json!({ "verified": true, "line": source_line }));
+                },
+                None => {
+                    verified.push(json!({
+                        "verified": false,
+                        "message": "no BASIC line starts here"
+                    }));
+                }
+            }
+        }
+        self.breakpoints = lines;
+
+        // AMSpiriT Lite resolves these line numbers to statement addresses
+        // itself and only pauses on a real match - nothing to arm on the
+        // generic path (no single shared breakpoint there to filter after
+        // the fact).
+        if self.native_amspirit {
+            self.send_own(
+                "cpclib/basicSetBreakpoints",
+                json!({ "lines": self.breakpoints }),
+                Purpose::Plain
+            )?;
+        }
+
+        let seq = self.next_seq();
+        Ok(vec![protocol::response(message, json!({ "breakpoints": verified }), seq)])
+    }
+
+    fn stack_trace(&mut self, message: &Value) -> Value {
+        let seq = self.next_seq();
+        let line = self.current_line.unwrap_or(0);
+        let source_line = self
+            .line_index
+            .iter()
+            .find(|(n, _)| *n == line)
+            .map(|(_, idx)| *idx as i64 + 1)
+            .unwrap_or(1);
+        // Which statement on a multi-statement line actually ran, not just
+        // which line - `50 sp=0 : px=320 : py=300` is one line and five
+        // stops. `1` (no highlight) when the current address is not one
+        // this session's own launch flow tokenised - direct mode, most
+        // often, which has no statement to point at.
+        let (column, end_column) = self.current_statement_column.unwrap_or((1, 1));
+
+        protocol::response(
+            message,
+            json!({
+                "stackFrames": [{
+                    "id": 0,
+                    "name": format!("BASIC {line}"),
+                    "line": source_line,
+                    "column": column,
+                    "endColumn": end_column,
+                    "source": {
+                        "path": self.source_path.display().to_string()
+                    }
+                }],
+                "totalFrames": 1
+            }),
+            seq
+        )
+    }
+
+    fn scopes(&mut self, message: &Value) -> Value {
+        let seq = self.next_seq();
+        let mut scopes = vec![
+            json!({
+                "name": "Variables",
+                "variablesReference": VARIABLES_REFERENCE,
+                "expensive": false,
+                // VS Code only auto-highlights a value that changed
+                // since the last stop for a scope hinted this way -
+                // there is no separate "changed" flag to set per
+                // variable, the way the memory view's own custom
+                // event has one. Not literally CPU registers, but
+                // the same "small set of frequently-changing named
+                // values" this hint is for, and the same one the
+                // Z80 session's own Registers scope already uses.
+                "presentationHint": "registers"
+            }),
+            json!({
+                "name": "Workspace",
+                "variablesReference": WORKSPACE_REFERENCE,
+                "expensive": false
+            })
+        ];
+        // The chips behind the BASIC program: added on request, to help
+        // diagnose a screen/timing problem the BASIC variables alone cannot
+        // explain (a broken snapshot, a CRTC left in a bad state, ...).
+        // `expensive: true` keeps every one of these opt-in, fetched only
+        // once actually expanded rather than on every stop - the same
+        // reasoning that throttled the RUN-await poll loop applies here
+        // too: this session has already seen what hammering AMSpiriT
+        // Lite's HTTP server with requests it did not ask to be asked does
+        // to it.
+        if self.native_amspirit {
+            for (name, reference, command) in [
+                ("CRTC", crate::inspect::CRTC_REFERENCE, "cpclib/crtc"),
+                ("Gate Array", crate::inspect::GATE_ARRAY_REFERENCE, "cpclib/ga"),
+                ("PSG", crate::inspect::PSG_REFERENCE, "cpclib/psg"),
+                ("Disc", crate::inspect::DISC_REFERENCE, "cpclib/fdc")
+            ] {
+                if self.peer.supports(command) {
+                    scopes.push(json!({
+                        "name": name,
+                        "variablesReference": reference,
+                        "expensive": true,
+                        "presentationHint": "registers"
+                    }));
+                }
+            }
+        }
+        // The generic peer has no per-chip endpoint at all - same fallback
+        // the Z80 session already relies on for it (`Purpose::MachineState`,
+        // a whole snapshot parsed for its saved chip registers), reused
+        // here rather than reimplemented: `crate::inspect::extra_scopes`/
+        // `chip_variables` are the exact same functions that session calls.
+        else if self.peer.supports("cpclib/machineState") {
+            scopes.extend(crate::inspect::extra_scopes());
+        }
+        protocol::response(message, json!({ "scopes": scopes }), seq)
+    }
+
+    fn begin_workspace(&mut self, message: &Value) -> std::io::Result<()> {
+        self.pending_workspace = Some(message.clone());
+        if self.native_amspirit {
+            self.send_own("cpclib/basicState", json!({}), Purpose::NativeWorkspaceInfo)
+        }
+        else {
+            self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(basic::PTR_ARRAYS_START as u32),
+                    "count": 2
+                }),
+                Purpose::WorkspaceArraysStart
+            )
+        }
+    }
+
+    /// Fetches one chip scope. On a native peer, its own endpoint directly -
+    /// no snapshot, no batching, see [`Purpose::NativeChipScope`].
+    /// `reference` not being one of the four AMSpiriT actually advertises
+    /// (stale state from before a peer swap, or a client that asks anyway)
+    /// answers empty rather than sending a request nobody can route. On the
+    /// generic peer, the same `cpclib/machineState` snapshot fallback the
+    /// Z80 session already relies on for it (see [`Purpose::GenericChipScope`]).
+    fn begin_chip_scope(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
+        let reference = message
+            .get("arguments")
+            .and_then(|a| a.get("variablesReference"))
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
+        if !self.native_amspirit {
+            self.send_own(
+                "cpclib/machineState",
+                json!({}),
+                Purpose::GenericChipScope {
+                    reference,
+                    request: message.clone()
+                }
+            )?;
+            return Ok(Vec::new());
+        }
+        let Some(command) = crate::amspiritlite::chip_command(reference) else {
+            let seq = self.next_seq();
+            return Ok(vec![protocol::response(message, json!({ "variables": [] }), seq)]);
+        };
+        self.send_own(
+            command,
+            json!({}),
+            Purpose::NativeChipScope {
+                reference,
+                request: message.clone()
+            }
+        )?;
+        Ok(Vec::new())
+    }
+
+    /// One `{name, value}` entry for the Workspace scope - always a leaf
+    /// (`variablesReference: 0`): everything shown here is a single
+    /// address, size or version string, nothing worth expanding.
+    fn workspace_entry(name: &str, value: impl Into<String>) -> Value {
+        json!({ "name": name, "value": value.into(), "variablesReference": 0 })
+    }
+
+    /// The Workspace scope on a peer without native BASIC debugging:
+    /// `PTR_VARIABLES_START` (TXTTOP) is not read at all, since this
+    /// session already knows it locally - only `vartop`
+    /// ([`basic::PTR_ARRAYS_START`]'s live value, which moves as variables
+    /// are created) needs a round trip.
+    fn complete_workspace_generic(&mut self, vartop: Option<u16>) -> Option<Vec<Value>> {
+        let request = self.pending_workspace.take()?;
+        let seq = self.next_seq();
+        let txttop = self.variables_base();
+
+        let mut entries = vec![
+            Self::workspace_entry("Program start", address_reference(self.program_start as u32)),
+            Self::workspace_entry("Program size", format!("{} B", self.program_len)),
+            Self::workspace_entry("BASIC version", "1.1")
+        ];
+        if let Some(vartop) = vartop {
+            entries.push(Self::workspace_entry(
+                "Variables zone",
+                format!(
+                    "{}\u{2013}{} ({} B)",
+                    address_reference(txttop as u32),
+                    address_reference(vartop as u32),
+                    vartop.saturating_sub(txttop)
+                )
+            ));
+        }
+        else {
+            entries.push(Self::workspace_entry(
+                "Variables start (TXTTOP)",
+                address_reference(txttop as u32)
+            ));
+        }
+        if let Some(address) = self.current_statement_address {
+            entries.push(Self::workspace_entry(
+                "Current instruction",
+                address_reference(address as u32)
+            ));
+        }
+
+        Some(vec![protocol::response(&request, json!({ "variables": entries }), seq)])
+    }
+
+    /// The Workspace scope on a peer with native BASIC debugging - every
+    /// field `cpclib/basicState` carries beyond what a stop itself needs
+    /// (`cur_linenum`/`stmt_addr`), matching this emulator's own info panel
+    /// field for field ("TXTTOP.../Taille.../Zone variables...") but with
+    /// English titles and inside the standard Variables pane rather than a
+    /// dedicated view.
+    fn complete_workspace_native(&mut self, message: &Value) -> Option<Vec<Value>> {
+        let request = self.pending_workspace.take()?;
+        let seq = self.next_seq();
+        let body = message.get("body");
+        let field = |key: &str| body.and_then(|b| b.get(key)).and_then(Value::as_u64);
+
+        let txttop = field("txttop");
+        let vartop = field("vartop");
+        let arrend = field("arrend");
+        // See `known_txttop`'s own doc comment - cached here too, so a
+        // Workspace query before any statement-level poll still gives
+        // `variables_base` the right answer.
+        if let Some(t) = txttop {
+            self.known_txttop = Some(t as u16);
+        }
+
+        let mut entries = Vec::new();
+        if let Some(size) = field("prog_size") {
+            entries.push(Self::workspace_entry("Program size", format!("{size} B")));
+        }
+        if let (Some(t), Some(v)) = (txttop, vartop) {
+            let size = field("var_size").unwrap_or_else(|| v.saturating_sub(t));
+            entries.push(Self::workspace_entry(
+                "Variables zone",
+                format!(
+                    "{}\u{2013}{} ({size} B)",
+                    address_reference(t as u32),
+                    address_reference(v as u32)
+                )
+            ));
+        }
+        if let (Some(v), Some(a)) = (vartop, arrend) {
+            entries.push(Self::workspace_entry(
+                "Arrays zone",
+                format!("{}\u{2013}{}", address_reference(v as u32), address_reference(a as u32))
+            ));
+        }
+        if let Some(end) = arrend {
+            // Matches this emulator's own web UI (`basicRefresh`'s "Free
+            // RAM" field): the gap from the array zone's end to the fixed
+            // start of the BASIC system workspace.
+            let free = if end < 0xae14 { 0xae14 - end } else { 0 };
+            entries.push(Self::workspace_entry("Free RAM", format!("{free} B")));
+        }
+        if let Some(version) = field("basic_ver") {
+            entries.push(Self::workspace_entry(
+                "BASIC version",
+                format!("1.{}", if version == 10 { "0" } else { "1" })
+            ));
+        }
+        if let Some(address) = field("stmt_addr") {
+            entries.push(Self::workspace_entry(
+                "Current instruction",
+                address_reference(address as u32)
+            ));
+        }
+
+        Some(vec![protocol::response(&request, json!({ "variables": entries }), seq)])
+    }
+
+    fn begin_variables(&mut self, message: &Value) -> std::io::Result<()> {
+        self.pending_variables = Some(PendingVariables {
+            request: Some(message.clone()),
+            chain_heads: None,
+            storage: None,
+            variables_base: self.variables_base()
+        });
+        // See `known_txttop`'s own doc comment: the generic peer has no
+        // self-reported live `txttop` the way AMSpiriT does, but the
+        // computed estimate drifts from the real value the same way - so
+        // read the ROM's own pointer live instead of trusting it, the first
+        // time this session needs to know. Cached afterward
+        // (`Purpose::GenericVariablesBase`) exactly like AMSpiriT's own
+        // value, so this round trip only happens once per session.
+        if !self.native_amspirit && self.known_txttop.is_none() {
+            return self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(PTR_VARIABLES_START as u32),
+                    "count": 2
+                }),
+                Purpose::GenericVariablesBase
+            );
+        }
+        self.start_variable_reads()
+    }
+
+    fn start_variable_reads(&mut self) -> std::io::Result<()> {
+        let base = self.variables_base();
+        if let Some(pending) = self.pending_variables.as_mut() {
+            pending.variables_base = base;
+        }
+        self.send_own(
+            "readMemory",
+            json!({
+                "memoryReference": address_reference(VARIABLE_CHAIN_HEADS as u32),
+                "count": VARIABLE_CHAIN_HEADS_COUNT * 2 + 2 // + the DEF FN head
+            }),
+            Purpose::VariableChainHeads
+        )?;
+        self.send_own(
+            "readMemory",
+            json!({
+                "memoryReference": address_reference(base as u32),
+                "count": MAX_VARIABLE_BYTES
+            }),
+            Purpose::VariableStorage
+        )
+    }
+
+    fn complete_variables(&mut self) -> Option<Vec<Value>> {
+        let pending = self.pending_variables.as_ref()?;
+        let (chain_heads, storage) = (pending.chain_heads.as_ref()?, pending.storage.as_ref()?);
+
+        // Both reads have arrived, but "arrived" is not "succeeded": a
+        // `readMemory` the peer refused (real transcript - AMSpiriT Lite's
+        // "The CPC must be stopped for this request", when the editor asks
+        // for variables while a step is still in flight) comes back with no
+        // `body.data` at all, and `read_memory_bytes` turns that into an
+        // empty `Vec` rather than failing outright. Indexing into that
+        // blindly - `chain_heads[i * 2]` on a 0-length buffer - is exactly
+        // what crashed the whole adapter process, taking the session with
+        // it. An empty variables list is a far better answer than a panic.
+        let mut heads = [0u16; VARIABLE_CHAIN_HEADS_COUNT];
+        for (i, h) in heads.iter_mut().enumerate() {
+            let Some(pair) = chain_heads.get(i * 2..i * 2 + 2) else {
+                return self.fail_variables();
+            };
+            *h = u16::from_le_bytes([pair[0], pair[1]]);
+        }
+        let def_fn_offset = VARIABLE_CHAIN_HEADS_COUNT * 2;
+        let Some(def_fn_bytes) = chain_heads.get(def_fn_offset..def_fn_offset + 2)
+        else {
+            return self.fail_variables();
+        };
+        let def_fn_head = u16::from_le_bytes([def_fn_bytes[0], def_fn_bytes[1]]);
+
+        let vars = basic::decode_variable_chains(&heads, def_fn_head, pending.variables_base, storage);
+
+        let request = self.pending_variables.take()?.request?;
+        let seq = self.next_seq();
+        let entries: Vec<Value> = vars
+            .iter()
+            .map(|v| {
+                let type_name = variable_type_name(&v.value);
+                json!({
+                    "name": v.name,
+                    // The DAP `type` field alone is not enough to actually
+                    // see it: VS Code's own Variables tree only ever shows
+                    // it in a hover tooltip, never inline, whatever
+                    // `supportsVariableType` the editor declared. Baked
+                    // into the value string instead, where it is always
+                    // visible - the field itself stays too, for whatever
+                    // else might read it.
+                    "value": format!("{} ({type_name})", format_variable_value(&v.value)),
+                    "type": type_name,
+                    "variablesReference": 0
+                })
+            })
+            .collect();
+
+        Some(vec![protocol::response(
+            &request,
+            json!({ "variables": entries }),
+            seq
+        )])
+    }
+
+    /// Answers a pending `variables` request with an empty list rather than
+    /// leaving it hanging - the editor asked something, and something is
+    /// always owed back, even when the read behind it did not succeed.
+    fn fail_variables(&mut self) -> Option<Vec<Value>> {
+        let request = self.pending_variables.take()?.request?;
+        let seq = self.next_seq();
+        Some(vec![protocol::response(
+            &request,
+            json!({ "variables": [] }),
+            seq
+        )])
+    }
+
+    pub fn on_emulator_message(&mut self, message: &Value) -> Vec<Value> {
+        if message.get("type").and_then(Value::as_str) == Some("response") {
+            let Some(own) = self.is_our_answer(message)
+            else {
+                // Not one of this session's own tracked requests: the
+                // answer to something forwarded to the peer verbatim under
+                // the editor's *own* seq - `pause`, or anything the
+                // catch-all in `on_editor_message` passed straight through.
+                // Those never got acknowledged at all before this: the
+                // editor's request just sat there, which is what "pause
+                // does not seem to work" looks like from the outside.
+                let seq = self.next_seq();
+                let mut forwarded = message.clone();
+                forwarded["seq"] = json!(seq);
+                return vec![forwarded];
+            };
+            match own.purpose {
+                Purpose::Plain => {},
+                Purpose::Attach => {
+                    if let Err(problem) = self.on_attached() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::BreakpointArmed => {
+                    if let Some(warning) = Self::breakpoint_arm_warning(message) {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{warning}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::LaunchResumed => {
+                    if let Err(problem) = self.autotype_run() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::CurrentLinePointer => return self.on_line_pointer_read(message),
+                Purpose::CurrentLineValue => return self.on_line_value_read(message),
+                Purpose::GenericVariablesBase => {
+                    let bytes = Self::read_memory_bytes(message);
+                    if let Some(chunk) = bytes.get(0..2) {
+                        self.known_txttop = Some(u16::from_le_bytes([chunk[0], chunk[1]]));
+                    }
+                    if let Err(problem) = self.start_variable_reads() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::VariableChainHeads => {
+                    if let Some(pending) = self.pending_variables.as_mut() {
+                        pending.chain_heads = Some(Self::read_memory_bytes(message));
+                    }
+                    return self.complete_variables().unwrap_or_default();
+                },
+                Purpose::VariableStorage => {
+                    if let Some(pending) = self.pending_variables.as_mut() {
+                        pending.storage = Some(Self::read_memory_bytes(message));
+                    }
+                    return self.complete_variables().unwrap_or_default();
+                },
+                Purpose::NativeBasicState => {
+                    return match self.apply_native_basic_state(message) {
+                        Some(line) => {
+                            // See `is_first_statement_of_line`'s own doc
+                            // comment - without this check, a breakpointed
+                            // line with several statements re-stops on
+                            // every one of them instead of once.
+                            let reason = if self.breakpoints.contains(&line)
+                                && self.is_first_statement_of_line(line)
+                            {
+                                "breakpoint"
+                            }
+                            else {
+                                "pause"
+                            };
+                            self.report_stopped(reason)
+                        },
+                        None => self.report_stopped("entry")
+                    };
+                },
+                Purpose::NativeStepDone => {
+                    // The emulator already paused and stepped by the time
+                    // this answers - what is left is reading where it
+                    // landed.
+                    let _ = self.send_own(
+                        "cpclib/basicState",
+                        json!({}),
+                        Purpose::NativeStateAfterStep
+                    );
+                },
+                Purpose::NativeStateAfterStep => {
+                    // Stale-read guard - see `Purpose::NativeStateAfterStepRetry`'s
+                    // own doc comment. Capped at exactly one retry for the
+                    // same reason the `Continue` loop's own version is: a
+                    // real self-loop (`10 GOTO 10`) legitimately revisits
+                    // the same address every step.
+                    let address_before_step = self.current_statement_address;
+                    let line = self.apply_native_basic_state(message);
+                    if line.is_some()
+                        && address_before_step.is_some()
+                        && self.current_statement_address == address_before_step
+                    {
+                        let _ = self.send_own(
+                            "cpclib/basicState",
+                            json!({}),
+                            Purpose::NativeStateAfterStepRetry
+                        );
+                        return Vec::new();
+                    }
+                    return self.decide_step_stop(line);
+                },
+                Purpose::NativeStateAfterStepRetry => {
+                    let line = self.apply_native_basic_state(message);
+                    return self.decide_step_stop(line);
+                },
+                Purpose::NativeContinueStep => {
+                    // The peer has already paused and stepped by the time
+                    // this answers - what is left is reading where it
+                    // landed, to decide whether to report a stop or step
+                    // past it.
+                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeContinueState);
+                },
+                Purpose::NativeContinueState => {
+                    // Stale-read guard, reported live: a `basicState` read
+                    // taken immediately after `basicStep` can still echo the
+                    // address from *before* the step - the emulator's own
+                    // `basic_bp` SSE event already named the real, later
+                    // line by the time this same read came back showing the
+                    // old one. Trusted anyway, a breakpoint got reported
+                    // twice for what was really only one stop: this step
+                    // landed on it, was reported, `continue` was clicked,
+                    // one step ran, and the stale read said the machine was
+                    // still sitting on the exact same statement it had just
+                    // left. One extra read, only when nothing moved, is
+                    // cheap; capped at exactly one retry
+                    // (`NativeContinueStateRetry` does not check again) so a
+                    // real self-loop (`10 GOTO 10`, which legitimately
+                    // revisits the same address every step) cannot turn this
+                    // into an infinite poll.
+                    let address_before_step = self.current_statement_address;
+                    let line = self.apply_native_basic_state(message);
+                    if line.is_some()
+                        && address_before_step.is_some()
+                        && self.current_statement_address == address_before_step
+                    {
+                        let _ = self.send_own(
+                            "cpclib/basicState",
+                            json!({}),
+                            Purpose::NativeContinueStateRetry
+                        );
+                        return Vec::new();
+                    }
+                    return self.decide_continue_stop(line);
+                },
+                Purpose::NativeContinueStateRetry => {
+                    let line = self.apply_native_basic_state(message);
+                    return self.decide_continue_stop(line);
+                },
+                Purpose::NativeAwaitRun => {
+                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunState);
+                },
+                Purpose::NativeAwaitRunState => {
+                    let prog_size = message
+                        .get("body")
+                        .and_then(|b| b.get("prog_size"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u16;
+                    // This handler is only ever reached after
+                    // `Purpose::NativeAwaitInjectionState` already confirmed
+                    // `prog_size` past the empty baseline once - so seeing it
+                    // back at or below the baseline here is never "hasn't
+                    // landed yet", it is the corruption
+                    // `native_reinjection_attempts`'s own doc comment
+                    // describes: live-observed, only in a real session, with
+                    // no request from this crate that could explain it
+                    // (confirmed against AMSpiriT's own `--debug-webapi` log:
+                    // exactly one `POST /api/basic` is ever sent, at
+                    // injection time). Re-inject and retype `RUN` rather than
+                    // leaving the session stuck polling a direct-mode prompt
+                    // forever with nothing in the Debug Console to explain
+                    // why.
+                    if prog_size <= EMPTY_PROGRAM_BASELINE {
+                        if self.native_reinjection_attempts < MAX_NATIVE_REINJECTION_ATTEMPTS {
+                            self.native_reinjection_attempts += 1;
+                            let note = format!(
+                                "AMSpiriT Lite's own program state reverted to \
+                                 empty mid-run (attempt {}/{}) - re-injecting and \
+                                 retyping RUN\n",
+                                self.native_reinjection_attempts, MAX_NATIVE_REINJECTION_ATTEMPTS
+                            );
+                            self.injection_landed = false;
+                            // The program is restarting from scratch - any
+                            // position tracked from before the corruption is
+                            // not just stale, it belongs to a run that no
+                            // longer exists. Left in place, live-confirmed:
+                            // the entry stop this restart reports next can
+                            // carry a transient out-of-range `stmt_addr`
+                            // (`apply_native_basic_state`'s own doc comment
+                            // covers why that gets rejected rather than
+                            // trusted), which used to leave the *previous
+                            // run's* last-known statement highlighted -
+                            // right up until the next real update, wrongly
+                            // implying the machine was still sitting where
+                            // the corruption caught it.
+                            self.current_statement_column = None;
+                            self.current_statement_address = None;
+                            self.current_line = None;
+                            let _ = self.send_own(
+                                "cpclib/basicInject",
+                                json!({ "source": self.source_text }),
+                                Purpose::NativeInjected
+                            );
+                            return vec![protocol::event(
+                                "output",
+                                json!({ "category": "stderr", "output": note }),
+                                1
+                            )];
+                        }
+                        else if self.native_reinjection_attempts == MAX_NATIVE_REINJECTION_ATTEMPTS {
+                            // One-shot: move past the cap so this does not
+                            // re-warn on every subsequent poll while still
+                            // corrupted - falls through to the pre-recovery
+                            // behaviour (poll forever, stuck in direct mode)
+                            // from here on.
+                            self.native_reinjection_attempts += 1;
+                            return vec![protocol::event(
+                                "output",
+                                json!({
+                                    "category": "stderr",
+                                    "output": format!(
+                                        "AMSpiriT Lite's own program state kept \
+                                         reverting to empty after {MAX_NATIVE_REINJECTION_ATTEMPTS} \
+                                         re-injection attempts - giving up; the \
+                                         session will likely stay stuck in direct \
+                                         mode\n"
+                                    )
+                                }),
+                                1
+                            )];
+                        }
+                    }
+                    let line = message
+                        .get("body")
+                        .and_then(|b| b.get("cur_linenum"))
+                        .and_then(Value::as_u64)
+                        .map(|n| n as u16);
+                    match line {
+                        // Still direct mode: RUN hasn't reached the
+                        // interpreter yet. No `basicStep` here, see
+                        // `autotype_run`'s doc comment for why stepping this
+                        // window is what breaks autotype in the first place
+                        // - but a bare throttled sleep before polling again
+                        // instead of firing back to back: reported live,
+                        // polling at the request rate `perform`'s own
+                        // one-connection-per-call design allowed (every
+                        // request opens and tears down a fresh TCP
+                        // connection - hundreds of these in a couple of
+                        // seconds) reproduced the exact keyboard/rendering
+                        // corruption this whole poll-not-step design exists
+                        // to avoid, just from a different cause: connection
+                        // churn competing with the emulator's own
+                        // single-threaded frame/keyboard-scan loop for CPU
+                        // time, not pause/resume cycling. Paced at roughly
+                        // the same ballpark as the emulator's own `frame`
+                        // SSE heartbeat (ten times a second, see
+                        // `amspiritlite.rs`), which it already sustains
+                        // without trouble.
+                        None | Some(0xffff) => {
+                            // A real line was seen before (recorded below,
+                            // in the "not a reason to stop, keep running"
+                            // arm) and now it is back in direct mode: the
+                            // program genuinely finished running, not merely
+                            // still warming up from typing RUN.
+                            // `decide_continue_stop` already uses "entry" as
+                            // the reason for this same situation later in a
+                            // session - matched here rather than inventing a
+                            // second name for "back in direct mode after a
+                            // real run".
+                            if self.current_line.is_some() {
+                                self.resuming_as = None;
+                                return self.report_stopped("entry");
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(30));
+                            let _ = self.send_own(
+                                "cpclib/basicState",
+                                json!({}),
+                                Purpose::NativeAwaitRunState
+                            );
+                        },
+                        // A real line, and a reason to actually stop free-
+                        // running for it: a breakpoint on it, `stopOnEntry`
+                        // explicitly asked for, or the editor's own pause
+                        // request racing this window.
+                        Some(line)
+                            if self.breakpoints.contains(&line)
+                                || self.stop_on_entry
+                                || self.pause_requested =>
+                        {
+                            let _ = self.send_own(
+                                "pause",
+                                json!({ "threadId": THREAD_ID }),
+                                Purpose::NativeAwaitRunPaused
+                            );
+                        },
+                        // A real line, but nothing the user asked to stop
+                        // for: keep free-running rather than pausing
+                        // unconditionally at whatever line the poll first
+                        // happened to catch - reported live, that used to
+                        // surprise a user who set no breakpoints at all with
+                        // a stop on "wherever the machine happened to be",
+                        // not a meaningful entry point. Recorded here (not
+                        // just left for `apply_native_basic_state` to set
+                        // later) so the direct-mode arm above can tell
+                        // "still warming up" apart from "really finished".
+                        Some(line) => {
+                            self.current_line = Some(line);
+                            std::thread::sleep(std::time::Duration::from_millis(30));
+                            let _ = self.send_own(
+                                "cpclib/basicState",
+                                json!({}),
+                                Purpose::NativeAwaitRunState
+                            );
+                        }
+                    }
+                },
+                Purpose::NativeAwaitRunPaused => {
+                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunSettled);
+                },
+                Purpose::NativeAwaitRunSettled => {
+                    let line = self.apply_native_basic_state(message);
+                    return match line {
+                        Some(line)
+                            if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) =>
+                        {
+                            self.report_stopped("breakpoint")
+                        },
+                        _ => self.report_stopped("entry")
+                    };
+                },
+                Purpose::NativeChipScope { reference, request } => {
+                    let body = message.get("body").cloned().unwrap_or_default();
+                    let variables = crate::amspiritlite::chip_variables(reference, &body);
+                    let seq = self.next_seq();
+                    return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                },
+                Purpose::GenericChipScope { reference, request } => {
+                    let variables = message
+                        .get("body")
+                        .and_then(|b| b.get("snapshot"))
+                        .and_then(Value::as_str)
+                        .map(decode_base64)
+                        .filter(|bytes| !bytes.is_empty())
+                        .and_then(|bytes| cpclib_sna::Snapshot::from_buffer(bytes).ok())
+                        .and_then(|sna| crate::inspect::chip_variables(reference, &sna))
+                        .unwrap_or_default();
+                    let seq = self.next_seq();
+                    return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                },
+                Purpose::ScreenViewCrtc {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    request
+                } => {
+                    let regs = message
+                        .get("body")
+                        .and_then(crate::inspect::crtc_registers_from_json)
+                        .unwrap_or([0u8; 18]);
+                    let seq = self.next_seq();
+                    if let Err(problem) = self.send_own(
+                        "cpclib/ga",
+                        json!({}),
+                        Purpose::ScreenViewGa {
+                            crtc_regs: regs,
+                            address_override,
+                            width_override,
+                            height_override,
+                            mode_override,
+                            row_height_override,
+                            palette_override,
+                            encoding_override,
+                            request: request.clone()
+                        }
+                    ) {
+                        return vec![protocol::failure(&request, &problem.to_string(), seq)];
+                    }
+                },
+                Purpose::ScreenViewGa {
+                    crtc_regs,
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    request
+                } => {
+                    let Some((mode, palette)) = message
+                        .get("body")
+                        .and_then(crate::inspect::mode_and_palette_from_ga_json)
+                    else {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(
+                            &request,
+                            "could not read the Gate Array's mode/palette",
+                            seq
+                        )];
+                    };
+                    let mode = mode_override.unwrap_or(mode);
+                    let address = address_override.unwrap_or_else(|| {
+                        crate::inspect::crtc_screen_start_address(crtc_regs[12], crtc_regs[13])
+                    });
+                    let seq = self.next_seq();
+                    // The full 64K address space, from 0 - not just from
+                    // `address`, which may sit mid-scroll. Real hardware
+                    // wraps the interleaved display read at the full
+                    // 16-bit address boundary, not within any 16K page -
+                    // see `ColorMatrix::from_screen_at`'s own doc comment.
+                    if let Err(problem) = self.send_own(
+                        "readMemory",
+                        json!({ "memoryReference": address_reference(0), "count": 0x10000u32 }),
+                        Purpose::ScreenViewMemory {
+                            address,
+                            width: width_override,
+                            height: height_override,
+                            row_height_override,
+                            palette_override,
+                            encoding_override,
+                            crtc_regs,
+                            mode,
+                            palette,
+                            request: request.clone()
+                        }
+                    ) {
+                        return vec![protocol::failure(&request, &problem.to_string(), seq)];
+                    }
+                },
+                Purpose::ScreenViewMemory {
+                    address,
+                    width,
+                    height,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    crtc_regs,
+                    mode,
+                    palette,
+                    request
+                } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    return self.screen_view_answer(
+                        &request, address, width, height, row_height_override, &palette_override,
+                        encoding_override, &crtc_regs, mode, &palette, &bytes
+                    );
+                },
+                Purpose::ScreenViewSnapshot {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    request
+                } => {
+                    let sna = message
+                        .get("body")
+                        .and_then(|b| b.get("snapshot"))
+                        .and_then(Value::as_str)
+                        .map(decode_base64)
+                        .filter(|bytes| !bytes.is_empty())
+                        .and_then(|bytes| cpclib_sna::Snapshot::from_buffer(bytes).ok());
+                    let Some(sna) = sna
+                    else {
+                        let seq = self.next_seq();
+                        let why = message
+                            .get("body")
+                            .and_then(|b| b.get("error"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("the emulator could not describe its machine state");
+                        return vec![protocol::failure(&request, why, seq)];
+                    };
+                    let regs = crate::inspect::crtc_registers(&sna);
+                    let (mode, palette) = crate::inspect::mode_and_palette_from_snapshot(&sna);
+                    let mode = mode_override.unwrap_or(mode);
+                    let address = address_override.unwrap_or_else(|| {
+                        crate::inspect::crtc_screen_start_address(regs[12], regs[13])
+                    });
+                    let full_memory = sna.memory_dump();
+                    // The full 64K address space, from 0 - see
+                    // `Purpose::ScreenViewGa`'s identical comment. Capped
+                    // at exactly 0x10000: a 128K machine's own snapshot
+                    // carries more than that, and the wrap must stay at
+                    // the real 16-bit boundary regardless.
+                    let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
+                    return self.screen_view_answer(
+                        &request,
+                        address,
+                        width_override,
+                        height_override,
+                        row_height_override,
+                        &palette_override,
+                        encoding_override,
+                        &regs,
+                        mode,
+                        &palette,
+                        &memory
+                    );
+                },
+                Purpose::MemoryView {
+                    address,
+                    label,
+                    request
+                } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    if bytes.is_empty() {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(
+                            &request,
+                            &format!("{} could not be read", address_reference(address)),
+                            seq
+                        )];
+                    }
+                    let seq = self.next_seq();
+                    let event = protocol::event(
+                        "cpclib/memoryView",
+                        json!({
+                            "viewId": format!("fixed:{address:08x}"),
+                            "group": Value::Null,
+                            "requested": true,
+                            "address": address,
+                            "label": label,
+                            "bytes": bytes,
+                            "marks": [],
+                            "changed": []
+                        }),
+                        seq
+                    );
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({
+                            "result": format!(
+                                "{} bytes from {}{}",
+                                bytes.len(),
+                                address_reference(address),
+                                label.map(|l| format!(" ({l})")).unwrap_or_default()
+                            ),
+                            "variablesReference": 0,
+                            "memoryReference": address_reference(address)
+                        }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::DisassemblyView {
+                    address,
+                    count,
+                    label,
+                    request
+                } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    let decoded = u16::try_from(address)
+                        .ok()
+                        .map(|address| crate::disassemble::decode(address, &bytes, count))
+                        .unwrap_or_default();
+                    if decoded.is_empty() {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(
+                            &request,
+                            &format!("{} could not be disassembled", address_reference(address)),
+                            seq
+                        )];
+                    }
+                    let instructions = crate::disassemble::as_dap_instructions(&decoded);
+                    let seq = self.next_seq();
+                    let event = protocol::event(
+                        "cpclib/disassemblyView",
+                        json!({
+                            "address": address,
+                            "label": label,
+                            "instructions": instructions,
+                            "pc": Value::Null,
+                            "followsPc": false
+                        }),
+                        seq
+                    );
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({
+                            "result": format!(
+                                "{} instructions from {}{}",
+                                decoded.len(),
+                                address_reference(address),
+                                label.map(|l| format!(" ({l})")).unwrap_or_default()
+                            ),
+                            "variablesReference": 0,
+                            "memoryReference": address_reference(address)
+                        }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::AmspiritBasicListingText { request } => {
+                    let text = message
+                        .get("body")
+                        .map(format_amspirit_basic_listing)
+                        .unwrap_or_default();
+                    if text.is_empty() {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(&request, "the emulator answered no listing", seq)];
+                    }
+                    let seq = self.next_seq();
+                    let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({ "result": "listing opened", "variablesReference": 0 }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::GenericBasicListingRead { request } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    let text = match cpclib_basic::BasicProgram::decode(&bytes) {
+                        Ok(program) => program.to_string(),
+                        Err(problem) => {
+                            let seq = self.next_seq();
+                            return vec![protocol::failure(
+                                &request,
+                                &format!("could not decode the program in memory: {problem}"),
+                                seq
+                            )];
+                        }
+                    };
+                    let seq = self.next_seq();
+                    let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({ "result": "listing opened", "variablesReference": 0 }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::WorkspaceArraysStart => {
+                    let bytes = Self::read_memory_bytes(message);
+                    let vartop = bytes.get(0..2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+                    return self.complete_workspace_generic(vartop).unwrap_or_default();
+                },
+                Purpose::NativeWorkspaceInfo => {
+                    return self.complete_workspace_native(message).unwrap_or_default();
+                },
+                Purpose::NativeInjected => {
+                    let _ =
+                        self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitInjectionState);
+                },
+                Purpose::NativeAwaitInjectionState => {
+                    let prog_size = message
+                        .get("body")
+                        .and_then(|b| b.get("prog_size"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u16;
+                    // Confirmed live: a fresh boot's own empty-program
+                    // baseline is 2 bytes - moving past that is what
+                    // actually confirms the write landed, not merely that
+                    // the emulator acknowledged it. Deliberately *not*
+                    // compared against this session's own tokenised length
+                    // (`program_len`) any more - tried first, and reported
+                    // live as an even worse hang than the bug this whole
+                    // chain exists to fix: for the real mandelbrot.bas,
+                    // AMSpiriT Lite's own tokeniser lands on `prog_size: 508`
+                    // while this session's own tokeniser computes `516` for
+                    // the identical source, an 8-byte gap - comfortably
+                    // outside a few bytes' tolerance, so the poll never once
+                    // saw "landed" and spun forever even though the program
+                    // had genuinely, correctly loaded. The two tokenisers
+                    // disagreeing on byte count is exactly why
+                    // `native_listing`/`statement_position_in_line` exist at
+                    // all elsewhere in this file - nothing here should have
+                    // trusted them to agree either.
+                    let landed = prog_size > EMPTY_PROGRAM_BASELINE;
+                    if !landed {
+                        std::thread::sleep(std::time::Duration::from_millis(30));
+                        let _ = self.send_own(
+                            "cpclib/basicState",
+                            json!({}),
+                            Purpose::NativeAwaitInjectionState
+                        );
+                        return Vec::new();
+                    }
+                    // Set *before* proceeding: `configurationDone`'s own
+                    // handler calls `start_if_ready` directly, on the
+                    // editor's own timing, with no idea this chain exists -
+                    // see `injection_landed`'s own doc comment for why that
+                    // race needs this flag rather than sequencing alone.
+                    self.injection_landed = true;
+                    return self.proceed_once_injection_landed();
+                },
+                Purpose::NativeListingFetched => {
+                    self.apply_native_listing(message);
+                    if let Err(problem) = self.resume_after_injection_landed() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                }
+            }
+            return Vec::new();
+        }
+
+        let kind = message.get("type").and_then(Value::as_str).unwrap_or_default();
+        if kind == "event" {
+            let event = message.get("event").and_then(Value::as_str).unwrap_or_default();
+            // See `native_operation_pending`'s own doc comment: this
+            // session's own step/continue loop makes the peer pause and
+            // resume as a normal, internal part of itself, and both are
+            // *also* visible here, unsolicited, on a native peer - reported
+            // live as the whole debug session appearing to flicker between
+            // paused and running continuously while a single `Continue`
+            // click's own loop was quietly working through dozens of
+            // statements underneath it. Neither is dropped outright (a
+            // manual pause with nothing of ours in flight still needs this
+            // path), only while this session's own tracked chain is already
+            // going to answer for it.
+            if self.native_amspirit && self.native_operation_pending {
+                return Vec::new();
+            }
+            if event == "stopped" {
+                // The editor already knows the machine is stopped - see
+                // `native_already_stopped`'s own doc comment for why the
+                // emulator alone does not stop saying so just because this
+                // session's own tracked chain already reported it once.
+                if self.native_amspirit && self.native_already_stopped {
+                    return Vec::new();
+                }
+                return self.on_z80_stopped();
+            }
+            if event == "continued" {
+                // The peer resuming on its own reaches here unsolicited (a
+                // native peer can decide this by itself - reported live: the
+                // emulator resumed, its own `continued` event arrived, and
+                // with nothing forwarding it the editor never found out and
+                // sat showing "paused" while the program was actually
+                // running again). Forward it as-is rather than dropping it.
+                // The machine is not stopped any more either way, so a
+                // `stopped` seen after this is new again, not a straggler.
+                self.native_already_stopped = false;
+                let seq = self.next_seq();
+                return vec![protocol::event(
+                    "continued",
+                    message
+                        .get("body")
+                        .cloned()
+                        .unwrap_or_else(|| json!({ "threadId": THREAD_ID, "allThreadsContinued": true })),
+                    seq
+                )];
+            }
+            if event == "initialized" {
+                return Vec::new();
+            }
+        }
+        Vec::new()
+    }
+
+    /// The peer just paused, with nothing of this session's own already
+    /// in flight to account for it (`on_emulator_message`'s own caller
+    /// already filtered out the case where there is - see
+    /// `native_operation_pending`'s doc comment). On the generic path this
+    /// is the one shared Z80 breakpoint firing - not necessarily a line the
+    /// user actually wants to stop at, which is only known once the current
+    /// line has been read and compared. On a native peer, reaching here
+    /// unfiltered means either a real armed breakpoint or a manual pause -
+    /// nothing left to distinguish beyond reading where it landed.
+    fn on_z80_stopped(&mut self) -> Vec<Value> {
+        let sent = if self.native_amspirit {
+            self.send_own("cpclib/basicState", json!({}), Purpose::NativeBasicState)
+        }
+        else {
+            // One 4-byte read rather than two: PTR_CURRENT_STATEMENT and
+            // PTR_CURRENT_LINE_NUMBER_FIELD are adjacent (`&AE1B`, `&AE1D`),
+            // so both come back in the same round trip.
+            self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(PTR_CURRENT_STATEMENT as u32),
+                    "count": 4
+                }),
+                Purpose::CurrentLinePointer
+            )
+        };
+        if sent.is_err() {
+            return Vec::new();
+        }
+        Vec::new()
+    }
+
+    /// Decodes `cpclib/basicState`'s body and updates `current_line`/
+    /// `current_statement_column` from it. Returns the decoded line
+    /// number, or `None` for direct mode (`cur_linenum` `0xFFFF`) - the
+    /// caller decides what stop reason that means, since a breakpoint-
+    /// triggered stop and a completed step report it differently.
+    ///
+    /// `stmt_addr` is resolved to a *position* within `cur_linenum` - the
+    /// statement's index on the line, first/second/third - not directly to
+    /// an address, and that position is what actually picks the column: see
+    /// `statement_position_in_line`'s own doc comment for why an address
+    /// comparison is not trustworthy even scoped to one line, and
+    /// `native_listing`'s for how position sidesteps that entirely when it
+    /// is available.
+    ///
+    /// `stmt_addr` itself is not always trustworthy either: reported live
+    /// (and directly reproduced against a real instance), a `basicState`
+    /// read taken right after a fresh `pause` can answer with a `stmt_addr`
+    /// nowhere near this program at all (`63`, once, against a program
+    /// starting at `368`) - stale bookkeeping the pause has not caught up
+    /// on yet, not a real statement address. Trusting it anyway silently
+    /// misattributed the highlight to the *first* statement on the line
+    /// (the floor search in `statement_position_in_line` finds nothing at
+    /// or below a too-small address and falls back to position `0`) -
+    /// reported live as "the right line is selected but not the right
+    /// token." Anything outside this program's own address range is
+    /// rejected instead: `current_statement_column` is left as it was
+    /// (whole-line highlight, via `report_stopped`'s own fallback) rather
+    /// than actively pointing at the wrong token.
+    fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
+        let body = message.get("body")?;
+        // See `known_txttop`'s own doc comment - cached from every body
+        // that carries it, direct mode included, since variable reads can
+        // be asked for at any point and should not have to wait for a
+        // "real" line first.
+        if let Some(t) = body.get("txttop").and_then(Value::as_u64) {
+            self.known_txttop = Some(t as u16);
+        }
+        let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
+        if line == 0xffff {
+            return None;
+        }
+        self.current_line = Some(line);
+        let program_range = self.program_start..self.program_start.wrapping_add(self.program_len);
+        if let Some(address) = body
+            .get("stmt_addr")
+            .and_then(Value::as_u64)
+            .map(|a| a as u16)
+            .filter(|address| program_range.contains(address))
+        {
+            self.current_statement_address = Some(address);
+            if let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i) {
+                let position = self.statement_position_in_line(line, source_line, address);
+                let statement = self
+                    .statement_index
+                    .iter()
+                    .filter(|s| s.source_line == source_line)
+                    .nth(position);
+                if let Some(statement) = statement {
+                    self.current_statement_column = Some((statement.column, statement.end_column));
+                }
+            }
+        }
+        Some(line)
+    }
+
+    /// The "breakpoint, step, or entry" decision for a single explicit
+    /// `stepIn`/`next`/`stepOut`, shared between
+    /// [`Purpose::NativeStateAfterStep`] and
+    /// [`Purpose::NativeStateAfterStepRetry`] - `line` is whatever
+    /// `apply_native_basic_state` already decoded from the read either of
+    /// them is answering.
+    fn decide_step_stop(&mut self, line: Option<u16>) -> Vec<Value> {
+        match line {
+            Some(line) => {
+                let reason = if self.breakpoints.contains(&line) {
+                    "breakpoint"
+                }
+                else {
+                    "step"
+                };
+                self.report_stopped(reason)
+            },
+            None => self.report_stopped("entry")
+        }
+    }
+
+    /// Whether the statement at `self.current_statement_address` is the
+    /// *first* one on `line` - the point at which a breakpoint on that line
+    /// should actually trigger a stop, not on every later statement of a
+    /// multi-statement line the machine happens to still be executing.
+    /// Reported live: a breakpoint on a line inside a tight loop
+    /// (`x=1:y=2:GOTO <this line>`) stopped once per statement on the line
+    /// on every pass, not once per loop iteration - the user only ever
+    /// asked for the second. A plain "did the line number change since the
+    /// last statement" check would get this wrong the other way for a
+    /// self-looping line (`previous_line == line` is also true on a real,
+    /// new iteration reaching the line's first statement again) - position
+    /// on the line, not line-to-line movement, is the right question.
+    /// Defaults to `true` (does not suppress the stop) when the address or
+    /// position cannot be resolved, since a real breakpoint should never go
+    /// silently unreported over an unrelated resolution gap.
+    fn is_first_statement_of_line(&self, line: u16) -> bool {
+        let Some(address) = self.current_statement_address else {
+            return true;
+        };
+        let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i)
+        else {
+            return true;
+        };
+        self.statement_position_in_line(line, source_line, address) == 0
+    }
+
+    /// The actual "breakpoint, pause, keep stepping, or entry" decision for
+    /// the native step loop, shared between [`Purpose::NativeContinueState`]
+    /// and [`Purpose::NativeContinueStateRetry`] - `line` is whatever
+    /// `apply_native_basic_state` already decoded from the read either of
+    /// them is answering.
+    fn decide_continue_stop(&mut self, line: Option<u16>) -> Vec<Value> {
+        match line {
+            Some(line) if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) => {
+                self.resuming_as = None;
+                self.report_stopped("breakpoint")
+            },
+            Some(_) if self.pause_requested => {
+                self.resuming_as = None;
+                self.report_stopped("pause")
+            },
+            // Not a line the user cares about: keep stepping.
+            Some(_) => {
+                let _ =
+                    self.send_own("cpclib/basicStep", json!({ "mode": "stmt" }), Purpose::NativeContinueStep);
+                Vec::new()
+            },
+            // Direct mode. Reached from the very first resume, this loop is
+            // *typing* RUN, not running the program yet - `cur_linenum`
+            // stays direct-mode for the few steps it takes the typed
+            // keystrokes to actually reach the interpreter, exactly the way
+            // the generic path's own noise-stop fix already distinguishes
+            // (`current_line.is_some()`: has a real line ever been seen this
+            // session). Reported only once one has - landing back in direct
+            // mode with a real line already behind it is the program
+            // genuinely ending.
+            None if self.current_line.is_none() => {
+                let _ =
+                    self.send_own("cpclib/basicStep", json!({ "mode": "stmt" }), Purpose::NativeContinueStep);
+                Vec::new()
+            },
+            None => {
+                self.resuming_as = None;
+                self.report_stopped("entry")
+            }
+        }
+    }
+
+    /// Which statement of `line` (already resolved to its 0-based
+    /// `source_line` index into `statement_index`) contains `address` - a
+    /// *position* on the line (first, second, third...), not the address
+    /// itself.
+    ///
+    /// Prefers `native_listing`'s own `{addr,end}` ranges for `line` when
+    /// available: those come from AMSpiriT Lite's own tokeniser, the same
+    /// one that produced `address`, so there is nothing to disagree with -
+    /// matching by position rather than address only matters for lining
+    /// this session's own `statement_index` (a *different*, independent
+    /// tokeniser) up against it afterward.
+    ///
+    /// Without `native_listing`, falls back to a floor match against
+    /// `statement_index`'s own addresses directly - right most of the time,
+    /// but a live session showed it is not trustworthy even scoped to one
+    /// line: a later statement's `stmt_addr` can land *below* this
+    /// tokeniser's computed address for it (the two tokenisers' addresses
+    /// drift against each other, growing statement by statement, not just
+    /// line by line), silently misattributing it to an earlier statement on
+    /// the same line instead - the wrong token, still on the right line.
+    fn statement_position_in_line(&self, line: u16, source_line: usize, address: u16) -> usize {
+        if let Some(spans) = self.native_listing.as_ref().and_then(|listing| listing.get(&line)) {
+            return spans
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(_, (addr, _))| *addr <= address)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+        }
+        self.statement_index
+            .iter()
+            .filter(|s| s.source_line == source_line)
+            .enumerate()
+            .filter(|(_, s)| s.address <= address)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0)
+    }
+
+    /// Decodes `cpclib/basicListing`'s body into `native_listing`. Absent or
+    /// malformed leaves `native_listing` at `None` - `statement_position_in_line`
+    /// already falls back cleanly, so a peer that answers this oddly costs
+    /// nothing beyond losing the improvement it would have offered.
+    fn apply_native_listing(&mut self, message: &Value) {
+        let Some(lines) = message
+            .get("body")
+            .and_then(|b| b.get("lines"))
+            .and_then(Value::as_array)
+        else {
+            return;
+        };
+        let mut listing = HashMap::new();
+        for line in lines {
+            let Some(num) = line.get("num").and_then(Value::as_u64) else {
+                continue;
+            };
+            let Some(stmts) = line.get("stmts").and_then(Value::as_array) else {
+                continue;
+            };
+            let spans: Vec<(u16, u16)> = stmts
+                .iter()
+                .filter_map(|s| {
+                    let addr = s.get("addr").and_then(Value::as_u64)? as u16;
+                    let end = s.get("end").and_then(Value::as_u64)? as u16;
+                    Some((addr, end))
+                })
+                .collect();
+            if !spans.is_empty() {
+                listing.insert(num as u16, spans);
+            }
+        }
+        self.native_listing = Some(listing);
+    }
+
+    fn on_line_pointer_read(&mut self, message: &Value) -> Vec<Value> {
+        let bytes = Self::read_memory_bytes(message);
+        let Some(chunk) = bytes.get(0..4) else {
+            return Vec::new();
+        };
+        // PTR_CURRENT_STATEMENT's own value needs no *pointer* dereference,
+        // unlike the line-number field below, but it is not the statement's
+        // own address either: `Execution.asm` names the ROM variable
+        // `address_of_byte_before_current_statement` and says so directly
+        // in its own comment ("HL points to byte before first token") -
+        // confirmed both for a line's first statement (HL last incremented
+        // to the line-number field's high byte, one below the first token)
+        // and every later one (HL left on the `StatementSeparator` token
+        // itself, again one below the next statement's first token). `+1`
+        // is that offset undone, universally, in both cases. `None` (no
+        // match) leaves the previous stop's column standing rather than
+        // guessing; the very next line-number lookup either confirms this
+        // is a real stop (and the caller gets a column - or does not, on a
+        // statement layout the launch flow's own tokeniser did not expect)
+        // or a filtered-past one, in which case nobody reads it anyway.
+        let statement_address = u16::from_le_bytes([chunk[0], chunk[1]]).wrapping_add(1);
+        self.current_statement_address = Some(statement_address);
+        if let Some(statement) = self
+            .statement_index
+            .iter()
+            .find(|s| s.address == statement_address)
+        {
+            self.current_statement_column = Some((statement.column, statement.end_column));
+        }
+
+        match basic::current_line_number_field_address([chunk[2], chunk[3]]) {
+            Some(address) => {
+                let _ = self.send_own(
+                    "readMemory",
+                    json!({ "memoryReference": address_reference(address as u32), "count": 2 }),
+                    Purpose::CurrentLineValue
+                );
+                Vec::new()
+            },
+            // Direct/immediate mode. Two very different things produce
+            // this, and only one is worth reporting: the program ending
+            // (or being stepped past its last line) - and the "RUN"
+            // command autotype itself just typed, executed as a direct-
+            // mode statement before the program has run a single line of
+            // its own. Reported live: a spurious "stopped" the instant the
+            // program was told to run at all, well before any real
+            // breakpoint had a chance to matter. `current_line` being
+            // still unset (this session has never seen a real program
+            // line yet) is what tells the two apart when nothing else can
+            // - direct mode carries no line number either way - except
+            // during an active step, where landing back in direct mode is
+            // itself the answer regardless of what came before it.
+            None => {
+                let seen_a_real_line = self.current_line.is_some();
+                let actively_stepping = matches!(
+                    self.resuming_as,
+                    Some(ResumeKind::StepStatement) | Some(ResumeKind::StepLine { .. })
+                );
+                if seen_a_real_line || actively_stepping {
+                    self.resuming_as = None;
+                    self.report_stopped("entry")
+                }
+                else if self.pause_requested {
+                    self.resuming_as = None;
+                    self.report_stopped("pause")
+                }
+                else {
+                    let _ = self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    fn on_line_value_read(&mut self, message: &Value) -> Vec<Value> {
+        let bytes = Self::read_memory_bytes(message);
+        let Some(line_bytes) = bytes.get(0..2) else {
+            return Vec::new();
+        };
+        let line = basic::decode_line_number([line_bytes[0], line_bytes[1]]);
+
+        let should_stop = match self.resuming_as {
+            Some(ResumeKind::StepStatement) => true,
+            Some(ResumeKind::StepLine { from_line }) => Some(line) != from_line,
+            // See `is_first_statement_of_line`'s own doc comment - a
+            // breakpoint should trigger once per line entry, not once per
+            // statement still on it.
+            Some(ResumeKind::Continue) | None => {
+                self.breakpoints.contains(&line) && self.is_first_statement_of_line(line)
+            }
+        };
+
+        self.current_line = Some(line);
+
+        if should_stop {
+            self.resuming_as = None;
+            self.report_stopped(if self.breakpoints.contains(&line) {
+                "breakpoint"
+            }
+            else {
+                "step"
+            })
+        }
+        else if self.pause_requested {
+            self.resuming_as = None;
+            self.report_stopped("pause")
+        }
+        else {
+            // Not a line the user cares about: keep going.
+            let _ = self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
+            Vec::new()
+        }
+    }
+
+    fn report_stopped(&mut self, reason: &str) -> Vec<Value> {
+        // A stop for any reason answers whatever pause was pending - an
+        // unrelated breakpoint or step landing first is still a stop, and a
+        // pause left set past it would fire on the next unrelated `continue`
+        // that was never asked to pause at all.
+        self.pause_requested = false;
+        // Whatever native operation was in flight is answered too - this is
+        // the one place every Purpose-tracked native chain converges on a
+        // real, editor-visible stop, so it is the one place safe to say the
+        // generic unsolicited handling can stop staying quiet about *this*
+        // in-flight request. It is not safe yet to stop staying quiet about
+        // stragglers this same stop is still causing - see
+        // `native_already_stopped`'s own doc comment - so that one is set,
+        // not cleared, here.
+        self.native_operation_pending = false;
+        self.native_already_stopped = true;
+        let seq = self.next_seq();
+        let mut out = vec![protocol::event(
+            "stopped",
+            json!({
+                "reason": reason,
+                "threadId": THREAD_ID,
+                "allThreadsStopped": true
+            }),
+            seq
+        )];
+
+        // The standard `stopped` event alone gets a whole-line highlight
+        // from VS Code, not the precise statement `stackTrace`'s own
+        // column/endColumn describe - the Z80 session's editor-side
+        // `revealStop` (`cpclib-vscode/src/debug.ts`) is what actually
+        // narrows it to a span, and it is driven by this custom event, not
+        // by DAP's native stack-frame columns. `instruction` is left out
+        // entirely rather than sent as `null`: it is a Z80-only concept
+        // (the resolved byte pattern behind a line), and its absence is
+        // exactly what tells `revealStop` there is no hint to show.
+        if let Some(line) = self.current_line
+            && let Some(source_line) = self
+                .line_index
+                .iter()
+                .find(|(n, _)| *n == line)
+                .map(|(_, idx)| *idx as i64 + 1)
+        {
+            let seq = self.next_seq();
+            let (column, end_column) = self.current_statement_column.unwrap_or((1, 1));
+            out.push(protocol::event(
+                "cpclib/stoppedAt",
+                json!({
+                    "path": self.source_path.display().to_string(),
+                    "line": source_line,
+                    "column": column,
+                    "endColumn": end_column
+                }),
+                seq
+            ));
+        }
+
+        out
+    }
+}
+
+fn format_variable_value(value: &BasicVariableValue) -> String {
+    match value {
+        BasicVariableValue::Integer(i) => i.to_string(),
+        BasicVariableValue::Real(f) => f.to_string(),
+        BasicVariableValue::StringRef { len, address } => {
+            format!("<string, {len} bytes at {}>", address_reference(*address as u32))
+        },
+        BasicVariableValue::DefFn => "<DEF FN>".to_string(),
+        BasicVariableValue::Unknown(code) => format!("<unknown type {code:#04x}>")
+    }
+}
+
+/// The `Variable.type` DAP field - the editor asked for this outright
+/// (`"supportsVariableType": true` in its own `initialize`), and Locomotive
+/// BASIC already tells the difference apart by the same type byte
+/// [`BasicVariableValue`] itself came from, so there is nothing to infer.
+fn variable_type_name(value: &BasicVariableValue) -> &'static str {
+    match value {
+        BasicVariableValue::Integer(_) => "Integer",
+        BasicVariableValue::Real(_) => "Real",
+        BasicVariableValue::StringRef { .. } => "String",
+        BasicVariableValue::DefFn => "DEF FN",
+        BasicVariableValue::Unknown(_) => "Unknown"
+    }
+}
+
+/// Parses `source` with `cpclib_basic` and pairs each BASIC line number
+/// with the 0-based index of the source line it was written on - exact,
+/// since it comes from the same tokenizer the launch flow already used to
+/// build the program, not a text heuristic re-deriving line numbers from
+/// scratch.
+fn line_index_from_source(source: &str) -> Vec<(u16, usize)> {
+    let mut index = Vec::new();
+    for (line_idx, text) in source.lines().enumerate() {
+        let trimmed = text.trim_start();
+        let digits: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(number) = digits.parse::<u16>() {
+            if !digits.is_empty() {
+                index.push((number, line_idx));
+            }
+        }
+    }
+    index
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::peer::RecordingPeer;
+
+    use super::*;
+
+    #[test]
+    fn line_index_pairs_basic_line_numbers_with_source_line_indices() {
+        let source = "10 PRINT \"HI\"\n20 GOTO 10\n";
+        let index = line_index_from_source(source);
+        assert_eq!(index, vec![(10, 0), (20, 1)]);
+    }
+
+    #[test]
+    fn line_index_ignores_lines_with_no_leading_number() {
+        let source = "10 PRINT \"HI\"\n' a comment maybe\n20 GOTO 10\n";
+        let index = line_index_from_source(source);
+        assert_eq!(index, vec![(10, 0), (20, 2)]);
+    }
+
+    const SOURCE: &str = "10 PRINT \"HI\"\n20 GOTO 10\n";
+
+    fn encode_base64(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let b0 = chunk[0] as u32;
+            let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+            let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+            let n = (b0 << 16) | (b1 << 8) | b2;
+            out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+            out.push(if chunk.len() > 1 {
+                ALPHABET[((n >> 6) & 0x3F) as usize] as char
+            }
+            else {
+                '='
+            });
+            out.push(if chunk.len() > 2 {
+                ALPHABET[(n & 0x3F) as usize] as char
+            }
+            else {
+                '='
+            });
+        }
+        out
+    }
+
+    fn new_session(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
+    /// A session over a peer with native BASIC debugging (AMSpiriT Lite),
+    /// rather than 1984js's generic Z80-breakpoint shape.
+    fn native_session(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
+    /// Same as [`native_session`], but the peer also offers
+    /// `cpclib/basicListing` - for tests exercising `native_listing` itself,
+    /// kept separate so every other native test still covers the (still
+    /// supported) peer that does not have it.
+    fn native_session_with_listing(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/basicListing"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
+    /// Same as [`native_session`], but the peer also offers the four chip
+    /// endpoints - for tests exercising the chip scopes, kept separate so
+    /// every other native test still covers the (still supported) peer
+    /// that does not have them.
+    fn native_session_with_chips(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/crtc",
+                "cpclib/ga",
+                "cpclib/psg",
+                "cpclib/fdc"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
+    /// Sends `attach` and simulates the peer answering it successfully,
+    /// processing whatever that answer triggers (arming the breakpoint).
+    fn complete_attach(session: &mut BasicSession<RecordingPeer>) {
+        session.attach().unwrap();
+        let seq = last_sent_seq(session);
+        answer(session, seq, json!({ "success": true }));
+    }
+
+    fn last_sent_seq(session: &mut BasicSession<RecordingPeer>) -> i64 {
+        session
+            .peer_mut()
+            .sent
+            .last()
+            .unwrap()
+            .get("seq")
+            .and_then(Value::as_i64)
+            .unwrap()
+    }
+
+    /// Queues a response to request `seq` and processes it.
+    fn answer(session: &mut BasicSession<RecordingPeer>, seq: i64, extra: Value) -> Vec<Value> {
+        let mut response = json!({ "type": "response", "request_seq": seq, "success": true });
+        for (k, v) in extra.as_object().unwrap() {
+            response[k] = v.clone();
+        }
+        session.peer_mut().push_incoming(response);
+        let incoming = session.peer_mut().drain();
+        let mut out = Vec::new();
+        for message in incoming {
+            out.extend(session.on_emulator_message(&message));
+        }
+        out
+    }
+
+    fn read_memory_response(bytes: &[u8]) -> Value {
+        json!({ "body": { "data": encode_base64(bytes) } })
+    }
+
+    #[test]
+    fn attach_sends_initialize_before_attach() {
+        // Regression test: 1984js's embedded DAP server refuses every
+        // request - `attach` included - with "initialize must be the first
+        // request" until it has seen one. Confirmed against a real
+        // transcript where this was missing: attach, setInstructionBreakpoints
+        // and continue all failed identically from message one.
+        let mut session = new_session(SOURCE);
+        session.attach().unwrap();
+
+        let commands = session.peer_mut().commands();
+        assert_eq!(commands, vec!["initialize", "attach"]);
+    }
+
+    #[test]
+    fn attach_arms_the_statement_breakpoint_target_not_an_entry_point() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        // Regression test: this used to arm EXECUTE_LINE_ENTRY itself, which
+        // reads PTR_CURRENT_LINE_NUMBER_FIELD one line too early (the ROM
+        // updates it a few bytes later in the same routine - see
+        // STATEMENT_BREAKPOINT_TARGET's doc comment) - so every breakpoint
+        // comparison was off by one line and a real breakpoint could go the
+        // whole session without ever matching.
+        let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
+        assert_eq!(
+            armed["arguments"]["breakpoints"][0]["instructionReference"],
+            address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
+        );
+    }
+
+    #[test]
+    fn a_native_peer_gets_no_generic_breakpoint_armed() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        assert!(
+            session.peer_mut().last("setInstructionBreakpoints").is_none(),
+            "AMSpiriT Lite resolves its own breakpoints; nothing generic to arm"
+        );
+    }
+
+    #[test]
+    fn a_native_peer_gets_the_program_re_injected_through_its_own_tokeniser() {
+        // The hand-built launch snapshot alone kept producing corrupted
+        // BASIC state on this emulator specifically, even with every known
+        // pointer fixed - re-injecting through its own /api/basic sidesteps
+        // needing to know why.
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        let injected = session.peer_mut().last("cpclib/basicInject").unwrap();
+        assert_eq!(injected["arguments"]["source"], SOURCE);
+    }
+
+    #[test]
+    fn set_breakpoints_arms_them_natively_on_a_peer_that_supports_it() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        let armed = session.peer_mut().last("cpclib/basicSetBreakpoints").unwrap();
+        assert_eq!(armed["arguments"]["lines"], json!([20]));
+    }
+
+    #[test]
+    fn a_native_stop_is_reported_from_basic_state_directly() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    fn a_native_pause_not_on_a_breakpoint_is_reported_as_pause() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+
+        assert_eq!(events[0]["body"]["reason"], "pause");
+    }
+
+    /// Regression test: a live AMSpiriT Lite session had the peer resume on
+    /// its own - a real, unsolicited `continued` event arrived - and nothing
+    /// forwarded it, so the editor never found out and sat showing "paused"
+    /// while the program was actually running again.
+    #[test]
+    fn an_unsolicited_continued_event_reaches_the_editor() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        let events = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "continued",
+            "body": { "threadId": 1, "allThreadsContinued": true }
+        }));
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["event"], "continued");
+        assert_eq!(events[0]["body"]["allThreadsContinued"], true);
+    }
+
+    /// Regression test, reported live: the whole debug session appeared to
+    /// flicker continuously between paused and running during a single
+    /// `Continue` click. `cpclib/basicStep`'s own internal mechanism (which
+    /// this session's own Rust-driven loop calls once per statement) fires
+    /// the same unsolicited `stopped`/`continued` events as a side effect of
+    /// every call, whether or not the statement it lands on is one the user
+    /// armed - and both of those unsolicited events used to reach the editor
+    /// on top of whatever the loop's own tracked chain already reported,
+    /// once per statement stepped.
+    #[test]
+    fn unsolicited_stopped_and_continued_are_suppressed_while_a_native_operation_is_in_flight() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicStep");
+
+        // The step loop's own cpclib/basicStep is now in flight - an
+        // unsolicited pair arriving before it answers must not reach the
+        // editor at all.
+        let stopped = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "stopped",
+            "body": {}
+        }));
+        assert!(stopped.is_empty(), "{stopped:?}");
+        let continued = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "continued",
+            "body": { "threadId": 1, "allThreadsContinued": true }
+        }));
+        assert!(continued.is_empty(), "{continued:?}");
+
+        // The loop's own tracked chain still works once it actually answers.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+
+        // The stop cleared the flag: an unsolicited event now (nothing of
+        // this session's own in flight) reaches the editor again.
+        let continued = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "continued",
+            "body": { "threadId": 1, "allThreadsContinued": true }
+        }));
+        assert_eq!(continued.len(), 1, "{continued:?}");
+    }
+
+    /// Regression test, reported live: one real pause produced three
+    /// separate `stopped` events reaching the editor - "2 or 3 unwanted
+    /// breakpoints at the beginning". `native_operation_pending` answers for
+    /// the *in-flight request*, cleared the moment this session's own
+    /// tracked chain reports the stop - but the emulator keeps sending
+    /// straggler `stopped` events for that same pause afterwards (its own
+    /// `pause` SSE event, `basic_bp`'s own side effect, sometimes both),
+    /// arriving once nothing was suppressing them any more. Every one of
+    /// them before the next resume must be dropped, not just the first.
+    #[test]
+    fn stragglers_after_an_already_reported_stop_are_dropped_until_the_next_resume() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+
+        // The loop's own tracked chain reports the one real stop.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped");
+
+        // Two straggler `stopped` events for that exact same pause, arriving
+        // after the flag that suppressed the in-flight request has already
+        // cleared - neither is a new stop, both must be dropped.
+        for _ in 0..2 {
+            let stopped = session.on_emulator_message(&json!({
+                "type": "event",
+                "event": "stopped",
+                "body": {}
+            }));
+            assert!(stopped.is_empty(), "{stopped:?}");
+        }
+
+        // A genuinely new stop, after an actual resume, is not suppressed.
+        session
+            .on_editor_message(&json!({ "seq": 3, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped", "{events:?}");
+    }
+
+    /// Regression test: AMSpiriT Lite's own web UI - confirmed live to get
+    /// this right - resolves `stmt_addr` by range
+    /// (`sa >= a && sa < e`, in its own `basicRenderListing`), not by
+    /// comparing it to a statement's own start address, offset or not. A
+    /// fixed `+1` (guessing it shared the generic path's own "byte before
+    /// the first token" ROM semantics) happened to look plausible in
+    /// isolation but was never actually tested against a `stmt_addr` that
+    /// lands *inside* a statement rather than exactly on one boundary - the
+    /// case that actually matters, since nothing guarantees the emulator
+    /// only ever reports the very first byte.
+    #[test]
+    fn a_native_stop_resolves_the_statement_column_by_range_not_exact_match() {
+        let source = "10 a=1:b=2\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 2, "{index:?}");
+        let second_statement = index[1].clone();
+        assert_ne!(
+            second_statement.column, 1,
+            "the test fixture must actually exercise a non-first statement"
+        );
+
+        // A handful of bytes into the statement, not its very first one -
+        // an exact-match lookup (offset or not) would miss this.
+        for offset in [0u16, 1, 2] {
+            let mut session = native_session(source);
+            complete_attach(&mut session);
+
+            session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+            let incoming = session.peer_mut().drain();
+            for message in incoming {
+                session.on_emulator_message(&message);
+            }
+            let seq = last_sent_seq(&mut session);
+            answer(
+                &mut session,
+                seq,
+                json!({
+                    "body": {
+                        "cur_linenum": 10,
+                        "stmt_addr": second_statement.address + offset
+                    }
+                })
+            );
+
+            let frame = session
+                .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+                .unwrap();
+            let frame = &frame[0]["body"]["stackFrames"][0];
+            assert_eq!(frame["column"], second_statement.column, "offset {offset}");
+            assert_eq!(frame["endColumn"], second_statement.end_column, "offset {offset}");
+        }
+    }
+
+    /// Regression test, reported live: a `basicState` read taken right after
+    /// a fresh `pause` answered with `stmt_addr: 63` against a program
+    /// starting at `368` - stale bookkeeping nowhere near this program,
+    /// still on `cur_linenum`'s own real, correct line. Trusted anyway, the
+    /// floor search in `statement_position_in_line` found nothing at or
+    /// below `63` and silently fell back to this line's *first* statement -
+    /// "the right line is selected but not the right token." An address
+    /// outside the program's own range must be rejected instead: no
+    /// specific-token highlight at all (the (1,1) "whole line" fallback)
+    /// beats a confidently wrong one.
+    #[test]
+    fn a_stmt_addr_outside_the_program_is_rejected_not_floored_to_the_first_statement() {
+        let source = "10 a=1:b=2\n";
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 63 } })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["column"], 1, "{frame:?}");
+        assert_eq!(frame["endColumn"], 1, "{frame:?}");
+    }
+
+    /// Regression test, reported live as a wrong token being highlighted: a
+    /// captured session showed a new line's own first `stmt_addr` regularly
+    /// arriving a handful of bytes *below* this session's own tokeniser's
+    /// computed start for that line - the two tokenisers do not agree on
+    /// addresses byte-for-byte, and an unscoped floor search took that as
+    /// license to walk backward into the *previous* line's last statement.
+    /// `cur_linenum` is not in question (it is a stored line number, not a
+    /// computed address), so the lookup must never cross into a different
+    /// line than the one already known to be running - it should land on
+    /// this line's own first statement instead, however far off `stmt_addr`
+    /// actually is.
+    #[test]
+    fn a_native_stop_never_attributes_a_statement_to_the_wrong_line() {
+        let source = "10 a=1:b=2\n20 c=3\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 3, "{index:?}");
+        let line_20_statement = index[2].clone();
+        assert_eq!(line_20_statement.source_line, 1);
+
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        // Below this session's own computed start for line 20 - simulating
+        // the drift a live session actually showed, not a fixed offset.
+        answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "cur_linenum": 20,
+                    "stmt_addr": line_20_statement.address.wrapping_sub(5)
+                }
+            })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["line"], 2, "must stay on line 20, not spill back into line 10");
+        assert_eq!(frame["column"], line_20_statement.column);
+        assert_eq!(frame["endColumn"], line_20_statement.end_column);
+    }
+
+    /// The case `native_listing` exists for: even scoped to the right line,
+    /// an address-based floor search can still misattribute a later
+    /// statement to an earlier one once the two tokenisers' addresses have
+    /// drifted enough *within* that line - reported live as "the right line
+    /// is selected but not the right token". `native_listing`'s own
+    /// `{addr,end}` ranges come from the same tokeniser that produces
+    /// `stmt_addr`, so matching against them (by position, then translated
+    /// into this session's own `statement_index` at that same position)
+    /// sidesteps the drift entirely rather than working around it.
+    #[test]
+    fn a_native_stop_with_basic_listing_resolves_the_right_statement_despite_drift() {
+        let source = "10 a=1:b=2:c=3\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 3, "{index:?}");
+        let second_statement = index[1].clone();
+        assert_ne!(
+            second_statement.column, index[0].column,
+            "the test fixture must actually exercise a distinct second statement"
+        );
+
+        let mut session = native_session_with_listing(source);
+        session.attach().unwrap();
+        let attach_seq = last_sent_seq(&mut session);
+        answer(&mut session, attach_seq, json!({ "success": true }));
+
+        // Injection's own answer triggers a poll confirming the write has
+        // actually landed - not the basic_listing fetch directly any more,
+        // see `Purpose::NativeAwaitInjectionState`'s own doc comment.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // Confirmed landed: only now does the basic_listing fetch happen.
+        let landed_seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            landed_seq,
+            json!({ "body": { "prog_size": bytes.len() } })
+        );
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
+
+        // The second statement's own address, from AMSpiriT Lite's own
+        // tokeniser, deliberately *below* this session's own tokeniser's
+        // computed address for it - the drift a live session actually
+        // showed, but now with the authoritative range to resolve against.
+        let drifted_addr = second_statement.address.wrapping_sub(5);
+        let listing_seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            listing_seq,
+            json!({
+                "body": {
+                    "lines": [{
+                        "addr": 0,
+                        "num": 10,
+                        "stmts": [
+                            { "addr": 100, "end": drifted_addr, "colon": false, "text": "a=1", "vars": [] },
+                            { "addr": drifted_addr, "end": drifted_addr + 10, "colon": true, "text": "b=2", "vars": [] },
+                            { "addr": drifted_addr + 10, "end": drifted_addr + 20, "colon": true, "text": "c=3", "vars": [] }
+                        ]
+                    }]
+                }
+            })
+        );
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": drifted_addr } })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(
+            frame["column"], second_statement.column,
+            "must resolve to the second statement, not fall back to the first"
+        );
+        assert_eq!(frame["endColumn"], second_statement.end_column);
+    }
+
+    /// Regression test, reported live: `cpclib/basicInject` answers
+    /// `{"ok":true}` before the write has actually landed - a real session
+    /// showed `prog_size` sitting at the empty-program baseline (2) for
+    /// dozens of polls after injection's own answer came back, only
+    /// reflecting the real program roughly 1.5s later. Typing `RUN` before
+    /// that (the old, unguarded behaviour) found no program to run and left
+    /// the machine in direct mode for the rest of the session, with nothing
+    /// ever reported to the editor. `start_if_ready` (and, on this peer,
+    /// `RUN` itself) must not fire until a poll actually confirms the
+    /// program landed.
+    #[test]
+    fn injection_is_confirmed_landed_before_run_is_typed() {
+        let mut session = native_session(SOURCE);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+        complete_attach(&mut session);
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+
+        // Injection's own answer must not immediately hand off to
+        // start_if_ready (which would send `continue`) - a poll confirming
+        // the write landed comes first.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert!(
+            !session.peer_mut().commands().contains(&"continue".to_string()),
+            "{:?}",
+            session.peer_mut().commands()
+        );
+
+        // Still the empty-program baseline: keep polling, not start_if_ready.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "prog_size": 2 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert!(!session.peer_mut().commands().contains(&"continue".to_string()));
+
+        // Landed: only now does the launch actually proceed.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "prog_size": 20 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "continue");
+    }
+
+    /// Regression test, reported live: `configurationDone`'s own handler
+    /// calls `start_if_ready` *directly*, on the editor's own timing, with
+    /// no idea a native peer's injection might still be in flight - and it
+    /// almost always won that race, since it does not wait on anything.
+    /// Unlike `injection_is_confirmed_landed_before_run_is_typed` (which
+    /// happens to call `configurationDone` *before* `attach` even
+    /// completes, so `attached` alone was already blocking it), this drives
+    /// the exact order a real launch actually uses: attach completes first
+    /// (injection sent), *then* `configurationDone` arrives while that
+    /// injection is still unconfirmed.
+    #[test]
+    fn configuration_done_does_not_race_ahead_of_injection_landing() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+
+        // `configurationDone` arrives before injection's own answer has
+        // even come back - must not fire `continue`.
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+        assert!(
+            !session.peer_mut().commands().contains(&"continue".to_string()),
+            "{:?}",
+            session.peer_mut().commands()
+        );
+
+        // Injection's own answer arrives, kicking off the landing poll -
+        // still must not fire `continue` yet.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert!(!session.peer_mut().commands().contains(&"continue".to_string()));
+
+        // Landed: only now, even though `configurationDone` arrived long
+        // ago, does the launch actually proceed.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "prog_size": 20 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn step_in_sends_a_native_statement_step_and_reports_where_it_landed() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+        let step = session.peer_mut().last("cpclib/basicStep").unwrap();
+        assert_eq!(step["arguments"]["mode"], "stmt");
+
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        // basic_step's own answer triggers a follow-up basic_state read.
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+    }
+
+    /// Regression test, reported live: stepping through a multi-statement
+    /// line with "Step Into" never showed the *last* statement highlighted -
+    /// the display jumped straight from the second-to-last statement to the
+    /// first one of the next line. Root cause matches the `Continue` loop's
+    /// own stale-read bug (`a_stale_step_read_that_echoes_the_old_position_is_retried_not_reported_twice`):
+    /// `basicState` read right after `basicStep` can still echo the
+    /// pre-step position, so stepping *onto* the last statement reported the
+    /// second-to-last one again, and the next step (now genuinely landing on
+    /// the first statement of the next line) was the first read to ever show
+    /// real movement - the last statement's own position was never the one
+    /// actually reported.
+    #[test]
+    fn a_stale_step_in_read_is_retried_not_reported_as_no_movement() {
+        let source = "10 a=1:b=2:c=3\n20 d=4\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        let second_statement_address = index[1].address; // line 10's "b=2"
+        let third_statement_address = index[2].address; // line 10's "c=3"
+
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        // A real stop on the second statement first, establishing a known
+        // "before" position.
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": second_statement_address } })
+        );
+
+        // Step Into again, onto the third (last) statement - but the read
+        // right after the step echoes back the exact same position as
+        // before it: stale, not a second real visit to the same statement.
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": second_statement_address } })
+        );
+        assert!(events.is_empty(), "a stale echo must not be reported as a stop: {events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState",
+            "retried with another read, not another step"
+        );
+
+        // The retry shows where the step actually landed - the real, last
+        // statement, reported normally instead of silently skipped.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": third_statement_address } })
+        );
+        assert_eq!(events[0]["event"], "stopped", "{events:?}");
+        assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["body"]["column"], index[2].column);
+    }
+
+    #[test]
+    fn next_sends_a_native_line_step() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "next", "arguments": {} }))
+            .unwrap();
+        let step = session.peer_mut().last("cpclib/basicStep").unwrap();
+        assert_eq!(step["arguments"]["mode"], "line");
+    }
+
+    /// Regression test, reported live: with breakpoints armed through
+    /// `cpclib/basicSetBreakpoints`, `Continue` still never stopped, and a
+    /// live session showed AMSpiriT Lite reporting a spontaneous "breakpoint"
+    /// stop with *zero* breakpoints set, and resuming on its own with
+    /// nothing having asked it to - proof its own `/api/basic_bp` cannot be
+    /// trusted to decide this. `Continue` now drives the same statement
+    /// stepper `stepIn` already uses, in a loop, deciding the stop here.
+    #[test]
+    fn continue_on_a_native_peer_steps_past_lines_it_does_not_care_about() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let step = session.peer_mut().last("cpclib/basicStep").unwrap();
+        assert_eq!(step["arguments"]["mode"], "stmt");
+
+        // Lands on line 10, not the armed line: step again rather than
+        // reporting anything.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep",
+            "not a match - the loop must keep going, not stop"
+        );
+
+        // Lands on line 20, the armed line: report it.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    /// Regression test, reported live: a breakpoint on a multi-statement
+    /// line inside a tight self-loop (`a=1:b=2:GOTO <same line>`) stopped
+    /// once per statement on the line, every pass - not once per loop
+    /// iteration, which is all the user asked for. Confirms
+    /// `decide_continue_stop` only reports a breakpoint stop for the line's
+    /// own *first* statement, and keeps stepping (not stopping) through the
+    /// rest of that same pass.
+    fn a_breakpoint_stops_once_per_line_entry_not_once_per_statement_on_it() {
+        let source = "10 x=0\n20 a=1:b=2:GOTO 20\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        // Line 20's three statements, in order - only their relative order
+        // matters here, not their exact tokenised lengths.
+        let first = basic::PROGRAM_START + 10;
+        let second = basic::PROGRAM_START + 15;
+        let third = basic::PROGRAM_START + 20;
+        session.native_listing =
+            Some(HashMap::from([(20u16, vec![(first, second), (second, third), (third, third + 6)])]));
+
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        session.peer_mut().last("cpclib/basicStep").unwrap();
+
+        // First statement of line 20: a real breakpoint hit.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": first } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+
+        // The user clicks Continue: the loop re-enters line 20, this time
+        // at its *second* statement (a real `basicStep` landed there) -
+        // must not re-report the breakpoint, must keep stepping instead.
+        session
+            .on_editor_message(&json!({ "seq": 3, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": second } })
+        );
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep",
+            "still on the breakpoint line but not its first statement - must keep going"
+        );
+    }
+
+    /// Regression test, reported live: `basicState` read right after
+    /// `basicStep` can still echo the address from *before* the step - the
+    /// emulator's own `basic_bp` SSE event already named the real, later
+    /// line, but this read had not caught up yet. Trusted anyway, a
+    /// breakpoint the user had already been stopped at once got reported a
+    /// *second* time as soon as they clicked Continue, for a step that had
+    /// actually already moved on. One extra `basicState` read, triggered
+    /// only when nothing appears to have moved, must resolve it instead.
+    #[test]
+    fn a_stale_step_read_that_echoes_the_old_position_is_retried_not_reported_twice() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, SOURCE);
+        let line_10_address = index[0].address; // "10 PRINT ..."
+        let line_20_address = index[1].address; // "20 GOTO 10"
+
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        // A real stop at the armed line first, establishing a known
+        // "before" position.
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": line_20_address } })
+        );
+
+        // Continue: one step runs, but the read right after it echoes back
+        // the exact same line and address as before the step - stale, not a
+        // second real visit.
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": line_20_address } })
+        );
+        assert!(events.is_empty(), "a stale echo must not be reported as a stop: {events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState",
+            "retried with another read, not another step"
+        );
+
+        // The retry shows where the step actually landed - real movement
+        // (line 20's own `GOTO 10` looping back), reported normally.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": line_10_address } })
+        );
+        assert!(events.is_empty(), "line 10 is not armed: {events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicStep");
+    }
+
+    /// Same race as the generic path's own (`pause_requested`'s doc
+    /// comment), for the native loop: a pause requested while a
+    /// `cpclib/basicStep` was already in flight used to be undone by the
+    /// loop's own next step, sent right behind it.
+    #[test]
+    fn a_pause_requested_mid_native_continue_stops_instead_of_stepping_again() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "continue", "arguments": {} }))
+            .unwrap();
+        // Captured before `pause` is sent - `pause` is forwarded under the
+        // *editor's* own seq (2), which would otherwise shadow this one as
+        // "the last thing sent".
+        let step_seq = last_sent_seq(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "pause", "arguments": { "threadId": 1 } }))
+            .unwrap();
+        session.peer_mut().push_incoming(json!({
+            "type": "response",
+            "request_seq": 2,
+            "success": true,
+            "command": "pause",
+            "body": {}
+        }));
+        for message in session.peer_mut().drain() {
+            session.on_emulator_message(&message);
+        }
+
+        // The step already in flight lands on line 10 - not a breakpoint,
+        // but the pause must win over sending another step.
+        answer(&mut session, step_seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "pause");
+        assert_ne!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep",
+            "the pause must win, not another step"
+        );
+    }
+
+    #[test]
+    fn an_unverified_breakpoint_is_reported_to_the_user() {
+        // The response used to be discarded outright (Purpose::Plain): a
+        // peer that answered "verified: false" left every breakpoint and
+        // step silently inert for the rest of the session, indistinguishable
+        // from the mechanism just not working at all.
+        let mut session = new_session(SOURCE);
+        session.attach().unwrap();
+        let attach_seq = last_sent_seq(&mut session);
+        answer(&mut session, attach_seq, json!({ "success": true }));
+
+        let arm_seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            arm_seq,
+            json!({
+                "success": true,
+                "body": {
+                    "breakpoints": [{
+                        "verified": false,
+                        "message": "all 16 breakpoint channels are in use"
+                    }]
+                }
+            })
+        );
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "output");
+        let output = events[0]["body"]["output"].as_str().unwrap();
+        assert!(output.contains("did not verify"), "{output}");
+        assert!(
+            output.contains("all 16 breakpoint channels are in use"),
+            "{output}"
+        );
+    }
+
+    #[test]
+    fn a_verified_breakpoint_is_silent() {
+        let mut session = new_session(SOURCE);
+        session.attach().unwrap();
+        let attach_seq = last_sent_seq(&mut session);
+        answer(&mut session, attach_seq, json!({ "success": true }));
+
+        let arm_seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            arm_seq,
+            json!({
+                "success": true,
+                "body": { "breakpoints": [{ "verified": true }] }
+            })
+        );
+
+        assert!(events.is_empty(), "{events:?}");
+    }
+
+    #[test]
+    fn pause_forwards_the_peers_answer_back_to_the_editor() {
+        // Regression test, reported live as "pause does not seem to work":
+        // `pause` is forwarded to the peer verbatim, under the *editor's*
+        // own seq rather than one of this session's own tracked requests -
+        // so when the peer's answer came back, `is_our_answer` never
+        // recognised it and `on_emulator_message` silently dropped it. The
+        // editor's own `pause` request never got a response at all.
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        let response = session
+            .on_editor_message(&json!({ "seq": 7, "command": "pause", "arguments": { "threadId": 1 } }))
+            .unwrap();
+        assert!(
+            response.is_empty(),
+            "no immediate ack - the peer's own answer is what completes it"
+        );
+        assert_eq!(session.peer_mut().last("pause").unwrap()["seq"], 7);
+
+        // The peer answers using that same editor seq, since the request
+        // was forwarded unchanged.
+        session.peer_mut().push_incoming(json!({
+            "type": "response",
+            "request_seq": 7,
+            "success": true,
+            "command": "pause",
+            "body": {}
+        }));
+        let incoming = session.peer_mut().drain();
+        let mut events = Vec::new();
+        for message in incoming {
+            events.extend(session.on_emulator_message(&message));
+        }
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["request_seq"], 7);
+        assert_eq!(events[0]["success"], true);
+    }
+
+    /// Regression test, reported live: pausing while the generic path's own
+    /// "not a breakpoint line, keep going" logic was mid-flight raced that
+    /// very `continue` - both land at the emulator, ours last, undoing the
+    /// pause before the editor ever saw a stop. No breakpoint is armed here
+    /// on purpose, so without the fix every statement boundary auto-continues
+    /// forever and `pause` never gets a chance to matter.
+    #[test]
+    fn a_pause_requested_mid_auto_continue_stops_at_the_next_statement_instead_of_being_raced() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "pause", "arguments": { "threadId": 1 } }))
+            .unwrap();
+        session.peer_mut().push_incoming(json!({
+            "type": "response",
+            "request_seq": 1,
+            "success": true,
+            "command": "pause",
+            "body": {}
+        }));
+        for message in session.peer_mut().drain() {
+            session.on_emulator_message(&message);
+        }
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        for message in session.peer_mut().drain() {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let field_target = 0x9000u16;
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&field_target.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "pause");
+        assert_ne!(
+            session.peer_mut().commands().last().unwrap(),
+            "continue",
+            "the pause must win, not another auto-continue"
+        );
+    }
+
+    #[test]
+    fn configuration_done_starts_the_program_once_attached() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        let before = session.peer_mut().commands().len();
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let commands = session.peer_mut().commands();
+        assert!(commands.len() > before);
+        assert_eq!(commands.last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn the_first_resume_types_run_on_a_peer_that_supports_autotype() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/autotype"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        // The peer answering the very first `continue` is what triggers the
+        // autotype - matching AMSpiritLite's own `continue` handling, which
+        // does not answer until the machine is genuinely running.
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+
+        let last = session.peer_mut().sent.last().unwrap();
+        assert_eq!(last["command"], "cpclib/autotype");
+        assert_eq!(last["arguments"]["text"], "RUN\n");
+    }
+
+    #[test]
+    fn the_first_resume_types_nothing_on_a_peer_without_autotype() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let continue_seq = last_sent_seq(&mut session);
+        let before = session.peer_mut().commands().len();
+        answer(&mut session, continue_seq, json!({ "success": true }));
+
+        // Plain RecordingPeer claims no cpclib/autotype support - nothing
+        // extra should have been sent for it to reject or misinterpret.
+        assert_eq!(session.peer_mut().commands().len(), before);
+    }
+
+    /// Regression test, reported live: a breakpoint armed *before* launch
+    /// went uncaught on a native peer's very first run - the program simply
+    /// finished, and only an unrelated later manual pause ever stopped
+    /// anything. Drives `autotype_run`'s own poll-then-pause chain
+    /// (`NativeAwaitRun` -> `NativeAwaitRunState` -> `NativeAwaitRunPaused`
+    /// -> `NativeAwaitRunSettled`) end to end, through the "still typing
+    /// RUN" direct-mode polls a launch actually has to get through before a
+    /// real line ever shows up, confirming the breakpoint set before launch
+    /// is honored right where the poll-and-pause lands.
+    #[test]
+    fn a_breakpoint_armed_before_launch_is_caught_on_the_first_run() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+
+        // Injection confirmed landed before anything else can proceed - see
+        // `injection_landed`'s own doc comment for why `configurationDone`
+        // (right below) cannot be allowed to race ahead of this.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        // The bare `continue` that unfreezes the machine so RUN can be typed.
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/autotype");
+
+        // Autotype's own answer must now kick off the poll loop, not stop
+        // here trusting /api/basic_bp.
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // A couple of polls still typing RUN: direct mode, nothing reported,
+        // and critically no `basicStep` in between - stepping this window is
+        // exactly what used to stop RUN from ever registering.
+        for _ in 0..2 {
+            let seq = last_sent_seq(&mut session);
+            let events = answer(
+                &mut session,
+                seq,
+                json!({ "body": { "cur_linenum": 65535, "prog_size": 20 } })
+            );
+            assert!(events.is_empty(), "{events:?}");
+            assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        }
+
+        // A real line at last: stop free-running before doing anything else.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20, "prog_size": 20 } }));
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
+
+        let pause_seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, pause_seq, json!({ "success": true }));
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // Only now does this session start caring about breakpoints: line
+        // 20, the one armed before launch, is honored on this very first
+        // real line instead of being skipped past.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    /// Regression test, reported live: with no breakpoints set at all
+    /// (`stopOnEntry` off, the launch's own default), the session used to
+    /// pause unconditionally at whatever line the launch's free-run poll
+    /// first happened to catch - not a meaningful entry point, just
+    /// "wherever the machine was" by the time the poll asked. Confirms the
+    /// fix: a real line that is not a breakpoint, with `stopOnEntry` off,
+    /// keeps the machine free-running (still no `basicStep` in the mix,
+    /// same reasoning as `autotype_run`'s own doc comment) instead of
+    /// pausing and reporting a stop nobody asked for - and that a later
+    /// breakpoint line is still honored once actually reached.
+    fn a_real_line_with_no_breakpoint_and_no_stop_on_entry_keeps_running() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
+        // A breakpoint on line 20 only - line 10 is not one.
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+
+        // Line 10 at last - a real line, but not a breakpoint. No pause: the
+        // session keeps polling instead.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 10, "prog_size": 20 } }));
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState",
+            "a non-breakpoint line with stopOnEntry off must not pause"
+        );
+
+        // Line 20 - the armed breakpoint - is still honored once reached.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20, "prog_size": 20 } }));
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
+    }
+
+    #[test]
+    /// Regression test for the corruption `native_reinjection_attempts`'s own
+    /// doc comment describes: `prog_size` reverting to the empty baseline
+    /// mid-poll, well after injection was already confirmed landed once.
+    /// Live-observed only against a real AMSpiriT Lite instance under real
+    /// host load, never reproduced in isolation - this test models the
+    /// signature (the observable symptom over the wire), not the emulator's
+    /// own internal cause, which is unknown. Confirms the session recovers
+    /// by re-injecting and retyping `RUN` instead of polling a direct-mode
+    /// prompt forever with nothing to explain why.
+    fn prog_size_reverting_mid_poll_triggers_a_reinjection_and_retype() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        // Not what this test is about - `stopOnEntry` on, so the clean run
+        // this test checks for after recovery still pauses on the first
+        // real line the same way it did before the "don't stop for no
+        // reason" fix, without pulling that fix's own test coverage in here
+        // too.
+        session.set_stop_on_entry(true);
+        complete_attach(&mut session);
+
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // The poll sees `prog_size` back at the empty baseline, despite
+        // injection already having been confirmed landed once - the
+        // corruption signature. No stop is reported; the session quietly
+        // re-injects instead.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 65535, "prog_size": 2 } })
+        );
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["event"], "output");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+
+        // The recovery re-injection lands, confirmed the same way the launch
+        // itself confirms it.
+        let reinject_seq = last_sent_seq(&mut session);
+        answer(&mut session, reinject_seq, json!({ "success": true }));
+        let relanded_seq = last_sent_seq(&mut session);
+        answer(&mut session, relanded_seq, json!({ "body": { "prog_size": 20 } }));
+
+        // Unlike the very first landing, `self.started` is already `true` at
+        // this point - `start_if_ready` would be a silent no-op, so this
+        // must retype `RUN` directly instead.
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/autotype");
+        let reautotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, reautotype_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // From here on, a clean run proceeds exactly like any other.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "prog_size": 20 } })
+        );
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
+    }
+
+    /// Regression test, reported live: `pause` is itself asynchronous - the
+    /// state the poll loop saw right before sending it (a line with no
+    /// breakpoint on it) was already stale by the time the machine actually
+    /// stopped (landed on a different, later line instead). Feeding that into
+    /// `NativeContinueState`'s own "not a line I care about, keep stepping"
+    /// logic reproduced the exact hang this whole chain exists to avoid: it
+    /// restarted `cpclib/basicStep`, which ran the program straight back
+    /// into direct mode without ever reporting a sensible stop. This
+    /// confirms the fix - report a stop right where the pause landed,
+    /// breakpoint or not, with no `basicStep` sent at any point in the
+    /// chain.
+    #[test]
+    fn a_pause_after_run_lands_past_the_line_the_poll_saw_and_still_stops_cleanly() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        // This test is about the pause/settle race itself, not about
+        // whether the launch stops at all with no breakpoints set (see the
+        // "don't stop for no reason" fix's own tests for that) - `stopOnEntry`
+        // is what makes the first real line a reason to pause here, same as
+        // before that fix.
+        session.set_stop_on_entry(true);
+        complete_attach(&mut session);
+
+        // Injection confirmed landed before anything else can proceed.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+
+        // The poll sees a real line (10, no breakpoint on it) and asks to
+        // pause.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "cur_linenum": 10, "prog_size": 20 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
+
+        // By the time the pause actually lands, the machine has moved on to
+        // a different, also non-breakpoint line - not the one that
+        // triggered the pause.
+        let pause_seq = last_sent_seq(&mut session);
+        answer(&mut session, pause_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20 } }));
+
+        // A stop is reported right here - no `cpclib/basicStep` sent at any
+        // point in this chain.
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "entry");
+        assert!(
+            !session.peer_mut().commands().contains(&"cpclib/basicStep".to_string()),
+            "{:?}",
+            session.peer_mut().commands()
+        );
+    }
+
+    #[test]
+    fn set_breakpoints_verifies_a_line_that_starts_a_basic_line() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // "20 GOTO 10"
+            }))
+            .unwrap();
+
+        assert_eq!(response.len(), 1);
+        assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], true);
+    }
+
+    #[test]
+    /// Regression test, reported live: VS Code sends one `setBreakpoints`
+    /// request per source file that carries a breakpoint, to every active
+    /// debug session - not just the file it is actually debugging. A
+    /// leftover breakpoint on an unrelated file (`hello.bas` line 2, never
+    /// cleared from an earlier session) got silently reinterpreted against
+    /// this session's own line index (built for a different program),
+    /// arming a breakpoint on whatever BASIC line happened to share that
+    /// line number - the user set no breakpoint on the program actually
+    /// being debugged and had no way to know why it stopped. Confirms a
+    /// request naming a different file is rejected rather than touching
+    /// `self.breakpoints`.
+    fn set_breakpoints_for_a_different_file_are_rejected_not_reinterpreted() {
+        let mut session = new_session(SOURCE); // source_path is "test.bas"
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": {
+                    "breakpoints": [{ "line": 2 }],
+                    "source": { "name": "hello.bas", "path": "hello.bas" }
+                }
+            }))
+            .unwrap();
+
+        assert_eq!(response.len(), 1);
+        assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], false);
+        assert!(session.breakpoints.is_empty());
+    }
+
+    #[test]
+    fn set_breakpoints_rejects_a_line_with_no_basic_line_number() {
+        // A trailing blank line (common in real files) starts no BASIC
+        // line of its own - built directly rather than through
+        // `new_session`, since the parser itself does not tolerate one
+        // (irrelevant here: `line_index_from_source` is a separate, plain
+        // text scan, and only it is under test).
+        let program_bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            "10 PRINT \"HI\"\n20 GOTO 10\n\n",
+            basic::PROGRAM_START,
+            &program_bytes
+        );
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 3 }] } // the blank line
+            }))
+            .unwrap();
+
+        assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], false);
+    }
+
+    /// Drives one full breakpoint stop-or-continue cycle: `attach`, arm the
+    /// single Z80 breakpoint, then a `stopped` event from the peer, feeding
+    /// in `current_line`'s two bytes as the current BASIC line.
+    fn stop_at_line(session: &mut BasicSession<RecordingPeer>, current_line: u16) -> Vec<Value> {
+        complete_attach(session);
+        session.peer_mut().push_incoming(json!({
+            "type": "event",
+            "event": "stopped",
+            "body": {}
+        }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        // First round trip: PTR_CURRENT_STATEMENT (a statement address, not
+        // under test here - out of range on purpose so it never happens to
+        // collide with a real entry) followed immediately by
+        // PTR_CURRENT_LINE_NUMBER_FIELD -> a pointer, both in one 4-byte
+        // read.
+        let seq = last_sent_seq(session);
+        let field_target = 0x9000u16;
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&field_target.to_le_bytes());
+        answer(session, seq, read_memory_response(&response_bytes));
+
+        // Second round trip: dereferencing that pointer -> the line number.
+        let seq = last_sent_seq(session);
+        answer(session, seq, read_memory_response(&current_line.to_le_bytes()))
+    }
+
+    #[test]
+    fn a_stop_on_a_breakpoint_line_is_reported() {
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        let events = stop_at_line(&mut session, 20);
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+        // The custom event editor-side highlighting is driven by - see
+        // `report_stopped`'s doc comment for why the standard `stopped`
+        // event's own column/endColumn are not enough on their own.
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
+        assert_eq!(events[1]["body"]["line"], 2);
+    }
+
+    #[test]
+    fn a_stop_on_a_non_breakpoint_line_resumes_silently() {
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20 only
+            }))
+            .unwrap();
+
+        let commands_before = session.peer_mut().commands().len();
+        let events = stop_at_line(&mut session, 10); // not a breakpoint
+
+        assert!(events.is_empty(), "no stopped event should reach the editor");
+        let commands = session.peer_mut().commands();
+        assert!(commands.len() > commands_before);
+        assert_eq!(commands.last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn next_stops_at_the_next_line_even_with_no_breakpoint_there() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "next", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let field_target = 0x9000u16;
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&field_target.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
+    }
+
+    #[test]
+    fn step_in_stops_at_every_statement_on_a_multi_statement_line() {
+        // "stepIn stops at the very next statement, whatever line it is on" -
+        // reported directly: `next` executes a multi-statement line whole,
+        // which is expected, but `stepIn` did too, which is not.
+        let source = "10 a=1:b=2:c=3\n20 d=4\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        // The hit reports line 10 again (its second statement) - stepIn
+        // must stop here even though the *line* has not changed.
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
+    }
+
+    #[test]
+    fn next_skips_every_statement_on_the_current_line_and_stops_only_on_a_new_one() {
+        let source = "10 a=1:b=2:c=3\n20 d=4\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        // A real "next" always follows a previous stop - establish current_line
+        // = 10 first, the same way stepping through the debugger would.
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 1 }] } // "10 a=1:b=2:c=3"
+            }))
+            .unwrap();
+        stop_at_line(&mut session, 10);
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "next", "arguments": {} }))
+            .unwrap();
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        // First hit after "next": still line 10 (its second statement) -
+        // must NOT stop, matching "step over the whole line".
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+        assert!(events.is_empty(), "{events:?}");
+
+        // Silently continuing sent its own "continue"; the peer, having run
+        // on, hits the breakpoint again for line 20 - which "next" does
+        // stop at.
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9100u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
+    }
+
+    #[test]
+    fn direct_mode_after_the_program_has_run_is_reported_as_entry() {
+        // Realistic scenario: the program has already run at least one
+        // real line, then returns to direct mode - a genuine "the program
+        // ended" transition, worth reporting.
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 1 }] } // line 10
+            }))
+            .unwrap();
+        stop_at_line(&mut session, 10);
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "next", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0u16.to_le_bytes());
+        let events = answer(&mut session, seq, read_memory_response(&response_bytes));
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "entry");
+    }
+
+    #[test]
+    fn direct_mode_before_the_program_has_run_a_line_is_not_reported() {
+        // Regression test, reported live: the very first statement
+        // breakpoint hit of a session is the autotyped "RUN" command
+        // itself, executed as a direct-mode statement before the program
+        // has run a single line of its own - PTR_CURRENT_LINE_NUMBER_FIELD
+        // reads 0 (direct mode) exactly the same way "the program just
+        // ended" does. Reporting it unconditionally produced a spurious
+        // "stopped" the instant the program was told to run at all, before
+        // any real breakpoint had a chance to matter - "a breakpoint
+        // raised just before the first instruction".
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let commands_before = session.peer_mut().commands().len();
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0u16.to_le_bytes());
+        let events = answer(&mut session, seq, read_memory_response(&response_bytes));
+
+        assert!(events.is_empty(), "{events:?}");
+        // Silently resumed rather than left hanging.
+        let commands = session.peer_mut().commands();
+        assert!(commands.len() > commands_before);
+        assert_eq!(commands.last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn scopes_offers_both_variables_and_workspace() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = &response[0]["body"]["scopes"];
+        assert_eq!(scopes[0]["name"], "Variables");
+        assert_eq!(scopes[0]["variablesReference"], VARIABLES_REFERENCE);
+        // VS Code only auto-highlights a changed value between stops for a
+        // scope hinted this way - reported live as missing entirely.
+        assert_eq!(scopes[0]["presentationHint"], "registers");
+        assert_eq!(scopes[1]["name"], "Workspace");
+        assert_eq!(scopes[1]["variablesReference"], WORKSPACE_REFERENCE);
+    }
+
+    /// Requested live: chip state visible from the BASIC debugger, to
+    /// diagnose a screen/timing problem the BASIC variables alone cannot
+    /// explain - a broken snapshot, a CRTC left in a bad state.
+    #[test]
+    fn scopes_offers_chip_panes_on_a_native_peer_that_supports_them() {
+        let mut session = native_session_with_chips(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = response[0]["body"]["scopes"].as_array().unwrap();
+        let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["Variables", "Workspace", "CRTC", "Gate Array", "PSG", "Disc"]);
+        let crtc = scopes.iter().find(|s| s["name"] == "CRTC").unwrap();
+        assert_eq!(crtc["variablesReference"], crate::inspect::CRTC_REFERENCE);
+        // Opt-in only: this session has already seen what hammering AMSpiriT
+        // Lite's HTTP server with requests nobody asked for does to it.
+        assert_eq!(crtc["expensive"], true);
+    }
+
+    /// A native peer without the dedicated per-chip endpoints (an older
+    /// build, or a future native peer that never grows them) still works -
+    /// just without the extra panes, rather than advertising a scope
+    /// nothing can answer.
+    #[test]
+    fn scopes_omits_chip_panes_on_a_native_peer_without_them() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = response[0]["body"]["scopes"].as_array().unwrap();
+        assert_eq!(scopes.len(), 2, "{scopes:?}");
+    }
+
+    /// Each chip has its own endpoint and its own round trip - no shared
+    /// `machineState` snapshot to batch behind, unlike the Z80 session's own
+    /// chip scopes.
+    #[test]
+    fn a_chip_scope_variables_request_fetches_its_own_endpoint_and_answers_the_right_request() {
+        let mut session = native_session_with_chips(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "variables",
+                "arguments": { "variablesReference": crate::inspect::PSG_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/psg");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "regs": [1, 2, 3] } }));
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["command"], "variables");
+        assert_eq!(events[0]["request_seq"], 9);
+        assert!(events[0]["body"]["variables"].is_array());
+    }
+
+    #[test]
+    /// Reported live: the generic (1984js) peer's BASIC debug session had no
+    /// chip scopes at all, "unlike AMSpiriT". The Z80 session already
+    /// solves this for the same peer via a `cpclib/machineState` snapshot
+    /// fallback - confirms that scope is now offered here too, reusing (not
+    /// reimplementing) the exact same decode.
+    fn scopes_offers_chip_panes_on_a_generic_peer_with_machine_state() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/machineState"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = response[0]["body"]["scopes"].as_array().unwrap();
+        let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
+        assert_eq!(
+            names,
+            ["Variables", "Workspace", "CRTC", "Gate Array", "PSG", "PPI", "Disc"]
+        );
+    }
+
+    #[test]
+    /// Confirms the generic chip-scope fallback actually decodes the
+    /// snapshot `cpclib/machineState` answers with, the same way the Z80
+    /// session's own `Purpose::MachineState` does - not just that the scope
+    /// is offered.
+    fn a_generic_chip_scope_decodes_the_machine_state_snapshot() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/machineState"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "variables",
+                "arguments": { "variablesReference": crate::inspect::CRTC_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/machineState");
+
+        let sna = cpclib_sna::Snapshot::new_6128().unwrap();
+        let mut snapshot_bytes = Vec::new();
+        sna.write_all(&mut snapshot_bytes, cpclib_sna::SnapshotVersion::V2)
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "snapshot": encode_base64(&snapshot_bytes) } })
+        );
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["command"], "variables");
+        assert_eq!(events[0]["request_seq"], 9);
+        assert!(events[0]["body"]["variables"].is_array());
+        assert!(
+            !events[0]["body"]["variables"].as_array().unwrap().is_empty(),
+            "a real snapshot must decode to real CRTC register entries, {events:?}"
+        );
+    }
+
+    #[test]
+    /// Reported live: `-sv` (the WinAPE-style screen viewer) only existed on
+    /// the Z80 session - a user debugging BASIC had no way to open it at
+    /// all. Confirms the native (AmspiritLite) path's three-round-trip
+    /// chain - CRTC, then Gate Array, then the pixel bytes - ends in a real
+    /// `cpclib/screenView` event, not just that each step is dispatched.
+    fn sv_console_command_renders_a_screen_on_the_native_path() {
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/basicState", "cpclib/crtc", "cpclib/ga"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes()
+        );
+        complete_attach(&mut session);
+
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "evaluate",
+                "arguments": { "expression": "-sv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/crtc");
+
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/ga");
+
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "mode": 1, "ink_idx": vec![0; 16], "border_idx": 0 } })
+        );
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "readMemory");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&[0u8; 0x4000]));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/screenView");
+        assert!(events[0]["body"]["png"].as_str().is_some_and(|s| !s.is_empty()));
+        assert_eq!(events[1]["command"], "evaluate");
+        assert_eq!(events[1]["request_seq"], 9);
+    }
+
+    #[test]
+    /// The interactive panel's own controls re-issue `-sv` with all four
+    /// arguments filled in once the user changes one - confirms each is
+    /// actually honoured end to end, not just parsed: an explicit address
+    /// wins over the CRTC's own R12/R13 (regs here would compute 0xC000,
+    /// the override asks for 0x8000 instead), an explicit mode wins over
+    /// the Gate Array's own reported mode (GA says mode 0, the override
+    /// asks for mode 2), and width/height land in the event body verbatim.
+    fn sv_console_command_with_all_four_arguments_honours_every_override() {
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/basicState", "cpclib/crtc", "cpclib/ga"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes()
+        );
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "evaluate",
+                "arguments": { "expression": "-sv 0x8000 40 100 2" }
+            }))
+            .unwrap();
+
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } }));
+
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "mode": 0, "ink_idx": vec![0; 16], "border_idx": 0 } })
+        );
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&[0u8; 0x10000]));
+        assert_eq!(events[0]["event"], "cpclib/screenView", "{events:?}");
+        let body = &events[0]["body"];
+        assert_eq!(body["address"], 0x8000, "address override was not honoured: {body}");
+        assert_eq!(body["width"], 40, "width override was not honoured: {body}");
+        assert_eq!(body["height"], 100, "height override was not honoured: {body}");
+        assert_eq!(body["mode"], 2, "mode override was not honoured: {body}");
+    }
+
+    #[test]
+    /// Same as above, on the generic (non-AmspiritLite) path: a single
+    /// `cpclib/machineState` snapshot must be enough, with no CRTC/GA round
+    /// trips at all.
+    fn sv_console_command_renders_a_screen_on_the_generic_path() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "evaluate",
+                "arguments": { "expression": "-sv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/machineState");
+
+        let sna = cpclib_sna::Snapshot::new_6128().unwrap();
+        let mut snapshot_bytes = Vec::new();
+        sna.write_all(&mut snapshot_bytes, cpclib_sna::SnapshotVersion::V2)
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "snapshot": encode_base64(&snapshot_bytes) } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/screenView");
+        assert!(events[0]["body"]["png"].as_str().is_some_and(|s| !s.is_empty()));
+    }
+
+    #[test]
+    /// Reported live: no way to peek at raw memory while debugging BASIC.
+    /// Confirms `-mv`, typed as an `evaluate` expression the same way the
+    /// Z80 session's own console commands are, opens the exact same
+    /// `cpclib/memoryView` panel that session already renders.
+    fn mv_console_command_opens_a_memory_view() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-mv 0xC000 4" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(request["arguments"]["memoryReference"], address_reference(0xC000));
+        assert_eq!(request["arguments"]["count"], 4);
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&[1, 2, 3, 4]));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/memoryView");
+        assert_eq!(events[0]["body"]["address"], 0xC000);
+        assert_eq!(events[0]["body"]["bytes"], json!([1, 2, 3, 4]));
+        assert_eq!(events[1]["command"], "evaluate");
+    }
+
+    #[test]
+    /// Same as `mv_console_command_opens_a_memory_view`, for `-dv` and
+    /// `cpclib/disassemblyView` - decoded with `crate::disassemble`, the
+    /// exact functions the Z80 session's own panel already uses.
+    fn dv_console_command_opens_a_disassembly_view() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-dv 0x4000 2" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(request["arguments"]["memoryReference"], address_reference(0x4000));
+        assert_eq!(request["arguments"]["count"], 8, "2 instructions, 4 bytes worst case each");
+
+        let seq = last_sent_seq(&mut session);
+        // Two NOPs decode cleanly with no ambiguity.
+        let events = answer(&mut session, seq, read_memory_response(&[0x00, 0x00]));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/disassemblyView");
+        assert!(!events[0]["body"]["instructions"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    /// Requested live: a way to see the live BASIC listing sitting in
+    /// memory, not just the source file the session launched with (which
+    /// may have moved on - `RENUM`, a direct-mode edit). On the generic
+    /// peer, confirms the raw program bytes are read and decoded through
+    /// `cpclib_basic::BasicProgram` - the same crate this session's own
+    /// launch-time tokenising already goes through.
+    fn bv_console_command_decodes_program_bytes_on_the_generic_peer() {
+        let mut session = new_session(SOURCE);
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-bv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(basic::PROGRAM_START as u32)
+        );
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&bytes));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/basicListingView");
+        let text = events[0]["body"]["text"].as_str().unwrap();
+        assert!(text.contains("10"), "{text}");
+        assert!(text.contains("20"), "{text}");
+    }
+
+    #[test]
+    /// Same as `bv_console_command_decodes_program_bytes_on_the_generic_peer`,
+    /// on a native peer with `cpclib/basicListing` - trusts AMSpiriT's own
+    /// answer directly rather than re-decoding raw bytes with this crate's
+    /// own (different) tokeniser.
+    fn bv_console_command_uses_amspirits_own_listing_when_available() {
+        let mut session = native_session_with_listing(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-bv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "lines": [
+                        { "num": 10, "stmts": [{ "text": "PRINT \"HI\"" }] },
+                        { "num": 20, "stmts": [{ "text": "GOTO 10" }] }
+                    ]
+                }
+            })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/basicListingView");
+        assert_eq!(events[0]["body"]["text"], "10 PRINT \"HI\"\n20 GOTO 10\n");
+    }
+
+    #[test]
+    fn workspace_variables_on_a_generic_peer_reads_only_arrays_start() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": WORKSPACE_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty());
+
+        let armed = session.peer_mut().last("readMemory").unwrap();
+        assert_eq!(
+            armed["arguments"]["memoryReference"],
+            address_reference(basic::PTR_ARRAYS_START as u32)
+        );
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&0x200u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        let vars = &events[0]["body"]["variables"];
+        let names: Vec<&str> = vars.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"Program size"), "{names:?}");
+        assert!(names.contains(&"Variables zone"), "{names:?}");
+        assert!(names.contains(&"BASIC version"), "{names:?}");
+    }
+
+    #[test]
+    fn workspace_variables_on_a_native_peer_uses_basic_state_directly() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": WORKSPACE_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty());
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "txttop": 0x0200,
+                    "vartop": 0x0300,
+                    "arrend": 0x0300,
+                    "var_size": 256,
+                    "prog_size": 144,
+                    "basic_ver": 11,
+                    "stmt_addr": 0x0170
+                }
+            })
+        );
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        let vars = &events[0]["body"]["variables"];
+        let names: Vec<&str> = vars.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+        for expected in [
+            "Program size",
+            "Variables zone",
+            "Arrays zone",
+            "Free RAM",
+            "BASIC version",
+            "Current instruction"
+        ] {
+            assert!(names.contains(&expected), "missing {expected:?} in {names:?}");
+        }
+    }
+
+    #[test]
+    fn stack_trace_reports_the_current_line_and_its_source_line() {
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] }
+            }))
+            .unwrap();
+        stop_at_line(&mut session, 20);
+
+        let response = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+
+        assert_eq!(response.len(), 1);
+        let frame = &response[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["name"], "BASIC 20");
+        assert_eq!(frame["line"], 2);
+    }
+
+    #[test]
+    fn stack_trace_points_at_the_statement_that_actually_ran_not_the_lines_first_one() {
+        // "50 sp=0 : px=320 : py=300" is one BASIC line and several stops -
+        // this is what tells them apart, matching the Z80 session's own
+        // per-instruction highlight instead of only ever pointing at the
+        // start of the line.
+        let source = "10 a=1:b=2\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 2, "{index:?}");
+        let second_statement = index[1].clone();
+
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        let seq = last_sent_seq(&mut session);
+        // PTR_CURRENT_STATEMENT holds the byte *before* the statement's own
+        // first token (see `on_line_pointer_read`'s doc comment) - `- 1` is
+        // what a real ROM would actually report here.
+        let mut response_bytes = second_statement.address.wrapping_sub(1).to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+
+        let response = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &response[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["column"], second_statement.column);
+        assert_eq!(frame["endColumn"], second_statement.end_column);
+        assert_ne!(
+            second_statement.column, 1,
+            "the test fixture must actually exercise a non-first statement"
+        );
+    }
+
+    #[test]
+    fn a_refused_read_answers_with_an_empty_list_instead_of_panicking() {
+        // Regression test for a real crash: a `readMemory` the peer refused
+        // ("The CPC must be stopped for this request" - the editor asked
+        // for variables while a step was still in flight, a real DAP
+        // client's own doing, not a bug in this crate) came back with no
+        // `body.data`, which `read_memory_bytes` turns into an empty `Vec`
+        // rather than `None`. Indexing into that directly used to panic and
+        // take the whole adapter process down with it.
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": VARIABLES_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty());
+
+        // The generic peer's own live-txttop read (see `known_txttop`'s doc
+        // comment) happens first, ahead of the chain-heads/storage reads
+        // this test is actually about.
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        let refused = json!({
+            "type": "response",
+            "request_seq": seq,
+            "success": false,
+            "message": "notStopped",
+            "body": { "error": { "format": "The CPC must be stopped for this request" } }
+        });
+        session.peer_mut().push_incoming(refused.clone());
+        let mut events = Vec::new();
+        for message in session.peer_mut().drain() {
+            events.extend(session.on_emulator_message(&message));
+        }
+        // The second (storage) read refused the same way.
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        let mut second = refused;
+        second["request_seq"] = json!(seq);
+        session.peer_mut().push_incoming(second);
+        for message in session.peer_mut().drain() {
+            events.extend(session.on_emulator_message(&message));
+        }
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["body"]["variables"], json!([]));
+    }
+
+    #[test]
+    fn variables_request_decodes_a_chain_walk_from_two_reads() {
+        let mut session = new_session(SOURCE);
+
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": VARIABLES_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "waits on two reads before answering");
+
+        // The generic peer's own live-txttop read (see `known_txttop`'s doc
+        // comment) happens first, ahead of the chain-heads/storage reads
+        // this test is actually about.
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+
+        // 27 chain heads: 'I' (9th letter) points at offset 1.
+        let mut heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
+        heads[8 * 2] = 1;
+        heads[8 * 2 + 1] = 0;
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        answer(&mut session, seq, read_memory_response(&heads));
+
+        // One node: next=0, name "I" (bit 7 set on its one char), type
+        // 0x01 (integer), value 42.
+        let mut storage = vec![0u8, 0u8, b'I' | 0x80, 0x01, 42, 0];
+        storage.resize(64, 0);
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        let events = answer(&mut session, seq, read_memory_response(&storage));
+
+        assert_eq!(events.len(), 1);
+        let vars = &events[0]["body"]["variables"];
+        assert_eq!(vars[0]["name"], "I");
+        assert_eq!(vars[0]["value"], "42 (Integer)");
+        assert_eq!(vars[0]["type"], "Integer");
+    }
+
+    #[test]
+    /// Regression test, reported live: decoded variable names came back full
+    /// of stray control characters and most of a real program's variables
+    /// were missing outright. Root cause: `variables_base` computed where
+    /// variable storage starts from `program_start + program_len`, using
+    /// this session's own tokeniser's byte count - which, live-confirmed,
+    /// can disagree with AMSpiriT Lite's own ROM-tokeniser-driven `txttop`
+    /// by several bytes for a real program. Every variable read landed that
+    /// many bytes short of where the real data actually starts, and the
+    /// chain-walk decoder had no way to know. Confirms `variables_base`
+    /// prefers AMSpiriT's own live `txttop`, once seen, over the computed
+    /// address.
+    fn variables_base_prefers_amspirits_own_live_txttop_over_the_computed_one() {
+        let mut session = native_session(SOURCE);
+        let computed = basic::PROGRAM_START.wrapping_add(session.program_len);
+        assert_eq!(
+            session.variables_base(),
+            computed,
+            "falls back to the computed address before any basicState is seen"
+        );
+
+        // AMSpiriT's own tokeniser disagrees with this session's - an 8-byte
+        // gap was the live-observed case - so its real `txttop` is not the
+        // same address `program_len` alone would compute.
+        let live_txttop = computed - 8;
+        session.apply_native_basic_state(&json!({
+            "body": {
+                "cur_linenum": 10,
+                "stmt_addr": basic::PROGRAM_START,
+                "txttop": live_txttop
+            }
+        }));
+
+        assert_eq!(session.variables_base(), live_txttop);
+    }
+
+    #[test]
+    /// Regression test, reported live: the generic (1984js) peer's own
+    /// variable pane was missing "lots of things" compared to AMSpiriT's -
+    /// same root cause as `variables_base_prefers_amspirits_own_live_txttop_over_the_computed_one`,
+    /// but the generic peer has no self-reported `txttop` to prefer, only
+    /// [`basic::PTR_VARIABLES_START`], a ROM pointer readable like any other
+    /// memory. Confirms `begin_variables` reads it live, ahead of the chain-
+    /// heads/storage reads, and that the storage read actually uses the
+    /// live value rather than the computed estimate.
+    fn begin_variables_reads_ptr_variables_start_live_on_the_generic_peer() {
+        let mut session = new_session(SOURCE);
+        let computed = basic::PROGRAM_START.wrapping_add(session.program_len);
+
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": VARIABLES_REFERENCE }
+            }))
+            .unwrap();
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(basic::PTR_VARIABLES_START as u32)
+        );
+
+        let live_txttop = computed - 8;
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, read_memory_response(&live_txttop.to_le_bytes()));
+
+        let heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, read_memory_response(&heads));
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(live_txttop as u32),
+            "the storage read must target the live value, not the computed estimate"
+        );
+        assert_eq!(session.variables_base(), live_txttop);
+    }
+}

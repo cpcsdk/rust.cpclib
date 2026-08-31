@@ -1,0 +1,36 @@
+[package]
+name = "cpclib-dap"
+version.workspace = true
+description = "Debug Adapter Protocol adapter for Amstrad CPC assembly: source-level debugging on top of an emulator that speaks DAP in addresses"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "cpclib-dap"
+path = "src/main.rs"
+
+[dependencies]
+cpclib-project.workspace = true
+cpclib-asm.workspace = true
+cpclib-basic.workspace = true
+cpclib-sna.workspace = true
+# The Gate Array palette is a hardware colour number; turning one into an
+# actual colour is this crate's table, not a second copy of it here.
+cpclib-image.workspace = true
+image.workspace = true
+cpclib-tokens.workspace = true
+cpclib-common.workspace = true
+cpclib-runner = { workspace = true, default-features = false }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
+camino.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1"
+thiserror.workspace = true
+
+[dev-dependencies]
+camino-tempfile.workspace = true
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }

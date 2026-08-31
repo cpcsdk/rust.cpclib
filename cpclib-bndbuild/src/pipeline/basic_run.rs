@@ -25,7 +25,10 @@ pub const SUPPORTED_AUTO_RUN_EMULATORS: &[&str] = &[
     "cpcemupower",
     "caprice",
     "emulator1984",
-    "amspirit"
+    "amspirit",
+    // `-T/--run <name>` types RUN"<name> after boot, which is exactly what
+    // auto-run needs.
+    "amspiritlite"
 ];
 
 pub struct BasicRunOutcome {

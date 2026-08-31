@@ -20,6 +20,7 @@ use cpclib_tokens::{
 use ouroboros::*;
 
 use super::AssemblerWarning;
+use super::{ActiveExpansion, ActiveFrame, IncludeFrame, include_chain_note};
 use super::control::ControlOutputStore;
 use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
@@ -203,7 +204,12 @@ impl IncludeState {
         env: Arc<RwLock<&mut Env>>,
         fname: &str,
         namespace: Option<&str>,
-        once: bool
+        once: bool,
+        // The `INCLUDE`/`READ` directive's own span (in the *including*
+        // file) - `None` only when the token genuinely has none. Used to
+        // give both a normally-propagated error and a delayed `assert`
+        // failure a way back to this inclusion - see `Env::active_frames`.
+        call_site: Option<Z80Span>
     ) -> Result<(), Box<AssemblerError>> {
         let fname = {
             let env_guard = env.read().unwrap();
@@ -220,13 +226,31 @@ impl IncludeState {
         // Process the inclusion only if necessary
         if need_to_include {
             // most of the time, file has been loaded
-            let state = self.retreive_listing(env.clone(), &fname)?;
+            let state = self.retreive_listing(env.clone(), &fname).map_err(|e| {
+                match &call_site {
+                    Some(span) => e.with_chain_note(include_chain_note(span)),
+                    None => e
+                }
+            })?;
 
             // handle module if necessary
             if let Some(namespace) = namespace {
                 env.write().unwrap().enter_namespace(namespace)?;
                 // TODO handle the locating of error
                 //.map_err(|e| e.locate(span.clone()))?;
+            }
+
+            // Remember this inclusion, for as long as anything captured while
+            // visiting it (a delayed `assert` failure) or propagated out of
+            // it (a normal `Err`) might need to point back to it - see
+            // `Env::active_frames`.
+            if let Some(call_site) = &call_site {
+                env.write()
+                    .unwrap()
+                    .active_frames
+                    .push(ActiveFrame::Include(IncludeFrame {
+                        call_site: call_site.clone()
+                    }));
             }
 
             // Visit the included listing
@@ -242,7 +266,17 @@ impl IncludeState {
                 })
             };
             env.write().unwrap().leave_current_working_file();
-            res?;
+
+            if call_site.is_some() {
+                env.write().unwrap().active_frames.pop();
+            }
+
+            res.map_err(|e| {
+                match &call_site {
+                    Some(span) => e.with_chain_note(include_chain_note(span)),
+                    None => e
+                }
+            })?;
 
             // Remove module if necessary
             if namespace.is_some() {
@@ -253,6 +287,22 @@ impl IncludeState {
 
         Ok(())
     }
+}
+
+/// The project root is approximated as the process's current directory -
+/// where `basm`/`bndbuild` is invoked from, normally the project's own
+/// source directory. An included file resolved through it (the common case)
+/// ends up short and relative, matching how every other filename in these
+/// messages is already shown; anything outside it (or if the current
+/// directory can't even be determined) falls back to the resolved path
+/// as-is rather than failing or guessing.
+pub(crate) fn relative_to_project_root(path: &Utf8PathBuf) -> Utf8PathBuf {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| Utf8PathBuf::from_path_buf(cwd).ok())
+        .and_then(|cwd| path.strip_prefix(&cwd).ok())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| path.to_path_buf())
 }
 
 #[self_referencing]
@@ -285,7 +335,13 @@ impl Debug for IncludeStateInner {
 
 #[self_referencing]
 struct ExpandState {
-    listing: LocatedListing,
+    /// Wrapped in `Arc` so a clone of the buffer this macro/struct expansion
+    /// parsed can be kept alive independently of this `ExpandState` - e.g. by
+    /// `Env::active_expansion_listings`, so a `Z80Span` captured while this
+    /// expansion is being visited (an `assert` failure, say) stays valid even
+    /// after this `ExpandState` itself is dropped (overwritten by a later
+    /// pass, or the whole token tree going out of scope).
+    listing: Arc<LocatedListing>,
     #[borrows(listing)]
     #[covariant]
     processed_tokens: Vec<ProcessedToken<'this, LocatedToken>>
@@ -298,6 +354,15 @@ impl PartialEq for ExpandState {
 }
 
 impl Eq for ExpandState {}
+
+impl ExpandState {
+    /// A clone of the `Arc` owning this expansion's buffer - stashing this
+    /// somewhere with a longer lifetime (see `Env::active_expansion_listings`)
+    /// keeps the buffer alive independently of this `ExpandState`.
+    fn listing_arc(&self) -> Arc<LocatedListing> {
+        self.borrow_listing().clone()
+    }
+}
 
 impl Clone for ExpandState {
     fn clone(&self) -> Self {
@@ -937,21 +1002,21 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 
             // get the generated code
             // TODO handle some errors there
-            let (source, code, _flavor) = if let Some(r#macro) = &r#macro {
+            let (source, code, columns, _flavor) = if let Some(r#macro) = &r#macro {
                 let source = r#macro.source();
                 let flavor = r#macro.flavor();
-                let code = r#macro.expand(env)?;
-                (source, code, flavor)
+                let (code, columns) = r#macro.expand_with_columns(env)?;
+                (source, code, columns, flavor)
             }
             else {
                 let r#struct = r#struct
                     .as_ref()
                     .expect("BUG: r#struct should be Some when r#macro is None");
-                (
-                    r#struct.source(),
-                    r#struct.expand(env)?,
-                    AssemblerFlavor::Basm
-                )
+                // A struct's expansion is written from scratch - `DB`/`DW`
+                // lines built from its fields - rather than substituted into
+                // its body, so no column in it corresponds to one in the file.
+                let (code, columns) = r#struct.expand_with_columns(env)?;
+                (r#struct.source(), code, columns, AssemblerFlavor::Basm)
             };
 
             // Tokenize with the same parsing  parameters and context when possible
@@ -959,7 +1024,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
-                    let ctx_builder = ParserContextBuilder::default() // nothing is specified
+                    let mut ctx_builder = ParserContextBuilder::default() // nothing is specified
                         //                    from(span.state.clone())
                         .set_state(span.state.state)
                         .set_options(span.state.options.clone())
@@ -971,6 +1036,9 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                             if r#macro.is_some() { "MACRO" } else { "STRUCT" },
                             name,
                         ));
+                    if let Some(columns) = columns {
+                        ctx_builder = ctx_builder.set_expansion_columns(columns);
+                    }
                     parse_z80_with_context_builder(code, ctx_builder)?
                 },
                 _ => {
@@ -983,9 +1051,10 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
         // Only wrap env in Arc when needed for processed tokens list
         let env_arc = std::sync::Arc::new(std::sync::RwLock::new(&mut *env));
         let env_arc_macro = env_arc.clone();
+        let listing = std::sync::Arc::new(listing);
         let expand_state = ExpandStateTryBuilder {
             listing,
-            processed_tokens_builder: move |listing: &LocatedListing| {
+            processed_tokens_builder: move |listing: &std::sync::Arc<LocatedListing>| {
                 // Minimize lock scope: clone Arc, do not hold lock across call
                 build_processed_tokens_list(listing, env_arc_macro.clone())
             }
@@ -1271,6 +1340,10 @@ where
 
                     Some(ProcessedTokenState::Include(state)) => {
                         let fname = env.build_fname(self.token.include_fname())?;
+                        // `self.token.possible_span()`, not `self.possible_span()`, to
+                        // borrow only the `token` field - `state` above is already a
+                        // live exclusive borrow of `self.state`.
+                        let call_site = self.token.possible_span().cloned();
                         {
                             let env_arc_include: Arc<RwLock<&mut Env>> =
                                 std::sync::Arc::new(std::sync::RwLock::new(env));
@@ -1278,7 +1351,8 @@ where
                                 env_arc_include,
                                 &fname,
                                 self.token.include_namespace(),
-                                self.token.include_once()
+                                self.token.include_once(),
+                                call_site
                             )
                         }
                     },
@@ -1319,11 +1393,38 @@ where
 
                     Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
                         let name = self.token.macro_call_name();
+                        let location = env
+                            .symbols()
+                            .any_value(name)
+                            .ok()
+                            .flatten()
+                            .expect("BUG: macro name should exist in symbol table")
+                            .location()
+                            .cloned();
 
                         // Increment macro seed for this macro invocation
                         env.inc_macro_seed();
                         let macro_seed = env.macro_seed();
                         env.symbols_mut().push_seed(macro_seed);
+
+                        // Keep this expansion's buffer alive, and remember
+                        // this call's site, for as long as anything captured
+                        // while visiting it (e.g. a failed `assert`'s
+                        // `Z80Span`) might still need it - see
+                        // `Env::active_frames`.
+                        // `self.token.possible_span()` (not `self.possible_span()`)
+                        // to borrow only the `token` field - `state` below is
+                        // already a live exclusive borrow of `self.state`.
+                        let call_site = self.token.possible_span().cloned();
+                        let pushed_expansion = call_site.is_some();
+                        if let Some(call_site) = &call_site {
+                            env.active_frames.push(ActiveFrame::Expansion(ActiveExpansion {
+                                listing: state.listing_arc(),
+                                name: name.into(),
+                                location: location.clone(),
+                                call_site: call_site.clone()
+                            }));
+                        }
 
                         // save the number of prints to patch the ones added by the macro
                         // to properly locate them
@@ -1342,23 +1443,16 @@ where
 
                         // Always pop the seed, even if an error occurred (RAII principle)
                         env.symbols_mut().pop_seed();
+                        if pushed_expansion {
+                            env.active_frames.pop();
+                        }
 
                         process_result.map_err(|e| {
-                            let location = env
-                                .symbols()
-                                .any_value(name)
-                                .ok()
-                                .flatten()
-                                .expect("BUG: macro name should exist in symbol table")
-                                .location()
-                                .cloned();
-
                             let e = AssemblerError::MacroError {
                                 name: name.into(),
                                 root: e,
                                 location
                             };
-                            let _caller_span = self.possible_span();
                             relocate_error_with_span(e, self.token)
                         })?;
 
@@ -1574,5 +1668,35 @@ mod test_super {
             processed.unwrap().state,
             Some(ProcessedTokenState::Include(..))
         ));
+    }
+
+    #[test]
+    fn relative_to_project_root_shortens_a_path_under_the_current_directory() {
+        let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
+        let under_cwd = cwd.join("some/included/file.asm");
+        assert_eq!(
+            relative_to_project_root(&under_cwd),
+            Utf8PathBuf::from("some/included/file.asm")
+        );
+    }
+
+    #[test]
+    fn relative_to_project_root_leaves_an_already_relative_path_untouched() {
+        // The common case: `get_filename_to_read` typically resolves an
+        // include to a path relative to the current directory already (e.g.
+        // just "included.asm" when it's right there next to the main file) -
+        // `strip_prefix` against the (absolute) cwd can't apply to a relative
+        // path, so this must fall back to it unchanged rather than erroring.
+        let already_relative = Utf8PathBuf::from("spectral_sprites_bank.asm");
+        assert_eq!(
+            relative_to_project_root(&already_relative),
+            already_relative
+        );
+    }
+
+    #[test]
+    fn relative_to_project_root_leaves_a_path_outside_the_current_directory_unchanged() {
+        let outside = Utf8PathBuf::from("/some/other/place/file.asm");
+        assert_eq!(relative_to_project_root(&outside), outside);
     }
 }

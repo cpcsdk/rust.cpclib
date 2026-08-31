@@ -105,71 +105,67 @@ use cpclib_tokens::ExprResult;
 
 use crate::error::{AssemblerError, ExpressionError};
 
-
 macro_rules! min_max {
     ($name:ident) => {
-        pub fn $name(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+        pub fn $name<E: AsRef<ExprResult>>(args: &[E]) -> Result<ExprResult, Box<AssemblerError>> {
             if args.len() < 2 {
-                if args.len() == 1 && args[0].is_list() {
-                    return $name(args[0].list_content());
+                if args.len() == 1 && args[0].as_ref().is_list() {
+                    return $name(args[0].as_ref().list_content());
                 }
 
-
-                return Err(Box::new(
-                    AssemblerError::InvalidArgument{msg:
-                        format!("{} requires at least 2 arguments or a collection", stringify!($name)),
-                    }
-                ));
+                return Err(Box::new(AssemblerError::InvalidArgument {
+                    msg: format!(
+                        "{} requires at least 2 arguments or a collection",
+                        stringify!($name)
+                    )
+                }));
             }
 
-            let mut result = &args[0];
+            let mut result = args[0].as_ref();
             for arg in &args[1..] {
-                result = result.$name(arg);
+                result = result.$name(arg.as_ref());
             }
             Ok(result.clone())
         }
     };
 }
 
-
 min_max!(min);
 min_max!(max);
 
-/*
-pub fn min(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
-    if args.len() < 2 {
-        return Err(Box::new(
-            AssemblerError::FunctionWithWrongNumberOfArguments(
-                "min".to_string(),
-                either::Either::Left(2),
-                args.len()
-            )
-        ));
-    }
-    let mut min = &args[0];
-    for arg in &args[1..] {
-        min = min.min(arg);
-    }
-    Ok(min.clone())
-}
-
-pub fn max(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
-    if args.len() < 2 {
-        return Err(Box::new(
-            AssemblerError::FunctionWithWrongNumberOfArguments(
-                "max".to_string(),
-                either::Either::Left(2),
-                args.len()
-            )
-        ));
-    }
-    let mut max = &args[0];
-    for arg in &args[1..] {
-        max = max.max(arg);
-    }
-    Ok(max.clone())
-}
-*/
+// pub fn min(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+// if args.len() < 2 {
+// return Err(Box::new(
+// AssemblerError::FunctionWithWrongNumberOfArguments(
+// "min".to_string(),
+// either::Either::Left(2),
+// args.len()
+// )
+// ));
+// }
+// let mut min = &args[0];
+// for arg in &args[1..] {
+// min = min.min(arg);
+// }
+// Ok(min.clone())
+// }
+//
+// pub fn max(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+// if args.len() < 2 {
+// return Err(Box::new(
+// AssemblerError::FunctionWithWrongNumberOfArguments(
+// "max".to_string(),
+// either::Either::Left(2),
+// args.len()
+// )
+// ));
+// }
+// let mut max = &args[0];
+// for arg in &args[1..] {
+// max = max.max(arg);
+// }
+// Ok(max.clone())
+// }
 
 pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     let power = b.int()?;

@@ -1,6 +1,7 @@
 //! Diagnostics for assembly files: parse/assembly errors mapped to LSP
 //! diagnostics (recursive walk of the `AssemblerError` tree).
 
+use cpclib_asm::preamble::ListingElement;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -115,20 +116,173 @@ impl AssemblyAnalyzer {
         // resolution) is cached per document version, so this only pays
         // the real cost once per edit even though `analyze` and hover can
         // both request it for the same version.
+        //
+        // Uses `self.parse_document(document)` (the cached listing), not a
+        // fresh `Self::parse_source` call the way the recovery loop above
+        // does: `Env::address_trace` (`cpclib-asm`) keys recorded addresses
+        // by the exact parse that produced them, not by source text alone,
+        // so an address-aware constraint (`reachableByJr`, i.e. `jp2jr`)
+        // silently resolves to nothing if the `Env` handed to
+        // `collect_peephole_warnings` was cached against a *different*
+        // parse than the `listing` passed alongside it - which a fresh
+        // re-parse here would be whenever some other request (e.g. the
+        // quickfix, or hover) already populated the env cache first via
+        // `self.parse_document`. Reusing the same cached listing everywhere
+        // guarantees they're always the same parse.
         if diagnostics.is_empty()
-            && let Ok(listing) =
-                Self::parse_source(&full_text, Some(&document.uri), disabled_parser_categories)
+            && let Ok(listing) = self.parse_document(document)
         {
-            let mut env = self.dry_run_env_cached(document, &listing);
+            let (mut env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
+            collect_firmware_literal_warnings(document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
             if self.config().warnings.unused_bindings {
                 collect_unused_binding_warnings(&listing, document, &mut diagnostics);
             }
+            if self.config().warnings.smc_label_without_equ {
+                collect_smc_label_warnings(&listing, document, &mut diagnostics);
+            }
+            // Grey out the branches that will never assemble. The semantic
+            // token pass marks them too, but only with the `deprecated`
+            // modifier, which most themes render as strikethrough or ignore
+            // outright - `Unnecessary` is what actually fades code in an
+            // editor, and it is a plain LSP diagnostic tag rather than a
+            // client-specific extension. Free here: `env` is the dry run this
+            // block already paid for.
+            if self.config().inactive_code
+                && super::token::flatten_listing(listing.iter()).any(|t| t.is_if())
+            {
+                collect_inactive_region_hints(&listing, &mut env, document, &mut diagnostics);
+            }
+            // Either the warning class is on, or the user asked for this
+            // document by hand (`cpclib.analyzePeephole`). The default is off
+            // because answering costs a full project assemble.
+            if self.peephole_wanted(&document.uri) {
+                let (peephole_addresses, own_env) =
+                    super::peephole::address_source(self, document, &listing);
+                let before = diagnostics.len();
+                super::peephole::collect_peephole_warnings(
+                    &listing,
+                    self.config().peephole_goal.into(),
+                    peephole_addresses.as_addresses(own_env.as_ref()),
+                    &document.uri,
+                    &mut diagnostics
+                );
+                // A request narrowed to a selection reports only what falls
+                // inside it - but note the analysis above ran over the whole
+                // document regardless, because a match's safety depends on
+                // the code around it.
+                if let Some(scope) = self.peephole_scope(&document.uri) {
+                    let mut kept = diagnostics.split_off(before);
+                    kept.retain(|d| super::peephole::overlaps(&d.range, &scope));
+                    diagnostics.extend(kept);
+                }
+            }
         }
 
         diagnostics
+    }
+}
+
+/// A label sitting where `equ $-1` was meant.
+///
+/// See [`super::lint_smc_label`] for what does and does not qualify. Reported
+/// as a warning rather than an error because the file does assemble - the
+/// damage only shows up when something patches through the label at run time.
+fn collect_smc_label_warnings(
+    listing: &cpclib_asm::parser::obtained::LocatedListing,
+    document: &Document,
+    out: &mut Vec<Diagnostic>
+) {
+    for found in super::lint_smc_label::find_suspicious_smc_labels(listing) {
+        let line_text = document.line(found.line as usize).unwrap_or_default();
+        let Some(col) = line_text.find(&found.name)
+        else {
+            continue;
+        };
+        let start = crate::common::document::byte_offset_to_utf16_col(&line_text, col) as u32;
+        let end = start + found.name.chars().count() as u32;
+        out.push(Diagnostic {
+            range: Range {
+                start: Position {
+                    line: found.line,
+                    character: start
+                },
+                end: Position {
+                    line: found.line,
+                    character: end
+                }
+            },
+            severity: Some(DiagnosticSeverity::WARNING),
+            source: Some("basm".to_string()),
+            message: format!(
+                "'{}' {}. Did you mean '{} {}'?",
+                found.name,
+                found.explanation(),
+                found.name,
+                found.suggestion()
+            ),
+            ..Default::default()
+        });
+    }
+}
+
+/// Report each statically-dead `IF`/`ELSEIF`/`ELSE` branch as one faded
+/// region.
+///
+/// One diagnostic per *contiguous run* of lines rather than per line: a
+/// twenty-line disabled block is one thing the reader is being told, and
+/// twenty entries in the Problems panel for it would be noise. Severity is
+/// `HINT` for the same reason - the code is not wrong, it is simply not the
+/// branch being built.
+fn collect_inactive_region_hints(
+    listing: &cpclib_asm::preamble::LocatedListing,
+    env: &mut cpclib_asm::assembler::Env,
+    document: &Document,
+    out: &mut Vec<Diagnostic>
+) {
+    let inactive = super::semantic_tokens_ast::inactive_if_branch_lines(listing, env);
+    if inactive.is_empty() {
+        return;
+    }
+
+    let mut lines: Vec<u32> = inactive.into_iter().collect();
+    lines.sort_unstable();
+
+    let line_end = |line: u32| -> u32 {
+        document
+            .line(line as usize)
+            .map(|l| l.trim_end_matches(['\r', '\n']).chars().count() as u32)
+            .unwrap_or(0)
+    };
+
+    let mut start = lines[0];
+    let mut previous = lines[0];
+    for &line in lines.iter().skip(1).chain(std::iter::once(&u32::MAX)) {
+        if line == previous + 1 {
+            previous = line;
+            continue;
+        }
+        out.push(Diagnostic {
+            range: Range {
+                start: Position {
+                    line: start,
+                    character: 0
+                },
+                end: Position {
+                    line: previous,
+                    character: line_end(previous)
+                }
+            },
+            severity: Some(DiagnosticSeverity::HINT),
+            source: Some("basm".to_string()),
+            message: "Inactive code: this branch is not the one that assembles".to_string(),
+            tags: Some(vec![DiagnosticTag::UNNECESSARY]),
+            ..Default::default()
+        });
+        start = line;
+        previous = line;
     }
 }
 
@@ -163,6 +317,111 @@ pub(super) fn collect_assembler_warnings(
     }
     for diag in &mut out[start..] {
         diag.severity = Some(DiagnosticSeverity::WARNING);
+    }
+}
+
+/// Whether this line's instruction transfers control - the only place a
+/// firmware address is a *routine* rather than a number.
+pub(super) fn targets_a_routine(code: &str) -> bool {
+    // The mnemonic is the first word after any label, and a label is either
+    // flush left or ends in `:`. Testing every word covers `.loop call 0xBB5A`
+    // and `label: jp 0xBB18` without needing to know which word is the label.
+    code.split(|c: char| c.is_whitespace() || c == ':' || c == ',')
+        .any(|word| {
+            matches!(
+                word.to_ascii_uppercase().as_str(),
+                "CALL" | "JP" | "JR" | "RST"
+            )
+        })
+}
+
+/// One warning per raw firmware address written as a number.
+///
+/// `call 0xBB5A` works, and says nothing about what it calls; `call TXT_OUTPUT`
+/// says everything. The quickfix that swaps them - and adds the
+/// `include once` the symbol needs - already exists, but a code action is only
+/// found by someone who already suspects there is one. A diagnostic is how the
+/// editor *offers* it: the number is underlined wherever it appears in the
+/// file, and the lightbulb sits on it.
+///
+/// Scanned over the raw text rather than the parsed listing on purpose: the
+/// value may be anywhere an expression is - an operand, a `defw`, an `equ` -
+/// and the answer is the same everywhere. `lookup_by_value` is the same table
+/// hover uses, so what is underlined is exactly what hovering explains.
+pub(super) fn collect_firmware_literal_warnings(document: &Document, out: &mut Vec<Diagnostic>) {
+    for (line_index, line) in document.text().lines().enumerate() {
+        // A comment is prose about the code, not the code.
+        let code = match line.find([';']) {
+            Some(at) => &line[..at],
+            None => line
+        };
+
+        // Only where the number is being *used as a routine*. `CALL &BB5A` is
+        // a firmware call written the hard way; `defb 0xBB5A` is data that
+        // happens to collide with one, and offering to rewrite it as
+        // `TXT_OUTPUT` would be wrong. A jump can enter a routine too - `JP` to
+        // a firmware entry is the tail-call idiom - so those count, and nothing
+        // else does.
+        if !targets_a_routine(code) {
+            continue;
+        }
+
+        let mut at = 0usize;
+        while at < code.len() {
+            let Some((text, value, start)) = super::hover::extract_number_at_position(code, at)
+            else {
+                at += 1;
+                continue;
+            };
+            // Past this literal whatever happens, so a literal that names
+            // nothing cannot make this loop crawl through it byte by byte.
+            at = start + text.len().max(1);
+
+            let Some(firmware) = crate::common::firmware_docs::lookup_by_value(value)
+            else {
+                continue;
+            };
+
+            let start_col = crate::common::document::byte_offset_to_utf16_col(line, start) as u32;
+            let end_col =
+                crate::common::document::byte_offset_to_utf16_col(line, start + text.len()) as u32;
+
+            out.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: line_index as u32,
+                        character: start_col
+                    },
+                    end: Position {
+                        line: line_index as u32,
+                        character: end_col
+                    }
+                },
+                severity: Some(DiagnosticSeverity::WARNING),
+                source: Some("cpclib".to_string()),
+                message: {
+                    // The doc can be a paragraph; a diagnostic wants a line.
+                    let summary = firmware
+                        .doc
+                        .lines()
+                        .map(str::trim)
+                        .find(|line| !line.is_empty())
+                        .unwrap_or_default();
+                    let summary = if summary.is_empty() {
+                        String::new()
+                    }
+                    else {
+                        format!(" - {summary}")
+                    };
+                    format!(
+                        "{text} is the firmware routine {}{summary}. Replace it with \
+                         the symbol and `include once \"{}\"`.",
+                        firmware.symbol, firmware.source_file
+                    )
+                },
+                ..Default::default()
+            });
+        }
     }
 }
 
@@ -332,12 +591,12 @@ pub(super) fn collect_asm_diagnostics(
                 DiagnosticSeverity::INFORMATION
             ));
         },
-        AssemblerError::IncludedFileError { span, error: inner } => {
-            out.push(asm_diag(
-                Some(span),
-                format!("In included file: {inner}"),
-                DiagnosticSeverity::ERROR
-            ));
+        AssemblerError::WithChainNotes { error: inner, .. } => {
+            // The trailing "how we got here" notes have no span of their
+            // own (that's the whole point - see `WithChainNotes`'s doc
+            // comment) and `inner` renders/positions exactly as it would
+            // without this wrapping, so just recurse into it.
+            collect_asm_diagnostics(inner, parent_span, document, out);
         },
         AssemblerError::IfIssue { span, error: inner } => {
             collect_asm_diagnostics(inner, Some(span), document, out);
@@ -562,6 +821,14 @@ mod tests {
         let uri = Url::parse("file:///t.asm").unwrap();
         let document = Document::new(uri, text.to_string(), 1);
         AssemblyAnalyzer::new().analyze(&document)
+    }
+
+    /// The peephole pass is off by default (a full project assemble is not a
+    /// keystroke-time cost), so a test about it has to ask for it.
+    fn diagnostics_with_peephole(text: &str) -> Vec<Diagnostic> {
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = true;
+        diagnostics_for_with_config(text, config)
     }
 
     fn diagnostics_for_with_config(
@@ -890,6 +1157,49 @@ mod tests {
         assert!(!fake_token.is_warning(), "{fake_token:?}");
     }
 
+    /// Reproduces a real bug a user hit: `peephole_quickfix_action` (and any
+    /// other `self.parse_document`-based feature - hover, definitions, ...)
+    /// always populates the `dry_run_env_cached` cache using the *cached*
+    /// listing. If `analyze()` computed its diagnostics against a
+    /// *different* parse of the same text (as it used to, via a fresh
+    /// `Self::parse_source` call), `Env::address_trace`'s span-identity
+    /// keying (`cpclib-asm`) would silently miss every lookup for that
+    /// mismatched parse, and `jp2jr` would vanish from the diagnostics list
+    /// even though it's genuinely reachable - while the quickfix, always
+    /// self-consistent with its own cached listing, kept working. Exactly
+    /// the asymmetry (bulb but no squiggly) the user actually observed.
+    #[test]
+    fn analyze_finds_an_address_aware_match_even_when_something_else_primed_the_env_cache_first() {
+        let text = "start:\n    jp target\ntarget:\n    ret\n";
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        // This test is about the diagnostic, so the pass has to be on.
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = true;
+        analyzer.set_config(config);
+
+        // Simulate a quickfix request (or hover, or anything else built on
+        // `self.parse_document`) running before diagnostics ever do.
+        let cursor = Range {
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: 0,
+                character: 0
+            }
+        };
+        let _ = analyzer.peephole_quickfix_action(&document, cursor);
+
+        let diags = analyzer.analyze(&document);
+        assert!(
+            diags.iter().any(|d| d.message.contains("jr target")),
+            "{diags:?}"
+        );
+    }
+
     #[test]
     fn disabling_unused_bindings_suppresses_that_diagnostic() {
         let text = "FUNCTION f, a, b\n    IF {a} > 0\n        RETURN 1\n    ENDIF\n    RETURN 0\nENDFUNCTION\nval equ f(1, 2)\n";
@@ -906,6 +1216,137 @@ mod tests {
             !disabled.iter().any(|d| d.message.contains("is never used")),
             "{disabled:?}"
         );
+    }
+
+    /// `unnecessary-ld-to-itself` (a real, built-in `cpclib-asmoptim` rule)
+    /// firing through the real `analyze()` pipeline - proves the whole
+    /// chain (dry-run assemble, address recording, `flatten_listing`,
+    /// `find_matches_with_resolver`) is wired correctly, not just that the
+    /// engine works in isolation (already covered by `cpclib-asmoptim`'s own
+    /// tests).
+    #[test]
+    fn a_peephole_optimisation_is_reported_as_a_warning() {
+        let text = "org 0x4000\n ld b, b\n ret\n";
+        let diags = diagnostics_with_peephole(text);
+        let peephole: Vec<_> = diags
+            .iter()
+            .filter(|d| d.source.as_deref() == Some("basm-peephole"))
+            .collect();
+        assert_eq!(peephole.len(), 1, "{diags:?}");
+        assert!(peephole[0].message.contains("ld b,b"), "{peephole:?}");
+        assert_eq!(peephole[0].severity, Some(DiagnosticSeverity::WARNING));
+        // "ld b, b" is on line 1 (0-based), starting right after the leading
+        // space.
+        assert_eq!(peephole[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn already_optimal_source_reports_no_peephole_warning() {
+        let text = "org 0x4000\n xor a\n ld (hl), a\n ret\n";
+        let diags = diagnostics_for(text);
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
+            "{diags:?}"
+        );
+    }
+
+    #[test]
+    fn peephole_optimizer_is_off_unless_asked_for() {
+        let text = "org 0x4000\n ld b, b\n ret\n";
+        // The default: nothing, because deciding this needs a whole-project
+        // assemble and the user did not ask for one.
+        let by_default = diagnostics_for(text);
+        assert!(
+            !by_default
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
+            "the peephole pass must not run unasked: {by_default:?}"
+        );
+
+        let enabled = diagnostics_with_peephole(text);
+        assert!(
+            enabled
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
+            "{enabled:?}"
+        );
+    }
+
+    /// The other way in: leave the warning class off, and ask for this one
+    /// document by hand the way `cpclib.analyzePeephole` does.
+    #[test]
+    fn an_explicit_request_reports_peephole_matches_with_the_class_still_off() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri.clone(), "org 0x4000\n ld b, b\n ret\n".into(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let peephole = |diags: Vec<Diagnostic>| {
+            diags
+                .into_iter()
+                .filter(|d| d.source.as_deref() == Some("basm-peephole"))
+                .count()
+        };
+
+        assert_eq!(peephole(analyzer.analyze(&document)), 0);
+
+        analyzer.request_peephole(&uri, None);
+        assert_eq!(
+            peephole(analyzer.analyze(&document)),
+            1,
+            "asking for this document must be enough, with the class off"
+        );
+
+        // Only this document: the request is per-URI, not global.
+        let other_uri = Url::parse("file:///other.asm").unwrap();
+        let other = Document::new(other_uri, "org 0x4000\n ld b, b\n ret\n".into(), 1);
+        assert_eq!(peephole(analyzer.analyze(&other)), 0);
+
+        analyzer.clear_peephole_request(Some(&uri));
+        assert_eq!(peephole(analyzer.analyze(&document)), 0);
+    }
+
+    /// A request narrowed to a selection reports only what falls inside it.
+    /// The analysis itself still covers the whole document - a match is only
+    /// safe because of the code around it - so this is a filter on the
+    /// output, which is what the test checks: the same document reports more
+    /// when the scope is widened, not something different.
+    #[test]
+    fn a_scoped_request_reports_only_matches_inside_the_selection() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "org 0x4000\n ld b, b\n nop\n ld c, c\n ret\n";
+        let document = Document::new(uri.clone(), text.into(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let peephole_lines = |diags: Vec<Diagnostic>| {
+            let mut lines: Vec<u32> = diags
+                .into_iter()
+                .filter(|d| d.source.as_deref() == Some("basm-peephole"))
+                .map(|d| d.range.start.line)
+                .collect();
+            lines.sort();
+            lines
+        };
+
+        analyzer.request_peephole(&uri, None);
+        assert_eq!(peephole_lines(analyzer.analyze(&document)), vec![1, 3]);
+
+        // Just the `ld b, b` line.
+        analyzer.request_peephole(
+            &uri,
+            Some(Range {
+                start: Position {
+                    line: 1,
+                    character: 0
+                },
+                end: Position {
+                    line: 1,
+                    character: 8
+                }
+            })
+        );
+        assert_eq!(peephole_lines(analyzer.analyze(&document)), vec![1]);
     }
 
     #[test]
@@ -1064,5 +1505,290 @@ mod tests {
             !diags.iter().any(|d| d.message.contains("is never used")),
             "{diags:?}"
         );
+    }
+}
+/// Every firmware address written as a number is flagged, wherever it is -
+/// a code action is only found by someone who already suspects there is
+/// one, so the editor has to offer it.
+#[test]
+fn every_firmware_literal_in_the_file_is_warned_about() {
+    let diagnostics = AssemblyAnalyzer::new().analyze(&Document::new(
+        Url::parse("file:///t.asm").unwrap(),
+        "\torg 0x4000\n\
+             \tcall 0xBB5A\n\
+             \tld a, 1\n\
+             \tcall 0xBB06\n"
+            .to_string(),
+        1
+    ));
+    let firmware: Vec<&Diagnostic> = diagnostics
+        .iter()
+        .filter(|d| d.message.contains("firmware routine"))
+        .collect();
+
+    assert_eq!(
+        firmware.len(),
+        2,
+        "both, not just the one under the caret: {diagnostics:?}"
+    );
+    assert!(
+        firmware
+            .iter()
+            .all(|d| d.severity == Some(DiagnosticSeverity::WARNING))
+    );
+
+    // Each underlines its own literal, on its own line.
+    let lines: Vec<u32> = firmware.iter().map(|d| d.range.start.line).collect();
+    assert_eq!(lines, vec![1, 3]);
+    assert!(
+        firmware[0].message.contains("TXT_OUTPUT"),
+        "{:?}",
+        firmware[0].message
+    );
+    assert!(
+        firmware[0].message.contains("include once"),
+        "and says how to fix it: {:?}",
+        firmware[0].message
+    );
+    // The range covers the literal, not the whole line.
+    assert!(firmware[0].range.end.character > firmware[0].range.start.character);
+    assert!(
+        firmware[0].range.start.character >= 6,
+        "{:?}",
+        firmware[0].range
+    );
+}
+
+/// An ordinary number is not a firmware address, and a comment is prose.
+#[test]
+fn the_firmware_warning_ignores_ordinary_numbers_and_comments() {
+    let diagnostics = AssemblyAnalyzer::new().analyze(&Document::new(
+        Url::parse("file:///t.asm").unwrap(),
+        "\torg 0x4000\n\tld a, 0x12\n\t; see 0xBB5A for text output\n".to_string(),
+        1
+    ));
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|d| d.message.contains("firmware routine")),
+        "{diagnostics:?}"
+    );
+}
+
+#[cfg(test)]
+mod firmware_literal_warning_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn warnings(text: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        collect_firmware_literal_warnings(&doc(text), &mut out);
+        out
+    }
+
+    /// Every firmware address in the file is flagged, not just the one under
+    /// the caret. A code action is only found by someone who already suspects
+    /// there is one; a diagnostic is how the editor offers it.
+    #[test]
+    fn every_firmware_literal_in_the_file_is_flagged() {
+        let found = warnings(
+            "\torg 0x4000\n\
+             \tcall 0xBB5A\n\
+             \tld a, 1\n\
+             \tcall 0xBB06\n"
+        );
+        let lines: Vec<u32> = found.iter().map(|d| d.range.start.line).collect();
+        assert_eq!(lines, vec![1, 3], "{found:?}");
+        assert!(
+            found
+                .iter()
+                .all(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "clearly visible: {found:?}"
+        );
+    }
+
+    /// The warning underlines the number itself, so the lightbulb and the
+    /// quickfix land on it.
+    #[test]
+    fn the_warning_covers_the_literal_and_names_the_fix() {
+        let found = warnings("\tcall 0xBB5A\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].range.start.character, 6, "{found:?}");
+        assert_eq!(found[0].range.end.character, 12, "{found:?}");
+        assert!(
+            found[0].message.contains("TXT_OUTPUT"),
+            "{}",
+            found[0].message
+        );
+        assert!(
+            found[0].message.contains("include once"),
+            "{}",
+            found[0].message
+        );
+    }
+
+    /// A firmware address is only a *routine* where control is transferred to
+    /// it. In a `defb` it is data that happens to collide with one, and
+    /// offering to rewrite it as `TXT_OUTPUT` would be wrong.
+    #[test]
+    fn only_control_transfers_are_flagged() {
+        assert_eq!(warnings("\tcall 0xBB5A\n").len(), 1);
+        assert_eq!(warnings("\tjp 0xBB5A\n").len(), 1);
+        assert_eq!(warnings("\tjr 0xBB5A\n").len(), 1);
+        assert_eq!(
+            warnings("\tcall nz, 0xBB5A\n").len(),
+            1,
+            "a condition is still a call"
+        );
+        assert_eq!(
+            warnings(".loop\tcall 0xBB5A\n").len(),
+            1,
+            "a label is not in the way"
+        );
+
+        // Data is data.
+        assert!(warnings("\tdefb 0xBB5A\n").is_empty());
+        assert!(warnings("\tdb 0xBB5A\n").is_empty());
+        assert!(warnings("\tdefw 0xBB5A, 0xBB06\n").is_empty());
+        assert!(warnings("\tld hl, 0xBB5A\n").is_empty());
+        assert!(warnings("value equ 0xBB5A\n").is_empty());
+    }
+
+    /// A number that is not a firmware address is left alone, and so is a
+    /// firmware address that is only mentioned in a comment.
+    #[test]
+    fn the_firmware_warning_ignores_ordinary_numbers_and_comments() {
+        assert!(warnings("\tld a, 0x12\n").is_empty());
+        assert!(warnings("\tld hl, 0x4000\n").is_empty());
+        assert!(
+            warnings("\tnop ; 0xBB5A prints a character\n").is_empty(),
+            "a comment is prose about the code, not the code"
+        );
+    }
+
+    /// Already using the symbol? Nothing to say.
+    #[test]
+    fn the_symbol_itself_is_not_flagged() {
+        assert!(warnings("\tcall TXT_OUTPUT\n").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod inactive_region_hint_tests {
+    //! Disabled branches have to *look* disabled.
+    //!
+    //! The semantic-token pass already marks them, but only with the
+    //! `deprecated` modifier - which themes are free to render as
+    //! strikethrough, or not at all. `Unnecessary` is the tag editors
+    //! actually fade text for.
+
+    use tower_lsp::lsp_types::*;
+
+    use super::*;
+    use crate::basm::AssemblyAnalyzer;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn faded_lines(text: &str) -> Vec<(u32, u32)> {
+        AssemblyAnalyzer::new()
+            .analyze(&doc(text))
+            .into_iter()
+            .filter(|d| {
+                d.tags
+                    .as_ref()
+                    .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))
+            })
+            .map(|d| (d.range.start.line, d.range.end.line))
+            .collect()
+    }
+
+    /// The report that started this: `if false` with a `print` in each branch.
+    #[test]
+    fn the_false_branch_is_faded_and_the_taken_one_is_not() {
+        let faded = faded_lines("if false\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n");
+        assert_eq!(faded, vec![(1, 1)], "only the `if false` body fades");
+    }
+
+    /// And the other way round.
+    #[test]
+    fn the_else_branch_fades_when_the_condition_holds() {
+        let faded = faded_lines("if true\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n");
+        assert_eq!(faded, vec![(3, 3)]);
+    }
+
+    /// A block is one region, not one diagnostic per line - the reader is
+    /// being told a single thing.
+    #[test]
+    fn a_run_of_disabled_lines_is_reported_once() {
+        let faded = faded_lines("if 0\n\tld a, 1\n\tld b, 2\n\tld c, 3\nendif\n");
+        assert_eq!(faded, vec![(1, 3)]);
+    }
+
+    /// A block directive fades whole, not just its opening line.
+    ///
+    /// An `ENUM ... ENDENUM` is one token whose span runs from `enum` to
+    /// `endenum`, so keeping only the line it *starts* on left the members and
+    /// the closing keyword looking live inside a branch that is not assembled
+    /// at all. Reported from real code: "the whole content is supposed to be
+    /// disabled. At the moment, you only disable the first lines".
+    #[test]
+    fn a_multi_line_directive_fades_all_of_its_lines() {
+        let faded = faded_lines(
+            "    if false\n\
+             \t// seems to not work ATM\n\
+             enum ANIMATION_STATE\n\
+             \tPLAYING\n\
+             \tFINISHED\n\
+             endenum\n\
+             \telse\n\
+             ANIMATION_STATE_PLAYING equ 0\n\
+             \tendif\n"
+        );
+        // Lines 1..5 are the dead branch: the comment, and the enum from its
+        // keyword through `endenum`.
+        assert_eq!(faded, vec![(1, 5)], "{faded:?}");
+    }
+
+    /// Nothing to fade when the condition cannot be decided.
+    #[test]
+    fn an_undecidable_condition_fades_nothing() {
+        let faded = faded_lines("if truly_undefined_symbol\n\tld a, 1\nelse\n\tld a, 2\nendif\n");
+        assert!(faded.is_empty(), "{faded:?}");
+    }
+
+    /// A file without any `IF` must not pay for this at all, and must not
+    /// grow a diagnostic.
+    #[test]
+    fn ordinary_code_is_untouched() {
+        assert!(faded_lines("\tld a, 1\n\tld b, 2\n").is_empty());
+    }
+
+    /// The switch has to reach the code, not just exist in the schema.
+    #[test]
+    fn turning_inactive_code_off_stops_the_fading() {
+        let text = "if false\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n";
+        assert!(!faded_lines(text).is_empty(), "on by default");
+
+        let config = crate::common::config::AsmConfig {
+            inactive_code: false,
+            ..Default::default()
+        };
+        let analyzer = AssemblyAnalyzer::new();
+        analyzer.set_config(config);
+        let faded: Vec<_> = analyzer
+            .analyze(&doc(text))
+            .into_iter()
+            .filter(|d| {
+                d.tags
+                    .as_ref()
+                    .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))
+            })
+            .collect();
+        assert!(faded.is_empty(), "{faded:?}");
     }
 }

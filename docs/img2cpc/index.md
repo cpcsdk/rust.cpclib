@@ -8,6 +8,7 @@
 - **Full screen support**: Standard screens, overscan, fullscreen (2 banks)
 - **All video modes**: Mode 0 (160x200, 16 colors), Mode 1 (320x200, 4 colors), Mode 2 (640x200, 2 colors)
 - **Palette control**: Manual pen assignment, OCP palette files, automatic ink allocation
+- **Amstrad Plus**: 12-bit ASIC palettes (`--plus`, `--colbN`, `--kit`) instead of the 27 Gate Array inks
 - **Image manipulation**: Cropping, column/line selection, odd pixel skipping
 - **Direct M4 upload**: Send converted images directly to M4 board
 
@@ -22,6 +23,9 @@ img2cpc logo.png dsk DEMO.DSK
 
 # Send directly to M4
 img2cpc screen.png m4
+
+# Convert for the Amstrad Plus, with a palette taken from the image
+img2cpc --plus artwork.png sna PLUS.SNA
 ```
 
 ## Output Formats

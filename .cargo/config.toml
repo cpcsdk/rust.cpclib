@@ -27,6 +27,13 @@ rustflags = [
     '-Csplit-debuginfo=unpacked',
 ]
 
+
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+[build.x86_64-pc-windows-msvc]
+rustflags = ["-Z", "threads=8"]
+
 [profile.dev]
 opt-level = 0
 debug = 2

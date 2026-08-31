@@ -1,3 +1,15 @@
+/// Canonical form of a source path, so the same file reached by different
+/// routes (`include "x.asm"` from one directory, an absolute path from
+/// another) hashes to the same key in [`Env::address_trace_by_file`].
+///
+/// Falls back to the path as written when it cannot be canonicalised - a
+/// synthetic in-memory source has no real path - which is harmless, since such
+/// a source is only ever compared against itself.
+fn canonical_source_path(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::path::Path::new(name);
+    Some(std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
+}
+
 use crate::disass::disassemble;
 use crate::error::AssemblerError;
 pub mod control;
@@ -132,6 +144,8 @@ impl EnvOptions {
             pub fn save_behavior(&self) -> cpclib_disc::amsdos::AmsdosAddBehavior;
             pub fn dry_run(&self) -> bool;
             pub fn set_dry_run(&mut self, dry_run: bool) -> &mut AssemblingOptions;
+            pub fn record_token_addresses(&self) -> bool;
+            pub fn set_record_token_addresses(&mut self, record: bool) -> &mut AssemblingOptions;
 
             pub fn write_listing_output<W: 'static + Write + Send + Sync>(
                 &mut self,
@@ -402,6 +416,67 @@ pub trait EnvEventObserver: EventObserver {}
 
 impl<T> EnvEventObserver for T where T: EventObserver {}
 
+/// One entry of `Env::active_frames` - see its doc comment.
+#[derive(Debug, Clone)]
+enum ActiveFrame {
+    Expansion(ActiveExpansion),
+    Include(IncludeFrame)
+}
+
+/// A macro/struct call currently being expanded - see `Env::active_frames`.
+#[derive(Debug, Clone)]
+struct ActiveExpansion {
+    /// Keeps this expansion's buffer alive independently of the
+    /// `ExpandState` that owns it - see `Env::active_frames`.
+    listing: Arc<LocatedListing>,
+    name: SmolStr,
+    /// Where the macro/struct itself is defined.
+    location: Option<SourceLocation>,
+    /// Where it is called from - the span an error should point at to lead
+    /// the user back to the actual call site, not just the macro body.
+    call_site: Z80Span
+}
+
+/// A file currently being visited because of an `INCLUDE`/`READ` directive -
+/// see `Env::active_frames`. Unlike `ActiveExpansion`, no keep-alive buffer
+/// is needed: an included file's `LocatedListing` is parsed once and cached
+/// for the whole assembling run (see `IncludeState::retreive_listing`), never
+/// rebuilt mid-run the way a macro's `ExpandState` is, so a `Z80Span` into it
+/// never goes stale.
+#[derive(Debug, Clone)]
+struct IncludeFrame {
+    /// Where the `INCLUDE`/`READ` directive itself is written - all
+    /// `include_chain_note`/`Display` actually need: the included file's own
+    /// name is whatever `error`'s own span already names, unaffected by this
+    /// wrapping.
+    call_site: Z80Span
+}
+
+/// A one-line "how we got here" note for a single `INCLUDE`/`READ`, used
+/// both for `Env::active_frames_as_notes` (the whole stack, batched) and for
+/// accumulating one note at a time as a normally-propagated error travels
+/// out through nested `IncludeState::handle` calls (see
+/// `AssemblerError::with_chain_note`).
+fn include_chain_note(call_site: &Z80Span) -> String {
+    let (line, column) = call_site.relative_line_and_column();
+    let call_file =
+        processed_token::relative_to_project_root(&Utf8PathBuf::from(call_site.filename()));
+    format!("included from {call_file}:{line}:{column}")
+}
+
+/// Same as `include_chain_note`, for a macro/struct call.
+fn macro_chain_note(name: &SmolStr, location: &Option<SourceLocation>, call_site: &Z80Span) -> String {
+    let (line, column) = call_site.relative_line_and_column();
+    let call_file =
+        processed_token::relative_to_project_root(&Utf8PathBuf::from(call_site.filename()));
+    match location {
+        Some(location) => {
+            format!("inside MACRO {name} ({call_file}:{line}:{column}), defined in {location}")
+        },
+        None => format!("inside MACRO {name} ({call_file}:{line}:{column})")
+    }
+}
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -448,6 +523,41 @@ pub struct Env {
     /// Counter for the unique labels within macros
     macro_seed: usize,
 
+    /// Stack of the macro/struct expansions and `INCLUDE`d files currently
+    /// being visited, innermost last, interleaved in true nesting order (an
+    /// `INCLUDE` inside a macro body, or a macro called from an included
+    /// file, both push/pop into this same stack). Serves two purposes for
+    /// anything captured while one of these is active (e.g. a failed
+    /// `assert`'s span, see `FailedAssertCommand`):
+    ///
+    /// - for an `Expansion`, cloning its `listing` out keeps that macro
+    ///   expansion's buffer alive independently of the `ExpandState` that
+    ///   originally owned it - which is dropped well before such a delayed
+    ///   error is finally formatted (see `Env::handle_assert`). An `Include`
+    ///   frame needs no such keep-alive - see `IncludeFrame`'s doc comment;
+    /// - both let the error be wrapped in the same "error in macro call NAME
+    ///   (defined in LOCATION)" / "error in included file PATH" shape the
+    ///   propagated-error path already builds automatically for a genuinely
+    ///   returned `Err` (`MacroCallOrBuildStruct`/`Include` arms of
+    ///   `ProcessedToken::visited`) - a delayed `assert` never propagates as
+    ///   an `Err` (so every assert in a file can be collected in one run),
+    ///   so it never goes through that wrapping on its own and would
+    ///   otherwise point only at the assert's own line, with no way back to
+    ///   the call site/include that actually led there.
+    active_frames: Vec<ActiveFrame>,
+
+    /// For a symbol defined while `active_frames` was non-empty, the same
+    /// "how we got here" chain as `active_frames` itself, but flattened to
+    /// plain, owned text (`Env::active_frames_as_notes`) at the moment of
+    /// definition - unlike `active_frames`, this must survive for as long as
+    /// the symbol table entry it describes might (an "already defined"
+    /// error can be raised passes later, once the `Z80Span`s that were
+    /// active back then are long gone), so it can never hold a live span.
+    /// Keyed by the same normalized symbol name `SymbolsTable` itself uses,
+    /// so a lookup here always agrees with `contains_symbol`/`any_value`
+    /// regardless of case-sensitivity settings.
+    symbol_definition_chains: HashMap<String, Vec<String>>,
+
     charset_encoding: CharsetEncoding,
 
     /// Track where bytes has been written to forbid overriding them when generating data
@@ -465,6 +575,20 @@ pub struct Env {
 
     /// optional object that manages the listing output
     output_trigger: Option<ListingOutputTrigger>,
+    /// How deep we are inside expression evaluation.
+    ///
+    /// An instruction's recorded source location is the *instruction's*, never
+    /// its operands' - whatever the operands contain. Resolving an expression
+    /// can walk arbitrary tokens (a user `function` body most obviously, but
+    /// also an `assert` condition or a `print` argument), and each of those
+    /// announces itself to the listing as "we are here now". Left unguarded,
+    /// `ld a, SPECTRAL_START + integral(...)` records its bytes against the
+    /// `return` inside `integral`, and the debugger jumps to a line the
+    /// program never executes - a function only runs at assembly time.
+    ///
+    /// A counter rather than a flag: expressions nest, and functions call
+    /// functions.
+    expression_depth: usize,
     /// Listing of symbols generator
     symbols_output: SymbolOutputGenerator,
 
@@ -487,6 +611,40 @@ pub struct Env {
 
     if_token_adr_to_used_decision: HashMap<usize, bool>,
     if_token_adr_to_unused_decision: HashMap<usize, bool>,
+
+    /// Real assembled address of every visited token that carries a real
+    /// span, keyed by `Z80Span::identity()` (context identity + offset, NOT
+    /// just `offset_from_start()` alone - a real project assembles several
+    /// source files via `include`, each with its own span whose offset
+    /// restarts at 0, so two tokens in different files can otherwise share an
+    /// offset; see `Z80Span::identity`'s own doc comment). A token with no
+    /// span at all (some `ListingElement` implementors this assembler can
+    /// visit, e.g. plain `Token`, are not guaranteed one) is simply never
+    /// recorded - there is no meaningful "position" to key it by.
+    ///
+    /// Only populated when `AssemblingOptions::record_token_addresses` is set
+    /// - see that field's doc comment. Overwritten (never reset) pass over
+    /// pass, since one `Env` is reused across the whole multi-pass assemble
+    /// (`visit_tokens_all_passes_with_options`), so it naturally converges to
+    /// the final pass's real addresses.
+    ///
+    /// Looking this up therefore only ever makes sense for a span that came
+    /// from *the same parse* the assemble itself visited - a listing that was
+    /// merely re-parsed (even from identical text) gets fresh contexts and
+    /// simply misses, which is the safe failure mode (`Option::None`, never a
+    /// wrong address).
+    address_trace: HashMap<SpanIdentity, u16>,
+    /// The same addresses, keyed by `(canonical file, byte offset in that
+    /// file)` instead of by [`SpanIdentity`].
+    ///
+    /// `SpanIdentity` is deliberately *parse-local* - it exists so that two
+    /// files whose spans both start at offset 0 cannot collide - which also
+    /// means it cannot connect one assemble to a *different* parse of the same
+    /// file. That is exactly what an editor needs: it assembles the project's
+    /// entry file, then wants the addresses of tokens in its own, separately
+    /// parsed copy of an `include`d file. A `(file, offset)` key survives that
+    /// crossing; a `SpanIdentity` cannot.
+    address_trace_by_file: HashMap<(std::path::PathBuf, usize), u16>,
 
     included_paths: HashSet<Utf8PathBuf>,
 
@@ -513,6 +671,13 @@ impl Default for Env {
     }
 }
 
+
+impl AsRef<Env> for Env {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
@@ -530,11 +695,14 @@ impl Clone for Env {
             sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
             macro_seed: self.macro_seed,
+            active_frames: self.active_frames.clone(),
+            symbol_definition_chains: self.symbol_definition_chains.clone(),
             charset_encoding: self.charset_encoding.clone(),
             byte_written: self.byte_written,
             symbols: self.symbols.clone(),
             run_options: self.run_options,
             output_trigger: self.output_trigger.clone(),
+            expression_depth: self.expression_depth,
             symbols_output: self.symbols_output.clone(),
             warnings: self.warnings.clone(),
             nested_rorg: self.nested_rorg,
@@ -544,6 +712,8 @@ impl Clone for Env {
 
             if_token_adr_to_used_decision: self.if_token_adr_to_used_decision.clone(),
             if_token_adr_to_unused_decision: self.if_token_adr_to_unused_decision.clone(),
+            address_trace: self.address_trace.clone(),
+            address_trace_by_file: self.address_trace_by_file.clone(),
             requested_additional_pass: self.requested_additional_pass,
 
             functions: self.functions.clone(),
@@ -787,6 +957,25 @@ impl Env {
     /// If the expression is not solvable in second pass, an error is returned
     ///
     /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
+    /// Resolve an expression with the listing's idea of "where we are" frozen.
+    ///
+    /// Every expression in the assembler goes through `resolve`, and resolving
+    /// one can walk arbitrary tokens - a user `function`'s body, an `assert`
+    /// condition, a `print` argument. Each of those announces itself to the
+    /// listing, which would leave the current position inside the expression
+    /// rather than on the instruction that owns it. See `expression_depth`.
+    ///
+    /// The only place `resolve` should ever be called from `Env`.
+    fn resolve_isolated<E: ExprEvaluationExt>(
+        &mut self,
+        exp: &E
+    ) -> Result<ExprResult, Box<AssemblerError>> {
+        self.expression_depth += 1;
+        let result = exp.resolve(self);
+        self.expression_depth -= 1;
+        result
+    }
+
     pub fn resolve_expr_may_fail_in_first_pass<E: ExprEvaluationExt>(
         &mut self,
         exp: &E
@@ -818,7 +1007,7 @@ impl Env {
     ) -> Result<ExprResult, Box<AssemblerError>> {
         self.track_used_symbols(exp)?;
 
-        match exp.resolve(self) {
+        match self.resolve_isolated(exp) {
             Ok(value) => Ok(value),
             Err(e) => {
                 // if we have no more remaining passes, we fail !
@@ -845,7 +1034,7 @@ impl Env {
         &mut self,
         exp: &E
     ) -> Result<ExprResult, Box<AssemblerError>> {
-        match exp.resolve(self) {
+        match self.resolve_isolated(exp) {
             Ok(value) => Ok(value),
             Err(e) => {
                 if self.pass.is_first_pass() {
@@ -1062,8 +1251,35 @@ impl Env {
     }
 
     /// Manage the play with data for the output listing
+    /// The listing recorder, unless we are inside an expression.
+    ///
+    /// Every route into the listing goes through here, because "an
+    /// instruction's location is the instruction's, not its operands'" is not
+    /// only about which token is current: assigning a symbol also overrides the
+    /// address column with the assigned value, and `acc = 0` inside a
+    /// `function` body would leave the *next* instruction's row claiming to be
+    /// at address 0. See `expression_depth`.
+    pub(crate) fn listing_trigger(&mut self) -> Option<&mut ListingOutputTrigger> {
+        if self.expression_depth > 0 {
+            return None;
+        }
+        self.output_trigger.as_mut()
+    }
+
+    /// Whether the listing is recording right now.
+    fn listing_is_recording(&self) -> bool {
+        self.expression_depth == 0 && self.pass.is_listing_pass() && self.output_trigger.is_some()
+    }
+
     fn handle_output_trigger(&mut self, new: &LocatedToken) {
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        // Tokens reached while resolving an expression are not where the code
+        // is: they are how a value was computed. Announcing them would move the
+        // listing's position into a `function` body that emits nothing and
+        // leave it there for the instruction that follows.
+        if self.expression_depth > 0 {
+            return;
+        }
+        if self.listing_is_recording() {
             let code_addr = self.logical_code_address();
             let phy_addr = self.logical_to_physical_address(self.logical_output_address());
 
@@ -1075,7 +1291,7 @@ impl Env {
             };
             let symbols = Some(self.symbols() as *const _);
 
-            let trig = self.output_trigger.as_mut().unwrap();
+            let trig = self.listing_trigger().unwrap();
 
             trig.new_token(new, code_addr as _, kind, phy_addr, symbols);
         }
@@ -1158,6 +1374,16 @@ impl Env {
 
             self.stable_counters.new_pass();
             self.run_options = None;
+
+            // A pass starts where the file starts: outside every global label.
+            //
+            // Local labels are stored as `<current global>.<local>`, and the
+            // current global was left wherever the *previous* pass ended. So a
+            // `.loop` written before the first global label became `.loop` in
+            // pass 1 and `message.loop` in pass 2 - "Label .loop is not present
+            // in the symbol table in pass 2", for a program with nothing
+            // conditional in it at all.
+            let _ = self.symbols_mut().set_current_global_label("");
 
             self.sna.reset_written_bytes();
             if let Some(cpr) = self.cpr.as_mut() {
@@ -1286,23 +1512,7 @@ impl Env {
             self.sna.add_chunk(remu.clone());
         }
 
-        // Add an additional pass to build the listing (this way it is built only one time)
-        if self.options().assemble_options().output_builder.is_some() {
-            let mut tokens = processed_token::build_processed_tokens_list(
-                tokens,
-                std::sync::Arc::new(std::sync::RwLock::new(self))
-            )
-            .expect("No errors must occur here");
-            self.pass = AssemblingPass::ListingPass;
-            self.start_new_pass()?;
-            processed_token::visit_processed_tokens(&mut tokens, self)
-                .map_err(|e| eprintln!("{e}"))
-                .expect("No error can arise in listing output mode; there is a bug somewhere");
-
-            if let Some(trigger) = self.output_trigger.as_mut() {
-                trigger.finish();
-            }
-        }
+        self.run_listing_pass(tokens)?;
 
         // BUG this is definitevely a bug
         // - I have moved file saving here because output was wrong when done before listing
@@ -1310,6 +1520,50 @@ impl Env {
         self.saved_files = Some(self.handle_file_save()?);
 
         Ok((remu, wabp))
+    }
+
+    /// Re-visit the whole program one last time, with the listing machinery
+    /// switched on.
+    ///
+    /// A separate pass because the listing needs *final* addresses: during the
+    /// convergence passes an address can still move, and a listing built from
+    /// them would be quietly wrong. Running it once, after everything has
+    /// settled, is also why it costs one extra pass rather than one per pass.
+    ///
+    /// Drives both the textual/HTML listing and - when
+    /// [`AssemblingOptions::record_source_map`] asked for it - the source map,
+    /// which are two consumers of the same records rather than two mechanisms.
+    /// Does nothing at all when no output was requested.
+    pub fn run_listing_pass<'token, T>(
+        &mut self,
+        tokens: &'token [T]
+    ) -> Result<(), Box<AssemblerError>>
+    where
+        T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt + ExprElement,
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
+        if self.options().assemble_options().output_builder.is_none() {
+            return Ok(());
+        }
+
+        let mut tokens = processed_token::build_processed_tokens_list(
+            tokens,
+            std::sync::Arc::new(std::sync::RwLock::new(self))
+        )
+        .expect("No errors must occur here");
+        self.pass = AssemblingPass::ListingPass;
+        self.start_new_pass()?;
+        processed_token::visit_processed_tokens(&mut tokens, self)
+            .map_err(|e| eprintln!("{e}"))
+            .expect("No error can arise in listing output mode; there is a bug somewhere");
+
+        if let Some(trigger) = self.listing_trigger() {
+            trigger.finish();
+        }
+        Ok(())
     }
 
     // Add the symbols in the snapshot
@@ -1720,6 +1974,63 @@ impl Env {
         self.active_page_info().logical_outputadr
     }
 
+    /// The real assembled address of `span`, if `record_token_addresses` was
+    /// enabled for this assemble (see that option's doc comment) **and**
+    /// `span` came from the same parse this `Env` actually visited - a
+    /// same-text-but-re-parsed span gets a fresh context and simply misses
+    /// here, safely, rather than returning a wrong address (see
+    /// `address_trace`'s own doc comment).
+    pub fn address_of_span(&self, span: &Z80Span) -> Option<u16> {
+        self.address_trace.get(&span.identity()).copied()
+    }
+
+    /// The real assembled address of the token starting at `offset` in `file`.
+    ///
+    /// Unlike [`Self::address_of_span`] this survives being asked from a
+    /// different parse of the same file, which is what lets an editor assemble
+    /// a project's entry point and then resolve addresses for a file that
+    /// entry merely `include`s. The caller is responsible for the offsets
+    /// still being meaningful - i.e. for the file not having changed since the
+    /// assemble.
+    /// Where each source line ended up, when
+    /// [`AssemblingOptions::record_source_map`] asked for it.
+    ///
+    /// Populated during the listing pass, i.e. once, after the address passes
+    /// have converged - so every address here is final.
+    /// Every breakpoint the program asked for, across all pages.
+    ///
+    /// Exposed for debuggers: a `BREAKPOINT` directive is the author saying
+    /// where they want to stop, and that is worth more than anything an editor
+    /// can infer. What an emulator does with the richer forms is its own
+    /// business - see `AssembledBreakpoint`.
+    pub fn assembled_breakpoints(
+        &self
+    ) -> Vec<crate::assembler::delayed_command::AssembledBreakpoint> {
+        self.sna
+            .pages_info
+            .iter()
+            .flat_map(|page| page.collect_breakpoints())
+            .map(|command| command.described())
+            .collect()
+    }
+
+    pub fn source_map(&self) -> Option<crate::assembler::listing_output::RawSourceMap> {
+        let builder = self.options().assemble_options().output_builder.as_ref()?;
+        let mut output = builder.write().unwrap();
+        // The listing accumulates a line and only emits it when the *next*
+        // line starts, so the last one of the program - and the last iteration
+        // of a `REPEAT`, whose body never "changes line" - is still pending
+        // here. Flushing first is the difference between a map that accounts
+        // for every emitted byte and one that quietly loses the tail.
+        output.process_current_line();
+        output.source_map_snapshot()
+    }
+
+    pub fn address_of_file_offset(&self, file: &std::path::Path, offset: usize) -> Option<u16> {
+        let path = canonical_source_path(file.to_str()?)?;
+        self.address_trace_by_file.get(&(path, offset)).copied()
+    }
+
     pub fn physical_output_address(&self) -> PhysicalAddress {
         self.logical_to_physical_address(self.logical_output_address())
     }
@@ -1931,8 +2242,8 @@ impl Env {
         }
 
         // Add the byte to the listing space
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
-            self.output_trigger.as_mut().unwrap().write_byte(v);
+        if self.listing_is_recording() {
+            self.listing_trigger().unwrap().write_byte(v);
         }
 
         self.active_page_info_mut().logical_outputadr =
@@ -2082,7 +2393,7 @@ impl Env {
 
     /// Evaluate the expression according to the current state of the environment
     pub fn eval(&mut self, expr: &Expr) -> Result<ExprResult, Box<AssemblerError>> {
-        expr.resolve(self)
+        self.resolve_isolated(expr)
     }
 
     pub fn sna(&self) -> &cpclib_sna::Snapshot {
@@ -2240,9 +2551,9 @@ impl Env {
         self.update_dollar();
 
         // update the erroneous information for the listing
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        if self.listing_is_recording() {
             let output_adr = self.logical_to_physical_address(output_adr as _);
-            let trigger = self.output_trigger.as_mut().unwrap();
+            let trigger = self.listing_trigger().unwrap();
 
             trigger.replace_code_address(&code_adr.into());
             trigger.replace_physical_address(output_adr);
@@ -2568,6 +2879,16 @@ impl Env {
             }))
         }
         else {
+            // Remember how *this* definition was reached, in case a later
+            // label with the same name conflicts with it - see
+            // `Env::symbol_definition_chains`. Keyed by the same normalized
+            // `label` the error branch above looks up with, *before*
+            // `handle_global_and_local_labels` below resolves it further.
+            if !self.active_frames.is_empty() {
+                self.symbol_definition_chains
+                    .insert(label.to_string(), self.active_frames_as_notes());
+            }
+
             // TODO we should make the expansion right now because it is fucked up otherwise
 
             let label = self.handle_global_and_local_labels(label)?;
@@ -2613,7 +2934,34 @@ impl Env {
             return processed_token.visited(self);
         }
 
-        res
+        // Locate with *this* occurrence's own span, and attach how the
+        // *original* definition was itself reached, only now - not as
+        // fields of `AlreadyDefinedSymbol` itself, which would put a
+        // variable number of extra lines between the "error: ..." line and
+        // the "-->"/"┌─ file:line:col" line a consumer (cpclib-vscode's
+        // `$basm` problem matcher) expects right after it. `with_chain_note`
+        // instead appends after the whole codespan block already rendered
+        // by locating first - see `AlreadyDefinedSymbol`'s doc comment.
+        res.map_err(|e| {
+            if matches!(e.as_ref(), AssemblerError::AlreadyDefinedSymbol { .. }) {
+                let mut e = match label_span.possible_span() {
+                    Some(span) => Box::new((*e).locate(span.clone())),
+                    None => e
+                };
+                for note in self
+                    .symbol_definition_chains
+                    .get(label)
+                    .cloned()
+                    .unwrap_or_default()
+                {
+                    e = e.with_chain_note(note);
+                }
+                e
+            }
+            else {
+                e
+            }
+        })
     }
 
     fn visit_noexport<S: AsRef<str> + Display>(
@@ -2971,7 +3319,7 @@ impl Env {
         self.active_page_info_mut().logical_codeadr = code_adr;
 
         self.update_dollar();
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&code_adr.into())
         }
 
@@ -3035,7 +3383,10 @@ impl Env {
             return Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: destination.as_str().into(),
                 kind: kind.into(),
-                here: None
+                here: self
+                    .symbols()
+                    .any_value(destination.as_str())?
+                    .and_then(|v| v.location().cloned())
             }));
         }
 
@@ -3052,7 +3403,7 @@ impl Env {
                 destination.possible_span().map(|s| s.into())
             )?;
         }
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&value)
         }
 
@@ -3190,10 +3541,10 @@ impl Env {
 
         // BANK/BANKSET-like directives do not emit bytes, so refresh listing
         // coordinates after page/bank selection to avoid stale physical address.
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        if self.listing_is_recording() {
             let code_adr = self.logical_code_address();
             let output_adr = self.logical_to_physical_address(self.logical_output_address());
-            let trigger = self.output_trigger.as_mut().unwrap();
+            let trigger = self.listing_trigger().unwrap();
 
             trigger.replace_code_address(&(code_adr as i32).into());
             trigger.replace_physical_address(output_adr);
@@ -3246,10 +3597,10 @@ impl Env {
         self.update_dollar();
 
         // Keep listing row addresses in sync for BANKSET directives.
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        if self.listing_is_recording() {
             let code_adr = self.logical_code_address();
             let output_adr = self.logical_to_physical_address(self.logical_output_address());
-            let trigger = self.output_trigger.as_mut().unwrap();
+            let trigger = self.listing_trigger().unwrap();
 
             trigger.replace_code_address(&(code_adr as i32).into());
             trigger.replace_physical_address(output_adr);
@@ -3552,7 +3903,31 @@ impl Env {
                 )
             }));
         }
-        self.sna.sna = Snapshot::load(fname).map_err(|e| {
+        // `inner://` names a snapshot compiled into cpclib itself. A program
+        // that wants the firmware available - so `CALL &BB5A` does something -
+        // must start from a booted machine, and requiring every project to
+        // carry its own copy of one made the build depend on a binary blob
+        // sitting beside the source.
+        let loaded = match fname.as_str().strip_prefix("inner://") {
+            Some(inner) => {
+                Snapshot::from_embedded(inner).ok_or_else(|| {
+                    AssemblerError::AssemblingError {
+                        msg: format!(
+                            "There is no snapshot embedded as \"inner://{inner}\". \
+                             Available: {}.",
+                            Snapshot::EMBEDDED
+                                .iter()
+                                .map(|name| format!("inner://{name}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                })?
+            },
+            None => Snapshot::load(fname)
+        };
+
+        self.sna.sna = loaded.map_err(|e| {
             AssemblerError::AssemblingError {
                 msg: format!("Error while loading snapshot. {e}")
             }
@@ -3627,7 +4002,7 @@ impl Env {
         // TODO OR play all the passes directly now
         let mut crunched_env = self.build_crunched_section_env(span);
 
-        if let Some(t) = self.output_trigger.as_mut() {
+        if let Some(t) = self.listing_trigger() {
             t.enter_crunched_section()
         }
 
@@ -3667,7 +4042,7 @@ impl Env {
             }
         }
 
-        if let Some(t) = self.output_trigger.as_mut() {
+        if let Some(t) = self.listing_trigger() {
             t.leave_crunched_section()
         }
 
@@ -3810,6 +4185,8 @@ impl Env {
             ga_mmr: 0xC0, // standard memory configuration
 
             macro_seed: 0,
+            active_frames: Vec::new(),
+            symbol_definition_chains: HashMap::new(),
             charset_encoding: CharsetEncoding::new(),
             sna: SnaAssembler::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
@@ -3820,6 +4197,7 @@ impl Env {
             run_options: None,
             byte_written: false,
             output_trigger: None,
+            expression_depth: 0,
             symbols_output: Default::default(),
 
             crunched_section_state: None,
@@ -3839,6 +4217,8 @@ impl Env {
 
             if_token_adr_to_used_decision: HashMap::default(),
             if_token_adr_to_unused_decision: HashMap::default(),
+            address_trace: HashMap::default(),
+            address_trace_by_file: HashMap::default(),
             requested_additional_pass: false,
 
             functions: Default::default(),
@@ -3926,10 +4306,10 @@ impl Env {
         }
     }
 
-    pub fn eval_any_function<'res>(
+    pub fn eval_any_function<'res, E:AsRef<ExprResult>+Clone>(
         &'res mut self,
         name: &'res str,
-        params: &[ExprResult]
+        params: &[E]
     ) -> Result<ExprResult, Box<AssemblerError>> {
         let f = match HardCodedFunction::by_name(name) {
             Some(f) => Ok(f),
@@ -4224,6 +4604,21 @@ impl Env {
 
         let span = Some(outer_token.span());
 
+        if self.options().assemble_options().record_token_addresses() {
+            let span = outer_token.span();
+            let address = self.logical_output_address();
+            self.address_trace.insert(span.identity(), address);
+            // Recorded a second way so a *different* parse of the same file
+            // can look it up - see `address_trace_by_file`. Canonicalised on
+            // the way in, because how a file was reached (`include "x.asm"`
+            // from one directory, an absolute path from another) must not
+            // change its identity.
+            if let Some(path) = canonical_source_path(span.filename()) {
+                self.address_trace_by_file
+                    .insert((path, span.offset_from_start()), address);
+            }
+        }
+
         // handle warning if any - in practice, `build_processed_token`
         // (processed_token.rs) already intercepts every `is_warning()`
         // token at classification time, unwrapping it via
@@ -4466,7 +4861,7 @@ impl Env {
         self.update_dollar();
         let value = self.active_page_info_mut().logical_codeadr;
 
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&value.into())
         }
 
@@ -4836,7 +5231,7 @@ impl Env {
             let depth = self.symbols().counter_depth() + 1;
 
             if self.pass.is_listing_pass()
-                && let Some(trigger) = self.output_trigger.as_mut()
+                && let Some(trigger) = self.listing_trigger()
             {
                 trigger.repeat_iteration(counter_name, counter_value.as_ref(), depth)
             }
@@ -4844,7 +5239,7 @@ impl Env {
         else {
             let depth = self.symbols().counter_depth() + 1;
             if self.pass.is_listing_pass()
-                && let Some(trigger) = self.output_trigger.as_mut()
+                && let Some(trigger) = self.listing_trigger()
             {
                 trigger.repeat_iteration("<new iteration>", counter_value.as_ref(), depth)
             }
@@ -4924,7 +5319,7 @@ impl Env {
     ) -> Result<(), Box<AssemblerError>> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&address.into())
         }
 
@@ -5141,17 +5536,64 @@ impl Env {
         exp: &E
     ) -> Result<(), Box<AssemblerError>> {
         if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
-            Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
+            let key = self
+                .symbols()
+                .normalize_symbol(label_span.as_str())
+                .value()
+                .to_string();
+            let error = AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
-                here: label_span.possible_span().map(|s| s.into())
-            }))
+                // The *original* definition's location, not this (the
+                // conflicting, about-to-fail) occurrence's - same pattern as
+                // `visit_label` above. Using `label_span.possible_span()`
+                // here reported the current line twice (once as prose, once
+                // as the codespan block), which is useless for finding the
+                // actual duplicate.
+                here: self
+                    .symbols()
+                    .any_value(label_span.as_str())?
+                    .and_then(|v| v.location().cloned())
+            };
+            // Locate with *this* occurrence's own span first, then attach
+            // how the *original* definition was itself reached (e.g. via
+            // `INCLUDE`) - just as important for tracking down a duplicate
+            // as this occurrence's own chain (already shown by the codespan
+            // block), and otherwise invisible (`here` is only a flat
+            // file:line:col). Appended *after* locating, not a field of
+            // `AlreadyDefinedSymbol` itself - see its doc comment for why.
+            let mut error = match label_span.possible_span() {
+                Some(span) => Box::new(error.locate(span.clone())),
+                None => Box::new(error)
+            };
+            for note in self
+                .symbol_definition_chains
+                .get(&key)
+                .cloned()
+                .unwrap_or_default()
+            {
+                error = error.with_chain_note(note);
+            }
+            Err(error)
         }
         else {
             let label = self.handle_global_and_local_labels(label_span.as_str())?;
             let normalized_label = self.symbols().normalize_symbol(label);
             let normalized_label_value = normalized_label.value();
             let normalized_braced_label = format!("{{{}}}", normalized_label_value);
+
+            // Remember how *this* definition was reached, in case a later
+            // `equ` for the same name conflicts with it - see
+            // `Env::symbol_definition_chains`.
+            if !self.active_frames.is_empty() {
+                let key = self
+                    .symbols()
+                    .normalize_symbol(label_span.as_str())
+                    .value()
+                    .to_string();
+                self.symbol_definition_chains
+                    .insert(key, self.active_frames_as_notes());
+            }
 
             // Forbid self-referential EQU (e.g. `x equ y - x`), otherwise first-pass fallback
             // can silently inject a bogus value and make the symbol look valid.
@@ -5186,7 +5628,7 @@ impl Env {
             // self.symbols_mut().set_current_label(label)?;
             // }
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
-            if let Some(o) = self.output_trigger.as_mut() {
+            if let Some(o) = self.listing_trigger() {
                 o.replace_code_address(&value)
             }
             self.add_symbol_to_symbol_table(
@@ -5261,7 +5703,10 @@ impl Env {
             Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
-                here: None
+                here: self
+                    .symbols()
+                    .any_value(label_span.as_str())?
+                    .and_then(|v| v.location().cloned())
             }))
         }
         else {
@@ -5283,7 +5728,7 @@ impl Env {
             }
 
             let value: ExprResult = self.map_counter.into();
-            if let Some(o) = self.output_trigger.as_mut() {
+            if let Some(o) = self.listing_trigger() {
                 o.replace_code_address(&value)
             }
             self.add_symbol_to_symbol_table(
@@ -5317,7 +5762,7 @@ impl Env {
             self.resolve_expr_may_fail_in_first_pass(exp)?
         };
 
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&value)
         }
 
@@ -5450,25 +5895,9 @@ impl Env {
 
         let backup_address = env.logical_output_address();
         for exp in exprs.iter() {
-            if exp.is_string() {
-                let s = exp.string();
-                let bytes = env.charset_encoding.transform_string(s);
-                for b in &bytes {
-                    output(env, *b as _, delta, mask)?
-                }
-                env.update_dollar();
-            }
-            else if exp.is_char() {
-                let c = exp.char();
-                let b = env.charset_encoding.transform_char(c);
-                output(env, b as _, delta, mask)?;
-                env.update_dollar();
-            }
-            else {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
-                output_expr_result(env, &val, delta, mask)?;
-                env.update_dollar();
-            }
+            let exp = env.resolve_expr_may_fail_in_first_pass(exp)?;
+            output_expr_result(env, &exp, delta, mask)?;
+            env.update_dollar();
         }
 
         // Patch the last char of a str
@@ -5483,8 +5912,7 @@ impl Env {
             // the last character with bit 7 set.
             if env.pass.is_listing_pass()
                 && let Some(last) = env
-                    .output_trigger
-                    .as_mut()
+                    .listing_trigger()
                     .and_then(|trigger| trigger.bytes.last_mut())
             {
                 *last = patched_last_value;
@@ -5497,11 +5925,14 @@ impl Env {
 
             // TODO add that in a function to reuse it with DEFS
             // collect the bytes
-            let mut bytes = (0..num_bytes).into_iter().map(|i| {
-                let addr = backup_address.wrapping_add(i as u16);
-                let phy = env.logical_to_physical_address(addr);
-                env.peek(&phy)
-            }).collect_vec();
+            let mut bytes = (0..num_bytes)
+                .into_iter()
+                .map(|i| {
+                    let addr = backup_address.wrapping_add(i as u16);
+                    let phy = env.logical_to_physical_address(addr);
+                    env.peek(&phy)
+                })
+                .collect_vec();
 
             // disassemble the bytes
             let obtained_listing = disassemble(&bytes);
@@ -5529,7 +5960,6 @@ impl Env {
 
             let listing_duration = obtained_listing.estimated_duration().unwrap();
             env.stable_counters.update_counters(listing_duration);
-
         }
 
         Ok(())
@@ -5586,10 +6016,10 @@ impl Env {
 
             // Keep listing token start/end addresses aligned with the effective
             // BASIC load address when LOCOMOTIVE is the first emitted content.
-            if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+            if self.listing_is_recording() {
                 let code_adr = self.logical_code_address();
                 let output_adr = self.logical_to_physical_address(self.logical_output_address());
-                let trigger = self.output_trigger.as_mut().unwrap();
+                let trigger = self.listing_trigger().unwrap();
 
                 trigger.replace_code_address(&code_adr.into());
                 trigger.replace_physical_address(output_adr);
@@ -7439,6 +7869,26 @@ impl Env {
         }
     }
 
+    /// Human-readable "how we got here" notes for `self.active_frames`,
+    /// innermost first - flattened to plain owned text (via
+    /// `macro_chain_note`/`include_chain_note`) so it is safe to keep around
+    /// after the `Z80Span`s in `active_frames` stop being valid (see
+    /// `Env::symbol_definition_chains`).
+    fn active_frames_as_notes(&self) -> Vec<String> {
+        self.active_frames
+            .iter()
+            .rev()
+            .map(|frame| {
+                match frame {
+                    ActiveFrame::Expansion(expansion) => {
+                        macro_chain_note(&expansion.name, &expansion.location, &expansion.call_site)
+                    },
+                    ActiveFrame::Include(include) => include_chain_note(&include.call_site)
+                }
+            })
+            .collect()
+    }
+
     pub fn visit_assert<E: ExprEvaluationExt + ExprElement>(
         &mut self,
         exp: &E,
@@ -7483,8 +7933,58 @@ impl Env {
             else {
                 *assert_error
             };
+
+            // An `assert` never propagates as an `Err` (so every assert in a
+            // file can be collected in one run), so it never goes through
+            // the wrapping `ProcessedToken::visited`'s `MacroCallOrBuildStruct`/
+            // `Include` arms apply automatically to a macro-body/included-file
+            // error that *does* propagate. Do it by hand here, innermost
+            // frame first: a macro call gets a whole extra codespan block
+            // (its call arguments are worth seeing - the same reason
+            // `MacroCallOrBuildStruct` gets one for a propagated `Err`), an
+            // `INCLUDE` gets a compact trailing note instead (there's
+            // nothing but the path to see in an `INCLUDE "..."` line the
+            // note doesn't already say - see `WithChainNotes`).
+            let mut assert_error = Box::new(assert_error);
+            for frame in self.active_frames.iter().rev() {
+                assert_error = match frame {
+                    ActiveFrame::Expansion(expansion) => {
+                        Box::new(AssemblerError::RelocatedError {
+                            span: expansion.call_site.clone(),
+                            error: Box::new(AssemblerError::MacroError {
+                                name: expansion.name.clone(),
+                                root: assert_error,
+                                location: expansion.location.clone()
+                            })
+                        })
+                    },
+                    ActiveFrame::Include(include) => {
+                        assert_error.with_chain_note(include_chain_note(&include.call_site))
+                    }
+                };
+            }
+
+            // Keep whichever macro/struct-expansion buffer(s) `assert_error`'s
+            // spans point into alive for as long as this command lives (i.e.
+            // as long as `self` lives) - see `Env::active_frames` and
+            // `FailedAssertCommand`. `Include` frames need no such keep-alive
+            // (see `IncludeFrame`'s doc comment), so only `Expansion` frames
+            // contribute here.
+            let keep_alive = self
+                .active_frames
+                .iter()
+                .filter_map(|frame| {
+                    match frame {
+                        ActiveFrame::Expansion(expansion) => Some(expansion.listing.clone()),
+                        ActiveFrame::Include(_) => None
+                    }
+                })
+                .collect();
             self.active_page_info_mut()
-                .add_failed_assert_command(assert_error.into());
+                .add_failed_assert_command(FailedAssertCommand {
+                    failure: assert_error,
+                    _keep_alive: keep_alive
+                });
             Ok(false)
         }
         else {

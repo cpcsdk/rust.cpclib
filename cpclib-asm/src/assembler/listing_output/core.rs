@@ -37,7 +37,21 @@ struct ListingTokenItem {
     raw: String,
     expanded: String,
     bytes: Vec<u8>,
-    token_kind: TokenKind
+    token_kind: TokenKind,
+    /// 1-based column where this token starts on its source line, and where it
+    /// ends.
+    ///
+    /// A line is often several instructions - `ld a,l : inc a : ld (.p),a` is
+    /// three - and a debugger that can only say "line 42" puts the cursor at
+    /// the start of all three. These are what let it point at the one that is
+    /// actually executing.
+    column: u16,
+    column_end: u16,
+    /// Whether this token is a data directive (`db`/`defs`/`defw`/`incbin`/a
+    /// string), as opposed to an instruction. Kept separate from `token_kind`,
+    /// which already collapses both onto `Hidden` for unrelated formatting
+    /// reasons - folding this in would break that collapse.
+    is_data: bool
 }
 
 pub struct ListingOutput {
@@ -60,10 +74,16 @@ pub struct ListingOutput {
     current_physical_address: PhysicalAddress,
     crunched_section_counter: usize,
     current_token_kind: TokenKind,
+    /// Whether the token currently being accumulated is a data directive -
+    /// see `ListingTokenItem::is_data`.
+    current_token_is_data: bool,
     current_token_bytes: Vec<u8>,
     current_token_raw: String,
     current_token_expanded: String,
     current_line_tokens: Vec<ListingTokenItem>,
+    /// Where the token currently being accumulated starts and ends on its line.
+    current_token_column: u16,
+    current_token_column_end: u16,
     next_token_id: usize,
     deferred_for_line: Vec<String>,
     counter_update: Vec<String>,
@@ -72,6 +92,22 @@ pub struct ListingOutput {
     format: ListingOutputFormat,
     renderer: ListingRenderer,
     current_file_index: usize,
+    /// Collects `(file, line, address, length)` alongside the rendered
+    /// listing when a caller asked for a source map. Independent of the
+    /// writer: both, either or neither can be wanted.
+    source_map: Option<super::SourceMapCollector>,
+    /// Nobody is reading the rendered listing, so do not render it.
+    ///
+    /// Asking for a source map installs one of these over `io::sink()`, which
+    /// used to format every line of the program - twice per line, character by
+    /// character, through `qualify_locals_in_line` - and throw the result
+    /// away. On a real demo that is tens of megabytes of text nobody will ever
+    /// see, and it dominated the time to start a debug session.
+    map_only: bool,
+    /// Where in the source the last token of the current line group started,
+    /// so a re-executed token (a new `REPEAT` iteration) is recognised rather
+    /// than glued onto the previous one. See `token_is_on_same_line`.
+    current_line_last_offset: Option<usize>,
     file_indices: HashMap<String, usize>,
     file_order: Vec<String>,
     file_map_header_printed: bool,
@@ -130,10 +166,13 @@ impl ListingOutput {
             crunched_section_counter: 0,
             current_physical_address: MemoryPhysicalAddress::new(0, 0).into(),
             current_token_kind: TokenKind::Hidden,
+            current_token_is_data: false,
             current_token_bytes: Vec::new(),
             current_token_raw: String::new(),
             current_token_expanded: String::new(),
             current_line_tokens: Vec::new(),
+            current_token_column: 1,
+            current_token_column_end: 1,
             next_token_id: 0,
             deferred_for_line: Default::default(),
             counter_update: Vec::new(),
@@ -142,6 +181,9 @@ impl ListingOutput {
             format,
             renderer,
             current_file_index: 0,
+            source_map: None,
+            map_only: false,
+            current_line_last_offset: None,
             file_indices: HashMap::new(),
             file_order: Vec::new(),
             file_map_header_printed: false,
@@ -387,6 +429,24 @@ impl ListingOutput {
             | LocatedTokenInner::Repeat(..) => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
+        // A sibling classification, not folded into `token_kind` above: that
+        // enum already collapses data directives and opcodes onto the same
+        // `Hidden` arm for unrelated formatting reasons, so reusing it here
+        // would make data indistinguishable from code again.
+        //
+        // `Defs` is deliberately excluded: unlike a string table or `db`
+        // list, which are never meant to execute, a `defs` region genuinely
+        // executes every frame (it's just a shorthand for a run of zero
+        // bytes, which decode as `NOP`). Folding it into the data overlay
+        // would hide that from `-dv`. Step-over already treats a `defs` run
+        // the same way, as a repetition of NOPs rather than inert data.
+        self.current_token_is_data = matches!(
+            token.deref(),
+            LocatedTokenInner::Defb(..)
+                | LocatedTokenInner::Defw(..)
+                | LocatedTokenInner::Incbin { .. }
+                | LocatedTokenInner::Str(..)
+        );
     }
 
     fn flush_current_token(&mut self) {
@@ -409,7 +469,10 @@ impl ListingOutput {
             raw: self.current_token_raw.clone(),
             expanded: self.current_token_expanded.clone(),
             bytes: self.current_token_bytes.clone(),
-            token_kind: self.current_token_kind.clone()
+            token_kind: self.current_token_kind.clone(),
+            column: self.current_token_column,
+            column_end: self.current_token_column_end,
+            is_data: self.current_token_is_data
         });
         self.next_token_id = self.next_token_id.saturating_add(1);
         self.current_token_bytes.clear();
@@ -428,11 +491,24 @@ impl ListingOutput {
     }
 
     /// Check if the token is for the same line than the previous token
+    /// Whether `token` continues the line currently being accumulated.
+    ///
+    /// Being on the same line is necessary but not sufficient. A `REPEAT` body
+    /// re-executes the *same* tokens, so iteration two arrives on the same line
+    /// as iteration one and would silently extend its row - a listing showing
+    /// one line with the bytes of three iterations glued together, and a source
+    /// map with one address where there should be three. Source position going
+    /// backwards (or standing still) is what distinguishes re-execution from a
+    /// genuine multi-statement line like `nop : nop : nop`, whose statements do
+    /// advance.
     fn token_is_on_same_line(&self, token: &LocatedToken) -> bool {
         match &self.current_line_group {
             Some((current_location, _current_line, _current_line_expanded)) => {
                 self.token_is_on_same_source(token)
                     && *current_location == token.span().location_line()
+                    && self
+                        .current_line_last_offset
+                        .is_none_or(|last| token.span().offset_from_start() > last)
             },
             None => false
         }
@@ -494,8 +570,15 @@ impl ListingOutput {
             self.current_line_group = Some((token.span().location_line(), raw_line, expanded_line));
         }
 
+        self.current_line_last_offset = Some(token.span().offset_from_start());
         self.update_current_token_kind(token, symbols);
         self.current_token_raw = token.span().as_str().to_string();
+        // Where this token sits on its line. `relative_line_and_column` is the
+        // same computation the parser uses for error reporting, so the columns
+        // agree with what a diagnostic would point at.
+        let (column, column_end) = Self::source_columns(token, &self.current_token_raw);
+        self.current_token_column = column;
+        self.current_token_column_end = column_end;
         self.current_token_expanded = if !Self::should_expand_source_for_token(token) {
             self.current_token_raw.clone()
         }
@@ -505,6 +588,41 @@ impl ListingOutput {
         self.current_token_bytes.clear();
         self.append_current_line_bytes(bytes, address_kind);
         self.update_repeat_depth(token);
+    }
+
+    /// The columns a token occupies, in the file the user has open.
+    ///
+    /// Outside an expansion the span's own columns are the file's, and columns
+    /// count bytes from the start of the line, so the token's byte length is
+    /// its width.
+    ///
+    /// Inside one they are not: a macro body is substituted textually and
+    /// re-parsed, so `({addr1})` has become `(0xc000)` and everything after it
+    /// on that line has moved. Only the map built while substituting can put
+    /// them back. Without it - an orgams-flavor macro, a struct - the whole
+    /// line is recorded instead of a guess, because a column pointing at the
+    /// wrong instruction is worse than one pointing at all of them, and one
+    /// past the end of the line selects nothing at all.
+    fn source_columns(token: &LocatedToken, raw: &str) -> (u16, u16) {
+        /// `column_end` no greater than `column` is how a row says it has no
+        /// columns worth trusting; the debugger then selects the line.
+        const WHOLE_LINE: (u16, u16) = (1, 1);
+
+        let span = token.span();
+        let (_, column) = span.relative_line_and_column();
+        let column = column.max(1);
+        let width = raw.trim_end().len();
+
+        let context = span.context();
+        if !context.is_expansion() {
+            let start = column as u16;
+            return (start, start.saturating_add(width as u16));
+        }
+
+        context
+            .expansion_columns()
+            .and_then(|columns| columns.source_columns(span.offset_from_start(), column, width))
+            .unwrap_or(WHOLE_LINE)
     }
 
     fn expand_symbol_with_listing_context(
@@ -831,6 +949,11 @@ impl ListingOutput {
         self.deferred_for_line.clear();
 
         // draw all lines that correspond to the instructions to output
+        let mut last_mapped_line: Option<u32> = None;
+        // Parallel to `last_mapped_line`: carries whether the run being
+        // continued was data across a continuation chunk (a `defs`/`incbin`
+        // tail with no token of its own).
+        let mut last_mapped_is_data: Option<bool> = None;
         let mut byte_offset = 0usize;
         let render_lines = line_representation_raw.len().max(data_representation.len());
         for idx in 0..render_lines {
@@ -887,6 +1010,111 @@ impl ListingOutput {
 
             // missing instruction must be added manually using TokenKind
             if self.has_current_line_output() {
+                // A long byte run (`defs 16`, an `incbin`) renders as several
+                // chunks, and only the first carries the source line - the
+                // continuations are the *same* line's bytes, so they must be
+                // recorded against it rather than dropped. `last_mapped_line`
+                // carries it across the chunks.
+                if let Some(line) = rendered_line_number {
+                    last_mapped_line = Some(line);
+                }
+                if let Some(collector) = self.source_map.as_mut()
+                    && let Some(line) = last_mapped_line
+                    && let Some(logical) = logical_representation
+                    && !current_chunk.is_empty()
+                {
+                    let name = self
+                        .file_order
+                        .get(self.current_file_index)
+                        .map(String::as_str)
+                        .unwrap_or("");
+                    let file = collector.file_id(name);
+                    // A macro or struct body is re-parsed as its own source, so
+                    // the lines the spans carry count from the body, not from
+                    // the file. The context name still says where the body was
+                    // written - and it must be consulted *here*, before
+                    // `file_id` collapses two different expansions of the same
+                    // file onto one id: `INNER` called from `OUTER`'s body
+                    // gives two rows both reading "line 2" that belong on
+                    // different lines of the file.
+                    let line_offset = super::source_map::expansion_line_offset(name);
+                    // `current_offset` is already the physical position of
+                    // these very bytes; the page is what distinguishes the
+                    // same logical address in two banks.
+                    let page = match self.current_physical_address {
+                        PhysicalAddress::Memory(adr) => adr.page(),
+                        PhysicalAddress::Bank(adr) => adr.bank() as u8,
+                        PhysicalAddress::Cpr(adr) => adr.bloc() as u8
+                    };
+
+                    // One row per *instruction*, not per line: `ld a,l : inc a`
+                    // is two, at two addresses, and a debugger stopped at the
+                    // second should say so rather than pointing at the start of
+                    // the line. The tokens of this chunk already carry their own
+                    // bytes and columns, so the split is a walk over them.
+                    let emitting: Vec<(u16, u16, u16, bool)> = token_chunks
+                        .get(idx)
+                        .map(|tokens| {
+                            tokens
+                                .iter()
+                                .filter(|token| !token.bytes.is_empty())
+                                .map(|token| {
+                                    (
+                                        token.column,
+                                        token.column_end,
+                                        token.bytes.len() as u16,
+                                        token.is_data
+                                    )
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    if emitting.is_empty() {
+                        // A continuation chunk of a long run (`defs 16`), which
+                        // carries bytes but no token of its own - inherit
+                        // whether the run it continues was data, the same way
+                        // `last_mapped_line` inherits which line it continues.
+                        collector.push(
+                            file,
+                            line + line_offset,
+                            logical,
+                            current_offset,
+                            page,
+                            1,
+                            1,
+                            current_chunk.len() as u16,
+                            last_mapped_is_data.unwrap_or(false)
+                        );
+                    }
+                    else {
+                        let mut offset = 0u32;
+                        for (column, column_end, len, is_data) in emitting {
+                            collector.push(
+                                file,
+                                line + line_offset,
+                                logical + offset,
+                                current_offset + offset,
+                                page,
+                                column,
+                                column_end,
+                                len,
+                                is_data
+                            );
+                            offset += len as u32;
+                            last_mapped_is_data = Some(is_data);
+                        }
+                    }
+                }
+
+                // The map has been collected above; everything below is for
+                // the text, which nobody asked for when only the map was
+                // wanted - so it is not built either, not merely not written.
+                if self.map_only {
+                    byte_offset += current_data_len;
+                    continue;
+                }
+
                 let fallback_source_expanded = current_inner_line_expanded
                     .map(|line| line.trim_end())
                     .unwrap_or("");
@@ -955,6 +1183,7 @@ impl ListingOutput {
 
         // cleanup all the fields of the current line
         self.current_line_group = None;
+        self.current_line_last_offset = None;
         self.current_source = None;
         self.current_line_bytes.clear();
         self.current_line_tokens.clear();
@@ -984,6 +1213,28 @@ impl ListingOutput {
     }
 
     /// Print filename if needed
+    /// Start collecting a source map alongside (or instead of) the rendered
+    /// listing.
+    pub fn collect_source_map(&mut self) {
+        self.source_map = Some(super::SourceMapCollector::new());
+    }
+
+    /// Collect the map and render nothing.
+    pub fn collect_source_map_only(&mut self) {
+        self.collect_source_map();
+        self.map_only = true;
+    }
+
+    /// The collected rows, if any were asked for.
+    pub fn take_source_map(&mut self) -> Option<super::RawSourceMap> {
+        self.source_map.take().map(|c| c.finish())
+    }
+
+    /// The collected rows, without consuming them.
+    pub fn source_map_snapshot(&self) -> Option<super::RawSourceMap> {
+        self.source_map.as_ref().map(|c| c.snapshot())
+    }
+
     pub fn manage_fname(&mut self, token: &LocatedToken) {
         // 	dbg!(token);
 
@@ -1699,14 +1950,20 @@ endm\n";
                 raw: "ld".to_string(),
                 expanded: "ld".to_string(),
                 bytes: vec![0x3E],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 1,
                 raw: "1".to_string(),
                 expanded: "1".to_string(),
                 bytes: vec![0x01],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1,
+                is_data: false
             },
         ];
 
@@ -1765,28 +2022,40 @@ endm\n";
                 raw: "ld bc, 0xbc00 + 1".to_string(),
                 expanded: "ld bc, 0xbc00 + 1".to_string(),
                 bytes: vec![0x01, 0x01, 0xBC],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 30,
                 raw: "out (c), c".to_string(),
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 31,
                 raw: "ld bc, 0xbd00 + 96/2".to_string(),
                 expanded: "ld bc, 0xbd00 + 96/2".to_string(),
                 bytes: vec![0x01, 0x30, 0xBD],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 32,
                 raw: "out (c), c".to_string(),
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1,
+                is_data: false
             },
         ];
 
@@ -1830,7 +2099,10 @@ endm\n";
             raw: "add hl, de".to_string(),
             expanded: "add hl, de".to_string(),
             bytes: vec![0x19],
-            token_kind: TokenKind::Displayable
+            token_kind: TokenKind::Displayable,
+            column: 1,
+            column_end: 1,
+            is_data: false
         }];
 
         output.finish();
@@ -1874,7 +2146,10 @@ endm\n";
             raw: "start".to_string(),
             expanded: "start".to_string(),
             bytes: vec![0x00, 0x01],
-            token_kind: TokenKind::Displayable
+            token_kind: TokenKind::Displayable,
+            column: 1,
+            column_end: 1,
+            is_data: false
         }];
 
         output.finish();
