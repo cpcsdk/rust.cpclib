@@ -905,6 +905,14 @@ mod dry_run_env_cache_tests {
             .unwrap()
             .set_modified(later)
             .unwrap();
+        // `cpclib_project::entry::fingerprint_of` now memoizes its own
+        // result for a short while (`FINGERPRINT_CACHE_TTL`, currently
+        // 300ms) - added precisely so a burst of near-simultaneous callers
+        // for the same, unchanged root (a workspace-restore `did_open`
+        // storm) collapses into one real tree walk instead of one per
+        // caller. Wait past it so this test observes a real recomputation,
+        // not a still-warm memo from the lookup two lines up.
+        std::thread::sleep(std::time::Duration::from_millis(350));
 
         let (env2, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
         assert_eq!(

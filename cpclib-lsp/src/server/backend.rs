@@ -174,6 +174,7 @@ impl CpcLspBackend {
             // this off the async pool is the same fix `candidate_asm_paths`
             // above already applies to its own, cheaper, directory walk -
             // see its doc comment for the general reasoning.
+            let blocking_start = std::time::Instant::now();
             let diagnostics = match tokio::task::spawn_blocking(move || {
                 let diagnostics = compute_diagnostics(
                     &asm_analyzer,
@@ -183,11 +184,17 @@ impl CpcLspBackend {
                     &workspace_roots,
                     &build_error_diagnostics
                 );
+                let index_start = std::time::Instant::now();
                 update_embedded_bndbuild_index(
                     &asm_analyzer,
                     &build_analyzer,
                     &document,
                     &embedded_bndbuild_index
+                );
+                tracing::debug!(
+                    "update_embedded_bndbuild_index for {} took {:?}",
+                    document.uri,
+                    index_start.elapsed()
                 );
                 diagnostics
             })
@@ -198,6 +205,14 @@ impl CpcLspBackend {
                 // tokio's default panic hook; nothing to publish.
                 Err(_join_error) => return
             };
+            // The end-to-end cost of one deferred-analysis task, including
+            // `spawn_blocking`'s own scheduling delay - not just the work
+            // inside it. If this is slow while every line logged *inside*
+            // the closure above is individually fast, the gap is in getting
+            // scheduled onto the blocking pool at all (real contention for
+            // that pool, or something upstream of it), not in the work
+            // itself.
+            tracing::debug!("spawn_deferred_analysis for {} took {:?}", uri, blocking_start.elapsed());
             client.publish_diagnostics(uri, diagnostics, None).await;
         });
     }

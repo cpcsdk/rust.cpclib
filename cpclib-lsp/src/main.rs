@@ -304,7 +304,21 @@ async fn main() {
 
     let (service, socket) = LspService::new(CpcLspBackend::new);
 
-    Server::new(stdin, stdout, socket).serve(service).await;
+    // `tower-lsp`'s own default is 4 - fine for one request at a time, but a
+    // workspace-restore `did_open` burst (every previously-open tab, sent by
+    // the editor within milliseconds of each other) means dozens of
+    // notifications competing for only 4 concurrently-processed slots at
+    // once, even though each individual handler now finishes in
+    // microseconds-to-low-milliseconds (`did_open`'s own real work already
+    // runs on `spawn_blocking`, off this limit entirely - see
+    // `spawn_deferred_analysis`). Raised generously rather than tied to core
+    // count: these are cheap async tasks queuing for a slot, not CPU-bound
+    // work needing its own core.
+    const LSP_CONCURRENCY_LEVEL: usize = 32;
+    Server::new(stdin, stdout, socket)
+        .concurrency_level(LSP_CONCURRENCY_LEVEL)
+        .serve(service)
+        .await;
 }
 
 #[cfg(test)]

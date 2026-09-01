@@ -131,16 +131,49 @@ fn newest_mtime(entry: &ignore::DirEntry) -> u128 {
         .unwrap_or(0)
 }
 
+/// How long a computed fingerprint is trusted before `fingerprint_of` walks
+/// the tree again for the same root - see [`FINGERPRINT_CACHE`]'s own doc
+/// comment for why this exists at all.
+const FINGERPRINT_CACHE_TTL: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// `fingerprint_of`'s own memo, keyed by root: `(when it was computed, the
+/// value)`.
+///
+/// `fingerprint_of` is the cache *key* for `env_cache`/`address_source_cache`
+/// (see `cpclib-lsp`'s `workspace_fingerprint_of`) - which means it now runs
+/// on every diagnostics/hover/peephole computation for every open document,
+/// not just on a genuine cache miss, since you have to compute the
+/// fingerprint before you can even tell whether it changed. Real, measured
+/// consequence: opening a workspace-restore burst of N previously-open tabs
+/// (VS Code sends every `didOpen` within milliseconds of each other) fires N
+/// full recursive walks of the *same, unchanged* project root back to back,
+/// for a value that provably has not changed between them. Each walk alone
+/// is cheap; N of them queued through `tower-lsp`'s own concurrency limit is
+/// not. A short-lived memo collapses a burst like that into one real walk -
+/// long enough to matter for a startup burst (milliseconds apart), short
+/// enough that a genuine edit to an included file is picked up within a
+/// fraction of a second, not stale for any duration a person would notice.
+static FINGERPRINT_CACHE: std::sync::OnceLock<dashmap::DashMap<PathBuf, (std::time::Instant, u128)>> =
+    std::sync::OnceLock::new();
+
 /// The fingerprint alone, without reading a single file.
 ///
 /// This is the cache *key* for everything below it, so it has to be the cheap
 /// half of the walk: `stat` per candidate, no `read_to_string`. When it matches
 /// what a previous answer was computed under, nothing else runs at all.
 pub fn fingerprint_of(root: &Path) -> u128 {
-    build_affecting_files(root)
+    let cache = FINGERPRINT_CACHE.get_or_init(dashmap::DashMap::new);
+    if let Some(cached) = cache.get(root)
+        && cached.0.elapsed() < FINGERPRINT_CACHE_TTL
+    {
+        return cached.1;
+    }
+    let value = build_affecting_files(root)
         .map(|(entry, _)| newest_mtime(&entry))
         .max()
-        .unwrap_or(0)
+        .unwrap_or(0);
+    cache.insert(root.to_path_buf(), (std::time::Instant::now(), value));
+    value
 }
 
 pub fn scan_workspace(root: &Path) -> Workspace {
@@ -451,6 +484,46 @@ mod tests {
         // "no RUN here" about a file that has one.
         assert!(contains_run_word("    nop : RuN start"));
         assert!(!contains_run_word("    ld a, 1 : ret"));
+    }
+
+    /// Regression coverage for `fingerprint_of`'s short-lived memo: a burst
+    /// of calls for the same root within `FINGERPRINT_CACHE_TTL` must not
+    /// each re-walk the tree - repeated calls right after one another return
+    /// the same value even though the file changed *between* them, proving
+    /// the second call was served from the cache rather than recomputed.
+    /// Once the TTL has actually elapsed, a real change is picked up -
+    /// proving this is a short debounce, not a permanent staleness bug like
+    /// the one this same fingerprint mechanism exists to prevent elsewhere.
+    #[test]
+    fn fingerprint_of_coalesces_a_burst_of_calls_for_the_same_unchanged_root() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let root = tmp.path().as_std_path();
+        write(root, "main.asm", "ret\n");
+
+        let first = fingerprint_of(root);
+
+        // A change to the tree, immediately after - a real edit landing
+        // inside the memo's own TTL window, exactly like 45 near-simultaneous
+        // `did_open`s for a workspace-restore burst would.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        let changed = write(root, "second.asm", "nop\n");
+        std::fs::File::open(&changed)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+
+        let second = fingerprint_of(root);
+        assert_eq!(
+            first, second,
+            "a call within the memo's TTL must not see the change yet"
+        );
+
+        std::thread::sleep(FINGERPRINT_CACHE_TTL + std::time::Duration::from_millis(50));
+        let third = fingerprint_of(root);
+        assert_ne!(
+            first, third,
+            "once the memo has actually expired, the real change must be picked up"
+        );
     }
 }
 

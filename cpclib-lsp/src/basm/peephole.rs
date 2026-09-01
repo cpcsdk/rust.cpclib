@@ -931,6 +931,13 @@ mod quickfix_tests {
             "    org 0x5000\n    run start\n    include \"code.asm\"\n"
         )
         .unwrap();
+        // `cpclib_project::entry::fingerprint_of` now memoizes its own
+        // result for a short while (`FINGERPRINT_CACHE_TTL`, currently
+        // 300ms), so a lookup immediately after the write above could still
+        // observe the pre-change fingerprint from the `second` call just
+        // above. Wait past it so this test's own change is what gets
+        // observed, not a still-warm memo.
+        std::thread::sleep(std::time::Duration::from_millis(350));
         let third = analyzer.peephole_addresses(&d, || false);
         assert!(
             !Arc::ptr_eq(&first, &third),

@@ -248,10 +248,21 @@ impl Default for AssemblyAnalyzer {
 /// buffer) - same fallback both call sites already used before this was
 /// shared.
 pub(super) fn workspace_fingerprint_of(uri: &Url) -> u128 {
-    uri.to_file_path()
+    // Timed unconditionally: this runs on every `env_cache`/`address_source_cache`
+    // lookup, not just a miss - a burst of near-simultaneous calls for the
+    // same, unchanged root (a workspace-restore `did_open` storm) used to
+    // mean that many full recursive tree walks back to back before
+    // `cpclib_project::entry::fingerprint_of`'s own short-lived memo was
+    // added; this line is what lets that be confirmed directly from a log
+    // instead of inferred from a silent gap.
+    let start = std::time::Instant::now();
+    let result = uri
+        .to_file_path()
         .ok()
         .as_deref()
         .and_then(cpclib_project::entry::root_of)
         .map(|root| cpclib_project::entry::fingerprint_of(&root))
-        .unwrap_or(0)
+        .unwrap_or(0);
+    tracing::debug!("workspace_fingerprint_of for {} took {:?}", uri, start.elapsed());
+    result
 }
