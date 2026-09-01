@@ -3215,21 +3215,50 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document.uri;
         tracing::debug!("Semantic tokens request for {}", uri);
 
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            let data = dispatch_by_doc_type(
-                document,
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+
+        // Same class of bug `spawn_deferred_analysis` already fixed for
+        // diagnostics, in a handler that fix never touched: this used to
+        // compute tokens directly, inline, on whichever async worker thread
+        // picked up this request - real work (an AST walk per file, more for
+        // a large one) with no yield point, run synchronously on the same
+        // shared runtime `Server::serve`'s own message-reading loop lives
+        // on. The editor requests this immediately for every newly-opened
+        // document, not debounced the way diagnostics are - so a workspace-
+        // restore burst means dozens of these landing back to back, each one
+        // blocking everything else (including reading the *next* message off
+        // stdin) for as long as it takes. Confirmed directly: reproducing a
+        // real `didOpen` + `semanticTokens/full` burst outside VS Code
+        // entirely (bypassing any client-side explanation) still stalled for
+        // many seconds until this was also moved off the async pool.
+        let start = std::time::Instant::now();
+        let data = match tokio::task::spawn_blocking(move || {
+            dispatch_by_doc_type(
+                &document,
                 vec![],
-                |doc| self.asm_analyzer.semantic_tokens(doc),
-                |doc| self.build_analyzer.semantic_tokens(doc),
-                |doc| self.basic_analyzer.semantic_tokens(doc)
-            );
-            if !data.is_empty() {
-                return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-                    result_id: None,
-                    data
-                })));
-            }
+                |doc| asm_analyzer.semantic_tokens(doc),
+                |doc| build_analyzer.semantic_tokens(doc),
+                |doc| basic_analyzer.semantic_tokens(doc)
+            )
+        })
+        .await
+        {
+            Ok(data) => data,
+            Err(_join_error) => return Ok(None)
+        };
+        tracing::debug!("Semantic tokens request for {} took {:?}", uri, start.elapsed());
+
+        if !data.is_empty() {
+            return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data
+            })));
         }
 
         Ok(None)
