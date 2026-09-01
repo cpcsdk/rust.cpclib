@@ -70,7 +70,7 @@ pub fn collect_addresses_from_expressions(
             // Helper closure to extract and check an expression
             let mut check_expression = |expr: &Expr, is_memory: bool| {
                 if let Ok(value) = expr.eval()
-                    && let Ok(address) = value.int()
+                    && let Ok(address) = value.int_value()
                 {
                     let address = address as u16;
                     // Always label memory references (they're 16-bit addresses)
@@ -107,7 +107,7 @@ pub fn collect_addresses_from_expressions(
             let addr = address
                 .eval()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                .int()
+                .int_value()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
                 as u16;
             current_address = Some(addr);
@@ -193,7 +193,7 @@ pub fn inject_labels_into_expressions<O: EventObserver>(
             let addr = address
                 .eval()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                .int()
+                .int_value()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
                 as u16;
             current_address = Some(addr);
@@ -238,7 +238,7 @@ pub fn inject_labels_into_expressions<O: EventObserver>(
             // Helper closure to replace an expression with a label if it matches
             let replace_if_label = |expr: &mut Expr| {
                 if let Ok(value) = expr.eval()
-                    && let Ok(address) = value.int()
+                    && let Ok(address) = value.int_value()
                 {
                     let address = address as u16;
                     if let Some(label) = address_to_label.get(&address) {
@@ -277,7 +277,7 @@ pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
 
     for token in listing.iter() {
         if let Token::Org { val1: address, .. } = token
-            && let Some(addr) = address.eval().ok().and_then(|v| v.int().ok())
+            && let Some(addr) = address.eval().ok().and_then(|v| v.int_value().ok())
         {
             current_address = Some(addr as u16);
         }

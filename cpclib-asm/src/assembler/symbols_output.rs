@@ -29,7 +29,9 @@ impl SymbolOutputFormat {
                         format!("{} equ {}", k.value(), *b)
                     },
                     Value::Expr(e @ ExprResult::Float(_f)) => {
-                        format!("{} equ #{:04X}", k.value(), e.int().unwrap())
+                        // no Env reachable here - known gap, float EQU symbols
+                        // never warn on .sym export
+                        format!("{} equ #{:04X}", k.value(), e.int_value().unwrap())
                     },
                     Value::Expr(ExprResult::String(s)) => {
                         format!("{} equ {}", k.value(), s)
@@ -66,7 +68,9 @@ impl SymbolOutputFormat {
                         format!("{} {}", k.value(), *b)
                     },
                     Value::Expr(e @ ExprResult::Float(_f)) => {
-                        format!("{} #{:X}", k.value(), e.int().unwrap())
+                        // no Env reachable here - known gap, float EQU symbols
+                        // never warn on .sym export
+                        format!("{} #{:X}", k.value(), e.int_value().unwrap())
                     },
                     Value::Expr(ExprResult::String(_s)) => {
                         "".to_owned() // ignored by winape

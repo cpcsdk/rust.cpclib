@@ -374,7 +374,8 @@ impl CharsetEncoding {
         match spec {
             CharsetFormat::Reset => self.reset(),
             CharsetFormat::CharsList(l, s) => {
-                let mut s = env.resolve_expr_must_never_fail(s)?.int()?;
+                let result = env.resolve_expr_must_never_fail(s)?;
+                let mut s = env.int_forward(&result)?;
                 for c in l.iter() {
                     self.lut.insert(*c, s);
                     s += 1;
@@ -382,13 +383,15 @@ impl CharsetEncoding {
             },
             CharsetFormat::Char(c, i) => {
                 let c = env.resolve_expr_must_never_fail(c)?.char()?;
-                let i = env.resolve_expr_must_never_fail(i)?.int()?;
+                let result = env.resolve_expr_must_never_fail(i)?;
+                let i = env.int_forward(&result)?;
                 self.lut.insert(c, i);
             },
             CharsetFormat::Interval(a, b, s) => {
                 let a = env.resolve_expr_must_never_fail(a)?.char()?;
                 let b = env.resolve_expr_must_never_fail(b)?.char()?;
-                let mut s = env.resolve_expr_must_never_fail(s)?.int()?;
+                let result = env.resolve_expr_must_never_fail(s)?;
+                let mut s = env.int_forward(&result)?;
                 for c in a..=b {
                     self.lut.insert(c, s);
                     s += 1;
@@ -772,9 +775,8 @@ impl Env {
     where
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
-        let val = self
-            .resolve_expr_may_fail_in_first_pass(arg2.get_expression().unwrap())?
-            .int()?;
+        let result = self.resolve_expr_may_fail_in_first_pass(arg2.get_expression().unwrap())?;
+        let val = self.int_forward(&result)?;
 
         let _p = match val {
             0x38 | 7 | 38 => 0b111,
@@ -818,9 +820,8 @@ impl Env {
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
         let mut bytes = Bytes::new();
-        let val = self
-            .resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?
-            .int()?;
+        let result = self.resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?;
+        let val = self.int_forward(&result)?;
 
         let p = match val {
             0x00 => 0b000,
@@ -849,9 +850,8 @@ impl Env {
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
         let mut bytes = Bytes::new();
-        let val = self
-            .resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?
-            .int()?;
+        let result = self.resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?;
+        let val = self.int_forward(&result)?;
 
         let code = match val {
             0x00 => 0x46,
@@ -2484,6 +2484,21 @@ impl Env {
         }
         (value & 0xFFFF) as u16
     }
+
+    /// Coerce `result` to `i32`, forwarding any truncation warning it
+    /// carries (i.e. `result` was a real/float value) as an assembler
+    /// warning. The building block every call site that resolves a
+    /// user-authored expression into assembled output should use instead of
+    /// calling `ExprResult::int()` directly, so a stray float never gets
+    /// silently rounded without the user being told.
+    #[inline(always)]
+    pub fn int_forward(&mut self, result: &ExprResult) -> Result<i32, ExpressionTypeError> {
+        let (val, warn) = result.int()?;
+        if let Some(msg) = warn {
+            self.add_warning(Box::new(AssemblerWarning::AssemblingError { msg }));
+        }
+        Ok(val)
+    }
 }
 
 /// Visit directives
@@ -2503,7 +2518,7 @@ impl Env {
             self.logical_output_address() as i32
         }
         else {
-            self.resolve_expr_must_never_fail(address)?.int()?
+            { let __r = self.resolve_expr_must_never_fail(address)?; self.int_forward(&__r)? }
         };
 
         let output_adr = if let Some(address2) = address2 {
@@ -2511,7 +2526,7 @@ impl Env {
                 self.logical_output_address() as i32 // XXX here is must be code not output. I do not understand ...
             }
             else {
-                self.resolve_expr_must_never_fail(address2)?.int()?
+                { let __r = self.resolve_expr_must_never_fail(address2)?; self.int_forward(&__r)? }
             }
         }
         else {
@@ -2608,7 +2623,10 @@ impl Env {
                     let symbols = self.symbols();
                     let value: &Value = symbols.any_value(label)?.unwrap();
                     match value {
-                        Value::Expr(expr_result) => (expr_result.int()? as _, 0),
+                        Value::Expr(expr_result) => {
+                            let expr_result = expr_result.clone();
+                            (self.int_forward(&expr_result)? as _, 0)
+                        },
                         Value::Address(physical_address) => {
                             (
                                 physical_address.address(),
@@ -2619,7 +2637,7 @@ impl Env {
                     }
                 }
                 else {
-                    let current_address = self.resolve_expr_must_never_fail(exp)?.int()?;
+                    let current_address = { let __r = self.resolve_expr_must_never_fail(exp)?; self.int_forward(&__r)? };
                     let page = 0; // BUG should be dynamic and not hard coded !
                     (current_address as _, page)
                 }
@@ -2659,7 +2677,7 @@ impl Env {
 
             let mut brk = AdvancedRemuBreakPoint::default();
             brk.addr = if let Some(address) = address {
-                self.resolve_expr_must_never_fail(address)?.int()? as u16
+                ({ let __r = self.resolve_expr_must_never_fail(address)?; self.int_forward(&__r)? }) as u16
             }
             else {
                 self.logical_code_address()
@@ -2674,21 +2692,20 @@ impl Env {
                 brk.run_mode = run.clone();
             }
             if let Some(mask) = mask {
-                brk.mask = self.resolve_expr_may_fail_in_first_pass(mask)?.int()? as u16;
+                brk.mask = { let __r = self.resolve_expr_may_fail_in_first_pass(mask)?; self.int_forward(&__r)? } as u16;
             }
             if let Some(size) = size {
-                brk.size = self.resolve_expr_may_fail_in_first_pass(size)?.int()? as u16;
+                brk.size = { let __r = self.resolve_expr_may_fail_in_first_pass(size)?; self.int_forward(&__r)? } as u16;
             }
             if let Some(value) = value {
-                brk.value = self.resolve_expr_may_fail_in_first_pass(value)?.int()? as u8;
+                brk.value = { let __r = self.resolve_expr_may_fail_in_first_pass(value)?; self.int_forward(&__r)? } as u8;
             }
             if let Some(value_mask) = value_mask {
-                brk.val_mask = self
-                    .resolve_expr_may_fail_in_first_pass(value_mask)?
-                    .int()? as u8;
+                let result = self.resolve_expr_may_fail_in_first_pass(value_mask)?;
+                brk.val_mask = self.int_forward(&result)? as u8;
             }
             if let Some(step) = step {
-                brk.step = Some(self.resolve_expr_may_fail_in_first_pass(step)?.int()? as _);
+                brk.step = Some({ let __r = self.resolve_expr_may_fail_in_first_pass(step)?; self.int_forward(&__r)? } as _);
             }
             if let Some(condition) = condition {
                 let cond = self.resolve_expr_may_fail_in_first_pass(condition)?;
@@ -2773,7 +2790,7 @@ impl Env {
 
     /// TODO set the limit for the current page
     fn visit_limit<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
-        let value = self.resolve_expr_must_never_fail(exp)?.int()?;
+        let value = { let __r = self.resolve_expr_must_never_fail(exp)?; self.int_forward(&__r)? };
         let in_crunched_section = self.crunched_section_state.is_some();
 
         if value <= 0 {
@@ -2817,7 +2834,7 @@ impl Env {
     }
 
     fn visit_map<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
-        let value = self.resolve_expr_must_never_fail(exp)?.int()?;
+        let value = { let __r = self.resolve_expr_must_never_fail(exp)?; self.int_forward(&__r)? };
         self.map_counter = value;
 
         Ok(())
@@ -3151,7 +3168,7 @@ impl Env {
         let bytes = self.assemble_nop(Mnemonic::Nop, Some(count))?;
         self.output_bytes(&bytes)?;
 
-        let count = self.resolve_expr_may_fail_in_first_pass(count)?.int()? as _;
+        let count = { let __r = self.resolve_expr_may_fail_in_first_pass(count)?; self.int_forward(&__r)? } as _;
         self.stable_counters.update_counters(count);
         Ok(())
     }
@@ -3249,9 +3266,9 @@ impl Env {
         boundary: &E,
         fill: Option<&E>
     ) -> Result<(), Box<AssemblerError>> {
-        let boundary = self.resolve_expr_must_never_fail(boundary)?.int()? as u16;
+        let boundary = { let __r = self.resolve_expr_must_never_fail(boundary)?; self.int_forward(&__r)? } as u16;
         let fill = match fill {
-            Some(fill) => self.resolve_expr_may_fail_in_first_pass(fill)?.int()? as u8,
+            Some(fill) => ({ let __r = self.resolve_expr_may_fail_in_first_pass(fill)?; self.int_forward(&__r)? }) as u8,
             None => 0
         };
 
@@ -3336,8 +3353,8 @@ impl Env {
         start: &E,
         stop: &E
     ) -> Result<(), Box<AssemblerError>> {
-        let start = self.resolve_expr_must_never_fail(start)?.int()? as u16;
-        let stop = self.resolve_expr_must_never_fail(stop)?.int()? as u16;
+        let start = { let __r = self.resolve_expr_must_never_fail(start)?; self.int_forward(&__r)? } as u16;
+        let stop = { let __r = self.resolve_expr_must_never_fail(stop)?; self.int_forward(&__r)? } as u16;
         let mmr = self.ga_mmr;
 
         if let Some(section) = self.sections.get(name.as_str()) {
@@ -3439,7 +3456,7 @@ impl Env {
     }
 
     fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
-        let amount = self.resolve_expr_must_never_fail(exp)?.int()?;
+        let amount = { let __r = self.resolve_expr_must_never_fail(exp)?; self.int_forward(&__r)? };
 
         // if amount < 0 {
         // return Err(AssemblerError::AlreadyRenderedError(format!("SKIP accept only positive values. {amount} is invalid")));
@@ -3478,7 +3495,7 @@ impl Env {
         match exp {
             Some(exp) => {
                 // prefix provided, we explicitely want one configuration
-                let exp = self.resolve_expr_must_never_fail(exp)?.int()?;
+                let exp = { let __r = self.resolve_expr_must_never_fail(exp)?; self.int_forward(&__r)? };
                 self.free_banks.selected_index = None;
 
                 if output_kind == OutputKind::Cpr {
@@ -3559,7 +3576,7 @@ impl Env {
             return Err(Box::new(AssemblerError::NotAllowed));
         }
 
-        let page = self.resolve_expr_must_never_fail(exp)?.int()? as u8; // This value MUST be interpretable once executed
+        let page = { let __r = self.resolve_expr_must_never_fail(exp)?; self.int_forward(&__r)? } as u8; // This value MUST be interpretable once executed
 
         //       eprintln!("Warning need to code sna memory extension if needed");
         self.select_page(page)?;
@@ -3631,8 +3648,8 @@ impl Env {
         stop: &E
     ) -> Result<(), Box<AssemblerError>> {
         if self.pass.is_first_pass() {
-            let start = self.resolve_expr_must_never_fail(start)?.int()? as u16;
-            let stop = self.resolve_expr_must_never_fail(stop)?.int()? as u16;
+            let start = { let __r = self.resolve_expr_must_never_fail(start)?; self.int_forward(&__r)? } as u16;
+            let stop = { let __r = self.resolve_expr_must_never_fail(stop)?; self.int_forward(&__r)? } as u16;
 
             self.active_page_info_mut()
                 .protected_areas
@@ -3733,7 +3750,7 @@ impl Env {
 
         let from = match address {
             Some(address) => {
-                let address = self.resolve_expr_must_never_fail(address)?.int()?;
+                let address = { let __r = self.resolve_expr_must_never_fail(address)?; self.int_forward(&__r)? };
                 if address < 0 {
                     return Err(Box::new(AssemblerError::AssemblingError {
                         msg: format!(
@@ -3748,7 +3765,7 @@ impl Env {
 
         let size = match size {
             Some(size) => {
-                let size = self.resolve_expr_must_never_fail(size)?.int()?;
+                let size = { let __r = self.resolve_expr_must_never_fail(size)?; self.int_forward(&__r)? };
                 if size < 0 {
                     return Err(Box::new(AssemblerError::AssemblingError {
                         msg: format!("Cannot SAVE {amsdos_fname} as the size ({size}) is invalid.")
@@ -4138,7 +4155,7 @@ impl Env {
         count: Option<&E>
     ) -> Result<Bytes, Box<AssemblerError>> {
         let count = match count {
-            Some(count) => self.resolve_expr_must_never_fail(count)?.int()?,
+            Some(count) => { let __r = self.resolve_expr_must_never_fail(count)?; self.int_forward(&__r)? },
             None => 1
         };
         let mut bytes = Bytes::new();
@@ -4837,7 +4854,7 @@ impl Env {
         ProcessedToken<'token, T>: FunctionBuilder
     {
         // Get the next code address
-        let address = self
+        let result = self
             .resolve_expr_must_never_fail(address)
             .map_err(|error| {
                 match span {
@@ -4849,8 +4866,8 @@ impl Env {
                     },
                     None => error
                 }
-            })?
-            .int()?;
+            })?;
+        let address = self.int_forward(&result)?;
 
         // do not change the output address
         {
@@ -5083,7 +5100,7 @@ impl Env {
         ProcessedToken<'token, T>: FunctionBuilder
     {
         let repeat = self.resolve_expr_must_never_fail(count)?;
-        let repeat = repeat.int()?;
+        let repeat = self.int_forward(&repeat)?;
         for _ in 0..repeat {
             opcode.visited(self)?;
         }
@@ -5152,7 +5169,7 @@ impl Env {
         ProcessedToken<'token, T>: FunctionBuilder
     {
         // get the number of loops
-        let count = self.resolve_expr_must_never_fail(count)?.int()?;
+        let count = { let __r = self.resolve_expr_must_never_fail(count)?; self.int_forward(&__r)? };
 
         // get the counter name of any
         let counter_name = counter_name
@@ -5317,7 +5334,7 @@ impl Env {
         address: &E,
         ga: Option<&E>
     ) -> Result<(), Box<AssemblerError>> {
-        let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
+        let address = { let __r = self.resolve_expr_may_fail_in_first_pass(address)?; self.int_forward(&__r)? };
 
         if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&address.into())
@@ -5337,7 +5354,7 @@ impl Env {
                 self.run_options = Some((address as _, None));
             },
             Some(ga_expr) => {
-                let ga_expr = self.resolve_expr_may_fail_in_first_pass(ga_expr)?.int()?;
+                let ga_expr = { let __r = self.resolve_expr_may_fail_in_first_pass(ga_expr)?; self.int_forward(&__r)? };
                 self.sna.set_value(SnapshotFlag::GA_RAMCFG, address as _)?;
                 self.run_options = Some((address as _, Some(ga_expr as _)));
             }
@@ -5663,20 +5680,20 @@ impl Env {
         fields: &[(L, Option<V>)]
     ) -> Result<(), Box<AssemblerError>> {
         let mut counter: i32 = if let Some(s) = start {
-            self.resolve_expr_must_never_fail(s)?.int()?
+            { let __r = self.resolve_expr_must_never_fail(s)?; self.int_forward(&__r)? }
         }
         else {
             0
         };
         let step_val: i32 = if let Some(s) = step {
-            self.resolve_expr_must_never_fail(s)?.int()?
+            { let __r = self.resolve_expr_must_never_fail(s)?; self.int_forward(&__r)? }
         }
         else {
             1
         };
         for (label, override_val) in fields {
             if let Some(ov) = override_val {
-                counter = self.resolve_expr_must_never_fail(ov)?.int()?;
+                counter = { let __r = self.resolve_expr_must_never_fail(ov)?; self.int_forward(&__r)? };
             }
             let symbol_name: String = if let Some(p) = prefix {
                 format!("{}_{}", p.as_str(), label.as_str())
@@ -5710,7 +5727,7 @@ impl Env {
             }))
         }
         else {
-            let delta = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+            let delta = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
             if delta < 0 {
                 let mut e = AssemblerError::AlreadyRenderedError(format!(
                     "FIELD argument must be positive ({delta} is a wrong value)."
@@ -5827,7 +5844,7 @@ impl Env {
     ) -> Result<(), Box<AssemblerError>> {
         let env = self;
 
-        let delta = delta.int()?;
+        let delta = env.int_forward(&delta)?;
 
         let mask = kind.mask();
 
@@ -5861,12 +5878,14 @@ impl Env {
         ) -> Result<(), Box<AssemblerError>> {
             match &expr {
                 ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
-                    output(env, expr.int()?, delta, mask)
+                    let raw = env.int_forward(expr)?;
+                    output(env, raw, delta, mask)
                 },
                 ExprResult::Char(c) => {
                     // XXX here it is problematci c shold be a char and not a byte
                     let _c = env.charset_encoding.transform_char(*c as char);
-                    output(env, expr.int()?, delta, mask)
+                    let raw = env.int_forward(expr)?;
+                    output(env, raw, delta, mask)
                 },
                 ExprResult::String(s) => {
                     let bytes = env.charset_encoding.transform_string(s);
@@ -6038,7 +6057,7 @@ impl Env {
         let hidden_lines: Option<Vec<u16>> = if let Some(lines) = hidden_lines {
             let mut resolved = Vec::with_capacity(lines.len());
             for expr in lines {
-                let val = self.resolve_expr_must_never_fail(expr)?.int()?;
+                let val = { let __r = self.resolve_expr_must_never_fail(expr)?; self.int_forward(&__r)? };
                 resolved.push(val as u16);
             }
             Some(resolved)
@@ -6089,7 +6108,7 @@ impl Env {
         fill: Option<&E>
     ) -> Result<Bytes, Box<AssemblerError>> {
         let count = match self.resolve_expr_must_never_fail(expr) {
-            Ok(amount) => amount.int()?,
+            Ok(amount) => self.int_forward(&amount)?,
             Err(e) => {
                 self.add_error_discardable_one_pass(e)?;
                 *self.request_additional_pass.write().unwrap() = true; // we expect to obtain this value later
@@ -6107,9 +6126,8 @@ impl Env {
             0
         }
         else {
-            let raw = self
-                .resolve_expr_may_fail_in_first_pass(fill.unwrap())?
-                .int()?;
+            let result = self.resolve_expr_may_fail_in_first_pass(fill.unwrap())?;
+            let raw = self.int_forward(&result)?;
             self.checked_byte(raw)
         };
 
@@ -6125,15 +6143,14 @@ impl Env {
         expr: &Expr,
         fill: Option<&Expr>
     ) -> Result<Bytes, Box<AssemblerError>> {
-        let expression = self.resolve_expr_must_never_fail(expr)?.int()? as u16;
+        let expression = { let __r = self.resolve_expr_must_never_fail(expr)?; self.int_forward(&__r)? } as u16;
         let current = self.symbols().current_address()?;
         let value = if fill.is_none() {
             0
         }
         else {
-            let raw = self
-                .resolve_expr_may_fail_in_first_pass(fill.unwrap())?
-                .int()?;
+            let result = self.resolve_expr_may_fail_in_first_pass(fill.unwrap())?;
+            let raw = self.int_forward(&result)?;
             self.checked_byte(raw)
         };
 
@@ -6421,7 +6438,7 @@ impl Env {
         else if arg.is_expression() {
             let exp = arg.get_expression().unwrap();
             {
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let val = self.checked_byte(raw);
                 add_byte(&mut bytes, 0xFE);
                 add_byte(&mut bytes, val);
@@ -6441,7 +6458,7 @@ impl Env {
                 add_byte(&mut bytes, 0xBE);
                 add_byte(
                     &mut bytes,
-                    self.resolve_index_may_fail_in_first_pass(idx)?.int()? as _
+                    { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } as _
                 );
             }
         }
@@ -6492,7 +6509,7 @@ impl Env {
         if arg.is_expression() {
             let exp = arg.get_expression().unwrap();
             {
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let val = self.checked_byte(raw);
                 bytes.push(0xD6);
                 bytes.push(val);
@@ -6522,7 +6539,7 @@ impl Env {
             let idx = arg.get_index().unwrap();
 
             {
-                let val = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
+                let val = ({ let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } & 0xFF) as u8;
 
                 bytes.push(indexed_register16_to_code(reg));
                 bytes.push(0x96);
@@ -6570,7 +6587,7 @@ impl Env {
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                    let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                     let val = self.checked_byte(raw);
                     bytes.push(0xDE);
                     bytes.push(val);
@@ -6588,7 +6605,7 @@ impl Env {
                 {
                     bytes.push(indexed_register16_to_code(reg));
                     bytes.push(0x9E);
-                    let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()? as u8;
+                    let val = { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } as u8;
                     bytes.push(val);
                 }
             }
@@ -6679,7 +6696,7 @@ impl Env {
                 let idx = target.get_index().unwrap();
 
                 {
-                    let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()? as u8;
+                    let val = { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } as u8;
                     bytes.push(indexed_register16_to_code(reg));
                     add_byte(&mut bytes, 0xCB);
                     bytes.push(val);
@@ -6896,7 +6913,7 @@ impl Env {
             let idx = arg1.get_index().unwrap();
             {
                 let res = self.resolve_index_may_fail_in_first_pass(idx)?;
-                let val = (res.int()? & 0xFF) as u8;
+                let val = (self.int_forward(&res)? & 0xFF) as u8;
 
                 bytes.push(indexed_register16_to_code(reg));
                 bytes.push(if is_inc { 0x34 } else { 0x35 });
@@ -6926,7 +6943,7 @@ impl Env {
     {
         if let Some(expr) = arg1.get_expression() {
             let mut bytes = Bytes::new();
-            let address = self.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
+            let address = { let __r = self.resolve_expr_may_fail_in_first_pass(expr)?; self.int_forward(&__r)? };
             let relative = if expr.is_relative() {
                 address as u8
             }
@@ -6997,7 +7014,7 @@ impl Env {
                     Mnemonic::Xor => 0xEE,
                     _ => unreachable!()
                 };
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let value = self.checked_byte(raw);
                 bytes.push(base);
                 bytes.push(value);
@@ -7015,7 +7032,7 @@ impl Env {
             let idx = arg1.get_index().unwrap();
 
             {
-                let value = self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF;
+                let value = { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } & 0xFF;
                 bytes.push(indexed_register16_to_code(reg));
                 bytes.push(memory_code());
                 bytes.push(value as u8);
@@ -7058,7 +7075,7 @@ impl Env {
                 let idx = arg2.get_index().unwrap();
 
                 {
-                    let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()?;
+                    let val = { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? };
 
                     bytes.push(indexed_register16_to_code(reg));
                     if is_add {
@@ -7073,7 +7090,7 @@ impl Env {
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                    let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                     let val = self.checked_byte(raw);
                     if is_add {
                         bytes.push(0b1100_0110);
@@ -7208,7 +7225,7 @@ impl Env {
             let exp = arg2.get_expression().unwrap();
             {
                 if arg1.is_register_a() {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                    let val = ({ let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? } & 0xFF) as u8;
                     bytes.push(0xDB);
                     bytes.push(val);
                 }
@@ -7257,7 +7274,7 @@ impl Env {
             let exp = arg1.get_expression().unwrap();
             {
                 if arg2.is_register_a() {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                    let val = ({ let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? } & 0xFF) as u8;
                     bytes.push(0xD3);
                     bytes.push(val);
                 }
@@ -7290,7 +7307,7 @@ impl Env {
 
         let bit = match arg1.get_expression() {
             Some(e) => {
-                let bit = (self.resolve_expr_may_fail_in_first_pass(e)?.int()? & 0xFF) as u8;
+                let bit = ({ let __r = self.resolve_expr_may_fail_in_first_pass(e)?; self.int_forward(&__r)? } & 0xFF) as u8;
                 if bit > 7 {
                     return Err(Box::new(AssemblerError::InvalidArgument {
                         msg: format!("{mnemonic}: {bit} is an invalid value")
@@ -7322,7 +7339,7 @@ impl Env {
 
                 bytes.push(indexed_register16_to_code(reg));
                 add_byte(&mut bytes, 0xCB);
-                let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
+                let delta = ({ let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } & 0xFF) as u8;
                 add_byte(&mut bytes, delta);
 
                 if hidden.is_some() {
@@ -7397,7 +7414,7 @@ impl Env {
 
         if arg2.is_expression() {
             let e = arg2.get_expression().unwrap();
-            let address = self.resolve_expr_may_fail_in_first_pass(e)?.int()?;
+            let address = { let __r = self.resolve_expr_may_fail_in_first_pass(e)?; self.int_forward(&__r)? };
             if is_jr {
                 let relative = if e.is_relative() {
                     address as u8
@@ -7491,7 +7508,7 @@ impl Env {
         }
 
         let e = arg2.get_expression().unwrap();
-        let address = self.resolve_expr_may_fail_in_first_pass(e)?.int()?;
+        let address = { let __r = self.resolve_expr_may_fail_in_first_pass(e)?; self.int_forward(&__r)? };
 
         // A forward-referenced target's resolved value lags one pass behind
         // this instruction's own size decision (the symbol table only holds
@@ -7579,7 +7596,7 @@ impl Env {
             }
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let val = self.checked_byte(raw);
                 bytes.push(0b0000_0110 | (dst << 3));
                 bytes.push(val);
@@ -7587,7 +7604,7 @@ impl Env {
             else if arg2.is_indexregister_with_index() {
                 let reg = arg2.get_indexregister16().unwrap();
                 let idx = arg2.get_index().unwrap();
-                let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()?;
+                let val = { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? };
                 add_index_register_code(&mut bytes, reg);
                 add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
                 add_index(&mut bytes, val, self)?;
@@ -7616,7 +7633,7 @@ impl Env {
             else if arg2.is_memory() {
                 // dst is A
                 let expr = arg2.get_expression().unwrap();
-                let val = self.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
+                let val = { let __r = self.resolve_expr_may_fail_in_first_pass(expr)?; self.int_forward(&__r)? };
                 add_byte(&mut bytes, 0x3A);
                 add_word(&mut bytes, val as _);
             }
@@ -7638,7 +7655,7 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let val = self.checked_word(raw);
                 add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
                 add_word(&mut bytes, val);
@@ -7653,7 +7670,7 @@ impl Env {
             }
             else if arg2.is_memory() {
                 let expr = arg2.get_expression().unwrap();
-                let val = (self.resolve_expr_may_fail_in_first_pass(expr)?.int()? & 0xFFFF) as u16;
+                let val = ({ let __r = self.resolve_expr_may_fail_in_first_pass(expr)?; self.int_forward(&__r)? } & 0xFFFF) as u16;
 
                 if let Register16::Hl = dst {
                     add_byte(&mut bytes, 0x2A);
@@ -7675,7 +7692,7 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                let val = ({ let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? } & 0xFF) as u8;
                 bytes.push(0b0000_0110 | (indexregister8_to_code(dst) << 3));
                 bytes.push(val);
             }
@@ -7711,7 +7728,7 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let val = self.checked_word(raw);
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x21);
@@ -7720,7 +7737,7 @@ impl Env {
             else if arg2.is_memory() {
                 let exp = arg2.get_expression().unwrap();
 
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                let val = ({ let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? } & 0xFFFF) as u16;
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x2A);
                 add_word(&mut bytes, val);
@@ -7740,7 +7757,7 @@ impl Env {
                     }
                     else if arg2.is_expression() {
                         let exp = arg2.get_expression().unwrap();
-                        let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                        let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                         let val = self.checked_byte(raw);
                         bytes.push(0x36);
                         bytes.push(val);
@@ -7771,7 +7788,7 @@ impl Env {
             }
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let val = self.checked_byte(raw);
                 bytes.push(0x36);
                 bytes.push(val);
@@ -7784,10 +7801,10 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let raw = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
                 let value = self.checked_byte(raw);
                 add_byte(&mut bytes, indexed_register16_to_code(reg));
-                let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
+                let delta = ({ let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } & 0xFF) as u8;
                 add_byte(&mut bytes, 0x36);
                 add_byte(&mut bytes, delta);
                 add_byte(&mut bytes, value);
@@ -7795,7 +7812,7 @@ impl Env {
             else if arg2.is_register8() {
                 let src = arg2.get_register8().unwrap();
                 add_byte(&mut bytes, indexed_register16_to_code(reg));
-                let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
+                let delta = ({ let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } & 0xFF) as u8;
                 add_byte(&mut bytes, 0x70 + register8_to_code(src));
                 add_byte(&mut bytes, delta);
             }
@@ -7803,7 +7820,7 @@ impl Env {
         // Destination is memory
         else if arg1.is_memory() {
             let exp = arg1.get_expression().unwrap();
-            let address = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+            let address = { let __r = self.resolve_expr_may_fail_in_first_pass(exp)?; self.int_forward(&__r)? };
 
             if arg2.is_indexregister16() {
                 match arg2.get_indexregister16().unwrap() {

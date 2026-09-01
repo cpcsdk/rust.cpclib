@@ -133,7 +133,7 @@ pub enum ExpressionError {
 /// `AssemblerError::warning_category`, `AssemblingOptions::disabled_warning_categories`
 /// and `ParserOptions::disabled_warning_categories`. `Other` covers every
 /// warning kind that doesn't (yet) have a stable identifier - it is never
-/// individually toggleable, only the four named categories are.
+/// individually toggleable, only the five named categories are.
 #[bitflags]
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -142,6 +142,7 @@ pub enum WarningCategory {
     RedundantAccumulatorPrefix,
     OverrideMemory,
     Overflow,
+    PrecisionLoss,
     Other
 }
 
@@ -584,6 +585,9 @@ impl AssemblerError {
                 }
                 else if text.contains(" bytes at ") {
                     WarningCategory::OverrideMemory
+                }
+                else if text.contains("truncated to integer") {
+                    WarningCategory::PrecisionLoss
                 }
                 else {
                     WarningCategory::Other

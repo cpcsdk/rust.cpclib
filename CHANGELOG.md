@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-emucontrol` add support to activate roms (it was only possible to dectivate them before)
 - `cpclib-locomotive` new crate to handle the executable for basisc manipulation
 - `cpclib-orgams-ascii` add support to ORGAMS files. This crate aims at converting orgams sourceode to ascii and ascii source code to orgams. (in fact utf8, but...)
+- `cpclib-basm` add `//` integer-division operator to expressions - always returns an integer, unlike `/` which promotes int/int division to a real value
+- `cpclib-basm` add a warning when a real (float) value is used where an integer is expected (e.g. loaded into a register), since this almost always indicates an unintended `/` where `//` was meant
 
 ### Changed
 - Standardized README filename from `.mkd` to `.md`
@@ -33,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-catalog` add catalog visualization and catart creation
 - `cpclib-basm` add reorganize the source cdode of the parser
 - `cpclib-emucontrol` add support of CSL for controling emulators (partially possible for those without CSL support)
+- `cpclib-basm` **BREAKING**: `//` is no longer a line-comment marker (only `;` is now) - `//` is exclusively the new integer-division operator
 
 ### Fixed
 - `cpclib-bndbuild` AT3 version detection and download URLs

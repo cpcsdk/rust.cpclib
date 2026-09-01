@@ -520,6 +520,7 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
             parse_oper(parse_factor, b"*", BinaryOperation::Mul),
             parse_oper(parse_factor, b"%", BinaryOperation::Mod),
             parse_oper(parse_factor, b"MOD", BinaryOperation::Mod),
+            parse_oper(parse_factor, b"//", BinaryOperation::IntDiv),
             parse_oper(parse_factor, b"/", BinaryOperation::Div)
         ))
     )
@@ -884,8 +885,7 @@ pub fn parse_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess,
                         my_line_ending.value(()),
                         ','.value(()),
                         ':'.value(()),
-                        ';'.value(()),
-                        "//".value(())
+                        ';'.value(())
                     ))
                 )
             )

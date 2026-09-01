@@ -1740,7 +1740,7 @@ mod inactive_region_hint_tests {
     fn a_multi_line_directive_fades_all_of_its_lines() {
         let faded = faded_lines(
             "    if false\n\
-             \t// seems to not work ATM\n\
+             \t; seems to not work ATM\n\
              enum ANIMATION_STATE\n\
              \tPLAYING\n\
              \tFINISHED\n\

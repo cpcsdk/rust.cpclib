@@ -60,9 +60,10 @@ impl AssemblyAnalyzer {
     }
 }
 
-/// Strip a trailing comment (`;`, `//`, or `/* ...`) from an ASM line
+/// Strip a trailing comment (`;` or `/* ...`) from an ASM line
 /// (string-literal aware). Returns the slice up to (but not including) the
-/// comment marker.
+/// comment marker. `//` is not a comment marker (it's the integer-division
+/// operator), so it is left alone.
 ///
 /// This is a single-line, best-effort scan like the rest of this module's
 /// callers (see `token::scan_numeral_literals`'s own doc comment) — a `/*
@@ -82,7 +83,7 @@ pub(super) fn strip_asm_comment(line: &str) -> &str {
         match b {
             b'"' => in_str = !in_str,
             b';' if !in_str => return &line[..i],
-            b'/' if !in_str && matches!(bytes.get(i + 1), Some(b'/') | Some(b'*')) => {
+            b'/' if !in_str && matches!(bytes.get(i + 1), Some(b'*')) => {
                 return &line[..i];
             },
             _ => {}
@@ -240,8 +241,9 @@ mod strip_asm_comment_tests {
     }
 
     #[test]
-    fn slash_slash_comment_is_stripped() {
-        assert_eq!(strip_asm_comment("ld a, 1 // note"), "ld a, 1 ");
+    fn slash_slash_is_not_a_comment_marker() {
+        // `//` is the integer-division operator, not a comment marker.
+        assert_eq!(strip_asm_comment("ld a, 1 // note"), "ld a, 1 // note");
     }
 
     #[test]

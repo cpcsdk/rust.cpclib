@@ -12,13 +12,13 @@ use crate::implementation::tokens::TokenExt;
 /// XXX Orgams only handles integer values and strings
 /// TODO call it somewhere in the expression evaluation
 /// because it seesm not use anymore since various refactoring
-pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn ensure_orgams_type(e: ExprResult, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
     let e = if env.options().parse_options().is_orgams() {
         match &e {
             ExprResult::Float(_)
             | ExprResult::Value(_)
             | ExprResult::Char(_)
-            | ExprResult::Bool(_) => ExprResult::Value(e.int()?),
+            | ExprResult::Bool(_) => ExprResult::Value(env.int_forward(&e)?),
             ExprResult::String(_s) => e,
             _ => {
                 return Err(Box::new(AssemblerError::AlreadyRenderedError(format!(
@@ -92,6 +92,16 @@ macro_rules! resolve_impl {
                         cpclib_tokens::BinaryOperation::Add => (a + b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::Sub => (a - b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::Div => (a / b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+                        cpclib_tokens::BinaryOperation::IntDiv => {
+                            a.int_div(b)
+                                .map(|(v, warn)| {
+                                    if let Some(msg) = warn {
+                                        $env.add_warning(Box::new(AssemblerError::AssemblingError { msg }));
+                                    }
+                                    v
+                                })
+                                .map_err(AssemblerError::ExpressionTypeError)
+                        },
                         cpclib_tokens::BinaryOperation::Mod => (a % b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::Mul => (a * b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::RightShift => {

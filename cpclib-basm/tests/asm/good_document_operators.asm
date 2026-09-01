@@ -6,5 +6,6 @@
     shifted = 1 << 4          ; = 16
     high_byte = high($1234)   ; = $12
     low_byte = low($1234)     ; = $34
-    
+    int_div = 7 // 2          ; = 3 (integer division, always truncates toward zero)
+
     ret

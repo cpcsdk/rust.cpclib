@@ -13,7 +13,7 @@ impl<'src> Formatter<'src> {
                 .copied()
                 .unwrap_or("");
             let trimmed = src.trim();
-            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+            if trimmed.is_empty() || trimmed.starts_with(';') {
                 self.output.push_str(src);
                 self.output.push('\n');
             }

@@ -212,7 +212,7 @@ pub(super) fn local_symbols_env(listing: &LocatedListing) -> Env {
         if token.is_equ() {
             let sym = token.equ_symbol().to_string();
             if let Ok(v) = token.equ_value().resolve(&mut env)
-                && let Ok(i) = v.int()
+                && let Ok(i) = v.int_value()
             {
                 let _ = env
                     .symbols_mut()
@@ -222,7 +222,7 @@ pub(super) fn local_symbols_env(listing: &LocatedListing) -> Env {
         else if token.is_assign() {
             let sym = token.assign_symbol().to_string();
             if let Ok(v) = token.assign_value().resolve(&mut env)
-                && let Ok(i) = v.int()
+                && let Ok(i) = v.int_value()
             {
                 let _ = env
                     .symbols_mut()
@@ -935,7 +935,7 @@ mod local_symbols_env_tests {
         cpclib_asm::preamble::Expr::Label(symbol.into())
             .resolve(env)
             .ok()
-            .and_then(|v| v.int().ok())
+            .and_then(|v| v.int_value().ok())
     }
 
     #[test]

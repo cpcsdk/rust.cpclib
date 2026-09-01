@@ -463,8 +463,7 @@ pub fn parse_line_component_standard(
     if r#let.is_none() && input.eof_offset() == 0
         || peek(opt(alt((
             line_ending.value(()),
-            ';'.value(()),
-            "//".value(())
+            ';'.value(())
         ))))
         .parse_next(input)?
         .is_some()
@@ -1074,7 +1073,7 @@ pub fn parse_comma_multiline(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_comment(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
-    preceded(alt((b";", b"//")), take_till(0.., |ch| ch == b'\n'))
+    preceded(b";", take_till(0.., |ch| ch == b'\n'))
         .take()
         .map(|string: &[u8]| {
             LocatedTokenInner::Comment(cloned.update_slice(string).into())

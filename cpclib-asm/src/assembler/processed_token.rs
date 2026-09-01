@@ -750,12 +750,9 @@ where
 
         let passes = match token.assembler_control_get_max_passes() {
             Some(passes) => {
-                Some(
-                    env.write()
-                        .unwrap()
-                        .resolve_expr_must_never_fail(passes)?
-                        .int()? as u8
-                )
+                let mut env = env.write().unwrap();
+                let result = env.resolve_expr_must_never_fail(passes)?;
+                Some(env.int_forward(&result)? as u8)
             },
             None => None
         };
@@ -1289,7 +1286,8 @@ where
                         let transformation = self.token.incbin_transformation();
 
                         if let Some(offset) = offset {
-                            let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
+                            let result = env.resolve_expr_must_never_fail(offset)?;
+                            let offset = env.int_forward(&result)? as usize;
                             if offset > data.len() {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(
@@ -1304,7 +1302,8 @@ where
                         }
 
                         if let Some(length) = length {
-                            let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
+                            let result = env.resolve_expr_must_never_fail(length)?;
+                            let length = env.int_forward(&result)? as usize;
                             if data.len() < length {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(

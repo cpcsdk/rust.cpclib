@@ -58,7 +58,8 @@ impl PreprocessedFormattedExpr {
                 Ok(PreprocessedFormattedExpr::ExprResult(value))
             },
             FormattedExpr::Formatted(format, expr) => {
-                let value = env.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
+                let result = env.resolve_expr_may_fail_in_first_pass(expr)?;
+                let value = env.int_forward(&result)?;
                 Ok(PreprocessedFormattedExpr::Formatted(*format, value))
             }
         }

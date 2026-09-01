@@ -206,7 +206,7 @@ fn resolve8(state: &TrackedState, access: &LocatedDataAccess, env: &mut Env) -> 
         LocatedDataAccess::Expression(expr) => {
             expr.resolve(env)
                 .ok()
-                .and_then(|v| v.int().ok())
+                .and_then(|v| v.int_value().ok())
                 .map(|v| (v & 0xFF) as u8)
         },
         _ => None
@@ -217,7 +217,7 @@ fn resolve16(state: &TrackedState, access: &LocatedDataAccess, env: &mut Env) ->
     match access {
         LocatedDataAccess::Register16(r, _) => state.get16(*r),
         LocatedDataAccess::IndexRegister16(r, _) => state.get_index16(*r),
-        LocatedDataAccess::Expression(expr) => expr.resolve(env).ok().and_then(|v| v.int().ok()),
+        LocatedDataAccess::Expression(expr) => expr.resolve(env).ok().and_then(|v| v.int_value().ok()),
         _ => None
     }
 }

@@ -651,83 +651,83 @@ impl HardCodedFunction {
             // ...existing code...
             HardCodedFunction::Mode0ByteToPenAt => {
                 Ok(
-                    cpclib_image::pixels::mode0::byte_to_pens(params[0].as_ref().int()? as _)
-                        [params[1].as_ref().int()? as usize % 2]
+                    cpclib_image::pixels::mode0::byte_to_pens(env.int_forward(params[0].as_ref())? as _)
+                        [env.int_forward(params[1].as_ref())? as usize % 2]
                         .number()
                         .into()
                 )
             },
             HardCodedFunction::Mode1ByteToPenAt => {
                 Ok(
-                    cpclib_image::pixels::mode1::byte_to_pens(params[0].as_ref().int()? as _)
-                        [params[1].as_ref().int()? as usize % 4]
+                    cpclib_image::pixels::mode1::byte_to_pens(env.int_forward(params[0].as_ref())? as _)
+                        [env.int_forward(params[1].as_ref())? as usize % 4]
                         .number()
                         .into()
                 )
             },
             HardCodedFunction::Mode2ByteToPenAt => {
                 Ok(
-                    cpclib_image::pixels::mode2::byte_to_pens(params[0].as_ref().int()? as _)
-                        [params[1].as_ref().int()? as usize % 8]
+                    cpclib_image::pixels::mode2::byte_to_pens(env.int_forward(params[0].as_ref())? as _)
+                        [env.int_forward(params[1].as_ref())? as usize % 8]
                         .number()
                         .into()
                 )
             },
             HardCodedFunction::PenAtToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pen_to_pixel_byte(
-                    (params[0].as_ref().int()? as u8 % 16).into(),
-                    (params[1].as_ref().int()? as u8 % 2).into()
+                    (env.int_forward(params[0].as_ref())? as u8 % 16).into(),
+                    (env.int_forward(params[1].as_ref())? as u8 % 2).into()
                 )
                 .into())
             },
             HardCodedFunction::PenAtToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pen_to_pixel_byte(
-                    (params[0].as_ref().int()? as u8 % 4).into(),
-                    params[1].as_ref().int()? as u8 % 4
+                    (env.int_forward(params[0].as_ref())? as u8 % 4).into(),
+                    env.int_forward(params[1].as_ref())? as u8 % 4
                 )
                 .into())
             },
             HardCodedFunction::PenAtToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pen_to_pixel_byte(
-                    (params[0].as_ref().int()? as u8 % 2).into(),
-                    (params[1].as_ref().int()? as u8 % 8).into()
+                    (env.int_forward(params[0].as_ref())? as u8 % 2).into(),
+                    (env.int_forward(params[1].as_ref())? as u8 % 8).into()
                 )
                 .into())
             },
             HardCodedFunction::PensToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pens_to_byte(
-                    params[0].as_ref().int()?.into(),
-                    params[1].as_ref().int()?.into()
+                    env.int_forward(params[0].as_ref())?.into(),
+                    env.int_forward(params[1].as_ref())?.into()
                 )
                 .into())
             },
             HardCodedFunction::PensToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pens_to_byte(
-                    params[0].as_ref().int()?.into(),
-                    params[1].as_ref().int()?.into(),
-                    params[2].as_ref().int()?.into(),
-                    params[3].as_ref().int()?.into()
+                    env.int_forward(params[0].as_ref())?.into(),
+                    env.int_forward(params[1].as_ref())?.into(),
+                    env.int_forward(params[2].as_ref())?.into(),
+                    env.int_forward(params[3].as_ref())?.into()
                 )
                 .into())
             },
             HardCodedFunction::PensToMode2Byte => {
                 Ok(cpclib_image::pixels::mode2::pens_to_byte(
-                    params[0].as_ref().int()?.into(),
-                    params[1].as_ref().int()?.into(),
-                    params[2].as_ref().int()?.into(),
-                    params[3].as_ref().int()?.into(),
-                    params[4].as_ref().int()?.into(),
-                    params[5].as_ref().int()?.into(),
-                    params[6].as_ref().int()?.into(),
-                    params[7].as_ref().int()?.into()
+                    env.int_forward(params[0].as_ref())?.into(),
+                    env.int_forward(params[1].as_ref())?.into(),
+                    env.int_forward(params[2].as_ref())?.into(),
+                    env.int_forward(params[3].as_ref())?.into(),
+                    env.int_forward(params[4].as_ref())?.into(),
+                    env.int_forward(params[5].as_ref())?.into(),
+                    env.int_forward(params[6].as_ref())?.into(),
+                    env.int_forward(params[7].as_ref())?.into()
                 )
                 .into())
             },
-            HardCodedFunction::ListNew => Ok(list_new(params[0].as_ref().int()? as _, params[1].as_ref().clone())),
+            HardCodedFunction::ListNew => Ok(list_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone())),
             HardCodedFunction::ListSet => {
-                list_set(params[0].as_ref().clone(), params[1].as_ref().int()? as _, params[2].as_ref().clone())
+                list_set(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref().clone())
             },
-            HardCodedFunction::ListGet => list_get(params[0].as_ref(), params[1].as_ref().int()? as _),
+            HardCodedFunction::ListGet => list_get(params[0].as_ref(), params[1].as_ref().int_value()? as _),
             HardCodedFunction::ListPush => list_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
             HardCodedFunction::ListExtend => list_extend(params[0].as_ref().clone(), params[1].as_ref().clone()),
             HardCodedFunction::ListLen => list_len(params[0].as_ref()),
@@ -741,7 +741,7 @@ impl HardCodedFunction {
             },  
             
             HardCodedFunction::ListSublist => {
-                list_sublist(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
+                list_sublist(params[0].as_ref(), params[1].as_ref().int_value()? as _, params[2].as_ref().int_value()? as _)
             },
             HardCodedFunction::ListSplitByValue => {
                 list_split_by_value( params[0].as_ref(), params[1].as_ref())
@@ -760,17 +760,17 @@ impl HardCodedFunction {
             HardCodedFunction::ListSort => list_sort(params[0].as_ref().clone()),
             HardCodedFunction::ListArgsort => list_argsort(params[0].as_ref()),
 
-            HardCodedFunction::StringNew => string_new(params[0].as_ref().int()? as _, params[1].as_ref().clone()),
+            HardCodedFunction::StringNew => string_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone()),
             HardCodedFunction::StringFilter => string_filter(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::StringMap => string_map(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::StringLen => string_len(params[0].as_ref()),
-            HardCodedFunction::StringGet => string_get(params[0].as_ref(), params[1].as_ref().int()? as _),
+            HardCodedFunction::StringGet => string_get(params[0].as_ref(), params[1].as_ref().int_value()? as _),
             HardCodedFunction::StringUpperCase => string_upper_case(params[0].as_ref()),
             HardCodedFunction::MatrixNew => {
                 if nb_args == 3 {
                     Ok(matrix_new(
-                        params[0].as_ref().int()? as _,
-                        params[1].as_ref().int()? as _,
+                        params[0].as_ref().int_value()? as _,
+                        params[1].as_ref().int_value()? as _,
                         params[2].as_ref().clone()
                     ))
                 }
@@ -782,21 +782,21 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixSet => {
                 matrix_set(
                     params[0].as_ref().clone(),
-                    params[1].as_ref().int()? as _,
-                    params[2].as_ref().int()? as _,
+                    params[1].as_ref().int_value()? as _,
+                    params[2].as_ref().int_value()? as _,
                     params[3].as_ref().clone()
                 )
             },
             HardCodedFunction::MatrixGet => {
-                matrix_get(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
+                matrix_get(params[0].as_ref(), params[1].as_ref().int_value()? as _, params[2].as_ref().int_value()? as _)
             },
-            HardCodedFunction::MatrixCol => matrix_col(params[0].as_ref(), params[1].as_ref().int()? as _),
-            HardCodedFunction::MatrixRow => matrix_row(params[0].as_ref(), params[1].as_ref().int()? as _),
+            HardCodedFunction::MatrixCol => matrix_col(params[0].as_ref(), params[1].as_ref().int_value()? as _),
+            HardCodedFunction::MatrixRow => matrix_row(params[0].as_ref(), params[1].as_ref().int_value()? as _),
             HardCodedFunction::MatrixSetRow => {
-                matrix_set_row(params[0].as_ref().clone(), params[1].as_ref().int()? as _, params[2].as_ref())
+                matrix_set_row(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref())
             },
             HardCodedFunction::MatrixSetCol => {
-                matrix_set_col(params[0].as_ref().clone(), params[1].as_ref().int()? as _, params[2].as_ref())
+                matrix_set_col(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref())
             },
             HardCodedFunction::MatrixWidth => matrix_width(params[0].as_ref()),
             HardCodedFunction::MatrixHeight => matrix_height(params[0].as_ref()),
@@ -855,7 +855,7 @@ impl HardCodedFunction {
                 let (oks, errs): (Vec<u8>, Vec<ExpressionTypeError>) = params[0].as_ref()
                     .list_content()
                     .iter()
-                    .map(|item| item.int().map(|v| v as u8))
+                    .map(|item| env.int_forward(item).map(|v| v as u8))
                     .partition_map(|res| {
                         match res {
                             Ok(val) => either::Either::Left(val),

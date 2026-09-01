@@ -6254,12 +6254,11 @@ pub(crate) fn decode_base64(encoded: &str) -> Vec<u8> {
 ///
 /// basm accepts four spellings of the same thing (`DEFS`, `DS`, `RMEM`,
 /// `FILL`), any of which may be preceded by a label and followed by an
-/// expression. The comment is dropped first, so a line that merely mentions
-/// one in prose is not mistaken for one, and whole words only, so
+/// expression. The comment (`;`) is dropped first, so a line that merely
+/// mentions one in prose is not mistaken for one, and whole words only, so
 /// `defs_table` and `.ds` are labels rather than directives.
 fn is_a_defs_directive(text: &str) -> bool {
-    let code = text.split(';').next().unwrap_or_default();
-    let code = code.split("//").next().unwrap_or_default().to_lowercase();
+    let code = text.split(';').next().unwrap_or_default().to_lowercase();
     ["defs", "ds", "rmem", "fill"]
         .iter()
         .any(|spelling| mentions_word(&code, spelling))
@@ -6847,9 +6846,8 @@ mod tests {
             // A label is not a directive, whichever way it is spelled.
             "defs_table\tdb 0",
             ".ds\tnop",
-            // Nor is prose about one.
-            "\tnop ; padded like a defs run",
-            "\tnop // ds here would be neater"
+            // Nor is prose about one, in a real (`;`) comment.
+            "\tnop ; padded like a defs run"
         ] {
             assert!(!is_a_defs_directive(line), "{line}");
         }

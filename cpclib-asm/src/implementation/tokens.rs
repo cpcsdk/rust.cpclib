@@ -124,7 +124,7 @@ impl TokenExt for Token {
                 Some(Err(count.err().unwrap()))
             }
             else {
-                let count = count.unwrap().int().unwrap();
+                let count = env.int_forward(&count.unwrap()).unwrap();
                 let mut res = Vec::with_capacity(count as usize * tokens.len());
                 for _i in 0..count {
                     // TODO add a specific token to control the loop counter (and change the return type)
@@ -233,7 +233,7 @@ impl TokenExt for Token {
                 if *mnemonic == Mnemonic::Nop
                     && let Some(arg) = self.mnemonic_arg1()
                 {
-                    arg.get_expression().unwrap().eval()?.int()? as _
+                    arg.get_expression().unwrap().eval()?.int_value()? as _
                 }
                 else {
                     cpclib_z80flow::cost::opcode_duration(mnemonic, arg1.as_ref(), arg2.as_ref())

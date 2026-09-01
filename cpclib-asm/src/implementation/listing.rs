@@ -122,7 +122,7 @@ impl ListingExt for Listing {
             let current_instruction = &self.listing()[current_idx];
 
             let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-                current_address = Some(address.eval().unwrap().int().unwrap() as u16);
+                current_address = Some(address.eval().unwrap().int_value().unwrap() as u16);
                 current_address
             }
             else {

@@ -143,7 +143,7 @@ impl AssemblyAnalyzer {
                                 arg
                                 && let Some(slot) = resolved.get_mut(i)
                             {
-                                *slot = expr.resolve(&mut env).ok().and_then(|v| v.int().ok());
+                                *slot = expr.resolve(&mut env).ok().and_then(|v| v.int_value().ok());
                             }
                         }
                     }
@@ -307,14 +307,14 @@ impl AssemblyAnalyzer {
         let offset = token
             .incbin_offset()
             .and_then(|e| e.resolve(&mut env).ok())
-            .and_then(|v| v.int().ok())
+            .and_then(|v| v.int_value().ok())
             .filter(|v| *v >= 0)
             .map(|v| v as usize)
             .unwrap_or(0);
         let length = token
             .incbin_length()
             .and_then(|e| e.resolve(&mut env).ok())
-            .and_then(|v| v.int().ok())
+            .and_then(|v| v.int_value().ok())
             .filter(|v| *v >= 0)
             .map(|v| v as usize);
 

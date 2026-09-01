@@ -24,7 +24,7 @@ pub fn hypot(x: &ExprResult, y: &ExprResult) -> Result<ExprResult, Box<Assembler
 // ldexp(x,exp) calcule x * 2 puissance exp
 pub fn ldexp(x: &ExprResult, exp: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     let x = x.float()?;
-    let exp = exp.int()?;
+    let exp = exp.int_value()?;
     Ok((x * 2f64.powi(exp)).into())
 }
 
@@ -168,7 +168,7 @@ min_max!(max);
 // }
 
 pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    let power = b.int()?;
+    let power = b.int_value()?;
     match a {
         ExprResult::Float(f) => Ok(f.into_inner().powf(power as f64).into()),
         ExprResult::Value(v) => Ok(v.pow(power as _).into()),
@@ -192,17 +192,17 @@ pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerEr
 }
 
 pub fn high(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    let arg = arg.int().map_err(AssemblerError::ExpressionTypeError)?;
+    let arg = arg.int_value().map_err(AssemblerError::ExpressionTypeError)?;
     Ok((arg >> 8 & 0xFF).into())
 }
 
 pub fn low(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    let arg = arg.int().map_err(AssemblerError::ExpressionTypeError)?;
+    let arg = arg.int_value().map_err(AssemblerError::ExpressionTypeError)?;
     Ok((arg & 0xFF).into())
 }
 
 pub fn peek(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, Box<AssemblerError>> {
-    let arg = arg.int()?;
+    let arg = arg.int_value()?;
     if !(0..=0xFFFF).contains(&arg) {
         Err(Box::new(AssemblerError::ExpressionError(
             ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -228,8 +228,9 @@ pub fn frac(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
 }
 
 pub fn int(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    // INT() is the user's own explicit truncation request - never warn here
     Ok(arg
-        .int()
+        .int_value()
         .map(|i| i.into())
         .map_err(AssemblerError::ExpressionTypeError)?)
 }

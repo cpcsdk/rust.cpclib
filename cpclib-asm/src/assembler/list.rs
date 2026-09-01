@@ -36,7 +36,7 @@ pub fn list_set(
                     ExpressionError::InvalidSize(s.len(), index)
                 )));
             }
-            let c = value.int()? as u8 as char;
+            let c = value.int_value()? as u8 as char;
             let c = format!("{c}");
             let mut s = s.to_string();
             s.replace_range(index..index + 1, &c);
@@ -394,7 +394,7 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>
             // https://stackoverflow.com/questions/69764050/how-to-get-the-indices-that-would-sort-a-vector-in-rust
             fn argsort<T: Ord>(data: &[T]) -> Vec<ExprResult> {
                 let mut indices = (0..data.len()).map(ExprResult::from).collect::<Vec<_>>();
-                indices.sort_by_key(|i| &data[i.int().unwrap() as usize]);
+                indices.sort_by_key(|i| &data[i.int_value().unwrap() as usize]);
                 indices
             }
 
@@ -584,7 +584,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError
                 .iter()
                 .enumerate()
                 .map(|(idx, v)| {
-                    let v = v.int()?;
+                    let v = v.int_value()?;
                     if !(0..=255).contains(&v) {
                         Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{v} at {idx} is not a valid byte value")
@@ -736,7 +736,7 @@ pub fn string_format<E: AsRef<ExprResult>>(params: &[E]) -> Result<ExprResult, B
                             "string_format: unknown format spec '{spec}' in placeholder '{{{inner}}}' in template {template:?} - expected one of hex, hex2, hex4, hex8, bin, bin8, bin16, bin32, int"
                         ))
                     })?;
-                    let value = arg.as_ref().int().map_err(|_| {
+                    let value = arg.as_ref().int_value().map_err(|_| {
                         let arg = arg.as_ref();
                         string_format_error(format!(
                             "string_format: placeholder {{{inner}}} needs a numeric argument for format '{spec}', got {arg}"

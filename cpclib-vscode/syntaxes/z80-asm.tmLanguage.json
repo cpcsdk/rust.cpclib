@@ -15,13 +15,13 @@
     ],
     "repository": {
         "embedded_bndbuild": {
-            "comment": "A `#!bndbuild`-marked run of `;`/`//` comment lines embedding a bndbuild rule (cpclib-lsp's `basm/embedded_bndbuild.rs`). Only the comment marker itself (leading `;`/`//` plus one following space, per line) keeps comment styling - everything after it is tokenized with the real bndbuild grammar, matching a standalone `.bnd` file.",
+            "comment": "A `#!bndbuild`-marked run of `;` comment lines embedding a bndbuild rule (cpclib-lsp's `basm/embedded_bndbuild.rs`). Only the comment marker itself (leading `;` plus one following space, per line) keeps comment styling - everything after it is tokenized with the real bndbuild grammar, matching a standalone `.bnd` file.",
             "name": "meta.embedded.block.bndbuild.z80",
-            "begin": "^\\s*(;|//)[ \\t]?(#!bndbuild)\\b.*$",
+            "begin": "^\\s*;[ \\t]?(#!bndbuild)\\b.*$",
             "beginCaptures": {
                 "0": { "name": "comment.line.z80" }
             },
-            "while": "^\\s*(;|//)[ \\t]?",
+            "while": "^\\s*;[ \\t]?",
             "whileCaptures": {
                 "0": { "name": "comment.line.z80" }
             },
@@ -33,7 +33,6 @@
         "comment": {
             "patterns": [
                 { "name": "comment.line.semicolon.z80", "match": ";.*$" },
-                { "name": "comment.line.double-slash.z80", "match": "//.*$" },
                 { "name": "comment.block.z80", "begin": "/\\*", "end": "\\*/" }
             ]
         },

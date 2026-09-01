@@ -118,7 +118,7 @@ fn find_matching_overflow_operand<'a>(
             if width.bits() != bits {
                 continue;
             }
-            if expr.resolve(env).ok().and_then(|v| v.int().ok()) == Some(value) {
+            if expr.resolve(env).ok().and_then(|v| v.int_value().ok()) == Some(value) {
                 return Some((token, expr));
             }
         }

@@ -118,7 +118,7 @@ Matrices support specialized access functions documented in the [functions page]
 
 Listed by precedence (highest to lowest):
 
-1. **Multiplication/Division**: `*`, `/`, `%` (modulo)
+1. **Multiplication/Division**: `*`, `/` (real division), `//` (integer division), `%` (modulo)
 2. **Addition/Subtraction**: `+`, `-`
 3. **Bitwise Shift**: `<<`, `>>`
 4. **Relational**: `<`, `>`, `<=`, `>=`
@@ -128,6 +128,13 @@ Listed by precedence (highest to lowest):
 8. **Bitwise OR**: `|`
 9. **Logical AND**: `&&`
 10. **Logical OR**: `||`
+
+`/` always divides as a real number, even for two integer operands (e.g. `7 / 2` is `3.5`). `//` always divides as an integer, truncating toward zero (e.g. `7 // 2` is `3`, `-7 // 2` is `-3`). Loading a real value into a register (e.g. `ld a, 7 / 2`) emits a warning, since Z80 registers can only hold integers.
+
+!!! warning "Breaking change"
+    `//` used to also work as a line-comment marker, in addition to `;`. As
+    of this release it is exclusively the integer-division operator - only
+    `;` starts a line comment now.
 
 ### Unary Operators
 

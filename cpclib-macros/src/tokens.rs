@@ -443,6 +443,7 @@ impl MyToTokens for BinaryOperation {
             BinaryOperation::Sub => "Sub",
             BinaryOperation::Mul => "Mul",
             BinaryOperation::Div => "Div",
+            BinaryOperation::IntDiv => "IntDiv",
             BinaryOperation::Mod => "Mod",
             BinaryOperation::BinaryAnd => "BinaryAnd",
             BinaryOperation::BinaryOr => "BinaryOr",

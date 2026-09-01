@@ -152,7 +152,8 @@ fn disabled_warning_categories_from_matches(matches: &ArgMatches) -> BitFlags<Wa
                 "redundant-accumulator-prefix" => WarningCategory::RedundantAccumulatorPrefix,
                 "override-memory" => WarningCategory::OverrideMemory,
                 "overflow" => WarningCategory::Overflow,
-                _ => unreachable!("value_parser restricts this to the four known categories")
+                "real-value-truncated" => WarningCategory::PrecisionLoss,
+                _ => unreachable!("value_parser restricts this to the five known categories")
             };
             disabled.insert(category);
         }
@@ -1116,7 +1117,8 @@ If a placeholder appears multiple times in the template, only the first occurren
                                 "fake-instruction",
                                 "redundant-accumulator-prefix",
                                 "override-memory",
-                                "overflow"
+                                "overflow",
+                                "real-value-truncated"
                             ])
                     )
                     .arg(

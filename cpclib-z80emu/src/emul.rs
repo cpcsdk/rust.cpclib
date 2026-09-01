@@ -417,7 +417,7 @@ impl Z80 {
     #[allow(clippy::cast_sign_loss)]
     fn eval_expr(&mut self, expr: &Expr) -> Option<u16> {
         match expr.resolve(&mut self.context.env) {
-            Ok(val) => Some(val.abs().unwrap().int().unwrap() as u16),
+            Ok(val) => Some(val.abs().unwrap().int_value().unwrap() as u16),
             Err(_) => None
         }
     }

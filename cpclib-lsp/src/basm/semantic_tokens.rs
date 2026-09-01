@@ -190,18 +190,6 @@ impl AssemblyAnalyzer {
                     continue 'line;
                 }
 
-                // Comment: `//` through end of line
-                if c == b'/' && col + 1 < bytes.len() && bytes[col + 1] == b'/' {
-                    raw.push(RawSemanticToken {
-                        line: line_u,
-                        col: col as u32,
-                        len: (bytes.len() - col) as u32,
-                        token_type: TT_COMMENT,
-                        modifiers: 0
-                    });
-                    continue 'line;
-                }
-
                 // Comment: `/* ... */`, possibly spanning several physical
                 // lines (an unterminated one is picked back up at the top
                 // of the next iterations via `in_block_comment`).
@@ -610,13 +598,39 @@ mod tests {
     }
 
     #[test]
-    fn slash_slash_comment_is_recognized() {
+    fn slash_slash_is_an_integer_division_operator_not_a_comment() {
+        // `;` is now the only comment marker, so `ld a, 1 // BUFFER` is
+        // syntactically valid — an integer-division expression
+        // `(1 // BUFFER)` — and `//` must NOT be swallowed as a comment.
         let text = "ld a, 1 // BUFFER\n";
         let d = doc(text);
         let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
-        let comment_start = text.find("//").unwrap() as u32;
+        let slash_start = text.find("//").unwrap() as u32;
+        // Each `/` is its own single-character operator token.
         assert!(
-            decoded.contains(&(0, comment_start, "// BUFFER".len() as u32, TT_COMMENT)),
+            decoded.contains(&(0, slash_start, 1, TT_OPERATOR)),
+            "{decoded:?}"
+        );
+        assert!(
+            decoded.contains(&(0, slash_start + 1, 1, TT_OPERATOR)),
+            "{decoded:?}"
+        );
+        assert!(
+            !decoded
+                .iter()
+                .any(|&(l, c, _, ty)| l == 0 && c >= slash_start && ty == TT_COMMENT),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn semicolon_alone_still_starts_a_line_comment() {
+        let text = "ld a, 1 ; BUFFER\n";
+        let d = doc(text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        let comment_start = text.find(';').unwrap() as u32;
+        assert!(
+            decoded.contains(&(0, comment_start, "; BUFFER".len() as u32, TT_COMMENT)),
             "{decoded:?}"
         );
         // "BUFFER" inside the comment must not also show up as its own

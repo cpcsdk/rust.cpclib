@@ -24,7 +24,7 @@ use cpclib_tokens::ListingElement;
 
 const MARKER: &str = "#!bndbuild";
 
-/// A `#!bndbuild`-marked run of consecutive `;`/`//` comment lines.
+/// A `#!bndbuild`-marked run of consecutive `;` comment lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbeddedBndbuildBlock {
     /// 0-based line of the `#!bndbuild` marker comment itself.
@@ -37,7 +37,7 @@ pub struct EmbeddedBndbuildBlock {
     pub yaml_text: String,
     /// Per content line (same indexing as `yaml_text.lines()`), the
     /// outer-document column at which that line's dedented content begins -
-    /// how much the `;`/`// ` prefix-stripping peeled off. Needed for
+    /// how much the `; ` prefix-stripping peeled off. Needed for
     /// bidirectional column translation in an editor; execution only needs the
     /// lines.
     pub content_start_cols: Vec<u32>
@@ -122,16 +122,13 @@ fn is_marker(stripped: &str) -> bool {
     stripped.trim_end().split_whitespace().next() == Some(MARKER)
 }
 
-/// Strips a leading `;`/`//` comment prefix and at most one following space.
+/// Strips a leading `;` comment prefix and at most one following space.
 ///
-/// `raw` is a real `Token::Comment` span's own text - always one of the two
-/// prefixes, possibly after leading whitespace the parser left in the span.
+/// `raw` is a real `Token::Comment` span's own text - always starts with the
+/// prefix, possibly after leading whitespace the parser left in the span.
 fn strip_comment_prefix(raw: &str) -> &str {
     let trimmed = raw.trim_start();
-    let rest = trimmed
-        .strip_prefix(';')
-        .or_else(|| trimmed.strip_prefix("//"))
-        .unwrap_or(trimmed);
+    let rest = trimmed.strip_prefix(';').unwrap_or(trimmed);
     rest.strip_prefix(' ').unwrap_or(rest)
 }
 
@@ -163,12 +160,11 @@ mod tests {
         assert!(blocks_in_source("; just a comment\n  nop\n").is_empty());
     }
 
-    /// `//` is a comment in basm too, and the prefix comes off the same way.
+    /// `//` is the integer-division operator in basm, not a comment marker,
+    /// so a `//`-prefixed line cannot start (or continue) a block.
     #[test]
-    fn slash_comments_work_as_well() {
-        let blocks = blocks_in_source("// #!bndbuild\n// - tgt: a\n");
-        assert_eq!(blocks.len(), 1, "{blocks:?}");
-        assert_eq!(blocks[0].yaml_text, "- tgt: a");
+    fn slash_prefixed_lines_are_not_comments() {
+        assert!(blocks_in_source("// #!bndbuild\n// - tgt: a\n").is_empty());
     }
 
     #[test]

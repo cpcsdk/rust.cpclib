@@ -1,5 +1,5 @@
 //! Detection of `#!bndbuild`-marked bndbuild rules embedded in a `.asm`
-//! file's own `;`/`//` comments, e.g.:
+//! file's own `;` comments, e.g.:
 //! ```text
 //! ; #!bndbuild
 //! ; - tgt: test
@@ -360,10 +360,11 @@ ORG 0x8000\n";
     }
 
     #[test]
-    fn supports_both_semicolon_and_double_slash_prefixes() {
+    fn slash_prefixed_lines_are_not_comments() {
+        // `//` is the integer-division operator in basm, not a comment
+        // marker, so a `//`-prefixed line cannot start (or continue) a block.
         let blocks = blocks_for("// #!bndbuild\n// - tgt: a\n");
-        assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].yaml_text, "- tgt: a");
+        assert!(blocks.is_empty());
     }
 
     #[test]

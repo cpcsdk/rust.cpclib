@@ -491,6 +491,7 @@ pub enum BinaryOperation {
     Sub,
     Mul,
     Div,
+    IntDiv,
     Mod,
 
     BinaryAnd,
@@ -519,6 +520,7 @@ impl Display for BinaryOperation {
             Sub => "-",
             Mul => "*",
             Div => "/",
+            IntDiv => "//",
             Mod => "%",
 
             BinaryAnd => "&",
@@ -1105,6 +1107,11 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                 BinaryOperation::Add => (a + b).map_err(PureExprEvalError::from),
                 BinaryOperation::Sub => (a - b).map_err(PureExprEvalError::from),
                 BinaryOperation::Div => (a / b).map_err(PureExprEvalError::from),
+                BinaryOperation::IntDiv => {
+                    a.int_div(b)
+                        .map(|(v, _)| v)
+                        .map_err(PureExprEvalError::from)
+                },
                 BinaryOperation::Mod => (a % b).map_err(PureExprEvalError::from),
                 BinaryOperation::Mul => (a * b).map_err(PureExprEvalError::from),
                 BinaryOperation::RightShift => (a >> b).map_err(PureExprEvalError::from),
@@ -1268,7 +1275,7 @@ impl ExprResult {
             self.float().map(|e| e.into())
         }
         else if other.is_int() {
-            self.int().map(|e| e.into())
+            self.int().map(|(i, _)| i.into())
         }
         else {
             unimplemented!();
@@ -1286,12 +1293,24 @@ impl ExprResult {
         }
     }
 
-    pub fn int(&self) -> Result<i32, ExpressionTypeError> {
+    /// Converts to an integer. If `self` was a `Float`, the second element of
+    /// the returned pair carries a ready-to-use warning message describing
+    /// the truncation; `None` for any other exact-int-representable variant.
+    /// Callers must consciously decide whether to forward this warning (e.g.
+    /// via `Env::int_forward`/`Env::resolve_expr_as_int`) or explicitly
+    /// discard it (via `int_value()`) - the changed return type is what
+    /// forces every call site to make that decision instead of silently
+    /// losing precision.
+    pub fn int(&self) -> Result<(i32, Option<String>), ExpressionTypeError> {
         match self {
-            ExprResult::Float(f) => Ok((f.into_inner() + 0.5).floor() as _), /* ensure 2.9 is treated as 3 */
-            ExprResult::Value(i) => Ok(*i),
-            ExprResult::Char(i) => Ok(*i as i32),
-            ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
+            ExprResult::Float(f) => {
+                let i = (f.into_inner() + 0.5).floor() as i32; /* ensure 2.9 is treated as 3 */
+                let warning = format!("real value {} truncated to integer {i}", f.into_inner());
+                Ok((i, Some(warning)))
+            },
+            ExprResult::Value(i) => Ok((*i, None)),
+            ExprResult::Char(i) => Ok((*i as i32, None)),
+            ExprResult::Bool(b) => Ok((if *b { 1 } else { 0 }, None)),
             ExprResult::List(l) if l.len() == 1 => {
                 // Single-element lists can be converted to int (e.g., opcode(inc e))
                 l[0].int()
@@ -1302,6 +1321,39 @@ impl ExprResult {
                 )))
             },
         }
+    }
+
+    /// Convenience for call sites that intentionally do not forward the
+    /// truncation warning from `int()` (no `Env` reachable, or truncation is
+    /// the point, e.g. the `INT()` builtin). Prefer this over `.int()?.0` so
+    /// the intent ("discarding on purpose") is visible at the call site.
+    pub fn int_value(&self) -> Result<i32, ExpressionTypeError> {
+        self.int().map(|(i, _)| i)
+    }
+
+    /// Integer ("//") division: always truncates toward zero and always
+    /// returns `ExprResult::Value` (i32) - unlike `/`, never promotes to
+    /// float. Any truncation warning picked up while coercing either operand
+    /// to int is aggregated and returned rather than dropped - the caller
+    /// decides whether to forward it.
+    pub fn int_div<T: AsRef<Self> + std::fmt::Display>(
+        self,
+        rhs: T
+    ) -> Result<(Self, Option<String>), ExpressionTypeError> {
+        let rhs_ref = rhs.as_ref();
+        let (a, w1) = self.int()?;
+        let (b, w2) = rhs_ref.int()?;
+        if b == 0 {
+            return Err(ExpressionTypeError(format!(
+                "Integer division by zero: {self} // {rhs_ref}"
+            )));
+        }
+        let warning = match (w1, w2) {
+            (None, None) => None,
+            (Some(w), None) | (None, Some(w)) => Some(w),
+            (Some(w1), Some(w2)) => Some(format!("{w1}; {w2}"))
+        };
+        Ok(((a / b).into(), warning))
     }
 
     pub fn float(&self) -> Result<f64, ExpressionTypeError> {
@@ -1805,7 +1857,9 @@ impl std::ops::Shr for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn shr(self, rhs: Self) -> Self::Output {
-        Ok((self.int()?.wrapping_shr(rhs.int()? as _)).into())
+        // Discard: no `Env` reachable in this bare `ExprResult` trait impl -
+        // a float operand to `>>` silently truncates with no warning here.
+        Ok((self.int_value()?.wrapping_shr(rhs.int_value()? as _)).into())
     }
 }
 
@@ -1813,7 +1867,9 @@ impl std::ops::Shl for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn shl(self, rhs: Self) -> Self::Output {
-        Ok((self.int()?.wrapping_shl(rhs.int()? as u32)).into())
+        // Discard: no `Env` reachable in this bare `ExprResult` trait impl -
+        // a float operand to `<<` silently truncates with no warning here.
+        Ok((self.int_value()?.wrapping_shl(rhs.int_value()? as u32)).into())
     }
 }
 
@@ -1830,7 +1886,8 @@ impl std::ops::BitAnd for ExprResult {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(ExprResult::List(l3))
             },
-            (myself, rhs) => Ok((myself.int()? & rhs.int()?).into())
+            // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
+            (myself, rhs) => Ok((myself.int_value()? & rhs.int_value()?).into())
         }
     }
 }
@@ -1849,7 +1906,8 @@ impl std::ops::BitOr for ExprResult {
                 Ok(ExprResult::List(l3))
             },
 
-            (myself, rhs) => Ok((myself.int()? | rhs.int()?).into())
+            // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
+            (myself, rhs) => Ok((myself.int_value()? | rhs.int_value()?).into())
         }
     }
 }
@@ -1858,7 +1916,8 @@ impl std::ops::BitXor for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Ok((self.int()? ^ rhs.int()?).into())
+        // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
+        Ok((self.int_value()? ^ rhs.int_value()?).into())
     }
 }
 
@@ -1878,7 +1937,7 @@ impl std::cmp::PartialEq for ExprResult {
                     return false;
                 }
                 s.iter().zip(l.iter()).all(|(a, b)| {
-                    match b.int() {
+                    match b.int_value() {
                         Ok(b) => (*a as i32) == b,
                         Err(_) => false
                     }
@@ -1888,7 +1947,8 @@ impl std::cmp::PartialEq for ExprResult {
             (Self::String(_), _) | (_, Self::String(_)) => false,
             (Self::List(_), _) | (_, Self::List(_)) => false,
 
-            _ => self.int().unwrap() == other.int().unwrap()
+            // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
+            _ => self.int_value().unwrap() == other.int_value().unwrap()
         }
     }
 }

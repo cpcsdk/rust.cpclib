@@ -177,6 +177,10 @@ near_or_far_target:
 ; This is a comment
 ```
 
+!!! note
+    `//` is **not** a comment marker in basm - it is the integer-division
+    operator (see [Expressions](expression-types.md)).
+
 ### Multiline comment
 ```
 /*
