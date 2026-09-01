@@ -254,11 +254,23 @@ impl Transcript {
         if let Ok(mut file) = file.lock() {
             let _ = writeln!(
                 file,
-                "{direction} {}",
+                "{:?} {direction} {}",
+                std::time::SystemTime::now(),
                 serde_json::to_string(message).unwrap_or_default()
             );
             let _ = file.flush();
         }
+    }
+
+    /// How long one phase of a launch took - a debug-launch's own equivalent
+    /// of the request/response pairs `record` already logs, since none of
+    /// `start_session`'s phases (cache lookup, assemble, emulator install
+    /// check, spawn/serve, port wait) are themselves DAP messages. Lands in
+    /// the same opt-in `[dap] log` file rather than only stderr, since a
+    /// GUI-launched editor often has nowhere visible to show stderr - the
+    /// same reasoning `cpclib-lsp.toml`'s `log` field exists for.
+    fn record_timing(&self, phase: &str, elapsed: std::time::Duration) {
+        self.record("   timing  ", &json!({ "phase": phase, "elapsedMs": elapsed.as_millis() }));
     }
 }
 
@@ -510,6 +522,39 @@ fn start_session(
     // like a working one.
     let mut early_notices: Vec<String> = Vec::new();
 
+    // Which emulator this launch will use is decided purely from `arguments`
+    // + `[dap]` config - it needs neither the snapshot nor the source map
+    // the block below spends real time producing. Warming its install-check
+    // (a no-op once cached; a real download only ever on the very first
+    // launch) concurrently with that work, instead of only afterward inside
+    // `connect_backend`, means the two independent costs overlap instead of
+    // serializing. Not backgrounding the resolve-program step itself: it
+    // threads a `&mut early_notices` borrow through several branches, which
+    // would need real refactoring to move across a thread boundary for no
+    // benefit over warming this smaller, self-contained step instead.
+    let (early_chosen_emulator, _) = resolve_emulator_choice(&arguments);
+    let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite");
+    let install_check = std::thread::spawn(move || {
+        if wants_lite_early {
+            use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
+            let configuration = Emulator::AmspiritLite(AmspiritLiteVersion::default())
+                .configuration::<cpclib_common::event::DiscardObserver>();
+            if !configuration.is_cached() {
+                let _ = configuration.install(&cpclib_common::event::DiscardObserver);
+            }
+        }
+        else {
+            let _ = cpclib_runner::web::js1984::install();
+        }
+    });
+
+    // How long it took to get a snapshot+source-map to debug - a cache hit
+    // (either this crate's own, or the project's own build having already
+    // written a `basm --sourcemap` map) versus a real assemble are wildly
+    // different costs, and until now there was no way to tell which one a
+    // slow launch actually paid without re-deriving it from which
+    // `early_notices` message showed up.
+    let resolve_start = std::time::Instant::now();
     let (snapshot, source_map, program_breakpoints, image, entry_point) = if let Some(rule) =
         arguments.get("rule").and_then(Value::as_str)
     {
@@ -675,9 +720,25 @@ fn start_session(
             "the launch configuration named neither a \"program\" nor a \"rule\"".to_string()
         );
     };
+    transcript().record_timing("resolve_program", resolve_start.elapsed());
 
-    let (backend, url, chosen_emulator) =
-        connect_backend(&arguments, snapshot, &mut early_notices, false)?;
+    // Join the background install-check before `connect_backend`'s own
+    // (now often already-warm) check - a panic there is logged and
+    // otherwise ignored: it is only ever a background warmup, never the
+    // thing that decides whether this launch succeeds. `connect_backend`'s
+    // own check remains the single source of truth for a real error.
+    if install_check.join().is_err() {
+        eprintln!("cpclib-dap: background emulator-install warmup panicked; continuing");
+    }
+
+    let connect_start = std::time::Instant::now();
+    let connect_result = connect_backend(&arguments, snapshot, &mut early_notices, false);
+    // Recorded regardless of outcome: a failure after a long wait (e.g.
+    // AMSpiriT Lite's own 30-second port-wait timing out) is exactly the
+    // kind of slow launch this exists to diagnose, not just the successful
+    // ones.
+    transcript().record_timing("connect_backend", connect_start.elapsed());
+    let (backend, url, chosen_emulator) = connect_result?;
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
 
     let mut session = session::Session::new(backend, source_map);
@@ -803,26 +864,18 @@ fn start_session(
     Ok((session, url, notices))
 }
 
-/// Picks and connects to whichever emulator this session talks to (1984js
-/// or AMSpiriT Lite), loaded with `snapshot`. Shared between the Z80
-/// launch flow above and the BASIC one below - they differ only in how the
-/// snapshot itself gets built, never in how the emulator is found and
-/// started, since both end up behind the same [`DapPeer`].
+/// Which emulator a launch will use, and its `[dap]` config - resolved
+/// purely from the launch request's own arguments (plus whatever
+/// `cpclib-lsp.toml` says for the project they name), with no snapshot or
+/// assembled entry needed. Used both by `start_session`, to decide - before
+/// assembling - which emulator's install-check is worth warming in the
+/// background, and by [`connect_backend`] itself, so the two can never
+/// disagree about which emulator a launch resolves to.
 ///
-/// Returns the chosen emulator's own name alongside the connected peer:
-/// `start_session` still needs it afterwards, to warn about an emulator
-/// name it does not recognise and to explain AMSpiriT Lite's own window
-/// rather than duplicate the lookup that produced it.
-fn connect_backend(
-    arguments: &Value,
-    snapshot: Vec<u8>,
-    early_notices: &mut Vec<String>,
-    is_basic: bool
-) -> Result<(Backend, String, String), String> {
-    // The launch configuration wins; the project's own setting is the default,
-    // so a rule can be debugged either way without editing the project.
-    // The project this session is for, from whichever of the two launch shapes
-    // named it.
+/// The launch configuration wins; the project's own `[dap]` setting is the
+/// default, so a rule can be debugged either way without editing the
+/// project.
+fn resolve_emulator_choice(arguments: &Value) -> (String, cpclib_project::config::DapConfig) {
     let named_path = arguments
         .get("program")
         .or_else(|| arguments.get("buildFile"))
@@ -845,6 +898,39 @@ fn connect_backend(
                 .dap
         })
         .unwrap_or_default();
+
+    let configured_emulator = dap_config.emulator.clone();
+    let chosen_emulator = arguments
+        .get("emulator")
+        .and_then(Value::as_str)
+        .unwrap_or(&configured_emulator)
+        .to_string();
+    (chosen_emulator, dap_config)
+}
+
+/// Picks and connects to whichever emulator this session talks to (1984js
+/// or AMSpiriT Lite), loaded with `snapshot`. Shared between the Z80
+/// launch flow above and the BASIC one below - they differ only in how the
+/// snapshot itself gets built, never in how the emulator is found and
+/// started, since both end up behind the same [`DapPeer`].
+///
+/// Returns the chosen emulator's own name alongside the connected peer:
+/// `start_session` still needs it afterwards, to warn about an emulator
+/// name it does not recognise and to explain AMSpiriT Lite's own window
+/// rather than duplicate the lookup that produced it.
+fn connect_backend(
+    arguments: &Value,
+    snapshot: Vec<u8>,
+    early_notices: &mut Vec<String>,
+    is_basic: bool
+) -> Result<(Backend, String, String), String> {
+    // The project this session is for, from whichever of the two launch
+    // shapes named it.
+    let named_path = arguments
+        .get("program")
+        .or_else(|| arguments.get("buildFile"))
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
     // A `.dsk` is not a snapshot: it goes in drive A at boot instead of being
     // loaded as a memory image. Detected once here, off the same `program`
     // path already resolved above, and used both to pick the launch function
@@ -857,12 +943,7 @@ fn connect_backend(
                 .ends_with(".dsk")
         });
 
-    let configured_emulator = dap_config.emulator.clone();
-    let chosen_emulator = arguments
-        .get("emulator")
-        .and_then(Value::as_str)
-        .unwrap_or(&configured_emulator)
-        .to_string();
+    let (chosen_emulator, dap_config) = resolve_emulator_choice(arguments);
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
 
     let (backend, url) = if wants_lite {
@@ -1177,5 +1258,46 @@ mod tests {
             error.to_lowercase().contains("amspiritlite"),
             "{error}"
         );
+    }
+}
+
+#[cfg(test)]
+mod resolve_emulator_choice_tests {
+    use super::*;
+
+    /// No `"emulator"` override and no project config in reach (a bare
+    /// in-memory `arguments` with no real `program`/`buildFile` path) -
+    /// falls back to `DapConfig::default()`'s own emulator, which is
+    /// `1984js` (`cpclib-project/src/config.rs`).
+    #[test]
+    fn defaults_to_1984js_with_no_override_and_no_reachable_project_config() {
+        let arguments = json!({});
+        let (chosen, _config) = resolve_emulator_choice(&arguments);
+        assert!(chosen.eq_ignore_ascii_case("1984js"), "{chosen}");
+    }
+
+    /// The launch configuration's own `"emulator"` wins over whatever a
+    /// project's `cpclib-lsp.toml` says - a per-occasion override, not a
+    /// project-wide change.
+    #[test]
+    fn an_explicit_emulator_argument_overrides_the_default() {
+        let arguments = json!({ "emulator": "amspiritlite" });
+        let (chosen, _config) = resolve_emulator_choice(&arguments);
+        assert!(chosen.eq_ignore_ascii_case("amspiritlite"), "{chosen}");
+    }
+
+    /// `program`/`buildFile` are both accepted as the "which project is
+    /// this" hint, `program` taking priority when both are present (mirrors
+    /// `connect_backend`'s own `named_path` resolution, which this function
+    /// replaced) - checked here only for the case with no config file to
+    /// find (falls back to the default either way), since the point is that
+    /// resolution doesn't panic or misbehave on either shape of argument.
+    #[test]
+    fn accepts_either_program_or_build_file_as_the_project_hint() {
+        let (chosen_program, _) = resolve_emulator_choice(&json!({ "program": "does/not/exist.asm" }));
+        let (chosen_build_file, _) =
+            resolve_emulator_choice(&json!({ "buildFile": "does/not/exist.bnd" }));
+        assert!(chosen_program.eq_ignore_ascii_case("1984js"), "{chosen_program}");
+        assert!(chosen_build_file.eq_ignore_ascii_case("1984js"), "{chosen_build_file}");
     }
 }

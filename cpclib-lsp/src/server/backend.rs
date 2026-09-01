@@ -143,7 +143,10 @@ impl CpcLspBackend {
             }
 
             // A newer edit/open/save arrived while this waited - that one's
-            // own (already-scheduled) task will publish instead.
+            // own (already-scheduled) task will publish instead. Cheap
+            // DashMap lookups, so these stay on this async task rather than
+            // the blocking pool below - a superseded task should bail out
+            // without ever touching it.
             if pending_versions.get(&uri).map(|v| *v) != Some(version) {
                 return;
             }
@@ -157,20 +160,44 @@ impl CpcLspBackend {
                 return;
             }
 
-            let diagnostics = compute_diagnostics(
-                &asm_analyzer,
-                &build_analyzer,
-                &basic_analyzer,
-                &document,
-                &workspace_roots,
-                &build_error_diagnostics
-            );
-            update_embedded_bndbuild_index(
-                &asm_analyzer,
-                &build_analyzer,
-                &document,
-                &embedded_bndbuild_index
-            );
+            // `compute_diagnostics` can mean a real, full, multi-pass
+            // assemble (`dry_run_env`) - tens of seconds on a real demo,
+            // per this function's own doc comment above. Run on tokio's
+            // blocking-thread pool, not this async task: a plain
+            // `tokio::spawn` for this used to run that assemble as
+            // synchronous, non-yielding code directly on one of the async
+            // runtime's own fixed worker threads, which cannot preempt it -
+            // a burst of `did_open`s (VS Code restoring a workspace's
+            // previously-open tabs) starved the whole runtime for as long
+            // as each one took, freezing every other in-flight request
+            // (hover, completion, even a cheap CodeLens) behind it. Moving
+            // this off the async pool is the same fix `candidate_asm_paths`
+            // above already applies to its own, cheaper, directory walk -
+            // see its doc comment for the general reasoning.
+            let diagnostics = match tokio::task::spawn_blocking(move || {
+                let diagnostics = compute_diagnostics(
+                    &asm_analyzer,
+                    &build_analyzer,
+                    &basic_analyzer,
+                    &document,
+                    &workspace_roots,
+                    &build_error_diagnostics
+                );
+                update_embedded_bndbuild_index(
+                    &asm_analyzer,
+                    &build_analyzer,
+                    &document,
+                    &embedded_bndbuild_index
+                );
+                diagnostics
+            })
+            .await
+            {
+                Ok(diagnostics) => diagnostics,
+                // The blocking closure panicked - already logged by
+                // tokio's default panic hook; nothing to publish.
+                Err(_join_error) => return
+            };
             client.publish_diagnostics(uri, diagnostics, None).await;
         });
     }
@@ -1820,8 +1847,15 @@ impl LanguageServer for CpcLspBackend {
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let uri = params.text_document.uri;
         tracing::debug!("CodeLens request for {}", uri);
+        let start = std::time::Instant::now();
 
-        if let Some(entry) = self.documents.get(&uri) {
+        // Timed as a whole, not per-language-branch: this dispatch itself
+        // is always cheap (a cached Jinja render plus in-memory text scans
+        // for bndbuild, similarly cheap paths for the other two) - it never
+        // touches the include/project-graph caches or triggers a real
+        // assemble. Logged unconditionally so that claim is directly
+        // checkable from a real log instead of only from this comment.
+        let result = if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
             // Each language decides for itself: a project may well want the
             // bndbuild "▶ Run" buttons and not the ones on every `.bas`.
@@ -1839,11 +1873,13 @@ impl LanguageServer for CpcLspBackend {
                 },
                 _ => Vec::new()
             };
-            if !lenses.is_empty() {
-                return Ok(Some(lenses));
-            }
+            if !lenses.is_empty() { Some(lenses) } else { None }
         }
-        Ok(None)
+        else {
+            None
+        };
+        tracing::debug!("CodeLens request for {} took {:?}", uri, start.elapsed());
+        Ok(result)
     }
 
     async fn execute_command(
@@ -4863,5 +4899,79 @@ ORG 0x8000\n";
             .unwrap();
 
         assert_eq!(result, serde_json::json!([]));
+    }
+}
+
+#[cfg(test)]
+mod spawn_deferred_analysis_tests {
+    use futures_util::StreamExt;
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// Regression test for the `spawn_blocking` migration: `compute_diagnostics`
+    /// (which can mean a real, full, multi-pass assemble) used to run
+    /// directly inside `spawn_deferred_analysis`'s own `tokio::spawn`, with
+    /// no yield point - moving it onto `tokio::task::spawn_blocking` must
+    /// not break the end-to-end path from `did_open` to a real
+    /// `textDocument/publishDiagnostics` notification actually reaching the
+    /// client, nor silently swallow the result on the `Ok`/`Err` bridge this
+    /// migration introduced.
+    #[tokio::test]
+    async fn did_open_still_publishes_diagnostics_after_the_spawn_blocking_migration() {
+        use tower::{Service, ServiceExt};
+
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let (mut requests, _responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                if request.method() == "textDocument/publishDiagnostics"
+                    && let Some(params) = request.params()
+                    && let Ok(p) = serde_json::from_value::<PublishDiagnosticsParams>(params.clone())
+                {
+                    let _ = tx.send(p);
+                }
+            }
+        });
+
+        // `publish_diagnostics`, unlike `log_message`/`show_message`, only
+        // sends once the server has gone through a real `initialize`
+        // handshake - calling `did_open` directly on `backend` without one
+        // (as several other tests in this file do, for handlers that never
+        // proactively message the client) silently drops the notification.
+        let init_request = tower_lsp::jsonrpc::Request::build("initialize")
+            .params(serde_json::json!({ "capabilities": {} }))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(init_request).await;
+
+        let backend = service.inner();
+        let uri = Url::parse("file:///broken.asm").unwrap();
+        let text = "org 0x4000\n@#$ garbage @#$\n ld a, 1\n ret\n";
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "basm".to_string(),
+                    version: 1,
+                    text: text.to_string()
+                }
+            })
+            .await;
+
+        let params = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+            .await
+            .expect("timed out waiting for a publishDiagnostics notification")
+            .expect("expected a publishDiagnostics notification");
+
+        assert_eq!(params.uri, uri);
+        assert_eq!(params.diagnostics.len(), 1, "{:?}", params.diagnostics);
+        assert_eq!(
+            params.diagnostics[0].severity,
+            Some(DiagnosticSeverity::ERROR)
+        );
+        assert_eq!(params.diagnostics[0].range.start.line, 1);
     }
 }

@@ -159,7 +159,14 @@ pub(super) fn dry_run_env(
     }
     let options = EnvOptions::new(parse, assemble, Arc::new(DiscardObserver));
 
-    match cpclib_asm::assembler::visit_tokens_all_passes_with_options(listing, options) {
+    // This is the one call in the whole diagnostics/hover/semantic-tokens
+    // path that can genuinely mean a real, full, multi-pass assemble -
+    // tens of seconds on a real demo. Timed unconditionally (a single
+    // `Instant`/`.elapsed()` is negligible next to the call itself) so a
+    // slow open is directly diagnosable from a `cpclib-lsp.toml`-enabled
+    // log instead of only being inferable from a gap between other lines.
+    let start = std::time::Instant::now();
+    let result = match cpclib_asm::assembler::visit_tokens_all_passes_with_options(listing, options) {
         Ok((_tokens, env)) => (env, true),
         // The partial `Env` is still returned: hover and `EQU` resolution use
         // it happily, and a half-built symbol table is better than none for
@@ -167,7 +174,9 @@ pub(super) fn dry_run_env(
         // from it is fiction - the addresses recorded before the failure
         // describe a program that was never finished being laid out.
         Err((_tokens, env, _err)) => (env, false)
-    }
+    };
+    tracing::debug!("dry_run_env for {} took {:?}", doc_uri, start.elapsed());
+    result
 }
 
 /// Build an `Env` good enough to resolve *this file's own* `EQU`/`SET`
