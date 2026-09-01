@@ -1967,9 +1967,15 @@ impl LanguageServer for CpcLspBackend {
                 .next()
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
                 .and_then(|s| Url::parse(&s).ok());
-            if let Ok(mut guard) = self.active_document.write() {
-                *guard = uri.clone();
-            }
+            tracing::debug!("cpclib.setActiveDocument: {:?}", uri);
+            let changed = match self.active_document.write() {
+                Ok(mut guard) => {
+                    let changed = guard.as_ref() != uri.as_ref();
+                    *guard = uri.clone();
+                    changed
+                },
+                Err(_) => true
+            };
             // The document that just became active may have been sitting
             // open in a background tab this whole time, having only ever
             // gotten the cheap, parse-only treatment - upgrade it to the
@@ -1977,7 +1983,19 @@ impl LanguageServer for CpcLspBackend {
             // Whatever was active before needs no equivalent downgrade: its
             // existing diagnostics simply stay as they are (stale-but-
             // harmless) until it's edited or re-focused.
-            if let Some(uri) = uri
+            //
+            // `changed`: VS Code's own `onDidChangeActiveTextEditor` can
+            // fire more than once for the same eventual document while the
+            // workbench settles (a rapid tab-restore is exactly the kind of
+            // moment that plausibly does this) - without this check, every
+            // one of those redundant reports would re-trigger a fresh
+            // `spawn_deferred_analysis` (and a fresh `spawn_blocking`
+            // dispatch) for a document that was already correctly analysed
+            // moments ago. `env_cache` already makes the *assemble* itself
+            // a cheap cache hit on a repeat, so this isn't a correctness
+            // fix - just avoiding paying dispatch overhead for no reason.
+            if changed
+                && let Some(uri) = uri
                 && let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
                 && document.doc_type == DocumentType::Assembly
             {
