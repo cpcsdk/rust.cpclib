@@ -15,7 +15,34 @@ use crate::common::document::Document;
 const MAX_RECOVERY_ATTEMPTS: usize = 200;
 
 impl AssemblyAnalyzer {
-    /// Analyze the document and return diagnostics.
+    /// Analyze the document and return diagnostics - the expensive real
+    /// assemble (see `analyze_for_activity`'s own doc comment) always runs,
+    /// as it always has. Every existing caller (tests, and any deliberate,
+    /// explicitly-requested analysis) wants exactly that; only the
+    /// automatic, on-every-open/every-edit path
+    /// (`server::backend::spawn_deferred_analysis`) has a reason to skip it
+    /// sometimes, so that path calls `analyze_for_activity` directly instead.
+    pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
+        self.analyze_for_activity(document, true)
+    }
+
+    /// As [`Self::analyze`], but skips the expensive real assemble when
+    /// `is_active` is false (unless the user explicitly asked for peephole
+    /// analysis on this exact document, which always runs regardless -
+    /// asking by hand should never be silently ignored just because the tab
+    /// isn't focused right now).
+    ///
+    /// Exists because `analyze` used to run the same full multi-pass
+    /// assemble (`dry_run_env` - tens of seconds on a real demo per its own
+    /// doc comment) for *every* opened `.asm` file unconditionally, active
+    /// or not. A workspace restore opening dozens of background tabs meant
+    /// dozens of full assembles nobody asked for or was looking at - not a
+    /// scheduling bug (that class of bug is what `spawn_blocking` already
+    /// fixed elsewhere), just real, wasted CPU work for files the user isn't
+    /// even viewing. `is_active` is `server::backend::CpcLspBackend::should_fully_assemble`'s
+    /// answer - `true` whenever the client hasn't told us what's active yet
+    /// (an older/different client, or before the first `cpclib.setActiveDocument`
+    /// call), so nothing regresses for a client that never adopts it.
     ///
     /// basm's parser stops at the first syntax error, like most recursive-
     /// descent parsers - a single `parse_document` call only ever surfaces
@@ -24,7 +51,7 @@ impl AssemblyAnalyzer {
     /// against the rest of the file, and repeats until either the remainder
     /// parses cleanly, no error location can be determined (nothing to
     /// safely resume from), or the recovery cap is hit.
-    pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
+    pub fn analyze_for_activity(&self, document: &Document, is_active: bool) -> Vec<Diagnostic> {
         let disabled_parser_categories =
             super::parse::disabled_parser_warning_categories(&self.config().warnings);
         let full_text = document.text();
@@ -129,7 +156,14 @@ impl AssemblyAnalyzer {
         // quickfix, or hover) already populated the env cache first via
         // `self.parse_document`. Reusing the same cached listing everywhere
         // guarantees they're always the same parse.
-        if diagnostics.is_empty()
+        //
+        // `is_active || self.peephole_wanted(...)`: skip this whole block for
+        // a background tab nobody's looking at, unless the user explicitly
+        // asked for peephole analysis on this exact document by hand - that
+        // request must never be silently dropped just because the tab isn't
+        // focused right now.
+        if (is_active || self.peephole_wanted(&document.uri))
+            && diagnostics.is_empty()
             && let Ok(listing) = self.parse_document(document)
         {
             let (mut env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
@@ -1790,5 +1824,80 @@ mod inactive_region_hint_tests {
             })
             .collect();
         assert!(faded.is_empty(), "{faded:?}");
+    }
+}
+
+#[cfg(test)]
+mod analyze_for_activity_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// Regression coverage for the active-document gate
+    /// (`server::backend::CpcLspBackend::should_fully_assemble`'s reason for
+    /// existing): a background tab - not the document the editor's active
+    /// tab shows - must not pay for (or report) the expensive real assemble,
+    /// while the active one still gets real assembler warnings exactly as
+    /// `analyze` always has. `ld hl, de` is the same fake-instruction example
+    /// this file's own `dry_run_env` doc comment cites.
+    #[test]
+    fn a_non_active_document_skips_the_expensive_assembler_warnings() {
+        let text = "org 0x4000\n ld hl, de\n ret\n";
+        let analyzer = AssemblyAnalyzer::new();
+
+        let active = analyzer.analyze_for_activity(&doc(text), true);
+        assert!(
+            active
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "the active document must still get real assembler warnings: {active:?}"
+        );
+
+        let inactive = analyzer.analyze_for_activity(&doc(text), false);
+        assert!(
+            inactive.is_empty(),
+            "a background tab must not pay for (or report) the expensive assemble: {inactive:?}"
+        );
+    }
+
+    /// The one override: an explicit peephole request (`request_peephole`,
+    /// what `cpclib.analyzePeephole`/`cpclib.findPeepholeInFile` drive) must
+    /// still get the full treatment even for a document that isn't active -
+    /// asking by hand must never be silently ignored just because the tab
+    /// isn't focused right now.
+    #[test]
+    fn an_explicit_peephole_request_overrides_the_inactive_skip() {
+        let text = "org 0x4000\n ld hl, de\n ret\n";
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri.clone(), text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        analyzer.request_peephole(&uri, None);
+
+        let inactive = analyzer.analyze_for_activity(&document, false);
+        assert!(
+            inactive
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "an explicit peephole request must not be silently dropped just \
+             because the tab isn't focused: {inactive:?}"
+        );
+    }
+
+    /// `analyze` itself (every other caller: tests, deliberate re-analysis)
+    /// must be unaffected by this gate - it always means "yes, fully assemble
+    /// it", matching its behaviour before `analyze_for_activity` existed.
+    #[test]
+    fn analyze_itself_always_gets_the_full_treatment() {
+        let text = "org 0x4000\n ld hl, de\n ret\n";
+        let analyzer = AssemblyAnalyzer::new();
+        let diags = analyzer.analyze(&doc(text));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "{diags:?}"
+        );
     }
 }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ExtensionContext, window, workspace } from 'vscode';
 import { createLanguageClient, client, resolvedServerPath, logStartupTiming } from './lsp/client';
 import { installLogMessageMirror } from './lsp/logMirror';
+import { registerActiveDocumentTracking } from './lsp/activeDocument';
 import { BndbuildTaskProvider } from './tasks/bndbuildTaskProvider';
 import { registerCodeLensRunners } from './tasks/codeLensRunners';
 import { registerInkColorPicker } from './commands/inkColorPicker';
@@ -46,6 +47,7 @@ export function activate(context: ExtensionContext): void {
         setDebugClient(languageClient);
         window.showInformationMessage('CPClib LSP server started.');
         installLogMessageMirror(languageClient);
+        registerActiveDocumentTracking(context);
     }).catch((err: Error) => {
         logStartupTiming(`languageClient.start() rejected: ${err.message}`);
         window.showErrorMessage(`CPClib LSP failed to start: ${err.message}. Check cpclib-lsp.serverPath setting.`);

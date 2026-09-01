@@ -64,7 +64,13 @@ pub struct CpcLspBackend {
     /// until it is. An entry is removed if a later edit removes the file's
     /// last embedded block, but never on `did_close` - closing a tab
     /// shouldn't make its rules undiscoverable again.
-    embedded_bndbuild_index: Arc<DashMap<Url, Vec<String>>>
+    embedded_bndbuild_index: Arc<DashMap<Url, Vec<String>>>,
+    /// The document VS Code's active editor currently shows, set by
+    /// `cpclib.setActiveDocument` (the extension calls this from its own
+    /// `onDidChangeActiveTextEditor` listener - see `should_fully_assemble`'s
+    /// own doc comment for why this exists). `None` until the first such
+    /// call, or when nothing is focused.
+    active_document: RwLock<Option<Url>>
 }
 
 impl CpcLspBackend {
@@ -78,7 +84,37 @@ impl CpcLspBackend {
             pending_versions: Arc::new(DashMap::new()),
             workspace_roots: RwLock::new(Vec::new()),
             build_error_diagnostics: Arc::new(DashMap::new()),
-            embedded_bndbuild_index: Arc::new(DashMap::new())
+            embedded_bndbuild_index: Arc::new(DashMap::new()),
+            active_document: RwLock::new(None)
+        }
+    }
+
+    /// Whether `uri` should get the expensive, full multi-pass assemble
+    /// (`AssemblyAnalyzer::analyze_for_activity`'s `is_active` parameter) as
+    /// part of its automatic diagnostics, or just the cheap parse-level
+    /// checks.
+    ///
+    /// Reported live: a workspace restore reopens every previously-open tab
+    /// (VS Code sends a `didOpen` for each, within milliseconds of the
+    /// others), and the automatic diagnostics path used to run a real, full
+    /// assemble - tens of seconds on a real demo - for *every one of them*,
+    /// including background tabs nobody asked about opening a completely
+    /// different file for. Only the document the user's editor actually
+    /// shows gets that treatment now; everything else still gets real parse-
+    /// error diagnostics, just not the expensive cross-file assembler-
+    /// warning pass.
+    ///
+    /// Defaults to "yes, assemble it" whenever activity is unknown - either
+    /// the client hasn't sent `cpclib.setActiveDocument` yet (an older or
+    /// different client), or nothing is currently marked active - so nothing
+    /// regresses for a client that never adopts this.
+    fn should_fully_assemble(&self, uri: &Url) -> bool {
+        match self.active_document.read() {
+            Ok(guard) => match guard.as_ref() {
+                None => true,
+                Some(active) => active == uri
+            },
+            Err(_) => true
         }
     }
 
@@ -89,13 +125,19 @@ impl CpcLspBackend {
     }
 
     async fn analyze_document(&self, document: &Document) {
+        // Always the full treatment: every caller of this method is a
+        // deliberate, explicit re-analysis (a build finishing, a rename) -
+        // not the automatic did_open/did_change path, which is
+        // `spawn_deferred_analysis`'s own, separate call into
+        // `compute_diagnostics` below.
         let diagnostics = compute_diagnostics(
             &self.asm_analyzer,
             &self.build_analyzer,
             &self.basic_analyzer,
             document,
             &self.workspace_roots(),
-            &self.build_error_diagnostics
+            &self.build_error_diagnostics,
+            true
         );
         update_embedded_bndbuild_index(
             &self.asm_analyzer,
@@ -136,6 +178,12 @@ impl CpcLspBackend {
         let workspace_roots = self.workspace_roots();
         let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
         let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
+        // Read once, up front - `did_open`/`did_save` pass a zero delay, so
+        // this is already as fresh as it can be for them; only `did_change`'s
+        // own debounce could make this up to `DID_CHANGE_DEBOUNCE` stale,
+        // which just means the next edit or focus change re-evaluates it,
+        // not a correctness problem.
+        let is_active = self.should_fully_assemble(&uri);
 
         tokio::spawn(async move {
             if !delay.is_zero() {
@@ -182,7 +230,8 @@ impl CpcLspBackend {
                     &basic_analyzer,
                     &document,
                     &workspace_roots,
-                    &build_error_diagnostics
+                    &build_error_diagnostics,
+                    is_active
                 );
                 let index_start = std::time::Instant::now();
                 update_embedded_bndbuild_index(
@@ -762,10 +811,14 @@ fn compute_diagnostics(
     basic_analyzer: &BasicAnalyzer,
     document: &Document,
     workspace_roots: &[PathBuf],
-    build_error_diagnostics: &DashMap<Url, Vec<Diagnostic>>
+    build_error_diagnostics: &DashMap<Url, Vec<Diagnostic>>,
+    is_active: bool
 ) -> Vec<Diagnostic> {
     let mut diagnostics = match document.doc_type {
-        DocumentType::Assembly => asm_analyzer.analyze(document),
+        // Only the Assembly path has an expensive, skippable-when-inactive
+        // real assemble - `build_analyzer`/`basic_analyzer`'s own `analyze`
+        // are cheap regardless, so they don't need an `is_active` variant.
+        DocumentType::Assembly => asm_analyzer.analyze_for_activity(document, is_active),
         DocumentType::BuildFile => build_analyzer.analyze(document),
         DocumentType::Basic => basic_analyzer.analyze(document),
         DocumentType::CatartBasic => {
@@ -1009,7 +1062,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.getDebuggableRules",
     "cpclib.musicPlay",
     "cpclib.musicBuildDsk",
-    "cpclib.musicSidInfo"
+    "cpclib.musicSidInfo",
+    "cpclib.setActiveDocument"
 ];
 
 #[tower_lsp::async_trait]
@@ -1901,6 +1955,36 @@ impl LanguageServer for CpcLspBackend {
         &self,
         params: ExecuteCommandParams
     ) -> Result<Option<serde_json::Value>> {
+        if params.command == "cpclib.setActiveDocument" {
+            // The extension calls this from its own `onDidChangeActiveTextEditor`
+            // listener (plus once at startup for whatever is already active),
+            // passing the active editor's document URI as the sole argument,
+            // or no argument/`null` when nothing is focused. See
+            // `should_fully_assemble`'s own doc comment for why this exists.
+            let uri = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .and_then(|s| Url::parse(&s).ok());
+            if let Ok(mut guard) = self.active_document.write() {
+                *guard = uri.clone();
+            }
+            // The document that just became active may have been sitting
+            // open in a background tab this whole time, having only ever
+            // gotten the cheap, parse-only treatment - upgrade it to the
+            // real thing now that someone is actually looking at it.
+            // Whatever was active before needs no equivalent downgrade: its
+            // existing diagnostics simply stay as they are (stale-but-
+            // harmless) until it's edited or re-focused.
+            if let Some(uri) = uri
+                && let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+                && document.doc_type == DocumentType::Assembly
+            {
+                self.spawn_deferred_analysis(uri, document.version, Duration::ZERO);
+            }
+            return Ok(None);
+        }
         if params.command == "cpclib.runRule" {
             let mut args = params.arguments.into_iter();
             let rule = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
@@ -2014,13 +2098,16 @@ impl LanguageServer for CpcLspBackend {
             // `.asm` file, not YAML, for an embedded-bndbuild-in-basm rule
             // (`DocumentType::Assembly` branch above), and running the YAML
             // analyzer against `.asm` source produced misleading diagnostics.
+            // Always the full treatment: the user just explicitly ran this
+            // rule by hand, same reasoning as `analyze_document`.
             let mut diagnostics = compute_diagnostics(
                 &self.asm_analyzer,
                 &self.build_analyzer,
                 &self.basic_analyzer,
                 &document,
                 &self.workspace_roots(),
-                &self.build_error_diagnostics
+                &self.build_error_diagnostics,
+                true
             );
             let failed = !outcome.success;
             diagnostics.extend(outcome.diagnostics);
@@ -2243,13 +2330,16 @@ impl LanguageServer for CpcLspBackend {
             };
             let _ = log_task.await;
 
+            // Always the full treatment: the user just explicitly ran this
+            // task by hand, same reasoning as `analyze_document`.
             let diagnostics = compute_diagnostics(
                 &self.asm_analyzer,
                 &self.build_analyzer,
                 &self.basic_analyzer,
                 &document,
                 &self.workspace_roots(),
-                &self.build_error_diagnostics
+                &self.build_error_diagnostics,
+                true
             );
             self.publish_diagnostics(uri, diagnostics).await;
 
@@ -2886,13 +2976,19 @@ impl LanguageServer for CpcLspBackend {
             // client-driven project sweep is almost entirely such files.
             let open = self.documents.contains_key(&uri);
             let diagnostics = if open {
+                // Always the full treatment: `request_peephole` just above
+                // already marked this exact document `peephole_wanted`,
+                // which `analyze_for_activity` treats as an explicit ask
+                // that overrides activity-gating regardless - passing `true`
+                // here is just the more direct way to say so.
                 compute_diagnostics(
                     &self.asm_analyzer,
                     &self.build_analyzer,
                     &self.basic_analyzer,
                     &document,
                     &self.workspace_roots(),
-                    &self.build_error_diagnostics
+                    &self.build_error_diagnostics,
+                    true
                 )
             }
             else {
@@ -3781,7 +3877,8 @@ mod warnings_as_errors_tests {
             &basic_analyzer,
             &doc,
             &[],
-            &build_error_diagnostics
+            &build_error_diagnostics,
+            true
         );
         assert!(
             diags
@@ -3799,7 +3896,8 @@ mod warnings_as_errors_tests {
             &basic_analyzer,
             &doc,
             &[],
-            &build_error_diagnostics
+            &build_error_diagnostics,
+            true
         );
         assert!(!diags.is_empty(), "{diags:?}");
         assert!(
@@ -3836,7 +3934,8 @@ mod warnings_as_errors_tests {
             &basic_analyzer,
             &bnd_doc,
             &[],
-            &build_error_diagnostics
+            &build_error_diagnostics,
+            true
         );
         assert!(
             diags
@@ -4108,7 +4207,8 @@ mod build_error_diagnostics_tests {
             &basic_analyzer,
             &document,
             &[],
-            &build_error_diagnostics
+            &build_error_diagnostics,
+            true
         );
 
         assert_eq!(diagnostics, vec![stored], "{diagnostics:?}");
@@ -4137,7 +4237,8 @@ mod build_error_diagnostics_tests {
             &basic_analyzer,
             &document,
             &[],
-            &build_error_diagnostics
+            &build_error_diagnostics,
+            true
         );
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
@@ -5017,5 +5118,149 @@ mod spawn_deferred_analysis_tests {
             Some(DiagnosticSeverity::ERROR)
         );
         assert_eq!(params.diagnostics[0].range.start.line, 1);
+    }
+}
+
+#[cfg(test)]
+mod active_document_tests {
+    use futures_util::StreamExt;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// End-to-end regression coverage for the whole `cpclib.setActiveDocument`
+    /// mechanism: a background tab's `didOpen` must not get the expensive
+    /// real-assemble treatment (no assembler warnings) once *something else*
+    /// is marked active, and switching focus to it must upgrade it - a fresh
+    /// `publishDiagnostics` with the real warning this time - rather than
+    /// leaving it stuck with whatever it got when it was merely opened.
+    #[tokio::test]
+    async fn a_background_tab_is_upgraded_once_it_becomes_the_active_document() {
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let (mut requests, _responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                if request.method() == "textDocument/publishDiagnostics"
+                    && let Some(params) = request.params()
+                    && let Ok(p) = serde_json::from_value::<PublishDiagnosticsParams>(params.clone())
+                {
+                    let _ = tx.send(p);
+                }
+            }
+        });
+
+        let init_request = tower_lsp::jsonrpc::Request::build("initialize")
+            .params(serde_json::json!({ "capabilities": {} }))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(init_request).await;
+
+        let backend = service.inner();
+        let text = "org 0x4000\n ld hl, de\n ret\n"; // a real fake-instruction warning
+        let uri_a = Url::parse("file:///a.asm").unwrap();
+        let uri_b = Url::parse("file:///b.asm").unwrap();
+
+        async fn next_diagnostics_for(
+            rx: &mut tokio::sync::mpsc::UnboundedReceiver<PublishDiagnosticsParams>,
+            uri: &Url
+        ) -> PublishDiagnosticsParams {
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                loop {
+                    let p = rx.recv().await.expect("channel closed");
+                    if &p.uri == uri {
+                        return p;
+                    }
+                }
+            })
+            .await
+            .expect("timed out waiting for publishDiagnostics")
+        }
+
+        // `a.asm` opens first, before anything has ever been marked active -
+        // `should_fully_assemble` defaults to "yes" when activity is unknown,
+        // so this one gets the real warning despite never being explicitly
+        // marked active.
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri_a.clone(),
+                    language_id: "basm".to_string(),
+                    version: 1,
+                    text: text.to_string()
+                }
+            })
+            .await;
+        let diags_a = next_diagnostics_for(&mut rx, &uri_a).await;
+        assert!(
+            diags_a
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "{:?}",
+            diags_a.diagnostics
+        );
+
+        // Explicitly mark `a.asm` active - now activity is known, and
+        // `b.asm` (not yet open) is not it.
+        backend
+            .execute_command(ExecuteCommandParams {
+                command: "cpclib.setActiveDocument".to_string(),
+                arguments: vec![serde_json::Value::String(uri_a.to_string())],
+                work_done_progress_params: Default::default()
+            })
+            .await
+            .unwrap();
+
+        // `b.asm` opens while `a.asm` is active - the same warning-worthy
+        // text, but this time as a background tab: no assembler warnings.
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri_b.clone(),
+                    language_id: "basm".to_string(),
+                    version: 1,
+                    text: text.to_string()
+                }
+            })
+            .await;
+        let diags_b_background = next_diagnostics_for(&mut rx, &uri_b).await;
+        assert!(
+            diags_b_background.diagnostics.is_empty(),
+            "a background tab must not get the expensive treatment: {:?}",
+            diags_b_background.diagnostics
+        );
+
+        // Switching focus to `b.asm` must upgrade it - a fresh
+        // publishDiagnostics with the real warning this time.
+        backend
+            .execute_command(ExecuteCommandParams {
+                command: "cpclib.setActiveDocument".to_string(),
+                arguments: vec![serde_json::Value::String(uri_b.to_string())],
+                work_done_progress_params: Default::default()
+            })
+            .await
+            .unwrap();
+        let diags_b_active = next_diagnostics_for(&mut rx, &uri_b).await;
+        assert!(
+            diags_b_active
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "becoming active must upgrade a background tab's diagnostics: {:?}",
+            diags_b_active.diagnostics
+        );
+    }
+
+    /// `cpclib.setActiveDocument` isn't in the extension's own manifest (it's
+    /// purely programmatic, called from `onDidChangeActiveTextEditor`, never
+    /// surfaced in the command palette) - confirms it's still in the
+    /// advertised/bridged list despite that, since forgetting to advertise it
+    /// would make the client's call a silent no-op.
+    #[test]
+    fn set_active_document_is_advertised() {
+        assert!(EXECUTE_COMMANDS.contains(&"cpclib.setActiveDocument"));
     }
 }

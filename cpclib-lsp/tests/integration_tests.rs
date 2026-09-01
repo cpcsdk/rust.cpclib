@@ -1551,18 +1551,32 @@ async fn test_catart_document_gets_error_and_warning_diagnostics() {
             }
         })
         .await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-    let mut severities: Vec<i64> = Vec::new();
-    while let Ok(request) = notifications.try_recv() {
-        if request.method() == "textDocument/publishDiagnostics"
-            && let Some(params) = request.params()
-            && params.get("uri").and_then(|u| u.as_str()) == Some(uri.as_str())
-            && let Some(diags) = params.get("diagnostics").and_then(|d| d.as_array())
-        {
-            severities.extend(diags.iter().filter_map(|d| d.get("severity")?.as_i64()));
+    // Polled with a generous timeout rather than a fixed sleep-then-drain:
+    // the deferred analysis this waits on now runs on tokio's blocking-
+    // thread pool (`spawn_blocking`, not this async task - see
+    // `CpcLspBackend::spawn_deferred_analysis`'s own doc comment), whose
+    // first-ever use in a process pays real OS thread-creation cost. A fixed
+    // sleep has to guess a number big enough to cover that variance; polling
+    // for the actual notification does not.
+    let severities: Vec<i64> = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let request = notifications.recv().await.expect("channel closed");
+            if request.method() == "textDocument/publishDiagnostics"
+                && let Some(params) = request.params()
+                && params.get("uri").and_then(|u| u.as_str()) == Some(uri.as_str())
+                && let Some(diags) = params.get("diagnostics").and_then(|d| d.as_array())
+            {
+                let severities: Vec<i64> =
+                    diags.iter().filter_map(|d| d.get("severity")?.as_i64()).collect();
+                if !severities.is_empty() {
+                    return severities;
+                }
+            }
         }
-    }
+    })
+    .await
+    .expect("timed out waiting for a non-empty publishDiagnostics for t.asc");
 
     // DiagnosticSeverity::ERROR = 1, WARNING = 2 in the LSP wire format.
     assert!(
