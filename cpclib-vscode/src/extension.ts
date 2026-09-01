@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ExtensionContext, window, workspace } from 'vscode';
-import { createLanguageClient, client, resolvedServerPath } from './lsp/client';
+import { createLanguageClient, client, resolvedServerPath, logStartupTiming } from './lsp/client';
 import { installLogMessageMirror } from './lsp/logMirror';
 import { BndbuildTaskProvider } from './tasks/bndbuildTaskProvider';
 import { registerCodeLensRunners } from './tasks/codeLensRunners';
@@ -17,8 +17,10 @@ import { registerDebugging } from './debug/register';
 import { setDebugClient } from './debug/launch';
 
 export function activate(context: ExtensionContext): void {
+    logStartupTiming('activate: entry');
     const config = workspace.getConfiguration('cpclib-lsp');
     const languageClient = createLanguageClient(context, config);
+    logStartupTiming('activate: createLanguageClient returned');
 
     // Registered immediately, synchronously - not nested inside
     // `client.start().then(...)`. `Ctrl+Shift+B` ("Run Build Task") asks
@@ -36,12 +38,16 @@ export function activate(context: ExtensionContext): void {
         new BndbuildTaskProvider(languageClient, config),
     );
     context.subscriptions.push(taskProvider);
+    logStartupTiming('activate: task provider registered');
 
+    logStartupTiming('activate: calling languageClient.start()');
     languageClient.start().then(() => {
+        logStartupTiming('languageClient.start() resolved - server is ready');
         setDebugClient(languageClient);
         window.showInformationMessage('CPClib LSP server started.');
         installLogMessageMirror(languageClient);
     }).catch((err: Error) => {
+        logStartupTiming(`languageClient.start() rejected: ${err.message}`);
         window.showErrorMessage(`CPClib LSP failed to start: ${err.message}. Check cpclib-lsp.serverPath setting.`);
     });
 
@@ -59,6 +65,7 @@ export function activate(context: ExtensionContext): void {
 
     registerCycleCountStatusBar(context);
     registerRegistersStatusBar(context);
+    logStartupTiming('activate: returning (all synchronous registration done)');
 }
 
 export function deactivate(): Thenable<void> | undefined {

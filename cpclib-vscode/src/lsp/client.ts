@@ -19,6 +19,29 @@ import {
 export let client: LanguageClient;
 
 /**
+ * Timestamped activation-timing log, shared by `extension.ts` and this file -
+ * created once here (before the `LanguageClient` itself exists, so
+ * `activate()`'s very first line can log to it) and handed to
+ * `LanguageClientOptions.outputChannel` below so the client reuses this
+ * channel instead of creating a second "CPClib LSP" one.
+ *
+ * Exists to answer a real, otherwise-unanswerable question: a report of
+ * "cpclib-lsp itself responds instantly when driven directly over stdio,
+ * but a real VS Code session still has a ~40s stall before the workspace's
+ * previously-open tabs get re-opened" - i.e. something client-side, not
+ * server-side. `createFileSystemWatcher`'s broad, recursive,
+ * workspace-wide pattern (below) is the leading suspect - broad recursive
+ * watchers are a well-documented category of VS Code startup slowness -
+ * but this is the only way to actually confirm or rule that out on a
+ * remote machine nobody can attach an interactive debugger to.
+ */
+export const startupLog = vscode.window.createOutputChannel('CPClib LSP');
+
+export function logStartupTiming(label: string): void {
+    startupLog.appendLine(`[startup ${new Date().toISOString()}] ${label}`);
+}
+
+/**
  * The resolved `cpclib-lsp` binary path, set once by
  * {@link createLanguageClient} - reused by `bndbuildCommandPrefix` so
  * bndbuild execution (Tasks, the "▶ Run" CodeLens) invokes the *same* binary
@@ -100,11 +123,13 @@ export function createLanguageClient(
     context: ExtensionContext,
     config: vscode.WorkspaceConfiguration,
 ): LanguageClient {
+    logStartupTiming('createLanguageClient: start');
     const serverPath = resolveServerPath(
         config.get<string>('serverPath', 'cpclib-lsp'),
         context.extensionPath
     );
     resolvedServerPath = serverPath;
+    logStartupTiming(`createLanguageClient: server path resolved to ${serverPath}`);
 
     // `cwd` matters beyond convention: the server looks for `cpclib-lsp.toml`
     // relative to it at startup (before `initialize` gives it a workspace
@@ -138,10 +163,27 @@ export function createLanguageClient(
             // `cpclib_bndbuild::builder::EXPECTED_FILENAMES` explicitly
             // handles), so the LSP re-syncs on a build file's changes
             // regardless of which casing it was named with.
-            fileEvents: workspace.createFileSystemWatcher(
-                '{**/*.{asm,z80,bas,BAS,CAT,cat,ASC,asc},' +
-                '**/*.bnd,**/*.BND,**/*.build,**/*.BUILD,**/bndbuild.yml,**/BNDBUILD.YML}'
-            )
+            //
+            // Timed on both sides: this is a broad, recursive, workspace-wide
+            // watcher - VS Code has to set up a native recursive watch over
+            // the whole directory tree to support it, not just the matched
+            // file types, which is a well-documented category of VS Code
+            // startup slowness on a large/asset-heavy tree. `createFileSystemWatcher`
+            // itself returns synchronously (the native watcher setup happens
+            // in the background), so this pair of log lines won't show a long
+            // gap even if that background setup is what's actually slow -
+            // but it does at least prove or disprove that *this call itself*
+            // isn't a synchronous stall, and marks the one place in this
+            // file's own startup path most likely to matter if it is slow.
+            fileEvents: (() => {
+                logStartupTiming('createFileSystemWatcher: start (broad, recursive, workspace-wide)');
+                const watcher = workspace.createFileSystemWatcher(
+                    '{**/*.{asm,z80,bas,BAS,CAT,cat,ASC,asc},' +
+                    '**/*.bnd,**/*.BND,**/*.build,**/*.BUILD,**/bndbuild.yml,**/BNDBUILD.YML}'
+                );
+                logStartupTiming('createFileSystemWatcher: call returned');
+                return watcher;
+            })()
         },
         middleware: {
             // The server streams build output (stdout/stderr as the rule
@@ -175,8 +217,25 @@ export function createLanguageClient(
                     client.outputChannel.show(true);
                 }
                 return next(command, args);
+            },
+            // Timed for the same reason as `createFileSystemWatcher` above:
+            // this fires the moment VS Code itself hands this document to
+            // the client to forward as `textDocument/didOpen` - correlating
+            // this timestamp against the server's own "Document opened" log
+            // line for the same URI is what actually tells apart "the client
+            // was slow to forward a document VS Code already had open" from
+            // "VS Code itself hadn't opened the document yet" - the two
+            // explanations this instrumentation exists to distinguish.
+            didOpen: (document, next) => {
+                logStartupTiming(`didOpen middleware: ${document.uri.toString()}`);
+                return next(document);
             }
-        }
+        },
+        // Reuses `startupLog` rather than letting `LanguageClient` create its
+        // own "CPClib LSP" channel - same name, same channel, so the startup
+        // timing lines above and the client's own request/response tracing
+        // land together instead of in two separately-named channels.
+        outputChannel: startupLog
     };
 
     client = new LanguageClient(
@@ -185,6 +244,7 @@ export function createLanguageClient(
         serverOptions,
         clientOptions
     );
+    logStartupTiming('createLanguageClient: LanguageClient constructed, about to return (not started yet)');
 
     // NOTE: do NOT register `cpclib.runRule` here. The server advertises it in
     // its `executeCommandProvider` capability and vscode-languageclient
