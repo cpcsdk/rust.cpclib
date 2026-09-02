@@ -145,12 +145,24 @@ impl DerefMut for TableFrame {
 /// of hand written functions.
 /// This allows to play properly with recursive ones
 #[derive(Debug, Clone, Default)]
-struct FunctionsStack(Vec<TableFrame>);
+struct FunctionsStack {
+    active: Vec<TableFrame>,
+    /// Frames `leave_function` popped, `clear()`ed but with their allocated
+    /// capacity kept - reused by the next `enter_function` instead of
+    /// starting every single function call from a fresh, empty `HashMap`
+    /// (which then has to regrow through the same sequence of resizes as
+    /// the previous call's frame already went through, every time - a
+    /// user-function-heavy file calls this thousands of times). `clear()`
+    /// keeps the capacity but not the entries, so this is still correct for
+    /// a differently-shaped call: it only ever saves an allocation, never
+    /// leaks a previous call's bindings into the next one.
+    pool: Vec<TableFrame>
+}
 
 #[allow(dead_code)]
 impl FunctionsStack {
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.active.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -159,22 +171,28 @@ impl FunctionsStack {
 
     /// Create the frame for the current function
     pub fn enter_function(&mut self) {
-        self.0.push(TableFrame::default());
+        let frame = self.pool.pop().unwrap_or_default();
+        self.active.push(frame);
     }
 
-    /// Destroy the frame of the current function
-    pub fn leave_function(&mut self) -> TableFrame {
-        self.0.pop().unwrap() // must failed when called for nothing
+    /// Destroy the frame of the current function. Its own only caller
+    /// (`SymbolsTable::leave_function`) discards the bindings, so this
+    /// clears and pools the frame for reuse rather than returning (and
+    /// thereby having to clone) them.
+    pub fn leave_function(&mut self) {
+        let mut frame = self.active.pop().unwrap(); // must failed when called for nothing
+        frame.clear();
+        self.pool.push(frame);
     }
 
     /// Provide the frame for the current function call
     pub fn current_frame(&self) -> Option<&TableFrame> {
-        self.0.last()
+        self.active.last()
     }
 
     /// Mutably provide the frame for the current function call
     pub fn current_frame_mut(&mut self) -> Option<&mut TableFrame> {
-        self.0.last_mut()
+        self.active.last_mut()
     }
 }
 
@@ -527,8 +545,16 @@ impl SymbolsTable {
     }
 
     pub fn new_pass(&mut self) {
+        // The previous pass's symbol count is a good estimate for this one
+        // (assembly is deterministic pass-over-pass once mostly converged,
+        // so the same symbols get (re)defined every time) - reserving it
+        // up front avoids `current_pass_map` regrowing from empty through
+        // the same sequence of hashmap resizes on every single pass, for a
+        // real project's full symbol count (thousands of labels/EQUs).
+        let estimated_capacity = self.current_pass_map.len();
         self.current_pass_map = ModuleSymbolTable::default();
         self.current_pass_map.add_children("".to_owned().into());
+        self.current_pass_map.reserve(estimated_capacity);
         // Reset proximity label counter for each pass
         self.proximity_label_counter.store(-1, Ordering::Relaxed);
     }

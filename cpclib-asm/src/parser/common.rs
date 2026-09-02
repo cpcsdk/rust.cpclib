@@ -822,7 +822,20 @@ enum LabelModifier {
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 // MIGRATED: parse_z80_directive_with_block -> directives.rs
 pub fn parse_lines(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedToken>, Z80ParserError> {
-    let mut tokens = Vec::with_capacity(100);
+    // A fixed 100 was a reasonable guess for a whole source file, but this
+    // is also the entry point `Token::parse_token`/`parse_z80_str` use to
+    // parse a single hand-formatted instruction string back into one token
+    // (`cpclib-asm/src/disass.rs`'s `string_to_token`, called once per
+    // opcode byte while disassembling - a genuinely hot path when TICKER
+    // counters are active, since every DB/DW/STR statement's bytes get
+    // disassembled to check for incompatible looping mnemonics). Scaling
+    // the guess with the actual remaining input avoids allocating room for
+    // 100 tokens - each a full `LocatedToken`, hundreds of bytes - to parse
+    // what's typically exactly one. Clamped so a huge file doesn't trigger
+    // one huge speculative allocation either; Vec growth is amortized
+    // either way, this is just about not guessing wildly high for small
+    // inputs.
+    let mut tokens = Vec::with_capacity((input.eof_offset() / 8).clamp(4, 128));
 
     loop {
         let offset = input.eof_offset();
