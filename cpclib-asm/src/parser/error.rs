@@ -1,5 +1,6 @@
 #![allow(clippy::cast_lossless)]
 
+use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::error::{AddContext, ParserError, StrContext};
 use cpclib_common::winnow::stream::Stream;
 
@@ -33,8 +34,18 @@ pub enum Z80ParserErrorKind {
     }
 }
 
+/// Inline capacity of 1: every backtrack (the overwhelming majority of
+/// instances - one per failed `alt()` branch during parsing, immediately
+/// discarded) constructs exactly one entry via `from_input`. Keeping that
+/// case on the stack instead of the heap avoids an allocation per failed
+/// parse attempt, which dominates allocation count on backtracking-heavy
+/// grammars (see DHAT profiling: this was the #3 allocation site by bytes,
+/// with a block count an order of magnitude above genuinely-surfaced
+/// errors). Errors that accumulate real context (`add_context`/`append`)
+/// still work correctly - they just spill to the heap past 1 entry, same
+/// as before.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Z80ParserError(pub Vec<(InnerZ80Span, Z80ParserErrorKind)>);
+pub struct Z80ParserError(pub SmallVec<[(InnerZ80Span, Z80ParserErrorKind); 1]>);
 
 impl Z80ParserError {
     pub fn errors(&self) -> Vec<(&InnerZ80Span, &Z80ParserErrorKind)> {
@@ -124,7 +135,7 @@ impl Z80ParserError {
         listing: std::sync::Arc<LocatedListing>,
         error: Box<Z80ParserError>
     ) -> Self {
-        Self(vec![(*input, Z80ParserErrorKind::Inner { listing, error })])
+        Self(SmallVec::from_buf([(*input, Z80ParserErrorKind::Inner { listing, error })]))
     }
 
     /// Create a new error from input - convenience method that delegates to the trait method
@@ -137,7 +148,7 @@ impl ParserError<InnerZ80Span> for Z80ParserError {
     type Inner = Self;
 
     fn from_input(input: &InnerZ80Span) -> Self {
-        Self(vec![(*input, Z80ParserErrorKind::Winnow)])
+        Self(SmallVec::from_buf([(*input, Z80ParserErrorKind::Winnow)]))
     }
 
     fn append(
