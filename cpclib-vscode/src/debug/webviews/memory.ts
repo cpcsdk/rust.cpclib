@@ -48,41 +48,69 @@ export function showMemory(session: vscode.DebugSession, dump: MemoryDump | unde
     }
 
     const key = `${session.id}:${dump.viewId ?? 'default'}`;
-    let panel = memoryPanels.get(key);
-    const isNew = panel === undefined;
-    if (!panel) {
-        const title = dump.label ?? `&${hex(dump.address, 4)}`;
-        panel = vscode.window.createWebviewPanel(
-            'cpclib.memory',
-            `CPC memory: ${title} — ${session.name}`,
-            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-            { enableScripts: true, retainContextWhenHidden: true },
-        );
-        const owned = panel;
-        panel.onDidDispose(() => {
-            if (memoryPanels.get(key) === owned) { memoryPanels.delete(key); }
+    const existing = memoryPanels.get(key);
+    // An already-open panel gets the new frame patched into its *existing*
+    // page instead of a fresh one - same fix, and same reason, as
+    // `screen.ts`'s own account of the flicker/reload-loop a full
+    // `webview.html` reload on every stop caused there: this view exists
+    // specifically to "keep open and glance at while stepping" (see the
+    // doc comment above), so reloading the whole page on every single step
+    // defeats the point of leaving it open.
+    if (existing) {
+        void existing.webview.postMessage({
+            type: 'cpclib.memoryFrame',
+            title: memoryTitle(dump),
+            byteCount: dump.bytes.length,
+            tableHtml: memoryTableHtml(dump),
+            config: dump.config,
+            anchorArgument: anchorArgumentFromViewId(dump.viewId, dump.address),
+            count: dump.bytes.length || 0x40,
         });
-        // The config picker's own change event - reissues -mv with the
-        // same anchor/count and the newly chosen RAM-configuration
-        // override, the same round trip the disassembly view's own picker
-        // takes.
-        panel.webview.onDidReceiveMessage(async (
-            message: { config?: string; anchor?: string; count?: number },
-        ) => {
-            if (message?.config === undefined) { return; }
-            const config = message.config === '' ? '_' : message.config;
-            await consoleCommand(`-mv ${message.anchor ?? '_'} ${message.count ?? 0x40} ${config}`);
-        });
-        memoryPanels.set(key, panel);
+        // A stop's own silent refresh doesn't reveal it - pulling it in
+        // front of whatever shares its column on every step would defeat
+        // the same purpose. Only a person re-typing the command that
+        // opened it (`-mv HL,follow` again) does.
+        if (dump.requested) { existing.reveal(vscode.ViewColumn.Beside, true); }
+        return;
     }
 
+    const title = dump.label ?? `&${hex(dump.address, 4)}`;
+    const panel = vscode.window.createWebviewPanel(
+        'cpclib.memory',
+        `CPC memory: ${title} — ${session.name}`,
+        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+        { enableScripts: true, retainContextWhenHidden: true },
+    );
+    panel.onDidDispose(() => {
+        if (memoryPanels.get(key) === panel) { memoryPanels.delete(key); }
+    });
+    // The config picker's own change event - reissues -mv with the
+    // same anchor/count and the newly chosen RAM-configuration
+    // override, the same round trip the disassembly view's own picker
+    // takes.
+    panel.webview.onDidReceiveMessage(async (
+        message: { config?: string; anchor?: string; count?: number },
+    ) => {
+        if (message?.config === undefined) { return; }
+        const config = message.config === '' ? '_' : message.config;
+        await consoleCommand(`-mv ${message.anchor ?? '_'} ${message.count ?? 0x40} ${config}`);
+    });
+    memoryPanels.set(key, panel);
+
     panel.webview.html = memoryHtml(dump);
-    // New, or a person just typed the command that reused it (`-mv HL,follow`
-    // again brings the HL panel forward instead of leaving it wherever it
-    // was). A stop's own silent refresh does neither - revealing it every
-    // step would pull it in front of whatever shares its column.
+    // Always revealed here - this is the panel's very first paint (or a
+    // person just typed the command that reused it, `-mv HL,follow` again
+    // bringing it forward - but that's now the `existing` branch above).
     // `preserveFocus` keeps the keyboard, not the view.
-    if (isNew || dump.requested) { panel.reveal(vscode.ViewColumn.Beside, true); }
+    panel.reveal(vscode.ViewColumn.Beside, true);
+}
+
+/** The `<h2>` title text for `dump` - shared by the initial render and
+ * every subsequent `cpclib.memoryFrame` patch. */
+function memoryTitle(dump: MemoryDump): string {
+    return dump.label
+        ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
+        : `&amp;${hex(dump.address, 4)}`;
 }
 
 export const memoryPageStyle = `
@@ -160,9 +188,7 @@ function anchorArgumentFromViewId(viewId: string | undefined, address: number): 
 
 function memoryHtml(dump: MemoryDump): string {
     const nonce = Math.random().toString(36).slice(2);
-    const title = dump.label
-        ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
-        : `&amp;${hex(dump.address, 4)}`;
+    const title = memoryTitle(dump);
     // Same convention as the disassembly view's own picker.
     const configOptions = ['<option value="">Live (CPU)</option>']
         .concat(
@@ -184,25 +210,50 @@ function memoryHtml(dump: MemoryDump): string {
 </style>
 </head>
 <body>
-<h2>${title} &nbsp;<span class="addr">${dump.bytes.length} bytes</span></h2>
+<h2><span id="titleText">${title}</span> &nbsp;<span class="addr"><span id="byteCount">${dump.bytes.length}</span> bytes</span></h2>
 <div class="controls">
   <label>RAM configuration: <select id="config">${configOptions}</select></label>
 </div>
-${memoryTableHtml(dump)}
+<div id="tableContainer">${memoryTableHtml(dump)}</div>
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
 Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.
 Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
+  // Reassigned by the message listener below on every subsequent frame -
+  // this page is built once (on the panel's first paint) and only ever
+  // updates in place from here on, the same reason \`screen.ts\`'s own script
+  // keeps its per-frame state in plain variables rather than the page
+  // being rebuilt from scratch on every debug step.
+  let anchorArgument = ${JSON.stringify(anchorArgument)};
+  let count = ${dump.bytes.length || 0x40};
+  const configSelect = document.getElementById('config');
+  const titleText = document.getElementById('titleText');
+  const byteCount = document.getElementById('byteCount');
+  const tableContainer = document.getElementById('tableContainer');
+
   // Reissues -mv with the same anchor/count and the newly chosen config.
   function reissue() {
-    vscode.postMessage({
-      config: document.getElementById('config').value,
-      anchor: ${JSON.stringify(anchorArgument)},
-      count: ${dump.bytes.length || 0x40},
-    });
+    vscode.postMessage({ config: configSelect.value, anchor: anchorArgument, count });
   }
-  document.getElementById('config').addEventListener('change', reissue);
+  configSelect.addEventListener('change', reissue);
+
+  window.addEventListener('message', event => {
+    const msg = event.data;
+    if (!msg || msg.type !== 'cpclib.memoryFrame') { return; }
+    titleText.innerHTML = msg.title;
+    byteCount.textContent = String(msg.byteCount);
+    tableContainer.innerHTML = msg.tableHtml;
+    anchorArgument = msg.anchorArgument;
+    count = msg.count;
+    // Left alone while the picker has focus, same reason \`screen.ts\`
+    // leaves a focused field alone on an automatic refresh - a person
+    // mid-choosing a config shouldn't have their own in-progress selection
+    // overwritten by the next stop's answer.
+    if (document.activeElement !== configSelect) {
+      configSelect.value = msg.config != null ? String(msg.config) : '';
+    }
+  });
 </script>
 </body>
 </html>`;

@@ -769,7 +769,7 @@ impl AssemblyAnalyzer {
 ///   `EQU`/label inside becomes part of the real program at the call site
 ///   once expanded), so only declared parameters are checked, not
 ///   body-defined symbols.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum RenameTarget {
     Global(String),
     Local {

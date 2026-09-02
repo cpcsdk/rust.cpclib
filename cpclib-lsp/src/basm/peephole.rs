@@ -188,7 +188,26 @@ impl AssemblyAnalyzer {
         fingerprint: u128,
         config: &crate::common::config::AsmConfig
     ) -> Option<std::sync::Arc<Env>> {
-        self.projects.env_for(entry, fingerprint, config)
+        // Timed unconditionally, same reasoning as `workspace_fingerprint_of`:
+        // `ProjectCache::env_for`'s own module doc comment says a real demo's
+        // full assemble "takes tens of seconds" - true, but until now that
+        // cost was invisible in the log, swallowed inside whichever request's
+        // outer "took ..." line happened to trigger the cache miss (a
+        // misleadingly generic `code_action`/CodeLens/diagnostics duration,
+        // indistinguishable from every other kind of slowness). This line is
+        // what lets "was that 40 real seconds of assembling, or 40 seconds
+        // lost to CPU contention with something else on the machine" be
+        // answered directly from the log instead of guessed at - a cache hit
+        // logs near-instantly, so a slow line here specifically means a real,
+        // uncached project assemble ran.
+        let start = std::time::Instant::now();
+        let result = self.projects.env_for(entry, fingerprint, config);
+        tracing::debug!(
+            "project_env_cached for {} took {:?}",
+            entry.display(),
+            start.elapsed()
+        );
+        result
     }
 
     /// Where this document's real addresses come from.

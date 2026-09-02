@@ -301,15 +301,32 @@ impl CpcLspBackend {
     /// "first match wins" from strict directory-walk order to "first match
     /// found across parallel workers" - an acceptable difference, since a
     /// symbol should only have one real definition.
+    ///
+    /// The `par_iter` call itself also runs inside `spawn_blocking`, not
+    /// just the walk that produces `paths` - `rayon`'s `par_iter` blocks its
+    /// *caller* until every parallel task finishes, so leaving it directly
+    /// in this `async fn` would still stall the calling tokio worker thread
+    /// for the whole scan, defeating half of `candidate_asm_paths`'s own
+    /// `spawn_blocking` migration. Mirrors
+    /// `remove_unused_parameter_across_workspace`'s own
+    /// spawn_blocking-wrapped rayon scan.
     async fn find_definition_via_workspace_scan(
         &self,
         from_uri: &Url,
         word_upper: &str
     ) -> Option<Location> {
         let paths = self.candidate_asm_paths(from_uri).await;
-        paths
-            .par_iter()
-            .find_map_any(|path| self.find_definition_at_path(path, word_upper))
+        let documents = Arc::clone(&self.documents);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let word_upper = word_upper.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            paths.par_iter().find_map_any(|path| {
+                find_definition_at_path_with(&documents, &asm_analyzer, path, &word_upper)
+            })
+        })
+        .await
+        .unwrap_or(None)
     }
 
     /// The configured workspace root(s), or an empty `Vec` if the client
@@ -382,12 +399,7 @@ impl CpcLspBackend {
     /// fallbacks, call-hierarchy include-graph traversal, and several
     /// `executeCommand` handlers).
     fn load_document(&self, uri: &Url) -> Option<Document> {
-        if let Some(entry) = self.documents.get(uri) {
-            return Some(entry.value().clone());
-        }
-        let path = uri.to_file_path().ok()?;
-        let text = std::fs::read_to_string(&path).ok()?;
-        Some(Document::new(uri.clone(), text, disk_file_version(&path)))
+        load_document_from(&self.documents, uri)
     }
 
     /// Shared by both cross-file fallbacks: look up `word` (case-sensitively
@@ -395,10 +407,7 @@ impl CpcLspBackend {
     /// `AssemblyAnalyzer::find_definition_in`'s own doc comment) in the file
     /// at `path`, using the already-open in-memory document if there is one.
     fn find_definition_at_path(&self, path: &std::path::Path, word: &str) -> Option<Location> {
-        let target_uri = Url::from_file_path(path).ok()?;
-        let doc = self.load_document(&target_uri)?;
-        self.asm_analyzer
-            .find_definition_in(&doc, word, self.asm_analyzer.config().case_sensitive)
+        find_definition_at_path_with(&self.documents, &self.asm_analyzer, path, word)
     }
 
     /// Workspace-wide rename of a `Global` basm label: unlike
@@ -427,11 +436,34 @@ impl CpcLspBackend {
         // file's edits independently via rayon (no shared mutable state
         // during the parallel phase), then merge sequentially, preserving
         // today's "skip a URI already present" semantics via `or_insert`.
+        //
+        // The `par_iter` call runs inside `spawn_blocking`, not just the
+        // walk that produces `paths` - same reasoning as
+        // `find_definition_via_workspace_scan`'s own doc comment: `rayon`'s
+        // `par_iter` blocks its caller until every parallel task finishes,
+        // so this would otherwise stall the calling tokio worker thread for
+        // the whole scan.
         let paths = self.candidate_asm_paths(from_uri).await;
-        let results: Vec<(Url, Vec<TextEdit>)> = paths
-            .par_iter()
-            .filter_map(|path| self.rename_edits_at_path(path, target, new_name))
-            .collect();
+        let documents = Arc::clone(&self.documents);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let target_owned = target.clone();
+        let new_name_owned = new_name.to_string();
+        let results: Vec<(Url, Vec<TextEdit>)> = tokio::task::spawn_blocking(move || {
+            paths
+                .par_iter()
+                .filter_map(|path| {
+                    rename_edits_at_path_with(
+                        &documents,
+                        &asm_analyzer,
+                        path,
+                        &target_owned,
+                        &new_name_owned
+                    )
+                })
+                .collect()
+        })
+        .await
+        .unwrap_or_default();
         for (uri, edits) in results {
             changes.entry(uri).or_insert(edits);
         }
@@ -464,13 +496,7 @@ impl CpcLspBackend {
         target: &crate::basm::definition::RenameTarget,
         new_name: &str
     ) -> Option<(Url, Vec<TextEdit>)> {
-        let target_uri = Url::from_file_path(path).ok()?;
-        let doc = self.load_document(&target_uri)?;
-        let edits = self
-            .asm_analyzer
-            .rename_occurrences_in(&doc, target, new_name);
-
-        (!edits.is_empty()).then_some((target_uri, edits))
+        rename_edits_at_path_with(&self.documents, &self.asm_analyzer, path, target, new_name)
     }
 
     /// Workspace-wide, all-or-nothing removal of an unused MACRO/FUNCTION
@@ -925,6 +951,49 @@ fn relativize_diagnostic_messages(diagnostics: &mut [Diagnostic], workspace_root
     }
 }
 
+/// `CpcLspBackend::load_document`'s logic, taking the `documents` map
+/// explicitly rather than `&self` - lets it (and the small helpers built on
+/// it below) run inside a `tokio::task::spawn_blocking(move || ...)`
+/// closure, which needs `'static` captures and so can't hold a `&self`
+/// borrow tied to the handler's own non-`'static` lifetime.
+fn load_document_from(documents: &DashMap<Url, Document>, uri: &Url) -> Option<Document> {
+    if let Some(entry) = documents.get(uri) {
+        return Some(entry.value().clone());
+    }
+    let path = uri.to_file_path().ok()?;
+    let text = std::fs::read_to_string(&path).ok()?;
+    Some(Document::new(uri.clone(), text, disk_file_version(&path)))
+}
+
+/// `CpcLspBackend::find_definition_at_path`'s logic, `documents`/
+/// `asm_analyzer` taken explicitly - see `load_document_from`'s doc comment
+/// for why.
+fn find_definition_at_path_with(
+    documents: &DashMap<Url, Document>,
+    asm_analyzer: &AssemblyAnalyzer,
+    path: &std::path::Path,
+    word: &str
+) -> Option<Location> {
+    let target_uri = Url::from_file_path(path).ok()?;
+    let doc = load_document_from(documents, &target_uri)?;
+    asm_analyzer.find_definition_in(&doc, word, asm_analyzer.config().case_sensitive)
+}
+
+/// `CpcLspBackend::rename_edits_at_path`'s logic, `documents`/`asm_analyzer`
+/// taken explicitly - see `load_document_from`'s doc comment for why.
+fn rename_edits_at_path_with(
+    documents: &DashMap<Url, Document>,
+    asm_analyzer: &AssemblyAnalyzer,
+    path: &std::path::Path,
+    target: &crate::basm::definition::RenameTarget,
+    new_name: &str
+) -> Option<(Url, Vec<TextEdit>)> {
+    let target_uri = Url::from_file_path(path).ok()?;
+    let doc = load_document_from(documents, &target_uri)?;
+    let edits = asm_analyzer.rename_occurrences_in(&doc, target, new_name);
+    (!edits.is_empty()).then_some((target_uri, edits))
+}
+
 /// Dispatch by `document.doc_type` to the matching analyzer, returning
 /// `unknown_default` for `DocumentType::Unknown`. Shared by the handlers
 /// whose per-arm bodies are all `self.X_analyzer.method(document, ...)`
@@ -1287,21 +1356,41 @@ impl LanguageServer for CpcLspBackend {
 
         tracing::debug!("Hover request at {}:{}", uri, position.line);
 
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
 
-            let hover = dispatch_by_doc_type(
-                document,
+        // Same class of bug already fixed for `spawn_deferred_analysis`/
+        // `semantic_tokens_full`: on a macro/struct/FUNCTION call, hover
+        // reaches `dry_run_env_cached` - a real, potentially multi-pass
+        // assemble - on every cache miss, which happens on every edit or
+        // included-file change. Hover fires on essentially every mouse
+        // movement over such a call, far more often than either
+        // already-fixed handler, so leaving this inline risked stalling the
+        // whole server (including reading the next message off stdin) far
+        // more often too.
+        let start = std::time::Instant::now();
+        let hover = match tokio::task::spawn_blocking(move || {
+            dispatch_by_doc_type(
+                &document,
                 None,
-                |doc| self.asm_analyzer.hover(doc, position),
-                |doc| self.build_analyzer.hover(doc, position),
-                |doc| self.basic_analyzer.hover(doc, position)
-            );
+                |doc| asm_analyzer.hover(doc, position),
+                |doc| build_analyzer.hover(doc, position),
+                |doc| basic_analyzer.hover(doc, position)
+            )
+        })
+        .await
+        {
+            Ok(hover) => hover,
+            Err(_join_error) => return Ok(None)
+        };
+        tracing::debug!("Hover request for {} took {:?}", uri, start.elapsed());
 
-            return Ok(hover);
-        }
-
-        Ok(None)
+        Ok(hover)
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -3296,20 +3385,39 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document.uri;
         let range = params.range;
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
-        let doc_type = entry.value().doc_type;
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
 
-        let actions: Vec<CodeAction> = match doc_type {
-            DocumentType::Assembly => self.asm_analyzer.code_actions(entry.value(), range),
-            DocumentType::Basic | DocumentType::CatartBasic => {
-                self.basic_analyzer.code_actions(entry.value(), range)
-            },
-            DocumentType::BuildFile => self.build_analyzer.code_actions(entry.value(), range),
-            _ => vec![]
+        // Same class of bug already fixed for `spawn_deferred_analysis`/
+        // `semantic_tokens_full`/`hover`: the peephole quickfix path
+        // (`Assembly`'s `code_actions`) reaches `dry_run_env_cached_checked`
+        // - a real assemble on a cache miss - plus, for address-shaped
+        // quickfixes, a workspace-wide include-graph walk. Left inline this
+        // ran synchronously on a shared async worker thread every time the
+        // editor asks for available quick fixes (which VS Code does
+        // proactively, not just on click).
+        let start = std::time::Instant::now();
+        let actions: Vec<CodeAction> = match tokio::task::spawn_blocking(move || {
+            match document.doc_type {
+                DocumentType::Assembly => asm_analyzer.code_actions(&document, range),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    basic_analyzer.code_actions(&document, range)
+                },
+                DocumentType::BuildFile => build_analyzer.code_actions(&document, range),
+                _ => vec![]
+            }
+        })
+        .await
+        {
+            Ok(actions) => actions,
+            Err(_join_error) => return Ok(None)
         };
+        tracing::debug!("Code action request for {} took {:?}", uri, start.elapsed());
 
         if actions.is_empty() {
             return Ok(None);

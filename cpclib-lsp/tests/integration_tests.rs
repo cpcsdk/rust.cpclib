@@ -485,6 +485,136 @@ async fn test_assembly_hover() {
     // Note: Hover may return None if the position doesn't match a keyword
 }
 
+/// Regression test for the `hover` handler's `tokio::task::spawn_blocking`
+/// migration (see `server/backend.rs`'s own doc comment on `hover` for why):
+/// unlike `test_assembly_hover`'s plain instruction, a macro-call hover
+/// reaches `dry_run_env_cached` - a real assemble - so this is the path most
+/// at risk of the migration losing the result or breaking the dispatch.
+#[tokio::test]
+async fn test_hover_expands_a_macro_call() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let uri = Url::parse("file:///macro_hover.asm").unwrap();
+    let text = "MACRO greet name\n  db \"{name}\"\nENDM\n\ngreet \"hello\"\n".to_string();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text
+            }
+        })
+        .await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    // Cursor on "greet" at the call site (line 4).
+    let result = backend
+        .hover(HoverParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                position: Position {
+                    line: 4,
+                    character: 1
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap();
+
+    let hover = result.expect("expected an expansion hover for the macro call");
+    let HoverContents::Markup(content) = hover.contents
+    else {
+        panic!("expected markup hover content");
+    };
+    assert!(content.value.contains("hello"), "{}", content.value);
+}
+
+/// Regression test for the `code_action` handler's `spawn_blocking`
+/// migration: `code_action` was entirely untested at the handler level
+/// before this - only the underlying `AssemblyAnalyzer::peephole_quickfix_action`
+/// had unit tests, which bypass `Backend::code_action`'s own dispatch.
+#[tokio::test]
+async fn test_code_action_offers_a_peephole_quickfix() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let uri = Url::parse("file:///peephole.asm").unwrap();
+    let text = "start:\n    ld b, b\n    ret\n".to_string();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text
+            }
+        })
+        .await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let cursor = Position {
+        line: 1,
+        character: 6
+    };
+    let result = backend
+        .code_action(CodeActionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            range: Range {
+                start: cursor,
+                end: cursor
+            },
+            context: CodeActionContext::default(),
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap();
+
+    let actions = result.expect("expected at least one code action");
+    assert!(
+        actions.iter().any(|a| match a {
+            CodeActionOrCommand::CodeAction(action) => action.title.contains("ld b,b"),
+            CodeActionOrCommand::Command(_) => false
+        }),
+        "{actions:?}"
+    );
+}
+
 #[tokio::test]
 async fn test_document_change() {
     let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
@@ -1137,6 +1267,87 @@ async fn test_goto_definition_workspace_scan_finds_the_one_match_among_many_cand
         Url::from_file_path(tmp.path().join("real.asm")).unwrap()
     );
     assert_eq!(location.range.start.line, 0);
+}
+
+/// Regression test for `rename_label_across_workspace`'s own `spawn_blocking`
+/// migration (the `par_iter` scan, not just the directory walk that precedes
+/// it - see `server/backend.rs`'s own doc comment on the function). Never
+/// covered by a test before this at any level - guards against a panic,
+/// lost edits, or a wrong result from the parallel scan now running inside
+/// `spawn_blocking` instead of directly on the async runtime.
+#[tokio::test]
+async fn test_rename_global_label_finds_the_one_match_among_many_candidates() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    for i in 0..8 {
+        std::fs::write(
+            tmp.path().join(format!("decoy{i}.asm")),
+            format!("UNRELATED_LABEL_{i}:\n    ret\n")
+        )
+        .unwrap();
+    }
+    std::fs::write(tmp.path().join("real.asm"), "    call some_label\n").unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "some_label:\n    ret\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .rename(RenameParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                position: Position {
+                    line: 0,
+                    character: 1
+                }
+            },
+            new_name: "renamed_label".to_string(),
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap();
+
+    let edit = result.expect("expected a workspace edit");
+    let changes = edit.changes.expect("expected changes");
+    let real_uri = Url::from_file_path(tmp.path().join("real.asm")).unwrap();
+    assert!(changes.contains_key(&main_uri), "{changes:?}");
+    assert!(changes.contains_key(&real_uri), "{changes:?}");
+    assert_eq!(changes[&real_uri][0].new_text, "renamed_label");
+    for i in 0..8 {
+        let decoy_uri = Url::from_file_path(tmp.path().join(format!("decoy{i}.asm"))).unwrap();
+        assert!(!changes.contains_key(&decoy_uri), "{changes:?}");
+    }
 }
 
 // ─── cpclib.cycleCountForSelection ─────────────────────────────────────────

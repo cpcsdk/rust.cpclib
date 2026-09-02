@@ -958,6 +958,12 @@ impl AssemblyAnalyzer {
                 // here), same as any other symbol kind.
                 self.collect_symbols_cached(document)
             };
+            // A `Vec` scan per candidate symbol against everything
+            // accumulated so far would be O(total-symbols²) across
+            // `other_documents` and every include - kept as a `HashSet` of
+            // names seen so far instead, so each candidate is an O(1) check.
+            let mut seen: std::collections::HashSet<String> =
+                doc_symbols.iter().map(|(s, _)| s.clone()).collect();
             for other in other_documents {
                 let fname = other
                     .uri
@@ -966,13 +972,13 @@ impl AssemblyAnalyzer {
                     .unwrap_or("")
                     .to_string();
                 for (sym, detail) in self.collect_symbols_cached(other) {
-                    if !doc_symbols.iter().any(|(s, _)| *s == sym) {
+                    if seen.insert(sym.clone()) {
                         doc_symbols.push((sym, format!("{detail} ({fname})")));
                     }
                 }
             }
             for (fname, sym, detail) in self.collect_symbols_from_includes(document) {
-                if !doc_symbols.iter().any(|(s, _)| *s == sym) {
+                if seen.insert(sym.clone()) {
                     doc_symbols.push((sym, format!("{detail} ({fname})")));
                 }
             }
@@ -1265,7 +1271,7 @@ impl AssemblyAnalyzer {
                     .unwrap_or(0)
             };
             let included_doc = Document::new(synthetic_uri, content, version);
-            for (sym, detail) in self.collect_symbols(&included_doc) {
+            for (sym, detail) in self.collect_symbols_cached(&included_doc) {
                 out.push((source_name.clone(), sym, detail));
             }
         }

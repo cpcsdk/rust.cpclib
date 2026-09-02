@@ -28,20 +28,22 @@ async function buildActiveFile(): Promise<void> {
     );
 
     type Match = { buildFileUri: vscode.Uri; target: string };
-    const matches: Match[] = [];
-    for (const buildFileUri of buildFiles) {
+    // One `getTargetsForFile` round-trip per build file, all in flight at
+    // once instead of one at a time - same reasoning (and same per-file
+    // try/catch preserved) as `BndbuildTaskProvider.provideTasks`.
+    const perFileMatches = await Promise.all(buildFiles.map(async (buildFileUri): Promise<Match[]> => {
         try {
             const targets = await client.sendRequest<string[]>(
                 'workspace/executeCommand',
                 { command: 'cpclib.getTargetsForFile', arguments: [buildFileUri.toString(), sourcePath] },
             ) ?? [];
-            for (const target of targets) {
-                matches.push({ buildFileUri, target });
-            }
+            return targets.map(target => ({ buildFileUri, target }));
         } catch {
             // LSP not ready or file unreadable — skip this build file.
+            return [];
         }
-    }
+    }));
+    const matches: Match[] = perFileMatches.flat();
 
     if (matches.length === 0) {
         window.showInformationMessage('No bndbuild file in this workspace references the active file.');

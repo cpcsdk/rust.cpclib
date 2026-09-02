@@ -111,7 +111,13 @@ export class BndbuildTaskProvider implements vscode.TaskProvider {
         const bndbuildCommand = bndbuildCommandPrefix(this.config);
         const tasks: vscode.Task[] = [];
 
-        for (const fileUri of buildFiles) {
+        // One `getTargets` round-trip per build file, all in flight at
+        // once instead of one at a time - with N build files, awaiting
+        // them sequentially means N * round-trip-time instead of
+        // max(round-trip-time), on every Ctrl+Shift+B press. Each file's
+        // own try/catch and logging stay exactly as before, so one file's
+        // failure still doesn't affect the others.
+        const perFileTargets = await Promise.all(buildFiles.map(async fileUri => {
             let targets: string[] = [];
             try {
                 targets = await this.lspClient.sendRequest<string[]>(
@@ -130,7 +136,10 @@ export class BndbuildTaskProvider implements vscode.TaskProvider {
             this.lspClient.outputChannel.appendLine(
                 `[bndbuild task provider] ${fileUri.fsPath}: ${targets.length} target(s): ${targets.join(', ')}`,
             );
+            return { fileUri, targets };
+        }));
 
+        for (const { fileUri, targets } of perFileTargets) {
             const filePath = fileUri.fsPath;
             // Workspace-relative path, not just the bare filename - two
             // build files in different directories can both declare a
