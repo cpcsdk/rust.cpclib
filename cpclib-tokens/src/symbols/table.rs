@@ -574,6 +574,30 @@ impl SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
+        // Fast path: an ordinary identifier (no `{...}` pattern, no `.`/`@`
+        // prefix, and not one of the three literal proximity-label tokens
+        // `_`/`_+`/`_-` - note this is a whole-string equality check, not a
+        // "starts with `_`" one, so `MY_LABEL`/`_helper` are unaffected)
+        // needs none of the `String`-allocating machinery below - this is
+        // the overwhelmingly common case (a plain label reference), hit on
+        // every expression resolution, every pass, and used to cost ~4 heap
+        // allocations for nothing.
+        let s = symbol.as_ref();
+        let is_plain = !s.contains('{')
+            && !s.starts_with('.')
+            && !s.starts_with('@')
+            && s != "_"
+            && s != "_+"
+            && s != "_-";
+        if is_plain {
+            return Ok(if self.case_sensitive {
+                symbol.into()
+            }
+            else {
+                s.to_uppercase().into()
+            });
+        }
+
         let symbol: Symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
         // dbg!("Input", &symbol);
@@ -850,19 +874,23 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        let raw_symbol = symbol.as_ref().to_owned();
-        let raw_symbol_for_lookup: Symbol = raw_symbol.as_str().into();
-        let symbol = self.extend_readable_symbol::<Symbol>(raw_symbol_for_lookup)?;
+        // `Symbol` wraps a `SmolStr` (inline for short strings), so this
+        // conversion and the `.clone()` below are cheap - unlike the
+        // `String` round-trip this replaced, which allocated on every
+        // single call regardless of whether the symbol needed any of
+        // `extend_readable_symbol`'s rewriting.
+        let raw_symbol: Symbol = symbol.into();
+        let extended = self.extend_readable_symbol::<Symbol>(raw_symbol.clone())?;
 
-        if let Some(value) = self.lookup_symbol_in_visible_maps(&symbol) {
+        if let Some(value) = self.lookup_symbol_in_visible_maps(&extended) {
             return Ok(Some(value));
         }
 
         // In nested REPEAT/MACRO scopes, @symbols may be defined with an outer seed
         // and read from an inner one. Fallback to older seeds.
-        if raw_symbol.starts_with('@') {
+        if raw_symbol.value().starts_with('@') {
             for seed in self.seed_stack.iter().rev() {
-                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.as_str(), *seed);
+                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.value(), *seed);
                 if let Some(value) = self.lookup_symbol_in_visible_maps(&seeded_symbol) {
                     return Ok(Some(value));
                 }

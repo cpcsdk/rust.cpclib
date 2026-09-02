@@ -9,9 +9,9 @@ use crate::assembler::Env;
 use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
 
-/// XXX Orgams only handles integer values and strings
-/// TODO call it somewhere in the expression evaluation
-/// because it seesm not use anymore since various refactoring
+/// Orgams only handles integer values and strings. Called unconditionally
+/// from `LocatedExpr::resolve` on every resolved expression - a no-op
+/// outside Orgams-compatibility mode (`is_orgams()` gates the whole body).
 pub fn ensure_orgams_type(e: ExprResult, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
     let e = if env.options().parse_options().is_orgams() {
         match &e {
@@ -83,6 +83,30 @@ macro_rules! resolve_impl {
  //       }
 
         let mut binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, Box<AssemblerError>> {
+            // `&&`/`||` short-circuit: the right operand is only resolved
+            // when its value could actually change the result, matching
+            // every other language's boolean operators - avoids needless
+            // work (and a spurious error/warning from a right-hand side
+            // that a decided left side already made moot) for guards like
+            // `defined(X) && uses(X)`.
+            if matches!(oper, cpclib_tokens::BinaryOperation::BooleanAnd | cpclib_tokens::BinaryOperation::BooleanOr) {
+                let left_bool = left.resolve($env)
+                    .map_err(|e| Box::new(AssemblerError::ExpressionError(ExpressionError::LeftError(oper, e))))?
+                    .bool()
+                    .map_err(AssemblerError::ExpressionTypeError)
+                    .map_err(Box::new)?;
+                let short_circuits_on = oper == cpclib_tokens::BinaryOperation::BooleanOr;
+                if left_bool == short_circuits_on {
+                    return Ok(ExprResult::from(left_bool));
+                }
+                let right_bool = right.resolve($env)
+                    .map_err(|e| Box::new(AssemblerError::ExpressionError(ExpressionError::RightError(oper, e))))?
+                    .bool()
+                    .map_err(AssemblerError::ExpressionTypeError)
+                    .map_err(Box::new)?;
+                return Ok(ExprResult::from(right_bool));
+            }
+
             let res_left = left.resolve($env);
             let res_right = right.resolve($env);
 
@@ -126,8 +150,9 @@ macro_rules! resolve_impl {
                                 .map_err(AssemblerError::ExpressionTypeError)
                         }
 
-                        cpclib_tokens::BinaryOperation::BooleanAnd => Ok(ExprResult::from(a.bool()? && (b.bool()?))),
-                        cpclib_tokens::BinaryOperation::BooleanOr => Ok(ExprResult::from(a.bool()? || (b.bool()?))),
+                        cpclib_tokens::BinaryOperation::BooleanAnd | cpclib_tokens::BinaryOperation::BooleanOr => {
+                            unreachable!("short-circuited above, before left/right were both eagerly resolved")
+                        },
 
                         cpclib_tokens::BinaryOperation::Equal => {
                             let (eq, warnings) = a.eq_checked(&b);
@@ -166,46 +191,13 @@ macro_rules! resolve_impl {
             }.map_err(|e| Box::new(e))
         };
 
-        if $self.is_binary_operation() {
-            binary_operation($self.arg1(), $self.arg2(), $self.binary_operation())
-        }
-        else if $self.is_ternary() {
-            let condition = $self.ternary_condition().resolve($env)?;
-            if condition.bool()? {
-                $self.ternary_true().resolve($env)
-            } else {
-                $self.ternary_false().resolve($env)
-            }
-        }
-        else if $self.is_paren() {
-            let e = $self.arg1();
-            e.resolve($env)
-        }
-        else if $self.is_relative() {
-            Ok((Expr::Label("$".into()).resolve($env)? + ExprResult::from($self.relative_delta()))
-                .map_err(|e| AssemblerError::ExpressionTypeError(e))?)
-        }
-        else if $self.is_value(){
+        // `is_value`/`is_label` checked first - a plain literal or label
+        // reference is the single most common leaf node in real source, so
+        // resolving it shouldn't pay for several other, rarer checks first
+        // (the checks are mutually exclusive by construction, so reordering
+        // changes nothing but which is found fastest).
+        if $self.is_value(){
             Ok($self.value().into())
-        }
-        else if $self.is_char() {
-            Ok($self.char().into())
-        }
-        else if $self.is_bool() {
-            Ok($self.bool().into())
-        } else if $self.is_string() {
-            Ok(ExprResult::String($self.string().into()))
-        }
-        else if $self.is_float() {
-            Ok($self.float().into_inner().into())
-        }
-        else if $self.is_list() {
-            Ok(ExprResult::List(
-                $self.list().iter()
-                    .map(|e| e.resolve($env))
-                    .collect::<Result<Vec<_>, _>>()?
-                )
-            )
         }
         else if $self.is_label() {
             let label = $self.label();
@@ -241,6 +233,44 @@ macro_rules! resolve_impl {
                 }
             }.map_err(|e| Box::new(e))
 
+        }
+        else if $self.is_binary_operation() {
+            binary_operation($self.arg1(), $self.arg2(), $self.binary_operation())
+        }
+        else if $self.is_ternary() {
+            let condition = $self.ternary_condition().resolve($env)?;
+            if condition.bool()? {
+                $self.ternary_true().resolve($env)
+            } else {
+                $self.ternary_false().resolve($env)
+            }
+        }
+        else if $self.is_paren() {
+            let e = $self.arg1();
+            e.resolve($env)
+        }
+        else if $self.is_relative() {
+            Ok((Expr::Label("$".into()).resolve($env)? + ExprResult::from($self.relative_delta()))
+                .map_err(|e| AssemblerError::ExpressionTypeError(e))?)
+        }
+        else if $self.is_char() {
+            Ok($self.char().into())
+        }
+        else if $self.is_bool() {
+            Ok($self.bool().into())
+        } else if $self.is_string() {
+            Ok(ExprResult::String($self.string().into()))
+        }
+        else if $self.is_float() {
+            Ok($self.float().into_inner().into())
+        }
+        else if $self.is_list() {
+            Ok(ExprResult::List(
+                $self.list().iter()
+                    .map(|e| e.resolve($env))
+                    .collect::<Result<Vec<_>, _>>()?
+                )
+            )
         }
         else if $self.is_prefix_label() {
             let label = $self.label();

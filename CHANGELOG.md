@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-basm` fix various bugs 
 - `cpclib-catalog` fix various bugs
 - `HFE` files can be manipulated also from the windows platform (we had issues with the  `hxcfe` dependency before)
+- `cpclib-basm` `%` (modulo) no longer panics on a zero divisor, and now truncates toward zero for negative operands (matching `//`) instead of an unexplained integer-wraparound formula
+- `cpclib-basm` `matrix_new`/matrix-from-list no longer panics on an empty list, non-list rows, or ragged (differently-sized) rows - reports a clear error instead
+- `cpclib-basm` `&&`/`||` in expressions now actually short-circuit - the right operand is no longer evaluated (and can no longer raise a spurious error) once the left side has already decided the result
+- `cpclib-basm` expression resolution is faster: ordinary label references (the common case) skip several needless heap allocations they previously paid on every lookup, on every assembly pass
 
 ## [0.11.0] - 2025-12-15
 

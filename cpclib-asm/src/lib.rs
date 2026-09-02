@@ -662,6 +662,25 @@ mod test_super {
         }
     }
 
+    /// `&&`/`||` short-circuit: the right operand of `false && <undefined
+    /// symbol>` is never resolved, so referencing an unknown symbol there
+    /// must not turn into an error - and symmetrically for `true || <undefined>`.
+    #[test]
+    fn boolean_and_or_short_circuit_the_right_operand() {
+        let code = "
+		org 0x4000
+		assert (false && totally_undefined_symbol) == false
+		assert (true || totally_undefined_symbol) == true
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok(_) => {},
+            Err((_tok, _env, e)) => panic!("short-circuiting should have avoided the undefined symbol: {e}")
+        }
+    }
+
     /// A float-valued `EQU` symbol truncated on `.sym` export now warns
     /// (previously a silently-accepted, explicitly-flagged gap). Generated
     /// outside any `LocatedExpr::resolve` call (export walks the symbol

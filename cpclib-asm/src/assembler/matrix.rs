@@ -19,11 +19,31 @@ pub fn matrix_from_list(expr: &ExprResult) -> Result<ExprResult, Box<crate::Asse
         ExprResult::List(l) => {
             let height = l.len();
 
-            assert!(l.iter().all(|row| row.is_list())); // TODO generate an error message
+            if !l.iter().all(|row| row.is_list()) {
+                return Err(Box::new(AssemblerError::ExpressionError(
+                    ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                        msg: "matrix rows must all be lists".into()
+                    }))
+                )));
+            }
             let lengths = l.iter().map(|row| row.list_len()).collect_vec();
-            let width = lengths[0]; // TODO handle case of empty matrix
-            // TODO handle error properly
-            assert!(lengths.iter().all(|&len| len == width));
+            let Some(&width) = lengths.first()
+            else {
+                return Err(Box::new(AssemblerError::ExpressionError(
+                    ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                        msg: "matrix must have at least one row".into()
+                    }))
+                )));
+            };
+            if let Some(&len) = lengths.iter().find(|&&len| len != width) {
+                return Err(Box::new(AssemblerError::ExpressionError(
+                    ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                        msg: format!(
+                            "matrix rows must all have the same length, got {width} and {len}"
+                        )
+                    }))
+                )));
+            }
 
             Ok(ExprResult::Matrix {
                 width,
@@ -276,5 +296,47 @@ pub fn matrix_height(matrix: &ExprResult) -> Result<ExprResult, Box<crate::Assem
                 }))
             )))
         },
+    }
+}
+
+#[cfg(test)]
+mod matrix_from_list_tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_list_is_a_clear_error_not_a_panic() {
+        let result = matrix_from_list(&ExprResult::List(vec![]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn non_list_rows_are_a_clear_error_not_a_panic() {
+        let result = matrix_from_list(&ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ragged_rows_are_a_clear_error_not_a_panic() {
+        let result = matrix_from_list(&ExprResult::List(vec![
+            ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)]),
+            ExprResult::List(vec![ExprResult::Value(3)])
+        ]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_well_formed_list_of_lists_builds_a_matrix() {
+        let result = matrix_from_list(&ExprResult::List(vec![
+            ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)]),
+            ExprResult::List(vec![ExprResult::Value(3), ExprResult::Value(4)])
+        ]))
+        .unwrap();
+        match result {
+            ExprResult::Matrix { width, height, .. } => {
+                assert_eq!(width, 2);
+                assert_eq!(height, 2);
+            },
+            other => panic!("expected a Matrix, got {other:?}")
+        }
     }
 }

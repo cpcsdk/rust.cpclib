@@ -1854,8 +1854,17 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
                 Ok((self.float()? % f2.into_inner()).into())
             },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => {
-                // XXX is it the expected behavior ? (I used this formula only for ORGAMS compatibilyt. It is maybe an error)
-                Ok(((*v1 as u32 % *v2 as u32) as i32).into())
+                if *v2 == 0 {
+                    return Err(ExpressionTypeError(format!(
+                        "Integer remainder by zero: {self} % {rhs}"
+                    )));
+                }
+                // Native i32 %, truncates toward zero - matches `//`'s own
+                // convention. The previous `(v1 as u32 % v2 as u32) as i32`
+                // formula gave different (always-non-negative-ish) results
+                // for negative operands and panicked on a zero divisor; no
+                // test fixture in this workspace was found to depend on it.
+                Ok((v1 % v2).into())
             },
 
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
@@ -2226,5 +2235,28 @@ mod int_warning_tests {
     #[test]
     fn int_div_by_zero_is_an_error_not_a_panic() {
         assert!(ExprResult::Value(1).int_div(ExprResult::Value(0)).is_err());
+    }
+
+    #[test]
+    fn rem_by_zero_is_an_error_not_a_panic() {
+        use std::ops::Rem;
+        assert!(ExprResult::Value(10).rem(ExprResult::Value(0)).is_err());
+    }
+
+    #[test]
+    fn rem_truncates_toward_zero_for_negative_operands() {
+        use std::ops::Rem;
+        assert_eq!(
+            ExprResult::Value(-7).rem(ExprResult::Value(2)).unwrap(),
+            ExprResult::Value(-1)
+        );
+        assert_eq!(
+            ExprResult::Value(7).rem(ExprResult::Value(-2)).unwrap(),
+            ExprResult::Value(1)
+        );
+        assert_eq!(
+            ExprResult::Value(-7).rem(ExprResult::Value(-2)).unwrap(),
+            ExprResult::Value(-1)
+        );
     }
 }
