@@ -9,10 +9,11 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
+use cpclib_common::smol_str::SmolStr;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosFileType;
-use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
+use cpclib_tokens::symbols::{SourceLocation, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ListingElement,
     MacroParamElement, TestKindElement, ToSimpleToken, Token
@@ -27,6 +28,7 @@ use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Compressor;
+use crate::parser::context::ExpansionColumnMap;
 use crate::preamble::{LocatedListing, MayHaveSpan, SourceString, Z80Span};
 use crate::progress::{self, Progress};
 use crate::{
@@ -374,6 +376,40 @@ impl Debug for ExpandState {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "ExpandState")
     }
+}
+
+/// Which symbol namespace a `MacroExpansionKey` names - macros and structs
+/// already live in separate `SymbolsTable` namespaces (so a macro and a
+/// struct can share a name without colliding there), but this is kept as an
+/// explicit tag on the cache key too, as defense in depth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum MacroOrStruct {
+    Macro,
+    Struct
+}
+
+/// Cache key for `Env::macro_expansion_cache` - identifies a macro/struct
+/// call by its definition identity plus each call argument's *resolved*
+/// string form, computed the same lazy way `expand_param` already does
+/// (before the body is spliced together), rather than by the raw call-site
+/// argument text - see `ProcessedToken::update_macro_or_struct_state` for
+/// why (an argument can be evaluated against the environment, so identical
+/// call-site text is not guaranteed to resolve identically across passes).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct MacroExpansionKey {
+    kind: MacroOrStruct,
+    name: SmolStr,
+    /// `ValueMacro`/`Struct::source()` stringified via `Display` - disambiguates
+    /// a redefined macro/struct that happens to share a name.
+    def_location: Option<String>,
+    /// One entry per call argument for a macro (`None` = an argument the
+    /// macro body never referenced - collapsing this to `None` is correct,
+    /// not just convenient: the body cannot observe a value it never reads,
+    /// so two calls differing only there must expand identically); for a
+    /// struct, a single entry holding the whole post-expansion code text
+    /// (structs are cached post-splice, not before - see the doc comment on
+    /// the struct branch in `update_macro_or_struct_state`).
+    resolved_args: Vec<Option<String>>
 }
 
 /// Store for each branch (if passed at some point) the test result and the listing
@@ -997,50 +1033,142 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                 return Err(Box::new(relocate_error_with_span(e, self.token)));
             }
 
-            // get the generated code
-            // TODO handle some errors there
-            let (source, code, columns, _flavor) = if let Some(r#macro) = &r#macro {
+            // Tokenize with the same parsing parameters and context when
+            // possible. Shared by every "cache miss" branch below.
+            let parse_expansion = |source: Option<&SourceLocation>,
+                                    is_macro: bool,
+                                    code: String,
+                                    columns: Option<ExpansionColumnMap>|
+             -> Result<LocatedListing, Box<AssemblerError>> {
+                match self.token.possible_span() {
+                    Some(span) => {
+                        use crate::ParserContextBuilder;
+                        let mut ctx_builder = ParserContextBuilder::default() // nothing is specified
+                            //                    from(span.state.clone())
+                            .set_state(span.state.state)
+                            .set_options(span.state.options.clone())
+                            .set_context_name(format!(
+                                "{}:{}:{} > {} {}:",
+                                source.map(|s| s.fname()).unwrap_or_else(|| "???"),
+                                source.map(|s| s.line()).unwrap_or(0),
+                                source.map(|s| s.column()).unwrap_or(0),
+                                if is_macro { "MACRO" } else { "STRUCT" },
+                                name,
+                            ));
+                        if let Some(columns) = columns {
+                            ctx_builder = ctx_builder.set_expansion_columns(columns);
+                        }
+                        Ok(parse_z80_with_context_builder(code, ctx_builder)?)
+                    },
+                    _ => {
+                        use crate::parse_z80_str;
+                        Ok(parse_z80_str(&code)?)
+                    }
+                }
+            };
+
+            // get the generated code, going through `env.macro_expansion_cache`
+            // first - see `MacroExpansionKey`'s doc comment for the key
+            // shape and why it must be built from *resolved* arguments,
+            // computed before the body is spliced together, rather than
+            // from the raw call-site argument text or the post-splice code.
+            if let Some(r#macro) = &r#macro {
                 let source = r#macro.source();
-                let flavor = r#macro.flavor();
-                let (code, columns) = r#macro.expand_with_columns(env)?;
-                (source, code, columns, flavor)
+                let def_location = source.map(|s| s.to_string());
+
+                match r#macro.flavor() {
+                    AssemblerFlavor::Basm => {
+                        let (expanded_args, capacity) = r#macro.resolve_referenced_args(env)?;
+                        let resolved_args: Vec<Option<String>> = expanded_args
+                            .iter()
+                            .map(|a| a.as_ref().map(|c| c.to_string()))
+                            .collect();
+                        let key = MacroExpansionKey {
+                            kind: MacroOrStruct::Macro,
+                            name: SmolStr::from(name),
+                            def_location,
+                            resolved_args
+                        };
+
+                        let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();
+                        match hit {
+                            Some(listing) => listing,
+                            None => {
+                                let (code, columns) =
+                                    r#macro.finish_expand_for_basm(expanded_args, capacity)?;
+                                let listing =
+                                    parse_expansion(source, true, code, Some(columns))?;
+                                let listing = std::sync::Arc::new(listing);
+                                env.macro_expansion_cache
+                                    .write()
+                                    .unwrap()
+                                    .insert(key, listing.clone());
+                                listing
+                            }
+                        }
+                    },
+                    AssemblerFlavor::Orgams => {
+                        let resolved = r#macro.resolve_all_args_for_orgams(env)?;
+                        let resolved_args: Vec<Option<String>> =
+                            resolved.iter().map(|c| Some(c.to_string())).collect();
+                        let key = MacroExpansionKey {
+                            kind: MacroOrStruct::Macro,
+                            name: SmolStr::from(name),
+                            def_location,
+                            resolved_args
+                        };
+
+                        let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();
+                        match hit {
+                            Some(listing) => listing,
+                            None => {
+                                let code = r#macro.finish_expand_for_orgams(resolved)?;
+                                let listing = parse_expansion(source, true, code, None)?;
+                                let listing = std::sync::Arc::new(listing);
+                                env.macro_expansion_cache
+                                    .write()
+                                    .unwrap()
+                                    .insert(key, listing.clone());
+                                listing
+                            }
+                        }
+                    }
+                }
             }
             else {
                 let r#struct = r#struct
                     .as_ref()
                     .expect("BUG: r#struct should be Some when r#macro is None");
+                let source = r#struct.source();
+                let def_location = source.map(|s| s.to_string());
+
                 // A struct's expansion is written from scratch - `DB`/`DW`
                 // lines built from its fields - rather than substituted into
-                // its body, so no column in it corresponds to one in the file.
+                // its body, so (unlike a macro) it cannot cheaply separate
+                // "resolve arguments" from "build the code text" - see the
+                // doc comment on `StructWithArgs::expand`. Cache post-splice
+                // instead: still skips the re-parse on a hit, just not the
+                // splice itself.
                 let (code, columns) = r#struct.expand_with_columns(env)?;
-                (r#struct.source(), code, columns, AssemblerFlavor::Basm)
-            };
+                let key = MacroExpansionKey {
+                    kind: MacroOrStruct::Struct,
+                    name: SmolStr::from(name),
+                    def_location,
+                    resolved_args: vec![Some(code.clone())]
+                };
 
-            // Tokenize with the same parsing  parameters and context when possible
-
-            match self.token.possible_span() {
-                Some(span) => {
-                    use crate::ParserContextBuilder;
-                    let mut ctx_builder = ParserContextBuilder::default() // nothing is specified
-                        //                    from(span.state.clone())
-                        .set_state(span.state.state)
-                        .set_options(span.state.options.clone())
-                        .set_context_name(format!(
-                            "{}:{}:{} > {} {}:",
-                            source.map(|s| s.fname()).unwrap_or_else(|| "???"),
-                            source.map(|s| s.line()).unwrap_or(0),
-                            source.map(|s| s.column()).unwrap_or(0),
-                            if r#macro.is_some() { "MACRO" } else { "STRUCT" },
-                            name,
-                        ));
-                    if let Some(columns) = columns {
-                        ctx_builder = ctx_builder.set_expansion_columns(columns);
+                let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();
+                match hit {
+                    Some(listing) => listing,
+                    None => {
+                        let listing = parse_expansion(source, false, code, columns)?;
+                        let listing = std::sync::Arc::new(listing);
+                        env.macro_expansion_cache
+                            .write()
+                            .unwrap()
+                            .insert(key, listing.clone());
+                        listing
                     }
-                    parse_z80_with_context_builder(code, ctx_builder)?
-                },
-                _ => {
-                    use crate::parse_z80_str;
-                    parse_z80_str(&code)?
                 }
             }
         };
@@ -1048,7 +1176,6 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
         // Only wrap env in Arc when needed for processed tokens list
         let env_arc = std::sync::Arc::new(std::sync::RwLock::new(&mut *env));
         let env_arc_macro = env_arc.clone();
-        let listing = std::sync::Arc::new(listing);
         let expand_state = ExpandStateTryBuilder {
             listing,
             processed_tokens_builder: move |listing: &std::sync::Arc<LocatedListing>| {

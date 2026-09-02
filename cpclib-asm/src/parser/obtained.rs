@@ -116,13 +116,16 @@ impl SourceString for &UnescapedString {
     }
 }
 
-impl ExprElement for LocatedExpr {
-    type Expr = LocatedExpr;
-    type ResultExpr = Expr;
-    type Token = LocatedToken;
-
-    fn to_expr(&self) -> Cow<'_, Expr> {
-        let expr = match self {
+impl LocatedExpr {
+    /// Same construction as `ExprElement::to_expr`, but returns the owned
+    /// `Expr` directly instead of wrapping every level of the recursion in a
+    /// `Cow` that is only ever `Owned` (a `LocatedExpr` carries spans a plain
+    /// `Expr` does not, so it can never alias one - the `Cow` here was doing
+    /// no useful work, just one allocation-tagging branch per node). The
+    /// trait method below is implemented in terms of this, for callers that
+    /// need the generic `ExprElement`/`Cow` interface.
+    fn to_expr_owned(&self) -> Expr {
+        match self {
             LocatedExpr::RelativeDelta(d, _) => Expr::RelativeDelta(*d),
             LocatedExpr::Value(v, _) => Expr::Value(*v),
             LocatedExpr::Float(f, _) => Expr::Float(*f),
@@ -131,41 +134,46 @@ impl ExprElement for LocatedExpr {
             LocatedExpr::String(s) => Expr::String(s.as_ref().into()),
             LocatedExpr::Label(l) => Expr::Label(l.into()),
             LocatedExpr::List(l, _) => {
-                Expr::List(l.iter().map(|e| e.to_expr().into_owned()).collect_vec())
+                Expr::List(l.iter().map(|e| e.to_expr_owned()).collect_vec())
             },
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
-            LocatedExpr::Paren(p, _) => Expr::Paren(Box::new(p.to_expr().into_owned())),
+            LocatedExpr::Paren(p, _) => Expr::Paren(Box::new(p.to_expr_owned())),
             LocatedExpr::UnaryOperation(o, e, _) => {
-                Expr::UnaryOperation(*o, Box::new(e.to_expr().into_owned()))
+                Expr::UnaryOperation(*o, Box::new(e.to_expr_owned()))
             },
             LocatedExpr::UnaryTokenOperation(o, t, _) => {
-                Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
+                Expr::UnaryTokenOperation(*o, Box::new(t.to_token_owned()))
             },
 
             LocatedExpr::BinaryOperation(o, e1, e2, _) => {
                 Expr::BinaryOperation(
                     *o,
-                    Box::new(e1.to_expr().into_owned()),
-                    Box::new(e2.to_expr().into_owned())
+                    Box::new(e1.to_expr_owned()),
+                    Box::new(e2.to_expr_owned())
                 )
             },
             LocatedExpr::Ternary(cond, true_expr, false_expr, _) => {
                 Expr::Ternary(
-                    Box::new(cond.to_expr().into_owned()),
-                    Box::new(true_expr.to_expr().into_owned()),
-                    Box::new(false_expr.to_expr().into_owned())
+                    Box::new(cond.to_expr_owned()),
+                    Box::new(true_expr.to_expr_owned()),
+                    Box::new(false_expr.to_expr_owned())
                 )
             },
             LocatedExpr::AnyFunction(n, a, _) => {
-                Expr::AnyFunction(
-                    n.into(),
-                    a.iter().map(|e| e.to_expr().into_owned()).collect_vec()
-                )
+                Expr::AnyFunction(n.into(), a.iter().map(|e| e.to_expr_owned()).collect_vec())
             },
             LocatedExpr::Rnd(_) => Expr::Rnd
-        };
+        }
+    }
+}
 
-        Cow::Owned(expr)
+impl ExprElement for LocatedExpr {
+    type Expr = LocatedExpr;
+    type ResultExpr = Expr;
+    type Token = LocatedToken;
+
+    fn to_expr(&self) -> Cow<'_, Expr> {
+        Cow::Owned(self.to_expr_owned())
     }
 
     fn is_negated(&self) -> bool {
@@ -1290,6 +1298,22 @@ macro_rules! any_delegate {
     };
 }
 
+impl LocatedToken {
+    /// Same construction as `ListingElement::to_token`, but returns the
+    /// owned `Token` directly - see `LocatedExpr::to_expr_owned`'s doc
+    /// comment for why. The trait method below is implemented in terms of
+    /// this, for callers that need the generic `ListingElement`/`Cow`
+    /// interface.
+    fn to_token_owned(&self) -> Token {
+        match &self.inner {
+            either::Either::Left(inner) => inner.to_token_owned(),
+            either::Either::Right((inner, msg)) => {
+                Token::WarningWrapper(Box::new(inner.to_token_owned()), msg.as_ref().into())
+            }
+        }
+    }
+}
+
 impl ListingElement for LocatedToken {
     type AssemblerControlCommand = LocatedAssemblerControlCommand;
     type DataAccess = LocatedDataAccess;
@@ -1367,16 +1391,7 @@ impl ListingElement for LocatedToken {
     );
 
     fn to_token(&self) -> Cow<'_, cpclib_tokens::Token> {
-        match &self.inner {
-            either::Either::Left(inner) => inner.to_token(),
-            either::Either::Right((inner, msg)) => {
-                let inner_token = inner.to_token().into_owned();
-                Cow::Owned(cpclib_tokens::Token::WarningWrapper(
-                    Box::new(inner_token),
-                    msg.as_ref().into()
-                ))
-            }
-        }
+        Cow::Owned(self.to_token_owned())
     }
 
     fn is_warning(&self) -> bool {
@@ -1546,6 +1561,267 @@ impl ListingElement for LocatedToken {
                 // Comments/warnings wrapped in Right - no user symbols
                 HashSet::new()
             }
+        }
+    }
+}
+
+impl LocatedTokenInner {
+    /// Same construction as `ListingElement::to_token`, but returns the
+    /// owned `Token` directly instead of wrapping every level of the
+    /// recursion in a `Cow` that is only ever `Owned` - see
+    /// `LocatedExpr::to_expr_owned`'s doc comment for why. The trait method
+    /// below is implemented in terms of this, for callers that need the
+    /// generic `ListingElement`/`Cow` interface.
+    ///
+    /// Only the `to_expr()`/`to_token()` recursion is de-`Cow`'d here -
+    /// `to_data_access()`, `as_listing()`, `to_macro_param()`,
+    /// `as_simple_token()` and `to_test_kind()` calls are untouched
+    /// (out of scope: this targets the macro/struct-expansion and
+    /// `INCLUDE` conversion path specifically, not every `Located*`
+    /// conversion in the crate).
+    ///
+    /// Warning, this is quite costly when strings or vec are involved
+    fn to_token_owned(&self) -> Token {
+        match self {
+            Self::OpCode(mne, arg1, arg2, arg3) => {
+                Token::OpCode(
+                    *mne,
+                    arg1.as_ref().map(|d| d.to_data_access().into_owned()),
+                    arg2.as_ref().map(|d| d.to_data_access().into_owned()),
+                    *arg3
+                )
+            },
+            Self::Comment(cmt) => Token::Comment(cmt.to_string()),
+            Self::Org { val1, val2 } => {
+                Token::Org {
+                    val1: val1.to_expr_owned(),
+                    val2: val2.as_ref().map(|val2| val2.to_expr_owned())
+                }
+            },
+            Self::CrunchedSection(c, l) => Token::CrunchedSection(*c, l.as_listing()),
+            Self::Function(name, params, inner) => {
+                Token::Function(
+                    name.into(),
+                    params.iter().map(|p| p.into()).collect_vec(),
+                    inner.as_listing()
+                )
+            },
+            Self::If(v, e) => {
+                Token::If(
+                    v.iter()
+                        .map(|(k, l)| (k.to_test_kind(), l.as_listing()))
+                        .collect_vec(),
+                    e.as_ref().map(|l| l.as_listing())
+                )
+            },
+            Self::Repeat(_e, _l, _s, _start, _step) => {
+                unimplemented!("step");
+                #[allow(unreachable_code)]
+                {
+                    Token::Repeat(
+                        _e.to_expr_owned(),
+                        _l.as_listing(),
+                        _s.as_ref().map(|s| s.into()),
+                        _start.as_ref().map(|e| e.to_expr_owned())
+                    )
+                }
+            },
+            Self::RepeatUntil(e, l) => Token::RepeatUntil(e.to_expr_owned(), l.as_listing()),
+            Self::Rorg(e, l) => Token::Rorg(e.to_expr_owned(), l.as_listing()),
+            Self::Switch(v, c, d) => {
+                Token::Switch(
+                    v.to_expr_owned(),
+                    c.iter()
+                        .map(|(e, l, b)| (e.to_expr_owned(), l.as_listing(), *b))
+                        .collect_vec(),
+                    d.as_ref().map(|d| d.as_listing())
+                )
+            },
+            Self::While(e, l) => Token::While(e.to_expr_owned(), l.as_listing()),
+            Self::Iterate(_name, _values, _code) => {
+                todo!()
+            },
+            Self::Module(..) => todo!(),
+            Self::For {
+                label,
+                start,
+                stop,
+                step,
+                listing
+            } => {
+                Token::For {
+                    label: label.into(),
+                    start: Box::new(start.to_expr_owned()),
+                    stop: Box::new(stop.to_expr_owned()),
+                    step: step.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    listing: Box::new(listing.as_listing())
+                }
+            },
+            Self::Label(label) => Token::Label(label.into()),
+            Self::MacroCall(name, params) => {
+                Token::MacroCall(
+                    name.into(),
+                    params.iter().map(|p| p.to_macro_param()).collect_vec()
+                )
+            },
+            Self::Struct(name, params) => {
+                Token::Struct(
+                    name.into(),
+                    params
+                        .iter()
+                        .map(|(label, p)| (label.into(), p.as_simple_token().into_owned()))
+                        .collect_vec()
+                )
+            },
+            Self::Defb(exprs) => Token::Defb(exprs.iter().map(|e| e.to_expr_owned()).collect_vec()),
+            Self::Defw(exprs) => Token::Defw(exprs.iter().map(|e| e.to_expr_owned()).collect_vec()),
+            // `defs` sat in the catch-all below while its siblings `defb` and
+            // `defw` were converted, so anything asking a located listing what
+            // it costs - the debugger pricing the line at PC, a hover pricing
+            // the line under the cursor - panicked on the raster-timing idiom
+            // `defs 64 - duration(djnz $)-1`. The pair is (count, fill value),
+            // and the fill is optional.
+            Self::Defs(pairs) => {
+                Token::Defs(
+                    pairs
+                        .iter()
+                        .map(|(count, fill)| {
+                            (count.to_expr_owned(), fill.as_ref().map(|e| e.to_expr_owned()))
+                        })
+                        .collect_vec()
+                )
+            },
+            Self::Str(exprs) => Token::Str(exprs.iter().map(|e| e.to_expr_owned()).collect_vec()),
+
+            Self::Include(..) => todo!(),
+            Self::Incbin {
+                fname,
+                offset,
+                length,
+                extended_offset,
+                off,
+                transformation
+            } => {
+                Token::Incbin {
+                    fname: fname.to_expr_owned(),
+                    offset: offset.as_ref().map(|e| e.to_expr_owned()),
+                    length: length.as_ref().map(|e| e.to_expr_owned()),
+                    extended_offset: extended_offset.as_ref().map(|e| e.to_expr_owned()),
+                    off: *off,
+                    transformation: *transformation
+                }
+            },
+            Self::Macro {
+                name,
+                params,
+                content,
+                flavor,
+                tokenized_content,
+                has_variadic
+            } => {
+                Token::Macro {
+                    name: name.into(),
+                    params: params.iter().map(|p| p.into()).collect_vec(),
+                    content: content.as_str().to_owned(),
+                    flavor: *flavor,
+                    tokenized_content: tokenized_content.clone(),
+                    has_variadic: *has_variadic
+                }
+            },
+            Self::Confined(..) => todo!(),
+            Self::WarningWrapper(inner, msg) => {
+                Token::WarningWrapper(Box::new(inner.to_token_owned()), msg.as_ref().into())
+            },
+            Self::Assign {
+                label: _,
+                expr: _,
+                op: _
+            } => todo!(),
+            Self::Equ { label, expr } => {
+                Token::Equ {
+                    label: label.as_str().into(),
+                    expr: expr.to_expr_owned()
+                }
+            },
+            Self::Enum {
+                prefix,
+                start,
+                step,
+                fields
+            } => {
+                Token::Enum {
+                    prefix: prefix.as_ref().map(|p| p.as_str().into()),
+                    start: start.as_ref().map(|e| e.to_expr_owned()),
+                    step: step.as_ref().map(|e| e.to_expr_owned()),
+                    fields: fields
+                        .iter()
+                        .map(|(l, e)| (l.as_str().into(), e.as_ref().map(|e| e.to_expr_owned())))
+                        .collect_vec()
+                }
+            },
+            Self::SetN {
+                label: _,
+                source: _,
+                expr: _
+            } => todo!(),
+            Self::Next {
+                label: _,
+                source: _,
+                expr: _
+            } => todo!(),
+
+            Self::Assert(test, print) => Token::Assert(test.to_expr_owned(), print.clone()),
+
+            Self::Fail(msg) => Token::Fail(msg.clone()),
+            Self::Warning(msg) => Token::Warning(msg.clone()),
+            Self::OutputFile(filename) => Token::OutputFile(filename.to_expr_owned()),
+            Self::Breakpoint {
+                address,
+                r#type,
+                access,
+                run,
+                mask,
+                size,
+                value,
+                value_mask,
+                condition,
+                name,
+                step
+            } => {
+                Token::Breakpoint {
+                    address: address.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    r#type: r#type.clone(),
+                    access: access.clone(),
+                    run: run.clone(),
+                    mask: mask.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    size: size.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    value: value.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    value_mask: value_mask.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    condition: condition.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    name: name.as_ref().map(|e| Box::new(e.to_expr_owned())),
+                    step: step.as_ref().map(|e| Box::new(e.to_expr_owned()))
+                }
+            },
+
+            Self::Range(label, start, stop) => {
+                Token::Range(label.as_str().to_string(), start.to_expr_owned(), stop.to_expr_owned())
+            },
+            Self::Section(label) => Token::Section(label.as_str().into()),
+            Self::SnaSet(flag, value) => Token::SnaSet(*flag, value.clone()),
+
+            // Multi-register `push bc, hl` / `pop hl, bc`. `Token` has the
+            // matching variants, so this is a plain operand conversion - it
+            // was simply never reached until a consumer started rendering
+            // arbitrary tokens back to text, at which point the `todo!()`
+            // below turned an ordinary basm statement into a panic.
+            Self::MultiPush(regs) => {
+                Token::MultiPush(regs.iter().map(|r| r.to_data_access().into_owned()).collect())
+            },
+            Self::MultiPop(regs) => {
+                Token::MultiPop(regs.iter().map(|r| r.to_data_access().into_owned()).collect())
+            },
+
+            _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
 }
@@ -1742,292 +2018,7 @@ impl ListingElement for LocatedTokenInner {
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved
     fn to_token(&self) -> Cow<'_, Token> {
-        match self {
-            Self::OpCode(mne, arg1, arg2, arg3) => {
-                Cow::Owned(Token::OpCode(
-                    *mne,
-                    arg1.as_ref().map(|d| d.to_data_access().into_owned()),
-                    arg2.as_ref().map(|d| d.to_data_access().into_owned()),
-                    *arg3
-                ))
-            },
-            Self::Comment(cmt) => Cow::Owned(Token::Comment(cmt.to_string())),
-            Self::Org { val1, val2 } => {
-                Cow::Owned(Token::Org {
-                    val1: val1.to_expr().into_owned(),
-                    val2: val2.as_ref().map(|val2| val2.to_expr().into_owned())
-                })
-            },
-            Self::CrunchedSection(c, l) => Cow::Owned(Token::CrunchedSection(*c, l.as_listing())),
-            Self::Function(name, params, inner) => {
-                Cow::Owned(Token::Function(
-                    name.into(),
-                    params.iter().map(|p| p.into()).collect_vec(),
-                    inner.as_listing()
-                ))
-            },
-            Self::If(v, e) => {
-                Cow::Owned(Token::If(
-                    v.iter()
-                        .map(|(k, l)| (k.to_test_kind(), l.as_listing()))
-                        .collect_vec(),
-                    e.as_ref().map(|l| l.as_listing())
-                ))
-            },
-            Self::Repeat(_e, _l, _s, _start, _step) => {
-                unimplemented!("step");
-                #[allow(unreachable_code)]
-                {
-                    Cow::Owned(Token::Repeat(
-                        _e.to_expr().into_owned(),
-                        _l.as_listing(),
-                        _s.as_ref().map(|s| s.into()),
-                        _start.as_ref().map(|e| e.to_expr().into_owned())
-                    ))
-                }
-            },
-            Self::RepeatUntil(e, l) => {
-                Cow::Owned(Token::RepeatUntil(e.to_expr().into_owned(), l.as_listing()))
-            },
-            Self::Rorg(e, l) => Cow::Owned(Token::Rorg(e.to_expr().into_owned(), l.as_listing())),
-            Self::Switch(v, c, d) => {
-                Cow::Owned(Token::Switch(
-                    v.to_expr().into_owned(),
-                    c.iter()
-                        .map(|(e, l, b)| (e.to_expr().into_owned(), l.as_listing(), *b))
-                        .collect_vec(),
-                    d.as_ref().map(|d| d.as_listing())
-                ))
-            },
-            Self::While(e, l) => Cow::Owned(Token::While(e.to_expr().into_owned(), l.as_listing())),
-            Self::Iterate(_name, _values, _code) => {
-                todo!()
-            },
-            Self::Module(..) => todo!(),
-            Self::For {
-                label,
-                start,
-                stop,
-                step,
-                listing
-            } => {
-                Cow::Owned(Token::For {
-                    label: label.into(),
-                    start: Box::new(start.to_expr().into_owned()),
-                    stop: Box::new(stop.to_expr().into_owned()),
-                    step: step.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    listing: Box::new(listing.as_listing())
-                })
-            },
-            Self::Label(label) => Cow::Owned(Token::Label(label.into())),
-            Self::MacroCall(name, params) => {
-                Cow::Owned(Token::MacroCall(
-                    name.into(),
-                    params.iter().map(|p| p.to_macro_param()).collect_vec()
-                ))
-            },
-            Self::Struct(name, params) => {
-                Cow::Owned(Token::Struct(
-                    name.into(),
-                    params
-                        .iter()
-                        .map(|(label, p)| (label.into(), p.as_simple_token().into_owned()))
-                        .collect_vec()
-                ))
-            },
-            Self::Defb(exprs) => {
-                Cow::Owned(Token::Defb(
-                    exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
-                ))
-            },
-            Self::Defw(exprs) => {
-                Cow::Owned(Token::Defw(
-                    exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
-                ))
-            },
-            // `defs` sat in the catch-all below while its siblings `defb` and
-            // `defw` were converted, so anything asking a located listing what
-            // it costs - the debugger pricing the line at PC, a hover pricing
-            // the line under the cursor - panicked on the raster-timing idiom
-            // `defs 64 - duration(djnz $)-1`. The pair is (count, fill value),
-            // and the fill is optional.
-            Self::Defs(pairs) => {
-                Cow::Owned(Token::Defs(
-                    pairs
-                        .iter()
-                        .map(|(count, fill)| {
-                            (
-                                count.to_expr().into_owned(),
-                                fill.as_ref().map(|e| e.to_expr().into_owned())
-                            )
-                        })
-                        .collect_vec()
-                ))
-            },
-            Self::Str(exprs) => {
-                Cow::Owned(Token::Str(
-                    exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
-                ))
-            },
-
-            Self::Include(..) => todo!(),
-            Self::Incbin {
-                fname,
-                offset,
-                length,
-                extended_offset,
-                off,
-                transformation
-            } => {
-                Cow::Owned(Token::Incbin {
-                    fname: fname.to_expr().into_owned(),
-                    offset: offset.as_ref().map(|e| e.to_expr().into_owned()),
-                    length: length.as_ref().map(|e| e.to_expr().into_owned()),
-                    extended_offset: extended_offset.as_ref().map(|e| e.to_expr().into_owned()),
-                    off: *off,
-                    transformation: *transformation
-                })
-            },
-            Self::Macro {
-                name,
-                params,
-                content,
-                flavor,
-                tokenized_content,
-                has_variadic
-            } => {
-                Cow::Owned(Token::Macro {
-                    name: name.into(),
-                    params: params.iter().map(|p| p.into()).collect_vec(),
-                    content: content.as_str().to_owned(),
-                    flavor: *flavor,
-                    tokenized_content: tokenized_content.clone(),
-                    has_variadic: *has_variadic
-                })
-            },
-            Self::Confined(..) => todo!(),
-            Self::WarningWrapper(inner, msg) => {
-                Cow::Owned(Token::WarningWrapper(
-                    Box::new(inner.to_token().into_owned()),
-                    msg.as_ref().into()
-                ))
-            },
-            Self::Assign {
-                label: _,
-                expr: _,
-                op: _
-            } => todo!(),
-            Self::Equ { label, expr } => {
-                Cow::Owned(Token::Equ {
-                    label: label.as_str().into(),
-                    expr: expr.to_expr().into_owned()
-                })
-            },
-            Self::Enum {
-                prefix,
-                start,
-                step,
-                fields
-            } => {
-                Cow::Owned(Token::Enum {
-                    prefix: prefix.as_ref().map(|p| p.as_str().into()),
-                    start: start.as_ref().map(|e| e.to_expr().into_owned()),
-                    step: step.as_ref().map(|e| e.to_expr().into_owned()),
-                    fields: fields
-                        .iter()
-                        .map(|(l, e)| {
-                            (
-                                l.as_str().into(),
-                                e.as_ref().map(|e| e.to_expr().into_owned())
-                            )
-                        })
-                        .collect_vec()
-                })
-            },
-            Self::SetN {
-                label: _,
-                source: _,
-                expr: _
-            } => todo!(),
-            Self::Next {
-                label: _,
-                source: _,
-                expr: _
-            } => todo!(),
-
-            Self::Assert(test, print) => {
-                Cow::Owned(Token::Assert(test.to_expr().into_owned(), print.clone()))
-            },
-
-            Self::Fail(msg) => Cow::Owned(Token::Fail(msg.clone())),
-            Self::Warning(msg) => Cow::Owned(Token::Warning(msg.clone())),
-            Self::OutputFile(filename) => {
-                Cow::Owned(Token::OutputFile(filename.to_expr().into_owned()))
-            },
-            Self::Breakpoint {
-                address,
-                r#type,
-                access,
-                run,
-                mask,
-                size,
-                value,
-                value_mask,
-                condition,
-                name,
-                step
-            } => {
-                Cow::Owned(Token::Breakpoint {
-                    address: address.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    r#type: r#type.clone(),
-                    access: access.clone(),
-                    run: run.clone(),
-                    mask: mask.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    size: size.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    value: value.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    value_mask: value_mask
-                        .as_ref()
-                        .map(|e| Box::new(e.to_expr().into_owned())),
-                    condition: condition
-                        .as_ref()
-                        .map(|e| Box::new(e.to_expr().into_owned())),
-                    name: name.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    step: step.as_ref().map(|e| Box::new(e.to_expr().into_owned()))
-                })
-            },
-
-            Self::Range(label, start, stop) => {
-                Cow::Owned(Token::Range(
-                    label.as_str().to_string(),
-                    start.to_expr().into_owned(),
-                    stop.to_expr().into_owned()
-                ))
-            },
-            Self::Section(label) => Cow::Owned(Token::Section(label.as_str().into())),
-            Self::SnaSet(flag, value) => Cow::Owned(Token::SnaSet(*flag, value.clone())),
-
-            // Multi-register `push bc, hl` / `pop hl, bc`. `Token` has the
-            // matching variants, so this is a plain operand conversion - it
-            // was simply never reached until a consumer started rendering
-            // arbitrary tokens back to text, at which point the `todo!()`
-            // below turned an ordinary basm statement into a panic.
-            Self::MultiPush(regs) => {
-                Cow::Owned(Token::MultiPush(
-                    regs.iter()
-                        .map(|r| r.to_data_access().into_owned())
-                        .collect()
-                ))
-            },
-            Self::MultiPop(regs) => {
-                Cow::Owned(Token::MultiPop(
-                    regs.iter()
-                        .map(|r| r.to_data_access().into_owned())
-                        .collect()
-                ))
-            },
-
-            _ => todo!("Need to implement conversion  for {:?}", self)
-        }
+        Cow::Owned(self.to_token_owned())
     }
 
     fn is_warning(&self) -> bool {
@@ -2991,8 +2982,7 @@ impl LocatedListing {
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.deref().iter();
 
-        iter.map(|lt| lt.to_token())
-            .map(|c| -> Token { c.into_owned() })
+        iter.map(|lt| lt.to_token_owned())
             .collect::<Vec<Token>>()
             .into()
     }

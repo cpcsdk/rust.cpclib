@@ -549,6 +549,19 @@ pub struct Env {
     ///   the call site/include that actually led there.
     active_frames: Vec<ActiveFrame>,
 
+    /// Parsed macro/struct expansions, keyed on identity + each call
+    /// argument's *resolved* string form (computed the same lazy way
+    /// `expand_param` already does - see `processed_token::MacroExpansionKey`).
+    /// A hit skips both the (potentially large) body-splicing step and the
+    /// `winnow` parse; a miss costs exactly what it costs today. Lives for
+    /// the whole run, same lifetime as `IncludeState`'s per-file cache - no
+    /// eviction needed. `Arc<RwLock<_>>` so `Env::clone()` (crunched/confined
+    /// sections, below) stays cheap - matches how `functions`/`sections`
+    /// already keep only their *values* behind `Arc` - and so a clone
+    /// usefully *shares* the cache with the `Env` it was cloned from.
+    macro_expansion_cache:
+        Arc<RwLock<HashMap<processed_token::MacroExpansionKey, Arc<LocatedListing>>>>,
+
     /// For a symbol defined while `active_frames` was non-empty, the same
     /// "how we got here" chain as `active_frames` itself, but flattened to
     /// plain, owned text (`Env::active_frames_as_notes`) at the moment of
@@ -699,6 +712,7 @@ impl Clone for Env {
             free_banks: self.free_banks.clone(),
             macro_seed: self.macro_seed,
             active_frames: self.active_frames.clone(),
+            macro_expansion_cache: self.macro_expansion_cache.clone(),
             symbol_definition_chains: self.symbol_definition_chains.clone(),
             charset_encoding: self.charset_encoding.clone(),
             byte_written: self.byte_written,
@@ -4233,6 +4247,7 @@ impl Env {
 
             macro_seed: 0,
             active_frames: Vec::new(),
+            macro_expansion_cache: Arc::new(RwLock::new(HashMap::new())),
             symbol_definition_chains: HashMap::new(),
             charset_encoding: CharsetEncoding::new(),
             sna: SnaAssembler::default(),

@@ -1849,23 +1849,41 @@ pub fn parse_directive_new(
 
         let within_struct = local_parsing_state == &ParsingState::StructLimited;
 
-        //   dbg!("Directive:", unsafe{std::str::from_utf8_unchecked(word)});
-
-        let token: LocatedTokenInner = match word.len() {
-            2 => parse_directive_of_size_2(input, &input_start, is_orgams, within_struct, word),
-            3 => parse_directive_of_size_3(input, &input_start, is_orgams, within_struct, word),
-            4 => parse_directive_of_size_4(input, &input_start, is_orgams, within_struct, word),
-            5 => parse_directive_of_size_5(input, &input_start, is_orgams, within_struct, word),
-            6 => parse_directive_of_size_6(input, &input_start, is_orgams, within_struct, word),
-            7 => parse_directive_of_size_7(input, &input_start, is_orgams, within_struct, word),
-            8 => parse_directive_of_size_8(input, &input_start, is_orgams, within_struct, word),
-            10 => parse_directive_of_size_10(input, &input_start, is_orgams, within_struct, word),
-            _ => parse_directive_of_size_others(input, &input_start, is_orgams, within_struct, word)
-        }?;
-
-        let token = token.into_located_token_between(&input_start, *input);
-        Ok(token)
+        dispatch_directive(input, &input_start, is_orgams, within_struct, word)
     }
+}
+
+/// The length-bucketed dispatch body of `parse_directive_new`, factored out
+/// so `parse_single_token` can feed it a leading word it already scanned
+/// once (shared with the mnemonic dispatch table, see `dispatch_token2` in
+/// `common.rs`) instead of `parse_directive_new` rescanning the same input.
+/// `parse_directive_new` itself is unchanged and still used standalone
+/// elsewhere (e.g. struct-body directive parsing) with its own scan.
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub(crate) fn dispatch_directive(
+    input: &mut InnerZ80Span,
+    input_start: &Z80Checkpoint,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> ModalResult<LocatedToken, Z80ParserError> {
+    //   dbg!("Directive:", unsafe{std::str::from_utf8_unchecked(word)});
+
+    let token: LocatedTokenInner = match word.len() {
+        2 => parse_directive_of_size_2(input, input_start, is_orgams, within_struct, word),
+        3 => parse_directive_of_size_3(input, input_start, is_orgams, within_struct, word),
+        4 => parse_directive_of_size_4(input, input_start, is_orgams, within_struct, word),
+        5 => parse_directive_of_size_5(input, input_start, is_orgams, within_struct, word),
+        6 => parse_directive_of_size_6(input, input_start, is_orgams, within_struct, word),
+        7 => parse_directive_of_size_7(input, input_start, is_orgams, within_struct, word),
+        8 => parse_directive_of_size_8(input, input_start, is_orgams, within_struct, word),
+        10 => parse_directive_of_size_10(input, input_start, is_orgams, within_struct, word),
+        _ => parse_directive_of_size_others(input, input_start, is_orgams, within_struct, word)
+    }?;
+
+    let token = token.into_located_token_between(input_start, *input);
+    Ok(token)
 }
 
 fn parse_directive_of_size_others(

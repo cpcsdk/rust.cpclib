@@ -164,7 +164,21 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         &self,
         env: &mut Env
     ) -> Result<(String, ExpansionColumnMap), Box<AssemblerError>> {
-        let listing = self.r#macro.code();
+        let (expanded_args, capacity) = self.resolve_referenced_args(env)?;
+        self.finish_expand_for_basm(expanded_args, capacity)
+    }
+
+    /// First half of what `expand_for_basm` used to do in one pass: lazily
+    /// resolve only the call arguments the macro body actually references
+    /// (`{index}`/`{index:=default}` segments) and compute the exact output
+    /// capacity. Split out so a cache lookup can be built from the resolved
+    /// values *before* paying for the second half (splicing the body
+    /// together) or a full re-parse - see `ProcessedToken::update_macro_or_struct_state`.
+    #[inline]
+    pub(crate) fn resolve_referenced_args<'s>(
+        &'s self,
+        env: &mut Env
+    ) -> Result<(Vec<Option<beef::lean::Cow<'s, str>>>, usize), Box<AssemblerError>> {
         let mut expanded_args: Vec<Option<beef::lean::Cow<'_, str>>> = vec![None; self.args.len()];
         let arg_count = self.args.len().to_string();
 
@@ -234,12 +248,25 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             }
         )?;
 
-        // Second pass: assemble output from pre-expanded arguments.
-        //
-        // The columns of the result are recorded as it is built, because this
-        // is the only place both texts are in hand at once: after this, the
-        // expansion is a source of its own and nothing in it says how far each
-        // substitution moved the text around it. See [`ExpansionColumnMap`].
+        Ok((expanded_args, capacity))
+    }
+
+    /// Second half of what `expand_for_basm` used to do in one pass: splice
+    /// already-resolved arguments (from `resolve_referenced_args`) into the
+    /// body's literal segments.
+    ///
+    /// The columns of the result are recorded as it is built, because this
+    /// is the only place both texts are in hand at once: after this, the
+    /// expansion is a source of its own and nothing in it says how far each
+    /// substitution moved the text around it. See [`ExpansionColumnMap`].
+    pub(crate) fn finish_expand_for_basm(
+        &self,
+        expanded_args: Vec<Option<beef::lean::Cow<'_, str>>>,
+        capacity: usize
+    ) -> Result<(String, ExpansionColumnMap), Box<AssemblerError>> {
+        let listing = self.r#macro.code();
+        let arg_count = self.args.len().to_string();
+
         let mut output = String::with_capacity(capacity);
         let mut columns = ExpansionColumnMap::default();
         // Where the body has got to. A substitution's placeholder starts here,
@@ -308,9 +335,23 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
 
     #[inline]
     fn expand_for_orgams(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
+        let oks = self.resolve_all_args_for_orgams(env)?;
+        self.finish_expand_for_orgams(oks)
+    }
+
+    /// First half of what `expand_for_orgams` used to do in one call: eagerly
+    /// resolve every call argument (orgams expansion has no per-segment
+    /// laziness - see below) - split out so a cache lookup can be built from
+    /// the resolved values before paying for the `AhoCorasick` replace or a
+    /// full re-parse - see `ProcessedToken::update_macro_or_struct_state`.
+    #[inline]
+    pub(crate) fn resolve_all_args_for_orgams<'s>(
+        &'s self,
+        env: &mut Env
+    ) -> Result<Vec<beef::lean::Cow<'s, str>>, Box<AssemblerError>> {
         // Orgams-flavor expansion substitutes named params only (a literal
         // pattern->replacement pass over `params()`, no segment/index model
-        // at all - see this function's own body below) - it has no way to
+        // at all - see `finish_expand_for_orgams`) - it has no way to
         // place a variadic macro's extra positional args anywhere, so
         // silently dropping them would be a real, confusing bug rather than
         // an unsupported-but-honest error.
@@ -326,7 +367,6 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             }));
         }
 
-        let listing = self.r#macro.code();
         let all_expanded = self
             .args
             .iter()
@@ -342,6 +382,17 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
         }
 
+        Ok(oks)
+    }
+
+    /// Second half of what `expand_for_orgams` used to do in one call: turn
+    /// already-resolved arguments (from `resolve_all_args_for_orgams`) into
+    /// an `AhoCorasick` pattern/replacement pass over the macro body.
+    pub(crate) fn finish_expand_for_orgams(
+        &self,
+        oks: Vec<beef::lean::Cow<'_, str>>
+    ) -> Result<String, Box<AssemblerError>> {
+        let listing = self.r#macro.code();
         let capacity: usize = self.args.len();
         let mut patterns = Vec::with_capacity(capacity);
         let mut replacements = Vec::with_capacity(capacity);

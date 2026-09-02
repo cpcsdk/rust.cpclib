@@ -286,6 +286,61 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let factor = preceded(
         my_space0,
         alt((
+            // Fast path: for byte classes proven unambiguous (see this
+            // closure's own doc comment below), try only the branch(es)
+            // that can possibly match, instead of attempting all 12 in the
+            // full `alt` below. Any byte outside those classes - or any of
+            // them somehow failing here - falls straight through to the
+            // full, unmodified `alt` (its own checkpoint/reset is handled
+            // by `alt` itself, same as any other branch), which remains the
+            // single source of truth for every case; this closure can only
+            // make things faster, never wrong, because it never returns a
+            // token the full `alt` wouldn't also have produced.
+            //
+            // Several byte classes are deliberately left OUT of this fast
+            // path and always go through the full `alt` untouched, because
+            // more than one branch's grammar can start with them: `{`
+            // (prefixed-label/bracket-label/counter all start here), `#`/`@`
+            // (numeric hex/octal prefix vs. a valid label-leading char),
+            // `$` (numeric hex prefix vs. the literal `$`/`$$` branches,
+            // order-sensitive), `'` (string quote vs. an orgams-flavor
+            // label-leading char), `-` (negative-number vs. `-$$`/`-$`,
+            // whose closures capture `cloned` from the enclosing scope -
+            // not worth duplicating here for one byte class), and letters
+            // `A`-`F`/`a`-`f` (label/bool vs. a prefix-less hex literal with
+            // an `h`/`H` suffix, e.g. `FADEh`).
+            |input: &mut InnerZ80Span| -> ModalResult<LocatedExpr, Z80ParserError> {
+                let Some(&b) = input.as_bstr().first()
+                else {
+                    return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)));
+                };
+                match b {
+                    b'0'..=b'9' | b'+' => positive_number.parse_next(input),
+                    b'"' => parse_string
+                        .map(|s| {
+                            if s.as_ref().len() == 1 {
+                                LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
+                            }
+                            else {
+                                LocatedExpr::String(s)
+                            }
+                        })
+                        .parse_next(input),
+                    b'_' => alt((
+                        parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
+                        parse_label(false).map(|l| LocatedExpr::Label(l.into()))
+                    ))
+                    .parse_next(input),
+                    b'(' => parens.parse_next(input),
+                    b'[' if !is_orgams => parse_expr_bracketed_list.parse_next(input),
+                    b'G'..=b'Z' | b'g'..=b'z' => alt((
+                        parse_bool_value,
+                        parse_label(false).map(|l| LocatedExpr::Label(l.into()))
+                    ))
+                    .parse_next(input),
+                    _ => Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+                }
+            },
             alt((
                 // Proximity label references: _+ and _- (bare _ is parsed as normal label)
                 parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
@@ -432,13 +487,68 @@ pub fn negative_number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
-    let _input_start = input.checkpoint();
-    let _input_offset = input.eof_offset();
+    let input_start = input.checkpoint();
+    let input_offset = input.eof_offset();
 
-    // Try float first (since it contains integer part), then integer
+    // Scan the integer part exactly once. Previously this whole function
+    // was `alt((parse_float, parse_value))`, and since `parse_float`
+    // internally starts by parsing its own integer part the same way
+    // `parse_value` does, every plain integer (the overwhelming common
+    // case - addresses, immediates, constants) got scanned twice: once
+    // inside a `parse_float` attempt that then failed to find a `.` and
+    // backtracked, then again from scratch by the `parse_value` branch.
+    // Reused here (`int_part`) for both the float and plain-integer
+    // outcomes below.
+    let int_part = cpclib_common::parse_value.parse_next(input)?;
+
     alt((
+        // Float continuation - tried first, matching the original
+        // `alt`'s order (float is a superset grammar of plain integer).
+        // On ANY failure here - no `.` follows, or the trailing-character
+        // guard rejects what was parsed - `alt` resets `input` back to
+        // right after `int_part` (its own entry point, since that's where
+        // `input` already was when this `alt(..)` itself started) and
+        // falls through to the plain-integer branch below. This preserves
+        // an existing corner case exactly: `"12.5x"` fails the float
+        // branch's trailing-character guard (`x`), so `alt` retries as a
+        // plain integer, yielding `Value(12)` and leaving `".5x"`
+        // unconsumed for the rest of the grammar - same as before.
         terminated(
-            parse_float,
+            |input: &mut InnerZ80Span| -> ModalResult<LocatedExpr, Z80ParserError> {
+                '.'.parse_next(input)?;
+
+                // Fractional part (decimal digits), same grammar as before.
+                let frac_str = opt(take_while(1.., ('0'..='9', '_'))).parse_next(input)?;
+
+                // Optional scientific notation.
+                let exp_str = opt((
+                    one_of(['e', 'E']),
+                    opt(one_of(['+', '-'])),
+                    take_while(1.., ('0'..='9', '_'))
+                ))
+                .parse_next(input)?;
+
+                let mut float_str = format!("{int_part}.");
+                if let Some(frac) = frac_str {
+                    let frac_str = std::str::from_utf8(frac).unwrap_or("");
+                    float_str.push_str(&frac_str.replace('_', ""));
+                }
+                if let Some((e, sign, exp)) = exp_str {
+                    float_str.push(e as char);
+                    if let Some(s) = sign {
+                        float_str.push(s as char);
+                    }
+                    let exp_str = std::str::from_utf8(exp).unwrap_or("");
+                    float_str.push_str(&exp_str.replace('_', ""));
+                }
+
+                let float_val = float_str
+                    .parse::<f64>()
+                    .map_err(|_| ErrMode::Backtrack(Z80ParserError::from_input(input)))?;
+
+                let span = build_span(input_offset, &input_start, *input);
+                Ok(LocatedExpr::Float(OrderedFloat(float_val), span.into()))
+            },
             not(one_of((
                 b'A'..=b'Z',
                 b'a'..=b'z',
@@ -449,7 +559,10 @@ pub fn number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErr
             )))
         ),
         terminated(
-            parse_value,
+            |input: &mut InnerZ80Span| -> ModalResult<LocatedExpr, Z80ParserError> {
+                let span = build_span(input_offset, &input_start, *input);
+                Ok(LocatedExpr::Value(int_part as i32, span.into()))
+            },
             not(one_of((
                 b'A'..=b'Z',
                 b'a'..=b'z',
@@ -1150,21 +1263,14 @@ pub fn ignore_ascii_case_allowed_label(
     // Get bucket for this length
     let bucket = bucket_fn(len);
 
-    // Check if name matches any forbidden name (case-insensitive)
-    #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-    {
-        use cpclib_common::rayon::prelude::*;
-        !bucket
-            .par_iter()
-            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name))
-    }
-
-    #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
-    {
-        !bucket
-            .iter()
-            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name))
-    }
+    // Check if name matches any forbidden name (case-insensitive). Always
+    // sequential: `bucket` is at most a handful of short identifiers (see
+    // `bucket_by_length` in build.rs), and this runs once per label parsed -
+    // a `rayon` parallel iterator's thread-pool/work-stealing overhead would
+    // dwarf the trivial comparison work here.
+    !bucket
+        .iter()
+        .any(|&content| content.as_bytes().eq_ignore_ascii_case(name))
 }
 
 /// Parser for file names in appropriate directives

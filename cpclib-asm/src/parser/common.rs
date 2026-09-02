@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, space0};
+use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending, space0};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, terminated
 };
@@ -128,9 +128,38 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 
     // Get the first word that will drive the rest of parsing
     let word = delimited(my_space0, alpha1, my_space0).parse_next(input)?;
-
-    // Apply the right parsing using hash-based matching for performance and consistency
     let h = fnv1a_ascii_upper(word);
+
+    dispatch_token2(input, &input_start, word, h)
+}
+
+/// The hash-dispatch body of `parse_token2`, factored out so
+/// `parse_single_token` can feed it a leading word it already scanned once
+/// (shared with the directive dispatch table, see `dispatch_directive`)
+/// instead of `parse_token2` rescanning the same input. `parse_token2`
+/// itself is unchanged and still used standalone in many places (expression
+/// operands, disassembly, tests) with its own `alpha1`-only scan - this
+/// helper doesn't care which scan produced `word`/`h`, as long as `input`'s
+/// cursor is positioned right after them (trailing whitespace already
+/// trimmed).
+///
+/// One case is scan-class-sensitive: the `SL1` opcode alias. Called from
+/// `parse_token2`'s own `alpha1`-only scan, `word` can never contain a
+/// digit, so `SL1` is recognized via the `"SL"` branch below plus a
+/// hand-consumed literal `'1'`. Called from `parse_single_token`'s wider,
+/// `alphanumeric1`-based scan, `word` for "SL1 HL" is `"SL1"` (digit
+/// included, already past the trailing space) - so a second, literal
+/// `"SL1"` branch (matching the `SLA`/`SLL`/... pattern directly) handles
+/// that case too. Both branches stay, one per scan class; see the `"SL"` and
+/// `"SL1"` arms below.
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+fn dispatch_token2(
+    input: &mut InnerZ80Span,
+    input_start: &<InnerZ80Span as Stream>::Checkpoint,
+    word: &[u8],
+    h: u64
+) -> ModalResult<LocatedToken, Z80ParserError> {
     let token: LocatedTokenInner = match h {
         h if hashed_choice!(h, word, b"LD") => parse_ld(true).parse_next(input),
         h if hashed_choice!(h, word, b"ADC") => parse_add_or_adc(Mnemonic::Adc).parse_next(input),
@@ -193,6 +222,11 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
         h if hashed_choice!(h, word, b"SBC") => parse_sbc.parse_next(input),
         h if hashed_choice!(h, word, b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
         h if hashed_choice!(h, word, b"SL") /*1*/  => cut_err(preceded(('1', my_space1), parse_shifts_and_rotations(Mnemonic::Sl1))).parse_next(input),
+        // Same alias as the "SL" branch above, reached when `word` was
+        // scanned with a digit-inclusive class (`parse_single_token`'s
+        // shared scan) and so is already the full literal "SL1" rather than
+        // "SL" - see this function's doc comment.
+        h if hashed_choice!(h, word, b"SL1") => cut_err(parse_shifts_and_rotations(Mnemonic::Sl1)).parse_next(input),
         h if hashed_choice!(h, word, b"SLA") => alt((
             parse_shifts_and_rotations(Mnemonic::Sla),
             parse_shifts_and_rotations_fake(Mnemonic::Sla),
@@ -221,7 +255,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
         },
     }?;
 
-    let token = token.into_located_token_between(&input_start, *input);
+    let token = token.into_located_token_between(input_start, *input);
     Ok(token)
 }
 
@@ -678,8 +712,90 @@ pub fn parse_line_or_with_comment(
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_single_token(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
-    // Get the token
-    alt((parse_token, parse_directive)).parse_next(input)
+    let parsing_state = input.state.state;
+
+    // Phase 1: `parse_token1` (the small no-arg-opcode table, e.g.
+    // NOP/EI/DI/RET) keeps its own separate, small scan - unrelated to the
+    // redundancy fixed in phase 2 below, and tried first, as
+    // `alt((parse_token1, parse_token2))` used to do.
+    //
+    // Matches `parse_token`'s original `alt(..).verify(is_accepted)`
+    // semantics exactly: a candidate that parses but fails `is_accepted`
+    // makes the whole mnemonic attempt fail right here - it does not fall
+    // through to try another candidate, just like `.verify()` wrapping the
+    // whole `alt(..)` never retried a different branch either. Control
+    // falls through to directive dispatch below only when `parse_token1`
+    // itself fails to match at all.
+    let phase1_start = input.checkpoint();
+    match parse_token1(input) {
+        Ok(tok) => {
+            if tok.is_accepted(&parsing_state) {
+                return Ok(tok);
+            }
+            input.reset(&phase1_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)));
+        },
+        // A `Cut` means some branch inside `parse_token1` committed to its
+        // parse (e.g. via `cut_err`) and then failed - that failure is
+        // authoritative and must propagate immediately with its precise
+        // location, exactly as it would out of `alt((parse_token1, ..))` in
+        // the original code (a `Cut` aborts the whole `alt`, it does not
+        // make `alt` try the next branch). Only a plain `Backtrack` means
+        // "not a match, try something else" and falls through below.
+        Err(e @ ErrMode::Cut(_)) => return Err(e),
+        Err(_) => {}
+    }
+    input.reset(&phase1_start);
+
+    // Phase 2: both the mnemonic table (`parse_token2`) and the directive
+    // table (`parse_directive_new`) key off the same leading word - scanned
+    // ONCE here (the directive scanner's wider, alphanumeric class - a
+    // superset of the alpha-only class `parse_token2` uses standalone, see
+    // `dispatch_token2`'s doc comment for the one case that's sensitive to
+    // this) and handed to both dispatch helpers directly, instead of each
+    // rescanning the line's leading word independently.
+    let input_start = input.checkpoint();
+    let word = delimited(
+        my_space0,
+        terminated(alphanumeric1, alt((eof.value(()), not(b'.').value(())))),
+        my_space0
+    )
+    .parse_next(input)?;
+    let h = fnv1a_ascii_upper(word);
+    // Both dispatch helpers below expect `input` positioned right after the
+    // word (leading/trailing space already trimmed) when they start, just
+    // like `parse_token2`/`parse_directive_new` leave it after their own
+    // (equivalent) scan - `input_start` is kept only for span-building
+    // (`into_located_token_between`), never as a re-entry point for either.
+    let post_word = input.checkpoint();
+
+    match dispatch_token2(input, &input_start, word, h) {
+        Ok(tok) => {
+            if tok.is_accepted(&parsing_state) {
+                return Ok(tok);
+            }
+            input.reset(&input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)));
+        },
+        // Same `Cut`-propagates-immediately rule as phase 1 above - once
+        // `word` matched a known mnemonic (e.g. `PUSH`) and its operand
+        // parsing hard-fails via `cut_err`, that error is authoritative and
+        // must not be discarded in favor of trying directive dispatch next.
+        Err(e @ ErrMode::Cut(_)) => return Err(e),
+        Err(_) => {}
+    }
+    input.reset(&post_word);
+
+    let is_orgams = input.state.options().is_orgams();
+    let within_struct = parsing_state == ParsingState::StructLimited;
+    let directive = dispatch_directive(input, &input_start, is_orgams, within_struct, word)?;
+    if directive.is_accepted(&parsing_state) {
+        Ok(directive)
+    }
+    else {
+        input.reset(&input_start);
+        Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+    }
 }
 
 // TODO add struct and Macro
