@@ -725,7 +725,9 @@ impl HardCodedFunction {
             },
             HardCodedFunction::ListNew => Ok(list_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone())),
             HardCodedFunction::ListSet => {
-                list_set(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref().clone())
+                let (result, warnings) = list_set(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref().clone())?;
+                env.add_expression_warnings(warnings);
+                Ok(result)
             },
             HardCodedFunction::ListGet => list_get(params[0].as_ref(), params[1].as_ref().int_value()? as _),
             HardCodedFunction::ListPush => list_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
@@ -748,7 +750,11 @@ impl HardCodedFunction {
             },
             HardCodedFunction::StringPush => string_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
             HardCodedFunction::StringFromList => string_from_list(params[0].as_ref().clone()),
-            HardCodedFunction::StringFormat => string_format(params),
+            HardCodedFunction::StringFormat => {
+                let (result, warnings) = string_format(params)?;
+                env.add_expression_warnings(warnings);
+                Ok(result)
+            },
             HardCodedFunction::Assemble => assemble(params[0].as_ref().clone(), env),
             HardCodedFunction::StringConcat => {
                 let mut base = params[0].as_ref().clone();

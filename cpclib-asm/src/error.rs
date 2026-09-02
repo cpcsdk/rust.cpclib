@@ -243,6 +243,11 @@ pub enum AssemblerError {
         msg: String
     },
 
+    /// A warning from `cpclib_tokens::ExprWarning` - unlocated, same as every
+    /// other warning kind is when first pushed; located the same generic way
+    /// too, via `RelocatedWarning`/`locate_warning`.
+    ExpressionWarning(cpclib_tokens::ExprWarning),
+
     // #[fail(display = "Invalid argument: {}", msg)]
     InvalidArgument {
         msg: String
@@ -569,6 +574,10 @@ impl AssemblerError {
     pub fn warning_category(&self) -> WarningCategory {
         match self {
             AssemblerError::OverrideMemory(..) => WarningCategory::OverrideMemory,
+            AssemblerError::ExpressionWarning(w) => match w.kind {
+                cpclib_tokens::ExprWarningKind::PrecisionLoss => WarningCategory::PrecisionLoss,
+                cpclib_tokens::ExprWarningKind::Overflow => WarningCategory::Overflow
+            },
             AssemblerError::RelocatedError { error, .. }
             | AssemblerError::RelocatedWarning { warning: error, .. } => error.warning_category(),
             _ => {
@@ -853,6 +862,7 @@ impl AssemblerError {
 
             AssemblerError::BasicError { error } => write!(f, "{error}"),
             AssemblerError::AssemblingError { msg } => write!(f, "{msg}"),
+            AssemblerError::ExpressionWarning(w) => write!(f, "{}", w.message),
             AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {msg}"),
             AssemblerError::AssertionFailed {
                 test,

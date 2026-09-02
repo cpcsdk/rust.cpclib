@@ -467,9 +467,12 @@ impl ExprElement for LocatedExpr {
 }
 
 impl ExprEvaluationExt for LocatedExpr {
-    /// Resolve by adding localisation in case of error
+    /// Resolve by adding localisation in case of error (and, per-node, in
+    /// case of warning - see `Env::locate_warnings_since`).
     fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
+        let nb_warnings = env.warnings_len();
         let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))?;
+        env.locate_warnings_since(nb_warnings, self.span().clone());
         ensure_orgams_type(res, env)
     }
 

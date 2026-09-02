@@ -15,41 +15,43 @@ pub enum SymbolOutputFormat {
 }
 
 impl SymbolOutputFormat {
-    pub fn format(&self, k: &Symbol, v: &Value) -> String {
+    pub fn format(&self, k: &Symbol, v: &Value) -> (String, Vec<cpclib_tokens::ExprWarning>) {
         match self {
             SymbolOutputFormat::Basm => {
                 match v {
                     Value::Address(a) => {
-                        format!("{} equ #{:04X}", k.value(), a.address())
+                        (format!("{} equ #{:04X}", k.value(), a.address()), vec![])
                     },
                     Value::Expr(ExprResult::Value(i)) => {
-                        format!("{} equ #{:04X}", k.value(), i)
+                        (format!("{} equ #{:04X}", k.value(), i), vec![])
                     },
                     Value::Expr(ExprResult::Bool(b)) => {
-                        format!("{} equ {}", k.value(), *b)
+                        (format!("{} equ {}", k.value(), *b), vec![])
                     },
                     Value::Expr(e @ ExprResult::Float(_f)) => {
-                        // no Env reachable here - known gap, float EQU symbols
-                        // never warn on .sym export
-                        format!("{} equ #{:04X}", k.value(), e.int_value().unwrap())
+                        let (i, warnings) = e.int().unwrap(); // Float always succeeds
+                        (format!("{} equ #{:04X}", k.value(), i), warnings)
                     },
                     Value::Expr(ExprResult::String(s)) => {
-                        format!("{} equ {}", k.value(), s)
+                        (format!("{} equ {}", k.value(), s), vec![])
                     },
                     Value::Expr(l @ ExprResult::List(_)) => {
-                        format!("{} equ {}", k.value(), l)
+                        (format!("{} equ {}", k.value(), l), vec![])
                     },
                     Value::Expr(m @ ExprResult::Matrix { .. }) => {
-                        format!("{} equ {}", k.value(), m)
+                        (format!("{} equ {}", k.value(), m), vec![])
                     },
 
                     Value::Expr(ExprResult::Char(c)) => {
                         let c = *c as char;
-                        format!(
-                            "{} equ '{}{}'",
-                            k.value(),
-                            if c == '\'' { "\\" } else { "" },
-                            c
+                        (
+                            format!(
+                                "{} equ '{}{}'",
+                                k.value(),
+                                if c == '\'' { "\\" } else { "" },
+                                c
+                            ),
+                            vec![]
                         )
                     },
 
@@ -59,27 +61,26 @@ impl SymbolOutputFormat {
             SymbolOutputFormat::Winape => {
                 match v {
                     Value::Address(a) => {
-                        format!("{} #{:X}", k.value(), a.address())
+                        (format!("{} #{:X}", k.value(), a.address()), vec![])
                     },
                     Value::Expr(ExprResult::Value(i)) => {
-                        format!("{} #{:X}", k.value(), i)
+                        (format!("{} #{:X}", k.value(), i), vec![])
                     },
                     Value::Expr(ExprResult::Bool(b)) => {
-                        format!("{} {}", k.value(), *b)
+                        (format!("{} {}", k.value(), *b), vec![])
                     },
                     Value::Expr(e @ ExprResult::Float(_f)) => {
-                        // no Env reachable here - known gap, float EQU symbols
-                        // never warn on .sym export
-                        format!("{} #{:X}", k.value(), e.int_value().unwrap())
+                        let (i, warnings) = e.int().unwrap(); // Float always succeeds
+                        (format!("{} #{:X}", k.value(), i), warnings)
                     },
                     Value::Expr(ExprResult::String(_s)) => {
-                        "".to_owned() // ignored by winape
+                        ("".to_owned(), vec![]) // ignored by winape
                     },
                     Value::Expr(_l @ ExprResult::List(_)) => {
-                        "".to_owned() // ignored by winape
+                        ("".to_owned(), vec![]) // ignored by winape
                     },
                     Value::Expr(_m @ ExprResult::Matrix { .. }) => {
-                        "".to_owned() // ignored by winape
+                        ("".to_owned(), vec![]) // ignored by winape
                     },
 
                     _ => unimplemented!("{:?}", v)
@@ -207,17 +208,20 @@ impl SymbolOutputGenerator {
         w: &mut W,
         symbs: &impl SymbolsTableTrait,
         format: SymbolOutputFormat
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Vec<cpclib_tokens::ExprWarning>> {
+        let mut warnings = Vec::new();
         for (k, v) in symbs
             .expression_symbol()
             .iter()
             .filter(|(s, _v)| self.keep_symbol(s))
             .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase())
         {
-            writeln!(w, "{}", format.format(k, v))?;
+            let (line, w2) = format.format(k, v);
+            writeln!(w, "{line}")?;
+            warnings.extend(w2);
         }
 
-        Ok(())
+        Ok(warnings)
     }
 
     /// Returns true if the symbol needs to be printed

@@ -1358,3 +1358,42 @@ fn disable_warning_category_suppresses_only_that_category() {
         "disabling the warning must not disable the fake-instruction expansion itself"
     );
 }
+
+/// `checked_byte`/`checked_word`'s overflow warning was migrated onto the
+/// typed `ExprWarning`/`AssemblerError::ExpressionWarning` mechanism (same
+/// one the real-value-truncation warning uses) - confirm it's still
+/// categorized as `overflow`, and that a truncation warning in the same
+/// source is still independently categorized as `real-value-truncated`.
+#[test]
+fn migrated_overflow_warning_keeps_its_own_category_distinct_from_precision_loss() {
+    let code = "org 0x4000\nld a, 300\nld b, 10/3\nret\n";
+
+    let args_parser = build_args_parser();
+    let args = args_parser.get_matches_from(["basm", "--inline", code, "--dry-run"]);
+    let (env, _) = process(&args, Arc::new(())).expect("should assemble cleanly");
+    let categories: std::collections::HashSet<_> = env
+        .warnings()
+        .iter()
+        .map(|w| w.warning_category())
+        .collect();
+    assert!(categories.contains(&cpclib_asm::WarningCategory::Overflow), "{categories:?}");
+    assert!(categories.contains(&cpclib_asm::WarningCategory::PrecisionLoss), "{categories:?}");
+
+    let args_parser = build_args_parser();
+    let disabled_args = args_parser.get_matches_from([
+        "basm",
+        "--inline",
+        code,
+        "--dry-run",
+        "--disable-warning",
+        "overflow"
+    ]);
+    let (disabled_env, _) = process(&disabled_args, Arc::new(())).expect("should assemble cleanly");
+    let disabled_categories: std::collections::HashSet<_> = disabled_env
+        .warnings()
+        .iter()
+        .map(|w| w.warning_category())
+        .collect();
+    assert!(!disabled_categories.contains(&cpclib_asm::WarningCategory::Overflow));
+    assert!(disabled_categories.contains(&cpclib_asm::WarningCategory::PrecisionLoss));
+}

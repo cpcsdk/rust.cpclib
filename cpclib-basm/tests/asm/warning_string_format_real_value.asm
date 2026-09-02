@@ -1,0 +1,1 @@
+	s2 = string_format("{0:hex4}", 171.5)

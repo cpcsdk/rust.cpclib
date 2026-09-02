@@ -28,7 +28,7 @@ pub fn list_set(
     mut list: ExprResult,
     index: usize,
     value: ExprResult
-) -> Result<ExprResult, Box<AssemblerError>> {
+) -> Result<(ExprResult, Vec<cpclib_tokens::ExprWarning>), Box<AssemblerError>> {
     match list {
         ExprResult::String(s) => {
             if index >= s.len() {
@@ -36,11 +36,12 @@ pub fn list_set(
                     ExpressionError::InvalidSize(s.len(), index)
                 )));
             }
-            let c = value.int_value()? as u8 as char;
+            let (raw, warnings) = value.int().map_err(AssemblerError::ExpressionTypeError)?;
+            let c = raw as u8 as char;
             let c = format!("{c}");
             let mut s = s.to_string();
             s.replace_range(index..index + 1, &c);
-            Ok(ExprResult::String(fix_string(s)))
+            Ok((ExprResult::String(fix_string(s)), warnings))
         },
         ExprResult::List(_) => {
             if index >= list.list_len() {
@@ -49,7 +50,7 @@ pub fn list_set(
                 )));
             }
             list.list_set(index, value);
-            Ok(list)
+            Ok((list, vec![]))
         },
 
         _ => {
@@ -680,7 +681,9 @@ fn parse_format_spec(spec: &str) -> Option<ExprFormat> {
 /// (`hex`/`hex2`/`hex4`/`hex8`/`bin`/`bin8`/`bin16`/`bin32`/`int`) - the
 /// argument must then resolve to an integer, or it's a hard error the same
 /// way an out-of-range index is.
-pub fn string_format<E: AsRef<ExprResult>>(params: &[E]) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn string_format<E: AsRef<ExprResult>>(
+    params: &[E]
+) -> Result<(ExprResult, Vec<cpclib_tokens::ExprWarning>), Box<AssemblerError>> {
     let template = match params[0].as_ref() {
         ExprResult::String(s) => s.to_string(),
         other => {
@@ -690,6 +693,7 @@ pub fn string_format<E: AsRef<ExprResult>>(params: &[E]) -> Result<ExprResult, B
         }
     };
     let args = &params[1..];
+    let mut warnings = Vec::new();
 
     let mut out = String::with_capacity(template.len());
     let mut i = 0usize;
@@ -736,12 +740,13 @@ pub fn string_format<E: AsRef<ExprResult>>(params: &[E]) -> Result<ExprResult, B
                             "string_format: unknown format spec '{spec}' in placeholder '{{{inner}}}' in template {template:?} - expected one of hex, hex2, hex4, hex8, bin, bin8, bin16, bin32, int"
                         ))
                     })?;
-                    let value = arg.as_ref().int_value().map_err(|_| {
+                    let (value, w) = arg.as_ref().int().map_err(|_| {
                         let arg = arg.as_ref();
                         string_format_error(format!(
                             "string_format: placeholder {{{inner}}} needs a numeric argument for format '{spec}', got {arg}"
                         ))
                     })?;
+                    warnings.extend(w);
                     format.string_representation(value)
                 }
             };
@@ -765,7 +770,7 @@ pub fn string_format<E: AsRef<ExprResult>>(params: &[E]) -> Result<ExprResult, B
         i += c.len_utf8();
     }
 
-    Ok(ExprResult::String(fix_string(out)))
+    Ok((ExprResult::String(fix_string(out)), warnings))
 }
 
 pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
@@ -857,7 +862,7 @@ mod string_format_tests {
 
     #[test]
     fn substitutes_positional_placeholders_in_order() {
-        let result = string_format(&[
+        let (result, _warnings) = string_format(&[
             s("Score: {0}/{1}"),
             ExprResult::Value(10),
             ExprResult::Value(100)
@@ -871,25 +876,25 @@ mod string_format_tests {
         // Distinguishes this from `ExprResult`'s own `Display`, which wraps
         // strings in quotes for diagnostic output - interpolation must use
         // the raw content.
-        let result = string_format(&[s("Hello, {0}!"), s("world")]).unwrap();
+        let (result, _warnings) = string_format(&[s("Hello, {0}!"), s("world")]).unwrap();
         assert_eq!(result, s("Hello, world!"));
     }
 
     #[test]
     fn a_placeholder_can_be_reused_several_times() {
-        let result = string_format(&[s("{0}-{0}-{0}"), ExprResult::Value(7)]).unwrap();
+        let (result, _warnings) = string_format(&[s("{0}-{0}-{0}"), ExprResult::Value(7)]).unwrap();
         assert_eq!(result, s("7-7-7"));
     }
 
     #[test]
     fn double_braces_are_literal_braces() {
-        let result = string_format(&[s("{{literal}} {0}"), ExprResult::Value(1)]).unwrap();
+        let (result, _warnings) = string_format(&[s("{{literal}} {0}"), ExprResult::Value(1)]).unwrap();
         assert_eq!(result, s("{literal} 1"));
     }
 
     #[test]
     fn a_template_with_no_placeholders_is_returned_unchanged() {
-        let result = string_format(&[s("no placeholders here")]).unwrap();
+        let (result, _warnings) = string_format(&[s("no placeholders here")]).unwrap();
         assert_eq!(result, s("no placeholders here"));
     }
 
@@ -919,25 +924,25 @@ mod string_format_tests {
 
     #[test]
     fn a_format_spec_renders_hex_with_the_requested_width() {
-        let result = string_format(&[s("{0:hex4}"), ExprResult::Value(0xAB)]).unwrap();
+        let (result, _warnings) = string_format(&[s("{0:hex4}"), ExprResult::Value(0xAB)]).unwrap();
         assert_eq!(result, s("0x00ab"));
     }
 
     #[test]
     fn a_format_spec_renders_unpadded_hex_and_bin() {
-        let result = string_format(&[s("{0:hex} {0:bin}"), ExprResult::Value(5)]).unwrap();
+        let (result, _warnings) = string_format(&[s("{0:hex} {0:bin}"), ExprResult::Value(5)]).unwrap();
         assert_eq!(result, s("0x5 0b101"));
     }
 
     #[test]
     fn a_format_spec_renders_padded_bin() {
-        let result = string_format(&[s("{0:bin8}"), ExprResult::Value(5)]).unwrap();
+        let (result, _warnings) = string_format(&[s("{0:bin8}"), ExprResult::Value(5)]).unwrap();
         assert_eq!(result, s("0b00000101"));
     }
 
     #[test]
     fn a_format_spec_can_be_reused_with_different_specs_on_the_same_argument() {
-        let result = string_format(&[s("{0:int} = {0:hex2}"), ExprResult::Value(10)]).unwrap();
+        let (result, _warnings) = string_format(&[s("{0:int} = {0:hex2}"), ExprResult::Value(10)]).unwrap();
         assert_eq!(result, s("10 = 0x0a"));
     }
 

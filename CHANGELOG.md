@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-locomotive` new crate to handle the executable for basisc manipulation
 - `cpclib-orgams-ascii` add support to ORGAMS files. This crate aims at converting orgams sourceode to ascii and ascii source code to orgams. (in fact utf8, but...)
 - `cpclib-basm` add `//` integer-division operator to expressions - always returns an integer, unlike `/` which promotes int/int division to a real value
-- `cpclib-basm` add a warning when a real (float) value is used where an integer is expected (e.g. loaded into a register), since this almost always indicates an unintended `/` where `//` was meant
+- `cpclib-basm` add a warning whenever a real (float) value is truncated to an integer anywhere it's used (register loads, memory writes, `list_set`/`string_format`, `.sym` export, bitwise/shift operators, comparisons, ...), since this almost always indicates an unintended `/` where `//` was meant. The warning is typed (`ExprWarning`/`ExprWarningKind`, room for more kinds later) and, inside a single expression with nested sub-expressions, located at the innermost one that produced it rather than just "somewhere in this statement". Never fires for a float that exactly encodes an integer (e.g. `6.0 / 2`)
+- `cpclib-basm` the pre-existing "value does not fit" overflow warning (register/memory immediates) now uses the same typed warning mechanism as the new real-value-truncation warning, instead of being categorized by matching a substring in its rendered text
 
 ### Changed
 - Standardized README filename from `.mkd` to `.md`

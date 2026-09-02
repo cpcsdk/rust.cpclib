@@ -1142,6 +1142,24 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExprWarningKind {
+    PrecisionLoss,
+    Overflow
+}
+
+/// A non-fatal issue found while evaluating an expression - e.g. a real
+/// value silently rounded to fit an integer-only context, or a value that
+/// doesn't fit the width it's being stored into. This crate has no notion
+/// of source spans (that's a `cpclib-asm`-side concept, via `LocatedExpr`);
+/// `cpclib-asm` locates it using the same generic warning-relocation
+/// mechanism every other warning kind already uses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExprWarning {
+    pub kind: ExprWarningKind,
+    pub message: String
+}
+
 /// The successful result of an evaluation.
 /// Embeds  a real,  an integer or a string
 #[derive(Eq, Debug, Clone)]
@@ -1293,24 +1311,33 @@ impl ExprResult {
         }
     }
 
-    /// Converts to an integer. If `self` was a `Float`, the second element of
-    /// the returned pair carries a ready-to-use warning message describing
-    /// the truncation; `None` for any other exact-int-representable variant.
-    /// Callers must consciously decide whether to forward this warning (e.g.
-    /// via `Env::int_forward`/`Env::resolve_expr_as_int`) or explicitly
-    /// discard it (via `int_value()`) - the changed return type is what
+    /// Converts to an integer. If `self` was a `Float` that doesn't already
+    /// exactly encode the rounded integer (e.g. `6.0` truncating to `6` loses
+    /// nothing and warns about nothing; `3.5` truncating to `4` does), the
+    /// returned `Vec` carries one `ExprWarning` describing it - empty
+    /// otherwise. Callers must consciously decide whether to forward these
+    /// warnings (e.g. via `Env::add_expression_warnings`) or explicitly
+    /// discard them (via `int_value()`) - the changed return type is what
     /// forces every call site to make that decision instead of silently
     /// losing precision.
-    pub fn int(&self) -> Result<(i32, Option<String>), ExpressionTypeError> {
+    pub fn int(&self) -> Result<(i32, Vec<ExprWarning>), ExpressionTypeError> {
         match self {
             ExprResult::Float(f) => {
-                let i = (f.into_inner() + 0.5).floor() as i32; /* ensure 2.9 is treated as 3 */
-                let warning = format!("real value {} truncated to integer {i}", f.into_inner());
-                Ok((i, Some(warning)))
+                let raw = f.into_inner();
+                let i = (raw + 0.5).floor() as i32; /* ensure 2.9 is treated as 3 */
+                let warnings = if raw == i as f64 {
+                    vec![]
+                } else {
+                    vec![ExprWarning {
+                        kind: ExprWarningKind::PrecisionLoss,
+                        message: format!("real value {raw} truncated to integer {i}")
+                    }]
+                };
+                Ok((i, warnings))
             },
-            ExprResult::Value(i) => Ok((*i, None)),
-            ExprResult::Char(i) => Ok((*i as i32, None)),
-            ExprResult::Bool(b) => Ok((if *b { 1 } else { 0 }, None)),
+            ExprResult::Value(i) => Ok((*i, vec![])),
+            ExprResult::Char(i) => Ok((*i as i32, vec![])),
+            ExprResult::Bool(b) => Ok((if *b { 1 } else { 0 }, vec![])),
             ExprResult::List(l) if l.len() == 1 => {
                 // Single-element lists can be converted to int (e.g., opcode(inc e))
                 l[0].int()
@@ -1324,7 +1351,7 @@ impl ExprResult {
     }
 
     /// Convenience for call sites that intentionally do not forward the
-    /// truncation warning from `int()` (no `Env` reachable, or truncation is
+    /// truncation warnings from `int()` (no `Env` reachable, or truncation is
     /// the point, e.g. the `INT()` builtin). Prefer this over `.int()?.0` so
     /// the intent ("discarding on purpose") is visible at the call site.
     pub fn int_value(&self) -> Result<i32, ExpressionTypeError> {
@@ -1333,27 +1360,23 @@ impl ExprResult {
 
     /// Integer ("//") division: always truncates toward zero and always
     /// returns `ExprResult::Value` (i32) - unlike `/`, never promotes to
-    /// float. Any truncation warning picked up while coercing either operand
-    /// to int is aggregated and returned rather than dropped - the caller
-    /// decides whether to forward it.
+    /// float. Any truncation warnings picked up while coercing either operand
+    /// to int are kept distinct (not merged into one message) and returned
+    /// rather than dropped - the caller decides whether to forward them.
     pub fn int_div<T: AsRef<Self> + std::fmt::Display>(
         self,
         rhs: T
-    ) -> Result<(Self, Option<String>), ExpressionTypeError> {
+    ) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
         let rhs_ref = rhs.as_ref();
-        let (a, w1) = self.int()?;
+        let (a, mut warnings) = self.int()?;
         let (b, w2) = rhs_ref.int()?;
+        warnings.extend(w2);
         if b == 0 {
             return Err(ExpressionTypeError(format!(
                 "Integer division by zero: {self} // {rhs_ref}"
             )));
         }
-        let warning = match (w1, w2) {
-            (None, None) => None,
-            (Some(w), None) | (None, Some(w)) => Some(w),
-            (Some(w1), Some(w2)) => Some(format!("{w1}; {w2}"))
-        };
-        Ok(((a / b).into(), warning))
+        Ok(((a / b).into(), warnings))
     }
 
     pub fn float(&self) -> Result<f64, ExpressionTypeError> {
@@ -1853,13 +1876,118 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
     }
 }
 
+impl ExprResult {
+    /// `>>`, warning-carrying form: the `>>` operator itself (below) discards
+    /// any truncation warnings, since it's a fixed-signature `std::ops` trait
+    /// impl with no room for an extra return value and no `Env` to forward
+    /// to anyway. `cpclib-asm`'s `resolve_impl!` macro calls this form
+    /// directly instead, since it *does* have `Env` in scope.
+    pub fn shr_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+        let (a, mut warnings) = self.int()?;
+        let (b, w2) = rhs.int()?;
+        warnings.extend(w2);
+        Ok((a.wrapping_shr(b as _).into(), warnings))
+    }
+
+    /// `<<`, warning-carrying form - see `shr_checked`.
+    pub fn shl_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+        let (a, mut warnings) = self.int()?;
+        let (b, w2) = rhs.int()?;
+        warnings.extend(w2);
+        Ok((a.wrapping_shl(b as u32).into(), warnings))
+    }
+
+    /// `&`, warning-carrying form - see `shr_checked`. The `List`/`List` case
+    /// never touches `int()` and so never warns.
+    pub fn bitand_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+        match (self, rhs) {
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.add(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((ExprResult::List(l3), vec![]))
+            },
+            (myself, rhs) => {
+                let (a, mut warnings) = myself.int()?;
+                let (b, w2) = rhs.int()?;
+                warnings.extend(w2);
+                Ok(((a & b).into(), warnings))
+            }
+        }
+    }
+
+    /// `|`, warning-carrying form - see `bitand_checked`.
+    pub fn bitor_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+        match (self, rhs) {
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.add(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((ExprResult::List(l3), vec![]))
+            },
+            (myself, rhs) => {
+                let (a, mut warnings) = myself.int()?;
+                let (b, w2) = rhs.int()?;
+                warnings.extend(w2);
+                Ok(((a | b).into(), warnings))
+            }
+        }
+    }
+
+    /// `^`, warning-carrying form - see `shr_checked`.
+    pub fn bitxor_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+        let (a, mut warnings) = self.int()?;
+        let (b, w2) = rhs.int()?;
+        warnings.extend(w2);
+        Ok(((a ^ b).into(), warnings))
+    }
+
+    /// `==`, warning-carrying form - see `shr_checked`. Every non-truncating
+    /// comparison arm (matching variants directly, or the `String`/`List`
+    /// cross-compare) never touches `int()` and so never warns.
+    pub fn eq_checked(&self, other: &Self) -> (bool, Vec<ExprWarning>) {
+        match (self, other) {
+            (Self::Float(l0), Self::Float(r0)) => (l0 == r0, vec![]),
+            (Self::Value(l0), Self::Value(r0)) => (l0 == r0, vec![]),
+            (Self::String(l0), Self::String(r0)) => (l0 == r0, vec![]),
+            (Self::List(l0), Self::List(r0)) => (l0 == r0, vec![]),
+            (Self::Matrix { content: l0, .. }, Self::Matrix { content: r0, .. }) => (l0 == r0, vec![]),
+
+            (Self::String(s), Self::List(l)) | (Self::List(l), Self::String(s)) => {
+                let s = s.as_bytes();
+                let eq = s.len() == l.len()
+                    && s.iter().zip(l.iter()).all(|(a, b)| {
+                        match b.int_value() {
+                            Ok(b) => (*a as i32) == b,
+                            Err(_) => false
+                        }
+                    });
+                (eq, vec![])
+            },
+
+            (Self::String(_), _) | (_, Self::String(_)) => (false, vec![]),
+            (Self::List(_), _) | (_, Self::List(_)) => (false, vec![]),
+
+            _ => {
+                // preserves today's panic-on-incompatible-type behavior
+                let (a, mut warnings) = self.int().unwrap();
+                let (b, w2) = other.int().unwrap();
+                warnings.extend(w2);
+                (a == b, warnings)
+            }
+        }
+    }
+}
+
 impl std::ops::Shr for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn shr(self, rhs: Self) -> Self::Output {
-        // Discard: no `Env` reachable in this bare `ExprResult` trait impl -
-        // a float operand to `>>` silently truncates with no warning here.
-        Ok((self.int_value()?.wrapping_shr(rhs.int_value()? as _)).into())
+        self.shr_checked(rhs).map(|(v, _)| v)
     }
 }
 
@@ -1867,9 +1995,7 @@ impl std::ops::Shl for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn shl(self, rhs: Self) -> Self::Output {
-        // Discard: no `Env` reachable in this bare `ExprResult` trait impl -
-        // a float operand to `<<` silently truncates with no warning here.
-        Ok((self.int_value()?.wrapping_shl(rhs.int_value()? as u32)).into())
+        self.shl_checked(rhs).map(|(v, _)| v)
     }
 }
 
@@ -1877,18 +2003,7 @@ impl std::ops::BitAnd for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
-                    .into_iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.add(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
-            },
-            // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
-            (myself, rhs) => Ok((myself.int_value()? & rhs.int_value()?).into())
-        }
+        self.bitand_checked(rhs).map(|(v, _)| v)
     }
 }
 
@@ -1896,19 +2011,7 @@ impl std::ops::BitOr for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
-                    .into_iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.add(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
-            },
-
-            // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
-            (myself, rhs) => Ok((myself.int_value()? | rhs.int_value()?).into())
-        }
+        self.bitor_checked(rhs).map(|(v, _)| v)
     }
 }
 
@@ -1916,40 +2019,14 @@ impl std::ops::BitXor for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
-        Ok((self.int_value()? ^ rhs.int_value()?).into())
+        self.bitxor_checked(rhs).map(|(v, _)| v)
     }
 }
 
 impl std::cmp::PartialEq for ExprResult {
     #[allow(clippy::non_canonical_partial_ord_impl)]
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Float(l0), Self::Float(r0)) => l0 == r0,
-            (Self::Value(l0), Self::Value(r0)) => l0 == r0,
-            (Self::String(l0), Self::String(r0)) => l0 == r0,
-            (Self::List(l0), Self::List(r0)) => l0 == r0,
-            (Self::Matrix { content: l0, .. }, Self::Matrix { content: r0, .. }) => l0 == r0,
-
-            (Self::String(s), Self::List(l)) | (Self::List(l), Self::String(s)) => {
-                let s = s.as_bytes();
-                if s.len() != l.len() {
-                    return false;
-                }
-                s.iter().zip(l.iter()).all(|(a, b)| {
-                    match b.int_value() {
-                        Ok(b) => (*a as i32) == b,
-                        Err(_) => false
-                    }
-                })
-            },
-
-            (Self::String(_), _) | (_, Self::String(_)) => false,
-            (Self::List(_), _) | (_, Self::List(_)) => false,
-
-            // Discard: no `Env` reachable here (see `Shr`/`Shl` above).
-            _ => self.int_value().unwrap() == other.int_value().unwrap()
-        }
+        self.eq_checked(other).0
     }
 }
 
@@ -2093,5 +2170,61 @@ impl std::ops::SubAssign for ExprResult {
         if let Ok(v) = self.clone().sub(rhs) {
             *self = v
         }
+    }
+}
+
+#[cfg(test)]
+mod int_warning_tests {
+    use super::*;
+
+    #[test]
+    fn a_lossless_float_produces_no_warning() {
+        let (i, warnings) = ExprResult::Float(3.0.into()).int().unwrap();
+        assert_eq!(i, 3);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_lossy_float_produces_exactly_one_warning() {
+        let (i, warnings) = ExprResult::Float(3.5.into()).int().unwrap();
+        assert_eq!(i, 4);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(warnings[0].kind, ExprWarningKind::PrecisionLoss);
+    }
+
+    #[test]
+    fn int_div_never_warns_on_two_integer_operands() {
+        let (v, warnings) = ExprResult::Value(7).int_div(ExprResult::Value(2)).unwrap();
+        assert_eq!(v, ExprResult::Value(3));
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn int_div_truncates_toward_zero_for_negative_operands() {
+        assert_eq!(
+            ExprResult::Value(-7).int_div(ExprResult::Value(2)).unwrap().0,
+            ExprResult::Value(-3)
+        );
+        assert_eq!(
+            ExprResult::Value(7).int_div(ExprResult::Value(-2)).unwrap().0,
+            ExprResult::Value(-3)
+        );
+        assert_eq!(
+            ExprResult::Value(-7).int_div(ExprResult::Value(-2)).unwrap().0,
+            ExprResult::Value(3)
+        );
+    }
+
+    #[test]
+    fn int_div_keeps_both_operands_warnings_distinct() {
+        let (_, warnings) = ExprResult::Float(3.5.into())
+            .int_div(ExprResult::Float(2.5.into()))
+            .unwrap();
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+    }
+
+    #[test]
+    fn int_div_by_zero_is_an_error_not_a_panic() {
+        assert!(ExprResult::Value(1).int_div(ExprResult::Value(0)).is_err());
     }
 }

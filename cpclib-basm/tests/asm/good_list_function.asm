@@ -45,9 +45,9 @@ function sum a, b
 endfunction
 
 data5 equ [2, 1, 0]
-data6 = list_fold(
-	list_map(list_filter(data, "is_even"), "multiply_3_add_1"),
-	10, 
+data6 = list_fold( \
+	list_map(list_filter(data, "is_even"), "multiply_3_add_1"), \
+	10, \
 	"sum") ; TODO allow use of names instead of strings
 
 	assert data6 == 18

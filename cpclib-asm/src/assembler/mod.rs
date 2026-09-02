@@ -2457,6 +2457,34 @@ impl Env {
         }
     }
 
+    /// Push each `cpclib_tokens::ExprWarning` as its own `Env::warnings`
+    /// entry - `env.warnings` is itself the "stack", so no need to nest a
+    /// `Vec` inside one `AssemblerError` value.
+    #[inline(always)]
+    pub fn add_expression_warnings(&mut self, warnings: Vec<cpclib_tokens::ExprWarning>) {
+        for w in warnings {
+            self.add_warning(Box::new(AssemblerError::ExpressionWarning(w)));
+        }
+    }
+
+    /// How many warnings have been recorded so far - paired with
+    /// `locate_warnings_since` to retroactively locate whatever a call
+    /// pushed, the same idiom `visit_located_token` already uses at
+    /// whole-statement granularity.
+    #[inline(always)]
+    pub(crate) fn warnings_len(&self) -> usize {
+        self.warnings.len()
+    }
+
+    /// Locate (idempotently - a no-op for anything already located by a
+    /// deeper call) every warning pushed since `from`.
+    #[inline(always)]
+    pub(crate) fn locate_warnings_since(&mut self, from: usize, span: Z80Span) {
+        for warning in &mut self.warnings[from..] {
+            **warning = warning.clone().locate_warning(span.clone());
+        }
+    }
+
     /// Truncate `value` into an 8-bit slot, warning first if it doesn't
     /// actually fit. Always returns the same truncated byte an unchecked
     /// `(value & 0xFF) as u8` would have - this only adds a warning, it
@@ -2467,9 +2495,10 @@ impl Env {
     #[inline(always)]
     pub fn checked_byte(&mut self, value: i32) -> u8 {
         if !(-128..=255).contains(&value) {
-            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
-                msg: format!("value {value} does not fit in 8 bits")
-            }));
+            self.add_expression_warnings(vec![cpclib_tokens::ExprWarning {
+                kind: cpclib_tokens::ExprWarningKind::Overflow,
+                message: format!("value {value} does not fit in 8 bits")
+            }]);
         }
         (value & 0xFF) as u8
     }
@@ -2478,25 +2507,24 @@ impl Env {
     #[inline(always)]
     pub fn checked_word(&mut self, value: i32) -> u16 {
         if !(-32768..=65535).contains(&value) {
-            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
-                msg: format!("value {value} does not fit in 16 bits")
-            }));
+            self.add_expression_warnings(vec![cpclib_tokens::ExprWarning {
+                kind: cpclib_tokens::ExprWarningKind::Overflow,
+                message: format!("value {value} does not fit in 16 bits")
+            }]);
         }
         (value & 0xFFFF) as u16
     }
 
-    /// Coerce `result` to `i32`, forwarding any truncation warning it
-    /// carries (i.e. `result` was a real/float value) as an assembler
-    /// warning. The building block every call site that resolves a
+    /// Coerce `result` to `i32`, forwarding any truncation warnings it
+    /// carries (i.e. `result` was a real/float value) as assembler
+    /// warnings. The building block every call site that resolves a
     /// user-authored expression into assembled output should use instead of
     /// calling `ExprResult::int()` directly, so a stray float never gets
     /// silently rounded without the user being told.
     #[inline(always)]
     pub fn int_forward(&mut self, result: &ExprResult) -> Result<i32, ExpressionTypeError> {
-        let (val, warn) = result.int()?;
-        if let Some(msg) = warn {
-            self.add_warning(Box::new(AssemblerWarning::AssemblingError { msg }));
-        }
+        let (val, warnings) = result.int()?;
+        self.add_expression_warnings(warnings);
         Ok(val)
     }
 }
@@ -2768,11 +2796,13 @@ impl Env {
 
     /// Write in w the list of symbols
     pub fn generate_symbols_output<W: Write>(
-        &self,
+        &mut self,
         w: &mut W,
         fmt: SymbolOutputFormat
     ) -> std::io::Result<()> {
-        self.symbols_output.generate(w, self.symbols(), fmt)
+        let warnings = self.symbols_output.generate(w, self.symbols(), fmt)?;
+        self.add_expression_warnings(warnings);
+        Ok(())
     }
 
     /// Visit all the tokens of the slice of tokens.

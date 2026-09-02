@@ -598,6 +598,104 @@ mod test_super {
         }
     }
 
+    /// A truncation warning generated *inside* `resolve_impl!` (e.g. a
+    /// binary operation like `<<` coercing a float operand) is located at
+    /// the innermost sub-expression that produced it, not the whole
+    /// statement - `LocatedExpr::resolve`'s per-node relocate loop should
+    /// stamp `3.5 << 1`'s own span, not `ld a, (3.5 << 1) + 1`'s.
+    #[test]
+    fn nested_precision_loss_warning_is_located_at_the_inner_sub_expression() {
+        let code = "
+		org 0x4000
+		ld a, (3.5 << 1) + 1
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
+        match &*env.warnings()[0] {
+            AssemblerError::AlreadyRenderedWarningWithLocation { msg, len, .. } => {
+                assert!(msg.contains("truncated to integer"), "{msg}");
+                assert_eq!(*len, "3.5 << 1".len() as u32, "{msg}");
+            },
+            other => {
+                panic!("expected an AlreadyRenderedWarningWithLocation, got: {other:?}")
+            }
+        }
+    }
+
+    /// Control case: a truncation warning generated *outside* any
+    /// `resolve_impl!` execution (via `Env::int_forward`, after the operand
+    /// expression has already fully resolved - the common `LD A, 10/3`
+    /// shape) keeps exactly the whole-statement location it already had
+    /// before per-node locating was added, via the pre-existing
+    /// `visit_located_token` mechanism. Guards against a future change
+    /// accidentally regressing this common case while refining the rarer one.
+    #[test]
+    fn plain_precision_loss_warning_still_gets_whole_statement_location() {
+        let code = "
+		org 0x4000
+		ld a, 10/3
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
+        match &*env.warnings()[0] {
+            AssemblerError::AlreadyRenderedWarningWithLocation { msg, len, .. } => {
+                assert!(msg.contains("truncated to integer"), "{msg}");
+                assert_eq!(*len, "ld a, 10/3".len() as u32, "{msg}");
+            },
+            other => {
+                panic!("expected an AlreadyRenderedWarningWithLocation, got: {other:?}")
+            }
+        }
+    }
+
+    /// A float-valued `EQU` symbol truncated on `.sym` export now warns
+    /// (previously a silently-accepted, explicitly-flagged gap). Generated
+    /// outside any `LocatedExpr::resolve` call (export walks the symbol
+    /// table after assembly, not source spans), so it stays unlocated -
+    /// still surfaced, just without a precise line/column.
+    #[test]
+    fn float_equ_symbol_warns_on_sym_export() {
+        let code = "
+		org 0x4000
+		FOO equ 3.5
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let mut env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+        assert!(env.warnings().is_empty(), "{:?}", env.warnings());
+
+        let mut out = Vec::new();
+        env.generate_symbols_output(&mut out, crate::assembler::symbols_output::SymbolOutputFormat::Basm)
+            .unwrap();
+
+        assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
+        match &*env.warnings()[0] {
+            AssemblerError::ExpressionWarning(w) => {
+                assert_eq!(w.kind, cpclib_tokens::ExprWarningKind::PrecisionLoss);
+                assert!(w.message.contains("truncated to integer"), "{}", w.message);
+            },
+            other => panic!("expected an ExpressionWarning, got: {other:?}")
+        }
+    }
+
     /// `AssemblerError::warning_category` must classify each of the four
     /// individually-toggleable kinds correctly - the shared basis for
     /// `AssemblingOptions`/`ParserOptions`'s `disabled_warning_categories`

@@ -94,38 +94,51 @@ macro_rules! resolve_impl {
                         cpclib_tokens::BinaryOperation::Div => (a / b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::IntDiv => {
                             a.int_div(b)
-                                .map(|(v, warn)| {
-                                    if let Some(msg) = warn {
-                                        $env.add_warning(Box::new(AssemblerError::AssemblingError { msg }));
-                                    }
-                                    v
-                                })
+                                .map(|(v, warnings)| { $env.add_expression_warnings(warnings); v })
                                 .map_err(AssemblerError::ExpressionTypeError)
                         },
                         cpclib_tokens::BinaryOperation::Mod => (a % b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::Mul => (a * b).map_err(|e| AssemblerError::ExpressionTypeError(e)),
                         cpclib_tokens::BinaryOperation::RightShift => {
-                            (a >> b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                            a.shr_checked(b)
+                                .map(|(v, warnings)| { $env.add_expression_warnings(warnings); v })
+                                .map_err(AssemblerError::ExpressionTypeError)
                         }
                         cpclib_tokens::BinaryOperation::LeftShift => {
-                            (a << b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                            a.shl_checked(b)
+                                .map(|(v, warnings)| { $env.add_expression_warnings(warnings); v })
+                                .map_err(AssemblerError::ExpressionTypeError)
                         }
 
                         cpclib_tokens::BinaryOperation::BinaryAnd => {
-                            (a & b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                            a.bitand_checked(b)
+                                .map(|(v, warnings)| { $env.add_expression_warnings(warnings); v })
+                                .map_err(AssemblerError::ExpressionTypeError)
                         }
                         cpclib_tokens::BinaryOperation::BinaryOr => {
-                            (a | b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                            a.bitor_checked(b)
+                                .map(|(v, warnings)| { $env.add_expression_warnings(warnings); v })
+                                .map_err(AssemblerError::ExpressionTypeError)
                         }
                         cpclib_tokens::BinaryOperation::BinaryXor => {
-                            (a ^ b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                            a.bitxor_checked(b)
+                                .map(|(v, warnings)| { $env.add_expression_warnings(warnings); v })
+                                .map_err(AssemblerError::ExpressionTypeError)
                         }
 
                         cpclib_tokens::BinaryOperation::BooleanAnd => Ok(ExprResult::from(a.bool()? && (b.bool()?))),
                         cpclib_tokens::BinaryOperation::BooleanOr => Ok(ExprResult::from(a.bool()? || (b.bool()?))),
 
-                        cpclib_tokens::BinaryOperation::Equal => Ok((a == b).into()),
-                        cpclib_tokens::BinaryOperation::Different => Ok((a != b).into()),
+                        cpclib_tokens::BinaryOperation::Equal => {
+                            let (eq, warnings) = a.eq_checked(&b);
+                            $env.add_expression_warnings(warnings);
+                            Ok(eq.into())
+                        },
+                        cpclib_tokens::BinaryOperation::Different => {
+                            let (eq, warnings) = a.eq_checked(&b);
+                            $env.add_expression_warnings(warnings);
+                            Ok((!eq).into())
+                        },
 
                         cpclib_tokens::BinaryOperation::LowerOrEqual => Ok((a <= b).into()),
                         cpclib_tokens::BinaryOperation::StrictlyLower => Ok((a < b).into()),
