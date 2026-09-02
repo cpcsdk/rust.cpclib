@@ -33,6 +33,7 @@ pub mod support;
 pub mod symbols_output;
 
 use std::borrow::BorrowMut;
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
@@ -508,6 +509,11 @@ pub struct Env {
     ga_mmr: u8,
     /// duplicate of the output address to be sure to select the appropriate page info
     output_address: u16,
+    /// Memoized `(output_address, ga_mmr, page index)` for `active_page_index`
+    /// - see that method's doc comment. `Cell` because `active_page_info`
+    /// (many other accessors' foundation) takes `&self`; self-invalidating
+    /// on the key, so this can never go stale, only briefly not-yet-warm.
+    active_page_index_cache: Cell<Option<(u16, u8, usize)>>,
 
     /// Ensemble of pages (2 for a stock CPC) for the snapshot
 
@@ -717,6 +723,7 @@ impl Clone for Env {
             stable_counters: self.stable_counters.clone(),
             ga_mmr: self.ga_mmr,
             output_address: self.output_address,
+            active_page_index_cache: self.active_page_index_cache.clone(),
             sna: self.sna.clone(),
             sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
@@ -1899,16 +1906,39 @@ impl Env {
 
 /// Output handling
 impl Env {
+    /// The `Snapshot`-mode active page index, computed from
+    /// `(output_address, ga_mmr)` - the only two fields it actually depends
+    /// on - and memoized in `active_page_index_cache` against exactly that
+    /// pair. Self-invalidating by construction: whichever of the two last
+    /// changed, the cached key simply stops matching and this recomputes -
+    /// there is no separate "remember to invalidate" step to get wrong, so
+    /// this can never observe a stale page. `output_byte` alone reads the
+    /// active page (directly or via `logical_output_address`/
+    /// `physical_output_address`/etc., which all route through
+    /// `active_page_info`) closer to a dozen times without either field
+    /// changing in between, so this turns what was a dozen re-derivations
+    /// of the same value into one.
+    fn active_page_index(&self) -> usize {
+        if let Some((cached_addr, cached_mmr, cached_idx)) = self.active_page_index_cache.get()
+            && cached_addr == self.output_address
+            && cached_mmr == self.ga_mmr
+        {
+            return cached_idx;
+        }
+
+        let idx = self
+            .logical_to_physical_address(self.output_address)
+            .to_memory()
+            .page() as usize;
+        self.active_page_index_cache
+            .set(Some((self.output_address, self.ga_mmr, idx)));
+        idx
+    }
+
     /// TODO
     fn active_page_info(&self) -> &PageInformation {
         match self.output_kind() {
-            OutputKind::Snapshot => {
-                let active_page = self
-                    .logical_to_physical_address(self.output_address)
-                    .to_memory()
-                    .page() as usize;
-                &self.sna.pages_info[active_page]
-            },
+            OutputKind::Snapshot => &self.sna.pages_info[self.active_page_index()],
             OutputKind::Cpr => {
                 self.cpr
                     .as_ref()
@@ -1923,10 +1953,7 @@ impl Env {
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
         match self.output_kind() {
             OutputKind::Snapshot => {
-                let active_page = self
-                    .logical_to_physical_address(self.output_address)
-                    .to_memory()
-                    .page() as usize;
+                let active_page = self.active_page_index();
                 &mut self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
@@ -4285,6 +4312,7 @@ impl Env {
             sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
             current_section: None,
             output_address: 0,
+            active_page_index_cache: Cell::new(None),
             free_banks: DecoratedPages::default(),
 
             real_nb_passes: 0,
