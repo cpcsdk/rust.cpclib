@@ -609,6 +609,16 @@ pub struct Env {
     symbols_output: SymbolOutputGenerator,
 
     warnings: Vec<Box<AssemblerWarning>>,
+    /// Monotonic count of every `Box<AssemblerWarning>` ever pushed via
+    /// `add_warning` - unlike `warnings.len()`, this never shrinks (
+    /// `merge_overriding_warnings` truncates `warnings` as it merges
+    /// adjacent entries), so it is what `cleanup_warnings` compares against
+    /// `warnings_cleaned_up_to` to detect "nothing new happened" cheaply.
+    warning_push_count: u64,
+    /// `warning_push_count`'s value as of the last `cleanup_warnings` call -
+    /// see that method's doc comment for why comparing these two avoids
+    /// redundant work.
+    warnings_cleaned_up_to: u64,
 
     /// Counter to disable some instruction in rorg stuff
     nested_rorg: usize,
@@ -722,6 +732,8 @@ impl Clone for Env {
             expression_depth: self.expression_depth,
             symbols_output: self.symbols_output.clone(),
             warnings: self.warnings.clone(),
+            warning_push_count: self.warning_push_count,
+            warnings_cleaned_up_to: self.warnings_cleaned_up_to,
             nested_rorg: self.nested_rorg,
             sections: self.sections.clone(),
             current_section: self.current_section.clone(),
@@ -2468,6 +2480,7 @@ impl Env {
         let opts = self.options().assemble_options();
         if opts.enable_warnings && opts.is_warning_category_enabled(warning.warning_category()) {
             self.warnings.push(warning);
+            self.warning_push_count += 1;
         }
     }
 
@@ -4265,6 +4278,8 @@ impl Env {
             crunched_section_state: None,
 
             warnings: Vec::new(),
+            warning_push_count: 0,
+            warnings_cleaned_up_to: 0,
             nested_rorg: 0,
 
             sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
@@ -5580,11 +5595,36 @@ impl Env {
         });
     }
 
+    /// Merges adjacent `OverrideMemory` warnings and renders every warning
+    /// still holding a live `Z80Span` into an owned, safe-to-keep shape -
+    /// see `render_warnings`'s doc comment for why the rendering itself
+    /// can't be skipped or deferred.
+    ///
+    /// Called at the end of *every* `visit_processed_tokens` (`processed_token.rs`)
+    /// - once per macro/struct expansion, `INCLUDE`, `IF` branch and `REPEAT`
+    /// iteration visited, not just once per pass - because any of those can
+    /// be the last chance to render a warning before the buffer its span
+    /// points into gets reused. Both `merge_overriding_warnings` and
+    /// `render_warnings` are full `O(warnings.len())` scans, so calling this
+    /// unconditionally made total cost scale with
+    /// `(nested visits) × (warnings accumulated so far)` - largely wasted
+    /// work, since a real demoscene source visits far more nested blocks
+    /// than it ever emits warnings (confirmed as the single largest cost in
+    /// this crate under profiling: ~12% of all instructions assembling a
+    /// real project, versus a low single-digit warning count). Skipping
+    /// outright when nothing was pushed since the last call is always safe:
+    /// with no new warning, there is nothing unrendered that could go
+    /// dangling, and the merge has nothing new to merge.
     pub fn cleanup_warnings(&mut self) {
         if !self.options().assemble_options().enable_warnings {
             debug_assert!(self.warnings.is_empty());
             return;
         }
+
+        if self.warning_push_count == self.warnings_cleaned_up_to {
+            return;
+        }
+        self.warnings_cleaned_up_to = self.warning_push_count;
 
         self.merge_overriding_warnings();
         self.render_warnings();
