@@ -636,7 +636,16 @@ impl ListingOutput {
                 symbols
                     .extend_local_and_patterns_for_symbol(raw)
                     .ok()
-                    .map(|symbol| symbol.to_string())
+                    // `.value().to_owned()` (str's specialized, single-alloc
+                    // to-owned path) instead of `.to_string()` (Symbol's
+                    // Display impl, which starts from an empty String and
+                    // grows it via `Formatter::write_str` - always at least
+                    // one reallocation). This call fires at least once per
+                    // listing line and once per lexical chunk on the
+                    // fallback path (expand_source_line_patterns), so it
+                    // was a real contributor in DHAT profiling of a real
+                    // project's listing generation.
+                    .map(|symbol| symbol.value().to_owned())
             })
             .unwrap_or_else(|| raw.to_string())
     }

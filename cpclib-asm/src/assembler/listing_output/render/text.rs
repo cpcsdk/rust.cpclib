@@ -7,7 +7,7 @@ use super::super::format::{
 };
 use super::shared::{
     ListingDeferredRender, ListingLineRender, ListingNotice, TextListingRenderer,
-    global_prefix_for_symbol, is_identifier_char, qualify_local_symbol
+    global_prefix_for_symbol, is_identifier_char
 };
 
 impl TextListingRenderer {
@@ -25,25 +25,38 @@ impl TextListingRenderer {
         }
     }
 
+    /// Walks `text` byte-slicing out each identifier-like run instead of
+    /// accumulating it char-by-char into a fresh `String` (DHAT profiling of
+    /// a real project's listing generation found the old char-by-char
+    /// `String::from(ch)` + `qualify_local_symbol`'s own `to_string()` was
+    /// the single largest allocation source in the whole build - ~5M
+    /// allocations, one per identifier character per line, doubled since
+    /// both the raw and expanded source line are qualified). A non-local
+    /// token (the overwhelming majority) is now pushed straight from the
+    /// original `&str` with no allocation of its own; only a `.`-prefixed
+    /// local symbol pays for the global-prefix push, same as before.
     fn qualify_locals_in_line(&self, text: &str) -> String {
-        let mut output = String::new();
-        let mut chars = text.chars().peekable();
+        let mut output = String::with_capacity(text.len());
+        let mut chars = text.char_indices().peekable();
 
-        while let Some(ch) = chars.next() {
+        while let Some((start, ch)) = chars.next() {
             if is_identifier_char(ch) {
-                let mut token = String::from(ch);
-                while let Some(&next) = chars.peek() {
-                    if !is_identifier_char(next) {
+                let mut end = start + ch.len_utf8();
+                while let Some(&(next_idx, next_ch)) = chars.peek() {
+                    if !is_identifier_char(next_ch) {
                         break;
                     }
-                    token.push(next);
+                    end = next_idx + next_ch.len_utf8();
                     chars.next();
                 }
 
-                output.push_str(&qualify_local_symbol(
-                    &token,
-                    self.current_global_symbol.as_deref()
-                ));
+                let token = &text[start..end];
+                if token.starts_with('.')
+                    && let Some(global) = self.current_global_symbol.as_deref()
+                {
+                    output.push_str(global);
+                }
+                output.push_str(token);
                 continue;
             }
 

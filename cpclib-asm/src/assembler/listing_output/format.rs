@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use cpclib_common::itertools::Itertools;
-
 pub const MAX_RENDERED_SOURCE_COLUMN_CHARS: usize = 80;
 pub const DEFAULT_LISTING_LINE_TEMPLATE: &str = "{A} {P} {C} {L4} {S}";
 
@@ -98,11 +96,37 @@ fn hex_byte_for_impl(format: &ListingOutputFormat, b: u8) -> String {
     }
 }
 
+const HEX_DIGITS_LOWER: &[u8; 16] = b"0123456789abcdef";
+const HEX_DIGITS_UPPER: &[u8; 16] = b"0123456789ABCDEF";
+
+/// Writes each byte as two hex digits, space-separated, straight into `out`.
+/// Used instead of `format!("{b:02x}")` per byte + `itertools::join` (the
+/// old `format_bytes_raw_for_impl`/`format_bytes_for_impl` shape): that was
+/// `bytes.len() + 1` allocations just to render one byte column, on the
+/// most frequently rendered field in the listing (every line with output
+/// bytes goes through this). DHAT profiling of a real project's listing
+/// generation found it among the largest remaining allocation sites after
+/// fixing the bigger per-identifier/per-placeholder hotspots.
+fn write_hex_bytes(out: &mut String, format: &ListingOutputFormat, bytes: &[u8]) {
+    let digits = if format.uppercase_hex {
+        HEX_DIGITS_UPPER
+    }
+    else {
+        HEX_DIGITS_LOWER
+    };
+    for (i, &b) in bytes.iter().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        out.push(digits[(b >> 4) as usize] as char);
+        out.push(digits[(b & 0xF) as usize] as char);
+    }
+}
+
 fn format_bytes_raw_for_impl(format: &ListingOutputFormat, bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|b| hex_byte_for_impl(format, *b))
-        .join(" ")
+    let mut out = String::with_capacity(bytes.len() * 3);
+    write_hex_bytes(&mut out, format, bytes);
+    out
 }
 
 fn format_bytes_for_impl(
@@ -110,19 +134,31 @@ fn format_bytes_for_impl(
     bytes_per_line: usize,
     bytes: &[u8]
 ) -> String {
-    let rendered = format_bytes_raw_for_impl(format, bytes);
     let full_width = bytes_per_line * 3;
-    format!("{rendered:<full_width$}")
+    let mut out = String::with_capacity(full_width.max(bytes.len() * 3));
+    write_hex_bytes(&mut out, format, bytes);
+    // `format!("{rendered:<full_width$}")`'s equivalent: pad, never truncate.
+    // Every char pushed above is ASCII, so byte length tracks char count.
+    while out.len() < full_width {
+        out.push(' ');
+    }
+    out
 }
 
 fn render_source_column_impl(line: Option<&str>) -> String {
-    line.map(|line| {
-        line.trim_start()
-            .chars()
-            .take(MAX_RENDERED_SOURCE_COLUMN_CHARS)
-            .collect()
-    })
-    .unwrap_or_default()
+    let Some(line) = line else {
+        return String::new();
+    };
+    let trimmed = line.trim_start();
+    // A byte length within the char cap can't possibly need truncating (byte
+    // count >= char count always), so the vast majority of lines - far
+    // shorter than MAX_RENDERED_SOURCE_COLUMN_CHARS - skip straight to a
+    // single-copy `to_owned()` instead of walking char boundaries to
+    // rebuild the same string one char at a time.
+    if trimmed.len() <= MAX_RENDERED_SOURCE_COLUMN_CHARS {
+        return trimmed.to_owned();
+    }
+    trimmed.chars().take(MAX_RENDERED_SOURCE_COLUMN_CHARS).collect()
 }
 
 fn format_line_with_template_for_impl(
@@ -138,23 +174,34 @@ fn format_line_with_template_for_impl(
 ) -> String {
     let template = format.listing_line_template.as_str();
     let mut output = String::with_capacity(template.len() + 32);
-    let mut consumed = HashSet::<String>::new();
-    let mut chars = template.chars().peekable();
+    // Borrows placeholder names straight out of `template` instead of
+    // collecting each into its own `String` (see the char-by-char build-up
+    // below): the template is a fixed, short, small-alphabet string re-scanned
+    // for every listing line, so a `String::new()` + push-per-char build-up
+    // and a per-occurrence `.clone()` into this set were pure per-line
+    // overhead - DHAT profiling of a real project's listing generation
+    // found this loop's `String::push` growth among the top allocation
+    // sites.
+    let mut consumed = HashSet::<&str>::new();
+    let mut chars = template.char_indices().peekable();
 
-    while let Some(ch) = chars.next() {
+    while let Some((start, ch)) = chars.next() {
         if ch != '{' {
             output.push(ch);
             continue;
         }
 
-        let mut placeholder = String::new();
-        while let Some(&next) = chars.peek() {
+        let placeholder_start = start + 1;
+        let mut placeholder_end = placeholder_start;
+        while let Some(&(next_idx, next_ch)) = chars.peek() {
             chars.next();
-            if next == '}' {
+            if next_ch == '}' {
+                placeholder_end = next_idx;
                 break;
             }
-            placeholder.push(next);
+            placeholder_end = next_idx + next_ch.len_utf8();
         }
+        let placeholder = &template[placeholder_start..placeholder_end];
 
         if placeholder.is_empty() {
             output.push('{');
@@ -162,11 +209,11 @@ fn format_line_with_template_for_impl(
             continue;
         }
 
-        if !consumed.insert(placeholder.clone()) {
+        if !consumed.insert(placeholder) {
             continue;
         }
 
-        let rendered = match placeholder.as_str() {
+        let rendered = match placeholder {
             "A" => {
                 logical_address
                     .map(|value| {
