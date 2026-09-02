@@ -1,8 +1,43 @@
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
 use cpclib_tokens::opcode_table::{
     TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRED, TABINSTRFD, TABINSTRFDCB
 };
 
 use crate::preamble::*;
+
+/// Pre-parsed `Token`s for every fixed (argument-less) representation string
+/// across the non-prefixed/CB/ED/DD/FD opcode tables, built once and reused.
+///
+/// `disassemble()` is not just a debug/display feature - it runs on every
+/// byte emitted while a `TICKER`/stable-duration counter is active (see
+/// `Env::visit_db_or_dw_or_str`), to check for timing-incompatible looping
+/// instructions. Real code hits this: e.g. a `db` byte carrying a
+/// self-modifying-code direction value that happens to equal a valid
+/// single-byte opcode (`INC HL`/`DEC HL` and friends) goes through here on
+/// every such emission. Without this cache, each one re-formats the LUT
+/// string (`.to_owned()`) and reparses it through the *entire* Z80 parser
+/// just to reconstruct the same fixed `Token` every time - this table lets
+/// that collapse to a HashMap lookup + clone.
+fn simple_opcode_cache() -> &'static HashMap<&'static str, Token> {
+    static CACHE: OnceLock<HashMap<&'static str, Token>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let mut map = HashMap::new();
+        for tab in [&TABINSTR, &TABINSTRCB, &TABINSTRED, &TABINSTRDD, &TABINSTRFD] {
+            for &representation in tab.iter() {
+                if !representation.is_empty()
+                    && !representation.contains("nn")
+                    && !map.contains_key(representation)
+                    && let Ok(token) = string_to_token(representation)
+                {
+                    map.insert(representation, token);
+                }
+            }
+        }
+        map
+    })
+}
 
 /// Generate a listing from the list of bytes. An error is generated if it is impossible to disassemble the flux
 /// TODO really implement it
@@ -75,6 +110,16 @@ pub fn disassemble_with_potential_argument<'stream>(
     bytes: &'stream [u8]
 ) -> Result<(Token, &'stream [u8]), String> {
     let representation: &'static str = lut[opcode as usize];
+
+    // Fast path: a representation with no "nn"/"nnnn" placeholder takes no
+    // argument bytes and, below, would just be reparsed unchanged - skip
+    // straight to the cached, already-parsed Token instead ("nn" also
+    // matches as a substring of "nnnn", so this one check covers both).
+    if !representation.contains("nn")
+        && let Some(token) = simple_opcode_cache().get(representation)
+    {
+        return Ok((token.clone(), bytes));
+    }
 
     // get the first argument if any
     let (representation, bytes) = if representation.contains("nnnn") {
