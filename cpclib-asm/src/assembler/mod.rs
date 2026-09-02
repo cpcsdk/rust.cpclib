@@ -5751,14 +5751,18 @@ impl Env {
             }
 
             if label.starts_with(".") {
-                let warning = AssemblerError::AssemblingError {
+                // `AssemblerWarning` is `AssemblerError` (type alias) and
+                // `Display for AssemblingError` is just `write!(f, "{msg}")`
+                // - building an AssemblerError here and then re-rendering
+                // it via `.to_string()` into a second, identically-shaped
+                // value produced the exact same text through a wasted
+                // allocate-format-parse round trip. One construction is
+                // enough.
+                let warning = AssemblerWarning::AssemblingError {
                     msg: format!(
                         "{} is not a local label. A better name without the dot would be better",
                         label
                     )
-                };
-                let warning = AssemblerWarning::AssemblingError {
-                    msg: warning.to_string()
                 };
                 self.add_warning(Box::new(warning));
             }
