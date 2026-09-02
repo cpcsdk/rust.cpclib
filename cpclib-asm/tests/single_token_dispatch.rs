@@ -4,8 +4,17 @@
 //! rescanning it independently. These tests lock down the edge cases that
 //! made that fusion easy to get subtly wrong:
 //!
-//! - the `SL1` opcode alias, whose recognition depends on where exactly the
-//!   leading-word scan stops relative to the digit glued onto `SL`
+//! - the `SL1` and `SRL8` opcode aliases, whose recognition depends on where
+//!   exactly the leading-word scan stops relative to the digit glued onto
+//!   `SL`/`SRL` - `SRL8` specifically was missed in the first pass of this
+//!   fix (caught by `cpclib-basm`'s own test suite, `good_fake_instructions4.asm`)
+//!   since it's dispatched through a nested `alt()` branch (`parse_srl8`)
+//!   rather than an inline digit literal at the match-arm call site, so a
+//!   textual grep for the `SL`/`SL1` pattern didn't find it. Cross-checked
+//!   against every digit-suffixed `Mnemonic` variant in the enum (`Sl1`,
+//!   `Srl8`, `Nop2`) - `Nop2`/`NOPS2` is confirmed separately as pre-existing
+//!   dead code, unreachable before this work too (its table's own scan is
+//!   untouched by this change), so it's intentionally not covered here.
 //! - `NOP` (and other directive-table-only mnemonics), which must still
 //!   dispatch correctly now that both tables are tried against a single
 //!   shared scan of the word
@@ -78,6 +87,21 @@ fn sl1_via_parse_single_token_shared_scan_also_works() {
             None
         )
     );
+}
+
+/// `SRL8` is a fake instruction (SRL applied to a 16-bit register pair,
+/// implemented as several real opcodes) - unlike `SL1`, a bare `SRL8 BC`
+/// statement is NOT intercepted by the statement-level label/macro-call
+/// heuristic, so this regressed all the way up through `assemble()` (caught
+/// by `cpclib-basm`'s `good_fake_instructions4.asm` test) rather than only
+/// being reachable via the low-level `parse_token`/`parse_single_token`
+/// entry points the way `SL1` is in the tests above.
+#[test]
+fn srl8_fake_instruction_still_assembles_for_every_register_pair() {
+    for reg in ["BC", "DE", "HL", "IX", "IY"] {
+        let code = format!("SRL8 {reg}\n");
+        assemble(&code).unwrap_or_else(|e| panic!("SRL8 {reg} must assemble: {e}"));
+    }
 }
 
 /// `SLA`/`SLL`/`SRA`/`SRL` are real 3-letter mnemonics with no trailing

@@ -1020,6 +1020,17 @@ pub fn parse_shifts_and_rotations_fake(
 /// Parse SRL8 rr -- fake instruction: SRL8 BC/DE/HL/IX/IY
 pub fn parse_srl8(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let _ = ('8', my_space0).parse_next(input)?;
+    parse_srl8_arg(input)
+}
+
+/// The register-argument half of `parse_srl8`, shared with the `"SRL8"`
+/// literal branch in `dispatch_token2` (`common.rs`) - reached via
+/// `parse_single_token`'s wider, digit-inclusive leading-word scan, where
+/// the `'8'` is already part of the scanned word (and any trailing
+/// whitespace already trimmed by that scan), unlike `parse_srl8` above
+/// (reached via `parse_token2`'s own alpha-only scan, which stops at `SRL`
+/// and must hand-consume the literal `'8'` itself).
+pub fn parse_srl8_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let arg = alt((parse_register16, parse_indexregister16)).parse_next(input)?;
     let token = LocatedTokenInner::new_opcode(Mnemonic::Srl8, Some(arg), None);
     let warning =

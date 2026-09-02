@@ -244,6 +244,12 @@ fn dispatch_token2(
             parse_shifts_and_rotations(Mnemonic::Srl),
             parse_shifts_and_rotations_fake(Mnemonic::Srl),
         )).parse_next(input),
+        // Same fake instruction as the "SRL" branch's `parse_srl8` above,
+        // reached when `word` was scanned with a digit-inclusive class
+        // (`parse_single_token`'s shared scan) and so is already the full
+        // literal "SRL8" rather than "SRL" - see `parse_srl8_arg`'s doc
+        // comment. Mirrors the "SL"/"SL1" pair just above.
+        h if hashed_choice!(h, word, b"SRL8") => cut_err(parse_srl8_arg).parse_next(input),
         h if hashed_choice!(h, word, b"SUB") => parse_sub.parse_next(input),
 
         h if hashed_choice!(h, word, b"XOR") => parse_logical_operator(Mnemonic::Xor).parse_next(input),
