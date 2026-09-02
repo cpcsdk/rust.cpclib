@@ -1088,6 +1088,7 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                     .iter()
                     .map(try_eval_expr_without_context)
                     .collect::<Result<Vec<_>, _>>()?
+                    .into()
             ))
         },
         Expr::Paren(inner) => try_eval_expr_without_context(inner),
@@ -1162,6 +1163,19 @@ pub struct ExprWarning {
 
 /// The successful result of an evaluation.
 /// Embeds  a real,  an integer or a string
+///
+/// `List`/`Matrix` wrap their payload in `Arc` rather than storing it
+/// directly: a symbol's value is looked up and `clone()`d on every
+/// reference to it (`resolve()` has to return an owned `ExprResult`), and
+/// without this a large or nested list literal - e.g. `EQU`'d once, then
+/// read inside a `REPEAT`-unrolled macro thousands of times - paid a full
+/// recursive deep-copy on every single read. With `Arc`, `clone()` is an
+/// atomic refcount bump; mutation (`list_set`, `matrix_set`, and friends in
+/// `cpclib-asm`'s `list.rs`/`matrix.rs`) goes through `Arc::make_mut`/
+/// `Arc::try_unwrap`, which still clones - but only when the value is
+/// genuinely shared, not on every read. `Arc` (not `Rc`) because `Env`
+/// crosses thread boundaries via `Arc<RwLock<&mut Env>>` in a few places
+/// (parallel token-tree construction) - `ExprResult` has to stay `Send`.
 #[derive(Eq, Debug, Clone)]
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
@@ -1169,11 +1183,11 @@ pub enum ExprResult {
     Char(u8),
     Bool(bool),
     String(SmolStr),
-    List(Vec<ExprResult>),
+    List(std::sync::Arc<Vec<ExprResult>>),
     Matrix {
         width: usize,
         height: usize,
-        content: Vec<ExprResult>
+        content: std::sync::Arc<Vec<ExprResult>>
     }
 }
 
@@ -1250,7 +1264,14 @@ impl From<char> for ExprResult {
 
 impl<T: Into<ExprResult> + Clone> From<&[T]> for ExprResult {
     fn from(slice: &[T]) -> Self {
-        ExprResult::List(slice.iter().cloned().map(|e| e.into()).collect())
+        ExprResult::List(
+            slice
+                .iter()
+                .cloned()
+                .map(|e| e.into())
+                .collect::<Vec<_>>()
+                .into()
+        )
     }
 }
 
@@ -1451,9 +1472,11 @@ impl ExprResult {
         &self.list_content()[pos]
     }
 
+    /// Clones the backing `Vec` only if it's genuinely shared (`Arc::make_mut`) -
+    /// the common case, a value nobody else references, mutates in place.
     pub fn list_set(&mut self, pos: usize, value: ExprResult) {
         match self {
-            ExprResult::List(content, ..) => content[pos] = value,
+            ExprResult::List(content, ..) => std::sync::Arc::make_mut(content)[pos] = value,
             _ => panic!("not a list")
         }
     }
@@ -1462,7 +1485,9 @@ impl ExprResult {
 impl ExprResult {
     pub fn matrix_set(&mut self, y: usize, x: usize, value: ExprResult) {
         match self {
-            ExprResult::Matrix { content, .. } => content[y].list_set(x, value),
+            ExprResult::Matrix { content, .. } => {
+                std::sync::Arc::make_mut(content)[y].list_set(x, value)
+            },
             _ => panic!("not a matrix")
         }
     }
@@ -1492,17 +1517,17 @@ impl ExprResult {
 
     pub fn matrix_rows(&self) -> &[ExprResult] {
         match self {
-            ExprResult::Matrix { content, .. } => content,
+            ExprResult::Matrix { content, .. } => content.as_slice(),
             _ => panic!("not a matrix")
         }
     }
 
     pub fn matrix_col(&self, x: usize) -> ExprResult {
-        let l = (0..self.matrix_height())
+        let l: Vec<ExprResult> = (0..self.matrix_height())
             .map(|row| self.matrix_rows()[row].list_get(x))
             .cloned()
             .collect();
-        ExprResult::List(l)
+        ExprResult::List(l.into())
     }
 
     pub fn matrix_set_col(&mut self, x: usize, values: &[ExprResult]) {
@@ -1526,9 +1551,12 @@ impl ExprResult {
                         cols[col_idx].push(col_val.clone())
                     }
                 }
-                let cols = cols.into_iter().map(ExprResult::List).collect();
+                let cols: Vec<ExprResult> = cols
+                    .into_iter()
+                    .map(|c| ExprResult::List(c.into()))
+                    .collect();
                 ExprResult::Matrix {
-                    content: cols,
+                    content: cols.into(),
                     width: *height,
                     height: *width
                 }
@@ -1679,12 +1707,12 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             },
 
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
+                let l3 = std::sync::Arc::unwrap_or_clone(l1)
                     .into_iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.add(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
+                Ok(ExprResult::List(l3.into()))
             },
 
             (ExprResult::Char(c), _) => ExprResult::Value(c as _) + rhs.clone(),
@@ -1746,12 +1774,12 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             (any, ExprResult::Char(c)) => any - ExprResult::Value(*c as _),
 
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
+                let l3 = std::sync::Arc::unwrap_or_clone(l1)
                     .into_iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.sub(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
+                Ok(ExprResult::List(l3.into()))
             },
 
             (any, rhs) => {
@@ -1789,7 +1817,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
                     .zip(l2.iter())
                     .map(|(a, b)| a.clone().mul(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
+                Ok(ExprResult::List(l3.into()))
             },
 
             (..) => {
@@ -1826,7 +1854,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
                     .zip(l2.iter())
                     .map(|(a, b)| a.clone().div(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
+                Ok(ExprResult::List(l3.into()))
             },
 
             (..) => {
@@ -1873,7 +1901,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
                     .zip(l2.iter())
                     .map(|(a, b)| a.clone().rem(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3))
+                Ok(ExprResult::List(l3.into()))
             },
 
             (..) => {
@@ -1911,12 +1939,12 @@ impl ExprResult {
     pub fn bitand_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
         match (self, rhs) {
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
+                let l3 = std::sync::Arc::unwrap_or_clone(l1)
                     .into_iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.add(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok((ExprResult::List(l3), vec![]))
+                Ok((ExprResult::List(l3.into()), vec![]))
             },
             (myself, rhs) => {
                 let (a, mut warnings) = myself.int()?;
@@ -1931,12 +1959,12 @@ impl ExprResult {
     pub fn bitor_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
         match (self, rhs) {
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
+                let l3 = std::sync::Arc::unwrap_or_clone(l1)
                     .into_iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.add(b))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok((ExprResult::List(l3), vec![]))
+                Ok((ExprResult::List(l3.into()), vec![]))
             },
             (myself, rhs) => {
                 let (a, mut warnings) = myself.int()?;

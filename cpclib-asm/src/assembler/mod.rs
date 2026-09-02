@@ -33,7 +33,6 @@ pub mod support;
 pub mod symbols_output;
 
 use std::borrow::BorrowMut;
-use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
@@ -510,10 +509,17 @@ pub struct Env {
     /// duplicate of the output address to be sure to select the appropriate page info
     output_address: u16,
     /// Memoized `(output_address, ga_mmr, page index)` for `active_page_index`
-    /// - see that method's doc comment. `Cell` because `active_page_info`
-    /// (many other accessors' foundation) takes `&self`; self-invalidating
-    /// on the key, so this can never go stale, only briefly not-yet-warm.
-    active_page_index_cache: Cell<Option<(u16, u8, usize)>>,
+    /// - see that method's doc comment. Needs interior mutability because
+    /// `active_page_info` (many other accessors' foundation) takes `&self`;
+    /// self-invalidating on the key, so this can never go stale, only
+    /// briefly not-yet-warm. `Mutex`, not `Cell`: `Env` crosses threads via
+    /// `Arc<RwLock<&mut Env>>` in a few places (parallel token-tree
+    /// construction, gated behind the `rayon` feature) - `Cell` isn't
+    /// `Sync`, which `Env` has to stay for that. The lock is never actually
+    /// contended (that outer `RwLock` already serializes real access to
+    /// `Env`), so this costs one uncontended lock/unlock, far cheaper than
+    /// the redundant page-index recomputation it replaces.
+    active_page_index_cache: std::sync::Mutex<Option<(u16, u8, usize)>>,
 
     /// Ensemble of pages (2 for a stock CPC) for the snapshot
 
@@ -723,7 +729,9 @@ impl Clone for Env {
             stable_counters: self.stable_counters.clone(),
             ga_mmr: self.ga_mmr,
             output_address: self.output_address,
-            active_page_index_cache: self.active_page_index_cache.clone(),
+            active_page_index_cache: std::sync::Mutex::new(
+                *self.active_page_index_cache.lock().unwrap()
+            ),
             sna: self.sna.clone(),
             sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
@@ -1919,7 +1927,8 @@ impl Env {
     /// changing in between, so this turns what was a dozen re-derivations
     /// of the same value into one.
     fn active_page_index(&self) -> usize {
-        if let Some((cached_addr, cached_mmr, cached_idx)) = self.active_page_index_cache.get()
+        let mut cache = self.active_page_index_cache.lock().unwrap();
+        if let Some((cached_addr, cached_mmr, cached_idx)) = *cache
             && cached_addr == self.output_address
             && cached_mmr == self.ga_mmr
         {
@@ -1930,8 +1939,7 @@ impl Env {
             .logical_to_physical_address(self.output_address)
             .to_memory()
             .page() as usize;
-        self.active_page_index_cache
-            .set(Some((self.output_address, self.ga_mmr, idx)));
+        *cache = Some((self.output_address, self.ga_mmr, idx));
         idx
     }
 
@@ -4312,7 +4320,7 @@ impl Env {
             sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
             current_section: None,
             output_address: 0,
-            active_page_index_cache: Cell::new(None),
+            active_page_index_cache: std::sync::Mutex::new(None),
             free_banks: DecoratedPages::default(),
 
             real_nb_passes: 0,
@@ -4894,7 +4902,9 @@ impl Env {
             either::Either::Right(values) => {
                 match self.resolve_expr_must_never_fail(values)? {
                     ExprResult::List(values) => {
-                        for (i, counter_value) in values.into_iter().enumerate() {
+                        for (i, counter_value) in
+                            std::sync::Arc::unwrap_or_clone(values).into_iter().enumerate()
+                        {
                             self.inner_visit_repeat(
                                 Some(counter_name),
                                 Some(counter_value),
@@ -6009,7 +6019,7 @@ impl Env {
                     Ok(())
                 },
                 ExprResult::List(l) => {
-                    for c in l {
+                    for c in l.iter() {
                         output_expr_result(env, c, delta, mask)?;
                     }
                     Ok(())

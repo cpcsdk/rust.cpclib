@@ -269,6 +269,7 @@ macro_rules! resolve_impl {
                 $self.list().iter()
                     .map(|e| e.resolve($env))
                     .collect::<Result<Vec<_>, _>>()?
+                    .into()
                 )
             )
         }
@@ -310,7 +311,7 @@ macro_rules! resolve_impl {
                         let byte_list: Vec<ExprResult> = bytes.iter()
                             .map(|&b| ExprResult::Value(i32::from(b)))
                             .collect();
-                        Ok(ExprResult::List(byte_list))
+                        Ok(ExprResult::List(byte_list.into()))
                     }
                 }
             }.map_err(|e| Box::new(e))

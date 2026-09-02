@@ -1038,7 +1038,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Box<Asse
                 .iter()
                 .map(|b| ExprResult::from(*b))
                 .collect_vec();
-            Ok(ExprResult::List(bytes))
+            Ok(ExprResult::List(bytes.into()))
         },
         None => Ok(ExprResult::List(Default::default()))
     }

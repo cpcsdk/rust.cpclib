@@ -8,7 +8,7 @@ use crate::list::list_get;
 /// Create a new matrix
 pub fn matrix_new(height: usize, width: usize, value: ExprResult) -> ExprResult {
     ExprResult::Matrix {
-        content: vec![list_new(width, value); height],
+        content: vec![list_new(width, value); height].into(),
         width,
         height
     }
@@ -175,7 +175,7 @@ pub fn matrix_set_row(
                         )));
                     }
 
-                    content[y] = row.clone();
+                    std::sync::Arc::make_mut(content)[y] = row.clone();
                     Ok(matrix)
                 },
                 _ => {
@@ -305,31 +305,39 @@ mod matrix_from_list_tests {
 
     #[test]
     fn an_empty_list_is_a_clear_error_not_a_panic() {
-        let result = matrix_from_list(&ExprResult::List(vec![]));
+        let result = matrix_from_list(&ExprResult::List(vec![].into()));
         assert!(result.is_err());
     }
 
     #[test]
     fn non_list_rows_are_a_clear_error_not_a_panic() {
-        let result = matrix_from_list(&ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)]));
+        let result = matrix_from_list(&ExprResult::List(
+            vec![ExprResult::Value(1), ExprResult::Value(2)].into()
+        ));
         assert!(result.is_err());
     }
 
     #[test]
     fn ragged_rows_are_a_clear_error_not_a_panic() {
-        let result = matrix_from_list(&ExprResult::List(vec![
-            ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)]),
-            ExprResult::List(vec![ExprResult::Value(3)])
-        ]));
+        let result = matrix_from_list(&ExprResult::List(
+            vec![
+                ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)].into()),
+                ExprResult::List(vec![ExprResult::Value(3)].into())
+            ]
+            .into()
+        ));
         assert!(result.is_err());
     }
 
     #[test]
     fn a_well_formed_list_of_lists_builds_a_matrix() {
-        let result = matrix_from_list(&ExprResult::List(vec![
-            ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)]),
-            ExprResult::List(vec![ExprResult::Value(3), ExprResult::Value(4)])
-        ]))
+        let result = matrix_from_list(&ExprResult::List(
+            vec![
+                ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)].into()),
+                ExprResult::List(vec![ExprResult::Value(3), ExprResult::Value(4)].into())
+            ]
+            .into()
+        ))
         .unwrap();
         match result {
             ExprResult::Matrix { width, height, .. } => {

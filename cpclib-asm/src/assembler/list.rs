@@ -13,7 +13,7 @@ pub fn fix_string<S: Borrow<str>>(s: S) -> SmolStr {
 
 /// Create a new list
 pub fn list_new(count: usize, value: ExprResult) -> ExprResult {
-    ExprResult::List(vec![value; count])
+    ExprResult::List(vec![value; count].into())
 }
 
 /// Create a new string
@@ -178,16 +178,16 @@ pub fn list_split_by_value(
             let mut current = Vec::new();
             for item in l.iter() {
                 if item == value {
-                    result.push(ExprResult::List(current));
+                    result.push(ExprResult::List(current.into()));
                     current = Vec::new();
                 } else {
                     current.push(item.clone());
                 }
             }
             if !current.is_empty() {
-                result.push(ExprResult::List(current));
+                result.push(ExprResult::List(current.into()));
             }
-            Ok(ExprResult::List(result))
+            Ok(ExprResult::List(result.into()))
         },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
@@ -279,7 +279,7 @@ pub fn list_sublist(
                     ExpressionError::InvalidSize(l.len(), end)
                 )));
             }
-            Ok(ExprResult::List(l[start..end].to_vec()))
+            Ok(ExprResult::List(l[start..end].to_vec().into()))
         },
 
         _ => {
@@ -309,9 +309,13 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
 
 pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::List(mut l) => {
+        ExprResult::List(l) => {
+            // Clones the backing Vec only if it's genuinely shared (e.g. the
+            // same list value is also still bound to a symbol) - the common
+            // case, nobody else referencing it, just pushes in place.
+            let mut l = std::sync::Arc::unwrap_or_clone(l);
             l.push(elem);
-            Ok(ExprResult::List(l))
+            Ok(ExprResult::List(l.into()))
         },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
@@ -328,11 +332,13 @@ pub fn list_extend(
     list2: ExprResult
 ) -> Result<ExprResult, Box<AssemblerError>> {
     match list1 {
-        ExprResult::List(mut l) => {
+        ExprResult::List(l) => {
             match list2 {
-                ExprResult::List(mut l2) => {
+                ExprResult::List(l2) => {
+                    let mut l = std::sync::Arc::unwrap_or_clone(l);
+                    let mut l2 = std::sync::Arc::unwrap_or_clone(l2);
                     l.append(&mut l2);
-                    Ok(ExprResult::List(l))
+                    Ok(ExprResult::List(l.into()))
                 },
                 _ => {
                     Err(Box::new(AssemblerError::ExpressionError(
@@ -356,7 +362,7 @@ pub fn list_extend(
 pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match &mut list {
         ExprResult::List(l) => {
-            l.sort(); // inplace sort
+            std::sync::Arc::make_mut(l).sort(); // inplace sort (copy-on-write if shared)
             Ok(list)
         },
         _ => {
@@ -371,9 +377,10 @@ pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>
 
 pub fn list_reverse(list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::List(mut l) => {
+        ExprResult::List(l) => {
+            let mut l = std::sync::Arc::unwrap_or_clone(l);
             l.reverse(); // inplace reverse
-            Ok(ExprResult::List(l))
+            Ok(ExprResult::List(l.into()))
         },
         ExprResult::String(s) => {
             let s = s.chars().rev().collect::<SmolStr>();
@@ -400,7 +407,7 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>
             }
 
             let l = argsort(l);
-            Ok(ExprResult::List(l))
+            Ok(ExprResult::List(l.into()))
         },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
@@ -432,13 +439,13 @@ pub fn list_filter(
     match list {
         ExprResult::List(l)=> {
             let mut result = Vec::with_capacity(l.len());
-            for item in l.into_iter() {
+            for item in l.iter() {
                 let keep = env.eval_any_function(predicate, &[item])?;
                 if keep.bool()? {
                     result.push(item.clone());
                 }
             }
-            Ok(ExprResult::List(result))
+            Ok(ExprResult::List(result.into()))
         },
         ExprResult::String(s) => {
             let mut result = String::with_capacity(s.len());
@@ -497,11 +504,11 @@ pub fn list_map(
     match list {
         ExprResult::List(l)=> {
             let mut result = Vec::with_capacity(l.len());
-            for item in l.into_iter() {
+            for item in l.iter() {
                 let mapped = env.eval_any_function(mapper, &[item])?;
                 result.push(mapped);
             }
-            Ok(ExprResult::List(result))
+            Ok(ExprResult::List(result.into()))
         },
         ExprResult::String(s) => {
             let mut result = String::with_capacity(s.len());
@@ -543,7 +550,7 @@ pub fn list_fold(
     match list {
         ExprResult::List(l)=> {
             let mut acc = initial.clone();
-            for item in l.into_iter() {
+            for item in l.iter() {
                 acc = env.eval_any_function(folder, &[&acc, item.as_ref()])?;
             }
             Ok(acc)
