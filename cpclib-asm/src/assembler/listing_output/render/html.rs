@@ -123,56 +123,65 @@ impl HtmlListingRenderer {
         format!("tok-{token_id}")
     }
 
+    /// Byte-slices each token straight out of `text` (via `char_indices`)
+    /// instead of accumulating it char-by-char into a fresh `String` -
+    /// mirrors the `qualify_locals_in_line` fix in `render/text.rs`, applied
+    /// here to the HTML syntax-highlighting tokenizer (not exercised by any
+    /// real-project build profiled so far, so this is a mechanical port of
+    /// the same, DHAT-verified pattern rather than independently measured).
+    /// A `;` comment always runs to end-of-line, so it collapses to a plain
+    /// slice with no accumulation at all.
     fn render_source_fragment_html(&self, text: &str, hover_key: &str) -> String {
         let mut output = String::new();
-        let mut chars = text.chars().peekable();
+        let mut chars = text.char_indices().peekable();
         let keywords = [
             "org", "macro", "endm", "repeat", "endr", "for", "next", "while", "wend", "if", "else",
             "endif", "db", "dw", "ds", "include", "equ", "set", "assert"
         ];
 
-        while let Some(ch) = chars.next() {
+        while let Some((start, ch)) = chars.next() {
             if ch == ';' {
-                let mut comment = String::from(ch);
-                comment.extend(chars.by_ref());
+                let comment = &text[start..];
                 output.push_str(&format!(
                     "<span class=\"token comment\">{}</span>",
-                    escape_html(&comment).replace(' ', "&nbsp;")
+                    escape_html(comment).replace(' ', "&nbsp;")
                 ));
                 break;
             }
 
             if ch == '"' || ch == '\'' {
                 let quote = ch;
-                let mut string = String::from(ch);
-                for next in chars.by_ref() {
-                    string.push(next);
-                    if next == quote {
+                let mut end = start + ch.len_utf8();
+                for (next_idx, next_ch) in chars.by_ref() {
+                    end = next_idx + next_ch.len_utf8();
+                    if next_ch == quote {
                         break;
                     }
                 }
+                let string = &text[start..end];
                 output.push_str(&format!(
                     "<span class=\"token string\">{}</span>",
-                    escape_html(&string).replace(' ', "&nbsp;")
+                    escape_html(string).replace(' ', "&nbsp;")
                 ));
                 continue;
             }
 
             if is_identifier_char(ch) {
-                let mut token = String::from(ch);
-                while let Some(&next) = chars.peek() {
-                    if !is_identifier_char(next) {
+                let mut end = start + ch.len_utf8();
+                while let Some(&(next_idx, next_ch)) = chars.peek() {
+                    if !is_identifier_char(next_ch) {
                         break;
                     }
-                    token.push(next);
+                    end = next_idx + next_ch.len_utf8();
                     chars.next();
                 }
+                let token = &text[start..end];
 
                 let token_lower = token.to_ascii_lowercase();
                 if keywords.iter().any(|kw| *kw == token_lower) {
                     output.push_str(&format!(
                         "<span class=\"token keyword\">{}</span>",
-                        escape_html(&token)
+                        escape_html(token)
                     ));
                 }
                 else if token.starts_with("0x")
@@ -181,14 +190,14 @@ impl HtmlListingRenderer {
                 {
                     output.push_str(&format!(
                         "<span class=\"token number\">{}</span>",
-                        escape_html(&token)
+                        escape_html(token)
                     ));
                 }
                 else {
                     output.push_str(&format!(
                         "<span class=\"token\" data-symbol-candidate=\"{}\">{}</span>",
-                        escape_html(&token),
-                        escape_html(&token)
+                        escape_html(token),
+                        escape_html(token)
                     ));
                 }
                 continue;
@@ -561,57 +570,60 @@ document.addEventListener('click', (event) => {
         .unwrap();
     }
 
+    /// Same byte-slicing approach as `render_source_fragment_html` above -
+    /// see its doc comment.
     fn highlight_source_html(&self, text: &str, row_id: Option<usize>) -> String {
         let mut output = String::new();
-        let mut chars = text.chars().peekable();
+        let mut chars = text.char_indices().peekable();
         let hover_attr = row_id.map(Self::row_hover_attr).unwrap_or_default();
         let keywords = [
             "org", "macro", "endm", "repeat", "endr", "for", "next", "while", "wend", "if", "else",
             "endif", "db", "dw", "ds", "include", "equ", "set", "assert"
         ];
 
-        while let Some(ch) = chars.next() {
+        while let Some((start, ch)) = chars.next() {
             if ch == ';' {
-                let mut comment = String::from(ch);
-                comment.extend(chars.by_ref());
+                let comment = &text[start..];
                 output.push_str(&format!(
                     "<span class=\"token comment\">{}</span>",
-                    escape_html(&comment)
+                    escape_html(comment)
                 ));
                 break;
             }
 
             if ch == '"' || ch == '\'' {
                 let quote = ch;
-                let mut string = String::from(ch);
-                for next in chars.by_ref() {
-                    string.push(next);
-                    if next == quote {
+                let mut end = start + ch.len_utf8();
+                for (next_idx, next_ch) in chars.by_ref() {
+                    end = next_idx + next_ch.len_utf8();
+                    if next_ch == quote {
                         break;
                     }
                 }
+                let string = &text[start..end];
                 output.push_str(&format!(
                     "<span class=\"token string\"{hover_attr}>{}</span>",
-                    escape_html(&string)
+                    escape_html(string)
                 ));
                 continue;
             }
 
             if is_identifier_char(ch) {
-                let mut token = String::from(ch);
-                while let Some(&next) = chars.peek() {
-                    if !is_identifier_char(next) {
+                let mut end = start + ch.len_utf8();
+                while let Some(&(next_idx, next_ch)) = chars.peek() {
+                    if !is_identifier_char(next_ch) {
                         break;
                     }
-                    token.push(next);
+                    end = next_idx + next_ch.len_utf8();
                     chars.next();
                 }
+                let token = &text[start..end];
 
                 let token_lower = token.to_ascii_lowercase();
                 if keywords.iter().any(|kw| *kw == token_lower) {
                     output.push_str(&format!(
                         "<span class=\"token keyword\"{hover_attr}>{}</span>",
-                        escape_html(&token)
+                        escape_html(token)
                     ));
                 }
                 else if token.starts_with("0x")
@@ -620,15 +632,15 @@ document.addEventListener('click', (event) => {
                 {
                     output.push_str(&format!(
                         "<span class=\"token number\"{hover_attr}>{}</span>",
-                        escape_html(&token)
+                        escape_html(token)
                     ));
                 }
                 else {
                     let display_token =
-                        qualify_local_symbol(&token, self.current_global_symbol.as_deref());
+                        qualify_local_symbol(token, self.current_global_symbol.as_deref());
                     output.push_str(&format!(
                         "<span class=\"token\"{hover_attr} data-symbol-candidate=\"{}\">{}</span>",
-                        escape_html(&token),
+                        escape_html(token),
                         escape_html(&display_token)
                     ));
                 }
