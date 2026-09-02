@@ -254,6 +254,38 @@ where F: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>> {
 /// Get a factor
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
+/// True iff `bytes` starts with exactly the shape `cpclib_common::parse::parse_value_with_kind`'s
+/// `EncodingKind::Unk` branch accepts as a prefix-less hex literal with an
+/// `h`/`H` suffix (e.g. `"FADEh"`), combined with `number()`'s own outer
+/// trailing-character guard in this file: a maximal run of hex digits/`_`,
+/// immediately followed by one `h`/`H`, immediately followed by a
+/// non-identifier character (or end of input) - matching `not(one_of((A-Z,
+/// a-z, 0-9, '#', '@', '_')))`, not just `not(alphanumeric1)`.
+///
+/// A letter `A`-`F`/`a`-`f` is the *only* byte class where a bare label/bool
+/// (`"FADE_TABLE"`, `"FALSE"`) and a bare hex literal (`"FADEh"`) can start
+/// identically - every other path through `parse_value_with_kind`'s
+/// `EncodingKind::Unk` branch (binary, decimal) provably fails to match
+/// content starting with a letter, so this one check exactly predicts
+/// whether `positive_number` will succeed, without attempting it. Used by
+/// `parse_factor`'s fast path to skip straight to `parse_bool_value`/
+/// `parse_label` instead of paying for a `positive_number` attempt that -
+/// per DHAT/callgrind profiling of a real project - `alt()`'s backtracking
+/// machinery makes far more expensive than a cheap byte scan.
+fn looks_like_unprefixed_hex_literal(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() && matches!(bytes[i], b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' | b'_') {
+        i += 1;
+    }
+    if i == 0 || !matches!(bytes.get(i), Some(b'h' | b'H')) {
+        return false;
+    }
+    match bytes.get(i + 1) {
+        None => true,
+        Some(&b) => !matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'#' | b'@' | b'_')
+    }
+}
+
 pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
@@ -304,11 +336,15 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
             // (numeric hex/octal prefix vs. a valid label-leading char),
             // `$` (numeric hex prefix vs. the literal `$`/`$$` branches,
             // order-sensitive), `'` (string quote vs. an orgams-flavor
-            // label-leading char), `-` (negative-number vs. `-$$`/`-$`,
+            // label-leading char), and `-` (negative-number vs. `-$$`/`-$`,
             // whose closures capture `cloned` from the enclosing scope -
-            // not worth duplicating here for one byte class), and letters
-            // `A`-`F`/`a`-`f` (label/bool vs. a prefix-less hex literal with
-            // an `h`/`H` suffix, e.g. `FADEh`).
+            // not worth duplicating here for one byte class).
+            //
+            // Letters `A`-`F`/`a`-`f` (label/bool vs. a prefix-less hex
+            // literal with an `h`/`H` suffix, e.g. `FADEh`) *are* handled
+            // below, via `looks_like_unprefixed_hex_literal`'s lookahead -
+            // see its doc comment for why that one check is a safe,
+            // exact stand-in for actually attempting `positive_number`.
             |input: &mut InnerZ80Span| -> ModalResult<LocatedExpr, Z80ParserError> {
                 let Some(&b) = input.as_bstr().first()
                 else {
@@ -338,6 +374,18 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                         parse_label(false).map(|l| LocatedExpr::Label(l.into()))
                     ))
                     .parse_next(input),
+                    b'A'..=b'F' | b'a'..=b'f' => {
+                        if looks_like_unprefixed_hex_literal(input.as_bstr().as_ref()) {
+                            positive_number.parse_next(input)
+                        }
+                        else {
+                            alt((
+                                parse_bool_value,
+                                parse_label(false).map(|l| LocatedExpr::Label(l.into()))
+                            ))
+                            .parse_next(input)
+                        }
+                    },
                     _ => Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
                 }
             },
