@@ -534,10 +534,10 @@ pub fn load_config(workspace_root: Option<&Path>) -> LoadedConfig {
 /// own comments and reformat the whole file).
 pub fn merge_missing_config_fields(existing_toml: &str) -> Result<(String, Vec<String>), String> {
     let mut existing = existing_toml
-        .parse::<toml_edit::Document>()
+        .parse::<toml_edit::DocumentMut>()
         .map_err(|e| e.to_string())?;
     let template = EXAMPLE_CONFIG_TOML
-        .parse::<toml_edit::Document>()
+        .parse::<toml_edit::DocumentMut>()
         .map_err(|e| e.to_string())?;
 
     let mut added = Vec::new();

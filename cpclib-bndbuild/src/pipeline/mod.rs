@@ -211,18 +211,18 @@ pub fn song_uses_sid(song_path: &Utf8Path) -> Result<bool, String> {
             .read_event()
             .map_err(|e| format!("Could not parse {song_path}'s song data: {e}"))?
         {
-            quick_xml::events::Event::Start(tag) if tag.name().as_ref() == b"sidIsActivated" => {
+            quick_xml::events::Event::Start(tag) if tag.name().as_ref() == "sidIsActivated" => {
                 in_sid_is_activated = true;
             },
             quick_xml::events::Event::Text(text) if in_sid_is_activated => {
                 // A boolean's text content never contains XML entities, so a
                 // plain UTF-8 decode (no unescape) is enough here.
-                if String::from_utf8_lossy(&text).trim() == "true" {
+                if text.trim() == "true" {
                     return Ok(true);
                 }
                 in_sid_is_activated = false;
             },
-            quick_xml::events::Event::End(tag) if tag.name().as_ref() == b"sidIsActivated" => {
+            quick_xml::events::Event::End(tag) if tag.name().as_ref() == "sidIsActivated" => {
                 in_sid_is_activated = false;
             },
             quick_xml::events::Event::Eof => break,

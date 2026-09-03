@@ -17,7 +17,7 @@ independent = true
 [dependencies]
 cpclib = { workspace=true, features = ["cmdline", "lz4"] }
 cpclib-common = { workspace = true }
-cpclib-image = { workspace = true, optional = true}
+cpclib-image = { workspace = true }
 
 anyhow.workspace = true
 crossbeam-channel.workspace = true

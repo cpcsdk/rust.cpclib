@@ -55,7 +55,6 @@ velcro.workspace = true
 rayon-cond = { workspace = true, optional = true }
 chardetng = {workspace = true, optional = true}
 aho-corasick.workspace = true
-compact_str.workspace = true
 beef.workspace = true
 enumflags2.workspace = true
 prettydiff.workspace = true
