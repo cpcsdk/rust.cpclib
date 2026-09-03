@@ -13,7 +13,8 @@
 //! this module.
 
 use minijinja::Value;
-use tower_lsp::lsp_types::*;
+#[cfg(test)]
+use tower_lsp::lsp_types::Url;
 
 use crate::common::document::Document;
 

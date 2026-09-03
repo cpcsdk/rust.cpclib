@@ -3660,15 +3660,13 @@ mod peephole_command_tests {
 
     fn init_params() -> InitializeParams {
         InitializeParams {
-            process_id: None,
-            root_path: None,
-            root_uri: None,
-            initialization_options: None,
             capabilities: ClientCapabilities::default(),
             trace: Some(TraceValue::Off),
-            workspace_folders: None,
-            client_info: None,
-            locale: None
+            // `root_path` is deprecated in favor of `root_uri` (itself
+            // deprecated in favor of `workspace_folders`) - leaving both
+            // out of this literal lets `..Default::default()` fill them
+            // with `None` without naming the deprecated field.
+            ..Default::default()
         }
     }
 
@@ -3780,15 +3778,13 @@ mod did_change_debounce_tests {
 
     fn init_params() -> InitializeParams {
         InitializeParams {
-            process_id: None,
-            root_path: None,
-            root_uri: None,
-            initialization_options: None,
             capabilities: ClientCapabilities::default(),
             trace: Some(TraceValue::Off),
-            workspace_folders: None,
-            client_info: None,
-            locale: None
+            // `root_path` is deprecated in favor of `root_uri` (itself
+            // deprecated in favor of `workspace_folders`) - leaving both
+            // out of this literal lets `..Default::default()` fill them
+            // with `None` without naming the deprecated field.
+            ..Default::default()
         }
     }
 

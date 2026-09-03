@@ -1,3 +1,9 @@
+// wasm-bindgen's macro expansion for `#[wasm_bindgen(catch)]` triggers a
+// spurious unused_variables lint anchored on the attribute itself (the lint
+// targets code the macro generates, which a fn-level #[allow] cannot reach);
+// see https://github.com/rustwasm/wasm-bindgen/issues/3946
+#![allow(unused_variables)]
+
 use std::sync::Arc;
 
 use cpclib_asm::error::AssemblerError;

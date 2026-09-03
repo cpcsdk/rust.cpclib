@@ -9,8 +9,6 @@ use crate::common::document::Document;
 
 // Reuse the same token type indices as the basm module (same SemanticTokensLegend)
 pub(super) const TT_KEYWORD: u32 = 0;
-pub(super) const TT_VARIABLE: u32 = 4;
-pub(super) const TT_NUMBER: u32 = 5;
 pub(super) const TT_STRING: u32 = 6;
 pub(super) const TT_COMMENT: u32 = 7;
 pub(super) const TT_OPERATOR: u32 = 8;

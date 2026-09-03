@@ -1,5 +1,3 @@
-mod utils;
-
 pub mod asm;
 pub mod basic;
 pub mod sna;

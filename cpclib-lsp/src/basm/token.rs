@@ -261,6 +261,13 @@ where
 /// ignoring any character/column position within those lines. A thin
 /// wrapper over [`tokens_in_range`] covering the entirety of both boundary
 /// lines.
+///
+/// Currently only exercised by this module's own test (both `cycles.rs` and
+/// `stabilize.rs` deliberately use character-precise [`tokens_in_range`]
+/// instead - see their own doc comments), but kept and test-covered since
+/// it documents a real, distinct behavior a future whole-line-selection
+/// caller may need.
+#[allow(dead_code)]
 pub(super) fn tokens_in_lines<'a, T>(
     listing: impl IntoIterator<Item = &'a T> + 'a,
     start_line: u32,

@@ -147,7 +147,7 @@ impl PyBndTask {
 impl PyBndTask {
     /// Execute the stored task using the provided observer.
     /// This is a Rust-level helper where the observer is an argument.
-    pub(crate) fn execute_with_observer(
+    fn execute_with_observer(
         &self,
         py: Python,
         observer: Arc<PyConsoleObserver>
@@ -160,12 +160,6 @@ impl PyBndTask {
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
 
-    /// Helper to create PyBndTask from a string (for builders)
-    pub(crate) fn new_from_string(py: Python, task_str: &str) -> PyResult<Py<PyBndTask>> {
-        let t = Task::from_str(task_str).map_err(pyo3::exceptions::PyValueError::new_err)?;
-        Self::new_from_task(py, t)
-    }
-
     /// Helper to create PyBndTask from a Task instance (for builders)
     pub(crate) fn new_from_task(py: Python, task: Task) -> PyResult<Py<PyBndTask>> {
         Py::new(
@@ -175,20 +169,4 @@ impl PyBndTask {
             }
         )
     }
-}
-
-/// Factory function to create a `PyBndTask` from a task string.
-#[pyfunction]
-pub fn create_bndbuild_task(task: &Bound<'_, PyAny>, py: Python) -> PyResult<Py<PyAny>> {
-    let task_str: &str = task
-        .extract()
-        .map_err(pyo3::exceptions::PyValueError::new_err)?;
-    let t = Task::from_str(task_str).map_err(pyo3::exceptions::PyValueError::new_err)?;
-    let obj = Py::new(
-        py,
-        PyBndTask {
-            inner: Mutex::new(t)
-        }
-    )?;
-    Ok(obj.into_any())
 }

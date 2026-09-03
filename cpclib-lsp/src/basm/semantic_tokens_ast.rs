@@ -39,7 +39,7 @@ use cpclib_tokens::symbols::SymbolsTableTrait;
 use super::token::{
     DIRECTIVE_SET, MOD_DECLARATION, MOD_INACTIVE, MOD_READONLY, RawSemanticToken, TT_ENUM_MEMBER,
     TT_FUNCTION, TT_KEYWORD, TT_LABEL, TT_MACRO, TT_NAMESPACE, TT_NUMBER, TT_VARIABLE,
-    flatten_listing, locate_name_in_statement, span_line, span_lines
+    flatten_listing, locate_name_in_statement, span_lines
 };
 
 type Tokens<'a> = Box<dyn Iterator<Item = RawSemanticToken> + 'a>;

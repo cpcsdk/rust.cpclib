@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use minijinja::{Environment, UndefinedBehavior};
-
 use super::BuildFileAnalyzer;
 use crate::common::document::Document;
 

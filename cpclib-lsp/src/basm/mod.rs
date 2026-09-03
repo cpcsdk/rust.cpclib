@@ -29,7 +29,6 @@ pub mod diagnostics;
 // Moved to `cpclib-project`, shared with the debug adapter: "which program
 // does this file belong to, and how is it built" is not an LSP question.
 // The LSP converts its `Url`s to paths at each call site.
-use cpclib_project::{build_defs, entry};
 pub(crate) mod breakpoint;
 pub mod disassemble;
 pub mod embedded_basic;

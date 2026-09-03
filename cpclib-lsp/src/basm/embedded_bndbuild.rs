@@ -24,14 +24,12 @@
 //! one-directional `basm -> bndbuild` dependency, mirroring the existing
 //! `basm -> locomotive` one (see `embedded_basic.rs`).
 
-use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
 // The blocks themselves are found by `cpclib_project::embedded_build`, which
 // the debug adapter uses too: two scanners could disagree about where a block
 // starts, which would be two answers to "which rules does this file have".
 // What stays here is the *editor* half - mapping positions in and out of a
 // block, and the lenses.
 pub(crate) use cpclib_project::embedded_build::{EmbeddedBndbuildBlock, extract_embedded_blocks};
-use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::{CodeLens, Command, Location, Position, Range, Url};
 
 use super::AssemblyAnalyzer;

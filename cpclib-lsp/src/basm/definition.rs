@@ -415,15 +415,6 @@ impl AssemblyAnalyzer {
         refs
     }
 
-    /// Find all references to a symbol
-    pub fn find_references(&self, document: &Document, position: Position) -> Vec<Location> {
-        let word = match self.word_at_position(document, position) {
-            Some(w) => w.to_uppercase(),
-            None => return Vec::new()
-        };
-        self.find_references_in(document, &word)
-    }
-
     fn prepare_rename_label(&self, document: &Document, position: Position) -> Option<Range> {
         let line = document.line(position.line as usize)?;
         let (word, start_col, end_col) =
@@ -773,22 +764,32 @@ impl AssemblyAnalyzer {
 pub(crate) enum RenameTarget {
     Global(String),
     Local {
+        // Only read by tests (asserting *which* enclosing label a rename
+        // resolved against); production rename logic only needs `name` and
+        // `scope`.
+        #[allow(dead_code)]
         owner: String,
         name: String,
         scope: std::ops::Range<u32>
     },
     Qualified(String),
     FunctionLocal {
+        // Only read by tests, as above.
+        #[allow(dead_code)]
         function_name: String,
         name: String,
         scope: std::ops::Range<u32>
     },
     LoopLocal {
+        // Only read by tests, as above.
+        #[allow(dead_code)]
         keyword: String,
         name: String,
         scope: std::ops::Range<u32>
     },
     MacroLocal {
+        // Only read by tests, as above.
+        #[allow(dead_code)]
         macro_name: String,
         name: String,
         scope: std::ops::Range<u32>
@@ -1069,7 +1070,6 @@ fn find_scoped_local_matches(
 // `cpclib-project::root`, shared with the debug adapter. What stays in this
 // file is the `Url` boundary: the LSP speaks document URIs, the shared crate
 // speaks paths, and the conversion happens once, here.
-pub(crate) use cpclib_project::root::{INCLUDE_DIRECTIVES, PROJECT_ROOT_MARKERS};
 
 impl AssemblyAnalyzer {
     /// If `position` is on a line holding an INCLUDE/INCBIN/BINCLUDE
@@ -1154,12 +1154,6 @@ pub(crate) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathB
 /// `filename`, stopping once a project-root marker or the filesystem root is
 /// reached. Shared by ctrl+click include navigation and the eager
 /// cross-file goto-definition fallback.
-/// Whether `dir` looks like the top of a project, by the same markers
-/// `resolve_include_path`/`ancestor_search_directories` already stop at.
-pub(super) fn is_project_root(dir: &std::path::Path) -> bool {
-    cpclib_project::root::is_project_root(dir)
-}
-
 pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::PathBuf> {
     let path = doc_uri.to_file_path().ok()?;
     cpclib_project::root::resolve_include_path(filename, &path)

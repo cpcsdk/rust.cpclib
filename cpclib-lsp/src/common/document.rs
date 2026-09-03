@@ -275,7 +275,12 @@ impl Document {
     }
 
     /// Convert a rope byte offset to an LSP `Position` (a UTF-16 code-unit
-    /// column - see `offset_from_position`).
+    /// column - see `offset_from_position`). Only exercised by this module's
+    /// own round-trip test today (nothing yet needs to go from a byte
+    /// offset back to a `Position`), but it's `offset_from_position`'s exact
+    /// inverse and worth keeping test-verified for whichever caller reaches
+    /// for it next.
+    #[allow(dead_code)]
     pub fn position_from_offset(&self, offset: usize) -> Position {
         let line = self.rope.byte_to_line(offset);
         let line_start = self.rope.line_to_byte(line);

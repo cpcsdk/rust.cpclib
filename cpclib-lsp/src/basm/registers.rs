@@ -151,6 +151,12 @@ fn is_ld_destination(token: &LocatedToken, word_upper: &str) -> bool {
 /// `'` isn't valid basm syntax) register name.
 pub(super) struct FunctionContract {
     pub inputs: Vec<(String, String)>,
+    // Parsed and test-verified (round-tripped through `parse_function_contract`),
+    // but hover only ever surfaces `inputs` (a hovered register's *known
+    // value* comes from tracked state, not from what a function documents
+    // it writes) - kept for parity with `inputs` and because a future
+    // hover/signature enrichment is a natural use for it.
+    #[allow(dead_code)]
     pub outputs: Vec<(String, String)>
 }
 

@@ -68,6 +68,13 @@ impl BuildFileAnalyzer {
             .collect()
     }
 
+    // `finalize_block!`/`flush_rule!` reset `collecting`/`block_base`/
+    // `rule_help` to their "nothing pending" state after consuming them -
+    // correct and needed for every mid-loop invocation, but on each macro's
+    // *final* call (right before `symbols` is returned) that reset is
+    // provably never read again. Real state resets, not dead logic - not
+    // worth complicating the shared macros to special-case the last call.
+    #[allow(unused_assignments)]
     pub(super) fn scan_symbols_from_text(
         &self,
         text: &str,

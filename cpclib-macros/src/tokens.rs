@@ -153,21 +153,6 @@ where T: MyToTokens + ?Sized {
     tokens.append(Group::new(Delimiter::Parenthesis, inside));
 }
 
-fn two_params<T1, T2>(name: &str, t1: &T1, t2: &T2, tokens: &mut TokenStream)
-where
-    T1: MyToTokens,
-    T2: MyToTokens
-{
-    tokens.append(Ident::new(name, Span::call_site()));
-
-    let mut inside = TokenStream::new();
-    t1.to_tokens(&mut inside);
-    inside.append(Punct::new(',', Spacing::Joint));
-    t2.to_tokens(&mut inside);
-
-    tokens.append(Group::new(Delimiter::Parenthesis, inside));
-}
-
 fn two_named_params<T1, T2>(
     name: &str,
     field1: &str,

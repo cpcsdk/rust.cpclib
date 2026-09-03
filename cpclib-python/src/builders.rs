@@ -29,7 +29,7 @@ use crate::bndbuild::PyBndTask;
 /// builder.output("output.sna")
 /// task = builder.build()
 /// ```
-#[pyclass(name = "SnapshotBuilder")]
+#[pyclass(name = "SnapshotBuilder", from_py_object)]
 #[derive(Default, Clone)]
 pub struct PySnapshotBuilder {
     /// Load a snapshot file as base
@@ -148,7 +148,7 @@ impl PySnapshotBuilder {
 /// builder.output("song.bin")
 /// task = builder.build()
 /// ```
-#[pyclass(name = "ArkosTracker3Builder")]
+#[pyclass(name = "ArkosTracker3Builder", from_py_object)]
 #[derive(Default, Clone)]
 pub struct PyArkosTracker3Builder {
     input: Option<String>,
@@ -225,7 +225,7 @@ impl PyArkosTracker3Builder {
 /// builder.output("effects.bin")
 /// task = builder.build()
 /// ```
-#[pyclass(name = "ChipnsfxBuilder")]
+#[pyclass(name = "ChipnsfxBuilder", from_py_object)]
 #[derive(Default, Clone)]
 pub struct PyChipnsfxBuilder {
     input: Option<String>,
@@ -302,7 +302,7 @@ impl PyChipnsfxBuilder {
 /// builder.output("song.min.ym")
 /// task = builder.build()
 /// ```
-#[pyclass(name = "MinyBuilder")]
+#[pyclass(name = "MinyBuilder", from_py_object)]
 #[derive(Default, Clone)]
 pub struct PyMinyBuilder {
     input: Option<String>,
@@ -367,7 +367,7 @@ impl PyMinyBuilder {
 /// builder.output("song.txt")
 /// task = builder.build()
 /// ```
-#[pyclass(name = "AytBuilder")]
+#[pyclass(name = "AytBuilder", from_py_object)]
 #[derive(Default, Clone)]
 pub struct PyAytBuilder {
     input: Option<String>,
@@ -439,7 +439,7 @@ impl PyAytBuilder {
 /// builder.output("song.wav")
 /// task = builder.build()
 /// ```
-#[pyclass(name = "SongConverterBuilder")]
+#[pyclass(name = "SongConverterBuilder", from_py_object)]
 #[derive(Clone)]
 pub struct PySongConverterBuilder {
     converter_type: String,

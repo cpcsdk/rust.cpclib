@@ -54,7 +54,7 @@ use cpclib_z80flow::{CostModel, InstructionCost};
 use tower_lsp::lsp_types::{Position, Range};
 
 use super::timing::{find_timings, nops_of, split_head};
-use super::token::{token_lsp_range, tokens_in_lines, tokens_in_range};
+use super::token::{token_lsp_range, tokens_in_range};
 
 /// One point of text change needed to balance the selection.
 pub(super) enum StabilizeTextEdit {

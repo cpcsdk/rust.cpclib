@@ -1,3 +1,9 @@
+// wasm-bindgen's macro expansion for `#[wasm_bindgen(catch)]` triggers a
+// spurious unused_variables lint anchored on the attribute itself (the lint
+// targets code the macro generates, which a fn-level #[allow] cannot reach);
+// see https://github.com/rustwasm/wasm-bindgen/issues/3946
+#![allow(unused_variables)]
+
 use cpclib_basic::*;
 use wasm_bindgen::prelude::*;
 use web_sys::console;
@@ -50,7 +56,6 @@ pub fn basic_parse_program(src: &str) -> Result<JsBasicProgram, JsBasicError> {
 }
 
 #[wasm_bindgen(catch)]
-
 pub fn basic_snapshot(src: &str) -> Result<JsSnapshot, String> {
     basic_parse_program(src).map_err(|e| e.0.to_string())?.sna()
 }

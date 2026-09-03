@@ -899,7 +899,12 @@ pub(super) fn typed_operands_before(line: &str, col: usize) -> Vec<String> {
 }
 
 impl AssemblyAnalyzer {
-    /// Backwards-compatible entry point: completion using only the current document.
+    /// Backwards-compatible entry point: completion using only the current
+    /// document. Only exercised by this module's own tests - the real LSP
+    /// `completion` request (`server::backend`) always has the document set
+    /// on hand and calls `completion_with_documents` directly so other open
+    /// Assembly buffers' labels are offered too.
+    #[allow(dead_code)]
     pub fn completion(&self, document: &Document, position: Position) -> Vec<CompletionItem> {
         self.completion_with_documents(document, position, &[])
     }

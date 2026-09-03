@@ -144,9 +144,8 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
 
 /// Split `without_comment` into `:`-separated segment byte ranges, ignoring
 /// any `:` found inside parens (e.g. `(ix+n)` never contains one in
-/// practice, but this stays robust regardless). Shared by
-/// `extract_instruction_at_col` (find the one segment under a cursor) and
-/// `classify_line` (classify every segment on the line).
+/// practice, but this stays robust regardless). Used by
+/// `extract_instruction_at_col` to find the one segment under a cursor.
 fn split_segments(without_comment: &str) -> Vec<(usize, usize)> {
     let bytes = without_comment.as_bytes();
     let mut depth = 0u32;
@@ -193,111 +192,6 @@ pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
         }
     }
     None
-}
-
-/// What a single instruction slot on a line actually is, once any leading
-/// label(s) have been skipped.
-pub(super) enum LineSegment {
-    /// A real Z80 instruction: mnemonic + operands, ready for `find_timings`.
-    Instruction(String),
-    /// A known assembler directive (`DB`/`ORG`/`EQU`/...) — zero execution
-    /// cost, not a red flag.
-    Directive,
-    /// Blank, comment-only, or label-only — nothing to report.
-    Blank,
-    /// Leading word isn't a known instruction or directive — most likely a
-    /// macro invocation, whose real cost can't be computed here.
-    Unrecognized
-}
-
-/// Every instruction slot on `line` (a line may contain multiple
-/// `:`-separated instructions), each classified — the whole-line
-/// counterpart of `extract_instruction_at_col`, used by the selection
-/// cycle-count feature to walk every instruction in a range rather than
-/// just the one under a cursor.
-///
-/// Deliberately does **not** reuse `split_segments`/`extract_instruction_at_col`'s
-/// naive "every top-level `:` is a separator" model: that model happens to
-/// still work for cursor-position lookup (a bare label fragment left behind
-/// by the split resolves to `None`, same as no instruction found there —
-/// the cursor was never going to land exactly on a label with nothing
-/// else), but it actively misclassifies here, since a label like `loop:`
-/// would be treated as its own segment and wrongly flagged `Unrecognized`
-/// instead of being absorbed into the instruction that follows it. Labels
-/// must be skipped *before* deciding where the next separator is, not
-/// after splitting on every colon uniformly.
-pub(super) fn classify_line(line: &str) -> Vec<LineSegment> {
-    let without_comment = match line.find(';') {
-        Some(i) => &line[..i],
-        None => line
-    };
-    let bytes = without_comment.as_bytes();
-    let mut result = Vec::new();
-    let mut pos = 0usize;
-
-    loop {
-        let content_start = skip_label_prefixes(without_comment, pos);
-        let mut depth = 0u32;
-        let mut i = content_start;
-        while i < bytes.len() && !(bytes[i] == b':' && depth == 0) {
-            match bytes[i] {
-                b'(' => depth += 1,
-                b')' => depth = depth.saturating_sub(1),
-                _ => {}
-            }
-            i += 1;
-        }
-        let content = without_comment[content_start..i].trim();
-        result.push(classify_content(content));
-        if i >= bytes.len() {
-            break;
-        }
-        pos = i + 1; // past the separator ':'
-    }
-    result
-}
-
-/// From `pos`, skip whitespace then zero or more `identifier:` label
-/// prefixes, returning the byte offset where real content (if any) begins.
-fn skip_label_prefixes(s: &str, mut pos: usize) -> usize {
-    let bytes = s.as_bytes();
-    loop {
-        while pos < bytes.len() && matches!(bytes[pos], b' ' | b'\t') {
-            pos += 1;
-        }
-        let start = pos;
-        while pos < bytes.len()
-            && (bytes[pos].is_ascii_alphanumeric() || matches!(bytes[pos], b'_' | b'.'))
-        {
-            pos += 1;
-        }
-        if pos == start {
-            return start; // no word here - blank, or a stray separator
-        }
-        if pos < bytes.len() && bytes[pos] == b':' {
-            pos += 1; // consume the label's own colon, keep looking for more labels
-            continue;
-        }
-        return start; // real content begins at this word
-    }
-}
-
-fn classify_content(content: &str) -> LineSegment {
-    use super::token::{DIRECTIVE_SET, INSTRUCTION_SET};
-    if content.is_empty() {
-        return LineSegment::Blank;
-    }
-    let (mnemonic, _) = split_head(content);
-    let mnemonic_upper = mnemonic.to_uppercase();
-    if INSTRUCTION_SET.contains(mnemonic_upper.as_str()) {
-        LineSegment::Instruction(content.to_string())
-    }
-    else if DIRECTIVE_SET.contains(mnemonic_upper.as_str()) {
-        LineSegment::Directive
-    }
-    else {
-        LineSegment::Unrecognized
-    }
 }
 
 /// Given the text of a single segment (possibly `"label: LD A, B"` or just `"LD A, B"`),

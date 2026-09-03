@@ -22,6 +22,12 @@ impl AssemblyAnalyzer {
     /// automatic, on-every-open/every-edit path
     /// (`server::backend::spawn_deferred_analysis`) has a reason to skip it
     /// sometimes, so that path calls `analyze_for_activity` directly instead.
+    // Only exercised by this module's own tests: the automatic path
+    // (`spawn_deferred_analysis`) calls `analyze_for_activity` directly so
+    // it can skip the expensive assemble on an inactive tab, and nothing
+    // else needs the unconditional-`is_active` semantics `analyze` gives -
+    // kept as the documented, test-covered "just analyze it" entry point.
+    #[allow(dead_code)]
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
         self.analyze_for_activity(document, true)
     }
@@ -166,7 +172,11 @@ impl AssemblyAnalyzer {
             && diagnostics.is_empty()
             && let Ok(listing) = self.parse_document(document)
         {
-            let (mut env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
+            // Only `.0` (the `Env`) is needed here: every diagnostic this
+            // block produces is symbolic/text-based, not an address-shaped
+            // question (see `dry_run_env_cached_checked`'s own doc comment
+            // for which callers must check completeness and why).
+            let (mut env, _complete) = self.dry_run_env_cached_checked(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
             collect_firmware_literal_warnings(document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
@@ -1718,8 +1728,6 @@ mod inactive_region_hint_tests {
     //! `deprecated` modifier - which themes are free to render as
     //! strikethrough, or not at all. `Unnecessary` is the tag editors
     //! actually fade text for.
-
-    use tower_lsp::lsp_types::*;
 
     use super::*;
     use crate::basm::AssemblyAnalyzer;

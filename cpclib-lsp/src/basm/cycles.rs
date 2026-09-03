@@ -28,8 +28,8 @@ use cpclib_z80flow::cost_range::{self};
 use cpclib_z80flow::{CostModel, InstructionCost};
 use tower_lsp::lsp_types::{Position, Range};
 
-use super::timing::{nops_of, split_head};
-use super::token::{tokens_in_lines, tokens_in_range};
+use super::timing::nops_of;
+use super::token::tokens_in_range;
 
 /// Total NOP-count summary for a selected line range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
