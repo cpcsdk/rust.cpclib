@@ -1,19 +1,9 @@
 use std::env;
 
 use cpclib_common::winnow::Parser;
-use cpclib_common::winnow::binary::le_u16;
-use cpclib_common::winnow::combinator::{cut_err, peek};
-use cpclib_common::winnow::error::{StrContext, StrContextValue};
-use cpclib_common::winnow::stream::{Offset, Stream};
-use cpclib_common::winnow::token::{any, literal, take};
-use cpclib_orgams_ascii::binary_decoder::{
-    DisplayState, Input, OrgamsParseResult, StringTable, parse_labels_table, parse_line,
-    parse_orgams_file
-};
+use cpclib_orgams_ascii::binary_decoder::{Input, OrgamsParseResult, parse_orgams_file};
 use encoding_rs::WINDOWS_1252;
 use fs_err as fs;
-
-const CHUNK_MAX_SIZE: u8 = 222;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();

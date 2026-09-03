@@ -108,7 +108,7 @@ mod test {
             println!("Generate the content of {}", fname.display());
             let content = fs_err::read(&fname).expect("Failed to read file");
 
-            let unicode = binary_orgams_to_utf8(&content).expect("Failed to convert to UTF-8");
+            binary_orgams_to_utf8(&content).expect("Failed to convert to UTF-8");
         }
     }
 }

@@ -5,7 +5,9 @@
 
 #![warn(missing_docs)]
 
+/// Winnow-based parser and encoder for the Orgams binary format.
 pub mod binary_decoder;
+/// High-level conversion helpers built on top of [`binary_decoder`].
 pub mod convert;
 
 /// Library version

@@ -8,7 +8,7 @@ use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::winnow::combinator::{cut_err, repeat, terminated};
+use cpclib_common::winnow::combinator::{cut_err, repeat};
 use cpclib_common::winnow::error::{ContextError, ErrMode, StrContext, StrContextValue};
 use cpclib_common::winnow::stream::Offset;
 use cpclib_common::winnow::{self, LocatingSlice};
@@ -19,7 +19,9 @@ use winnow::combinator::{alt, opt, peek};
 use winnow::prelude::*;
 use winnow::token::{any, literal, take};
 
+/// Byte-offset-tracking input stream consumed by every parser in this module.
 pub type Input<'a> = LocatingSlice<&'a [u8]>;
+/// Result type returned by every winnow parser in this module.
 pub type OrgamsParseResult<T> = ModalResult<T>;
 
 const CHUNK_MAX_SIZE: u8 = 222;
@@ -45,27 +47,49 @@ const fn is_escaped_byte(b: u8) -> bool {
         // Command opcodes (escaped commands)
         MARKER_ASSIGN | MARKER_BYTE | MARKER_COMMENT | MARKER_ESCAPE | MARKER_INDENT
         | MARKER_LABEL_ADDR | MARKER_LOCAL_LABEL | MARKER_MACRO_DEF | MARKER_NEWLINE
-        | MARKER_WORD | MARKER_BYTE | 0x52 | 0x58 | 0x5B => true,
+        | MARKER_WORD | 0x52 | 0x58 | 0x5B => true,
         _ => false
     }
 }
 
+/// Byte sequence that precedes a Z80 opcode byte and selects which disassembly/encoding table
+/// applies to it (standard, `IX`/`IY`-indexed, extended, or bit/rotate instructions).
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstructionPrefix {
+    /// No prefix: a plain, unprefixed opcode.
     None,
+    /// `0xDD` prefix: `IX`-indexed instruction (e.g. `LD A,(IX+n)`).
     DD,
+    /// `0xFD` prefix: `IY`-indexed instruction (e.g. `LD A,(IY+n)`).
     FD,
+    /// `0xDD 0xCB` prefix: `IX`-indexed bit/rotate/shift instruction.
     DDCB,
+    /// `0xFD 0xCB` prefix: `IY`-indexed bit/rotate/shift instruction.
     FDCB,
+    /// Orgams-specific `0xDF` prefix: an `IX`-indirect instruction encoded with an implicit
+    /// zero offset, displayed as `(ix)` rather than `(ix+0)`.
     DF,
+    /// Orgams-specific `0xFF` prefix: the `IY`-indirect equivalent of [`InstructionPrefix::DF`],
+    /// displayed as `(iy)` rather than `(iy+0)`.
     FF,
+    /// Orgams-specific `0xDF 0xCB` prefix: the bit/rotate/shift counterpart of
+    /// [`InstructionPrefix::DF`].
     DFCB,
+    /// Orgams-specific `0xFF 0xCB` prefix: the bit/rotate/shift counterpart of
+    /// [`InstructionPrefix::FF`].
     FFCB,
+    /// `0xCB` prefix: bit/rotate/shift instruction.
     CB,
+    /// `0xED` prefix: extended instruction.
     ED
 }
 
 impl InstructionPrefix {
+    /// Maps a single prefix byte (`0xDD`, `0xFD`, `0xDF`, `0xFF`, `0xCB` or `0xED`) to its
+    /// [`InstructionPrefix`] variant.
+    ///
+    /// # Panics
+    /// Panics if `b` is not one of the recognized prefix bytes.
     pub fn from_byte(b: u8) -> Self {
         match b {
             IX_CODE => InstructionPrefix::DD,
@@ -78,6 +102,11 @@ impl InstructionPrefix {
         }
     }
 
+    /// Maps a two-byte prefix (`0xDD 0xCB`, `0xFD 0xCB`, `0xDF 0xCB` or `0xFF 0xCB`) to its
+    /// [`InstructionPrefix`] variant.
+    ///
+    /// # Panics
+    /// Panics if `(first, second)` is not one of the recognized two-byte prefixes.
     pub fn from_bytes(first: u8, second: u8) -> Self {
         match (first, second) {
             (IX_CODE, 0xCB) => InstructionPrefix::DDCB,
@@ -93,6 +122,8 @@ impl InstructionPrefix {
         }
     }
 
+    /// Returns the raw prefix byte(s) that must be emitted before the opcode byte, or an empty
+    /// slice for [`InstructionPrefix::None`].
     pub fn bytes(&self) -> &[u8] {
         match self {
             InstructionPrefix::None => &[],
@@ -109,10 +140,13 @@ impl InstructionPrefix {
         }
     }
 
+    /// Returns `true` unless this is [`InstructionPrefix::None`].
     pub fn is_prefix(&self) -> bool {
         !matches!(self, InstructionPrefix::None)
     }
 
+    /// Returns `true` if `b` is a byte that introduces an instruction prefix (`IX`/`IY` index
+    /// bytes, the Orgams `IX`/`IY`-indirect markers, `0xED` or `0xCB`).
     pub const fn is_valid_prefix(b: u8) -> bool {
         matches!(
             b,
@@ -120,6 +154,8 @@ impl InstructionPrefix {
         )
     }
 
+    /// Returns the 256-entry Z80 disassembly table (indexed by opcode byte) that applies for
+    /// this prefix.
     pub const fn disassembler_table(&self) -> &'static [&'static str; 256] {
         match self {
             InstructionPrefix::None => &TABINSTR,
@@ -132,6 +168,9 @@ impl InstructionPrefix {
         }
     }
 
+    /// Returns `true` if, under this prefix, `opcode` is encoded with a trailing operand
+    /// expression beyond the usual `nn`/`nnnn` placeholders (e.g. the bit index of a `CB`
+    /// `BIT`/`RES`/`SET` instruction, or an `RST` restart vector).
     pub const fn requires_extra_expression(&self, opcode: u8) -> bool {
         match self {
             InstructionPrefix::CB | InstructionPrefix::DF | InstructionPrefix::FF => {
@@ -142,6 +181,9 @@ impl InstructionPrefix {
         }
     }
 
+    /// Returns `true` for the Orgams-specific `DF`/`FF`/`DFCB`/`FFCB` prefixes, which encode
+    /// `IX`/`IY`-indirect addressing with an implicit zero offset (`(ix)`/`(iy)`) rather than
+    /// the standard `(ix+n)`/`(iy+n)` form.
     pub const fn is_orgams_ix_iy_indirect(&self) -> bool {
         matches!(
             self,
@@ -203,6 +245,10 @@ const EXP_OP_LE: u8 = b'L';
 const EXP_OP_GE: u8 = b'M';
 const EXP_OP_NEQ: u8 = b'N';
 
+// Reverse-engineered expression-member marker for "no data" (used by a bare .byte/.word
+// directive with no operand). No sample file in the test corpus exercises this byte, so the
+// parser does not yet special-case it; kept here as a record of the known format encoding.
+#[allow(dead_code)]
 const EXP_NONE: u8 = b'?'; // no data (.byte ou .word seul)
 
 const EXP_OP_OR: u8 = b'@';
@@ -244,15 +290,25 @@ const CMD_FACTOR_BLOC: u8 = 13;
 const CMD_FACTOR_BLOC_END: u8 = 14;
 const CMD_END_BIS: u8 = 0x0F;
 const CMD_BRK: u8 = 16;
+// The following escaped command opcodes were identified while reverse-engineering the format
+// (their positions in the 0x7F command numbering are consistent with the ones around them) but
+// no sample file in the test corpus contains them, so `parse_escaped_7f_item` does not yet
+// implement a `Statement` variant for them. Kept here as a record of the known format encoding.
+#[allow(dead_code)]
 const CMD_BRK_SET: u8 = 17;
 const CMD_RESTORE: u8 = 18;
+#[allow(dead_code)]
 const CMD_BANK: u8 = 19;
 const CMD_ENDM: u8 = 0x14; // Renamed from CMD_MACRO
 const CMD_MACRO_USE: u8 = 0x15; // 0x15 used to be called Endm in decoder2, but decoder.rs calls it MacroUse or If. Assuming unused for now.
+#[allow(dead_code)]
 const CMD_LOAD: u8 = 22;
 const CMD_IMPORT: u8 = 0x17; // This seems to be the escaped version?
+#[allow(dead_code)]
 const CMD_STR: u8 = 24;
+#[allow(dead_code)]
 const CMD_SAVE: u8 = 25;
+#[allow(dead_code)]
 const CMD_SAVEA: u8 = 26;
 const CMD_REPEAT: u8 = 0x5B;
 
@@ -269,12 +325,18 @@ fn consume_marker(marker: u8) -> impl Fn(&mut Input) -> OrgamsParseResult<()> + 
 /// Main program structure
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
+    /// Source chunks, in file order. Each chunk was originally stored as a size-prefixed block
+    /// in the `SRCc` section of the binary file.
     pub chunks: Vec<Chunk>,
+    /// The label string table (`LBLs` section) shared by every label reference in `chunks`.
     pub labels: StringTable
 }
 
+/// A single source line: the sequence of [`Item`]s between two newline markers (the trailing
+/// [`Item::NewLine`], if any, is included as the last item).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
+    /// The items making up this line, in stream order.
     pub items: Vec<Item>
 }
 
@@ -287,6 +349,7 @@ impl Deref for Line {
 }
 
 impl Line {
+    /// Re-encodes this line's items back to their original binary representation.
     pub fn bytes(&self, labels: &StringTable) -> Vec<u8> {
         self.items
             .iter()
@@ -294,13 +357,17 @@ impl Line {
             .collect()
     }
 
+    /// Iterates over this line's items in stream order.
     pub fn iter(&self) -> impl Iterator<Item = &Item> {
         self.items.iter()
     }
 }
 
+/// A size-prefixed block of source [`Line`]s, as stored in the `SRCc` section of the binary
+/// file (each chunk is at most `CHUNK_MAX_SIZE` bytes once re-encoded).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chunk {
+    /// The lines making up this chunk, in stream order.
     pub lines: Vec<Line>
 }
 
@@ -326,16 +393,20 @@ impl Chunk {
         bytes
     }
 
+    /// Iterates over every item in this chunk, across all its lines, in stream order.
     pub fn items(&self) -> impl Iterator<Item = &Item> {
         self.lines.iter().flat_map(|line| line.items.iter())
     }
 }
 
 impl Program {
+    /// Iterates over every item in the program, across all chunks and lines, in stream order.
     pub fn items(&self) -> impl Iterator<Item = &Item> {
         self.chunks.iter().flat_map(|chunk| chunk.items())
     }
 
+    /// Re-encodes the whole program (header, source chunks, label table and checksum
+    /// placeholder) back to its original binary file layout.
     pub fn bytes(&self) -> Vec<u8> {
         self.header_bytes()
             .into_iter()
@@ -354,6 +425,8 @@ impl Program {
             .collect()
     }
 
+    /// Builds the file header: the `ORGA` magic, a zero-filled header body up to offset
+    /// `0x67`, and the `SRCc` section magic plus its version byte.
     pub fn header_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"ORGA");
@@ -363,6 +436,8 @@ impl Program {
         bytes
     }
 
+    /// Builds the `LBLs` label table section: its magic, version byte, every label string
+    /// (each already bit7-terminated by [`Bit7OnString::bytes`]), and a null terminator.
     pub fn labels_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"LBLs");
@@ -374,6 +449,8 @@ impl Program {
         bytes
     }
 
+    /// Builds the trailing `ChCk` checksum section. The 4-byte checksum itself is not computed;
+    /// it is left as a zero placeholder.
     pub fn checksum_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"ChCk");
@@ -395,6 +472,7 @@ pub enum Item {
     Assign(Assign),
     /// Standalone label reference
     Label(LabelRef),
+    /// Standalone local label reference (rendered with a leading `.`)
     LocalLabel(LabelRef),
     /// Macro definition
     MacroDef(MacroDef),
@@ -402,9 +480,11 @@ pub enum Item {
     Statement(Statement)
 }
 
+/// Number of spaces of indentation (the byte following an indent marker, `0x49`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Indent(pub u8);
 
+/// Comment text, as introduced by the `;` marker in Orgams source (without the leading `;`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Comment(pub SizedString);
 
@@ -422,8 +502,9 @@ impl Deref for Comment {
 pub struct Bit7OnString(OrgamsEncodedString);
 
 impl Bit7OnString {
-    // Create a string from a array of bytes where the last char has bit 7 on
-    // accept ONLY ASCII strings
+    /// Builds a `Bit7OnString` from raw bytes whose last byte has bit 7 set (as read from the
+    /// file). The stored content has that bit cleared; call [`Bit7OnString::bytes`] to get the
+    /// bit-7-set form back. Only ASCII strings are expected as input.
     pub fn new(bytes: &[u8]) -> Self {
         let mut content = bytes.to_vec();
         if let Some(last) = content.last_mut() {
@@ -432,6 +513,7 @@ impl Bit7OnString {
         Self(OrgamsEncodedString(content))
     }
 
+    /// Returns the raw bytes with bit 7 set on the last byte, as stored in the file.
     pub fn bytes(&self) -> Vec<u8> {
         let mut bytes = self.0.as_bytes().to_vec();
         if let Some(last) = bytes.last_mut() {
@@ -449,6 +531,8 @@ impl Deref for Bit7OnString {
     }
 }
 
+/// A raw byte string as stored in the Orgams format, encoded with the Windows-1252 codepage
+/// (see the [`Display`] impl, which decodes it for rendering).
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrgamsEncodedString(Vec<u8>);
 
@@ -468,11 +552,14 @@ impl Display for OrgamsEncodedString {
 }
 
 impl OrgamsEncodedString {
+    /// Returns the raw Windows-1252-encoded bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 }
 
+/// A string preceded in the binary stream by a one-byte length prefix (e.g. comment and string
+/// literal text).
 #[derive(Debug, Clone, PartialEq)]
 pub struct SizedString(OrgamsEncodedString);
 impl Deref for SizedString {
@@ -496,6 +583,8 @@ impl PartialEq<&str> for Bit7OnString {
 }
 
 impl SizedString {
+    /// Re-encodes this string as a length-prefixed byte sequence: one byte holding the string's
+    /// length, followed by its raw content bytes.
     pub fn bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.0.len() + 1);
         bytes.push(self.0.len() as u8);
@@ -505,6 +594,7 @@ impl SizedString {
 }
 
 impl Item {
+    /// Re-encodes this item back to its original binary representation.
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         match self {
             Item::Comment(text) => {
@@ -533,6 +623,8 @@ impl Item {
         }
     }
 
+    /// Renders this item as Orgams source text (as it would appear inside a line), resolving
+    /// any label reference against `labels`.
     pub fn display<'i>(&'i self, labels: &StringTable) -> Cow<'i, str> {
         match self {
             Item::Comment(text) => format!(";{}", ***text).into(),
@@ -563,7 +655,12 @@ impl Item {
 /// Label reference (index into string table)
 #[derive(Debug, Clone, PartialEq)]
 pub enum LabelRef {
+    /// A single-byte reference (source bytes `0x60`-`0xDF`), holding the already-resolved
+    /// 0-based index (`0`-`127`) into the label string table.
     Short(u8),
+    /// A two-byte reference (source bytes `0xE0`-`0xFF` followed by a second byte), holding the
+    /// two raw bytes exactly as read from the stream. The index into the label string table is
+    /// only computed on lookup, by [`StringTable::label`].
     Long(u8, u8)
 }
 
@@ -574,14 +671,20 @@ impl LabelRef {
     }
 
     const fn new_long_from_stream(long: u8, byte: u8) -> Self {
-        debug_assert!(long >= LONG_LABEL_START && long <= 0xFF); // XXX I do not know if there is a range of values here
+        // `long` is a u8, so it is always <= 0xFF; only the lower bound is meaningful here.
+        debug_assert!(long >= LONG_LABEL_START); // XXX I do not know if there is a range of values here
         LabelRef::Long(long, byte)
     }
 
+    /// Resolves this reference to its label text in `table`.
+    ///
+    /// # Panics
+    /// Panics if the referenced index is out of range for `table`.
     pub fn get<'t>(&self, table: &'t StringTable) -> &'t OrgamsEncodedString {
         table.label(self).unwrap()
     }
 
+    /// Re-encodes this reference back to its original one- or two-byte binary form.
     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
         match self {
             LabelRef::Short(index) => vec![index + SHORT_LABEL_START],
@@ -589,42 +692,40 @@ impl LabelRef {
         }
     }
 
+    /// Renders this reference as its label text (resolved against `table`).
     pub fn display(&self, table: &StringTable) -> String {
         self.get(table).to_string()
     }
 }
 
+/// The `LBLs` section: every label/identifier string used by the source, indexed by
+/// [`LabelRef`]. Short references (`0x60`-`0xDF`) index directly into this table; long
+/// references (`0xE0`-`0xFF` + byte) are remapped to an index starting right after the last
+/// short index (see [`StringTable::label`]).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StringTable {
     strings: Vec<Bit7OnString>
 }
 
 impl StringTable {
+    /// Returns the number of label strings in the table.
     pub fn len(&self) -> usize {
         self.strings.len()
     }
 
+    /// Iterates over every label string, in table order (i.e. in short-index order, followed by
+    /// long-index order).
     pub fn iter(&self) -> impl Iterator<Item = &Bit7OnString> {
         self.strings.iter()
     }
 
-    fn empty() -> Self {
-        Self {
-            strings: Vec::with_capacity(0)
-        }
-    }
-
+    /// Builds a table directly from an ordered list of already-decoded label strings.
     pub fn from_vec_bit7on_texts(strings: Vec<Bit7OnString>) -> Self {
         Self { strings }
     }
 
     fn get(&self, index: usize) -> Option<&Bit7OnString> {
         self.strings.get(index)
-    }
-
-    fn add(&mut self, s: Vec<u8>) -> usize {
-        self.strings.push(Bit7OnString::new(&s));
-        self.strings.len() - 1
     }
 
     fn label(&self, label_ref: &LabelRef) -> Option<&OrgamsEncodedString> {
@@ -647,7 +748,10 @@ impl StringTable {
 /// Expression (encoded bytes)
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
+    /// A sequence of several members (e.g. `a+b`), delimited in the binary stream by the
+    /// multi-term begin/end markers (`'B'`/`'E'`).
     MultiTerm(Vec<ExpressionMember>),
+    /// A single expression member, with no multi-term wrapper.
     SingleTerm(ExpressionMember)
 }
 
@@ -669,72 +773,120 @@ impl Expression {
     }
 }
 
+/// An expression preceded by its encoded byte length (`0` meaning no expression at all), as
+/// used for operands such as `ORG`, `ENT`, `SKIP`, `FILL`, etc.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SizedExpression {
+    /// No expression was present (a zero size byte).
     Empty,
+    /// An expression was present, wrapped with its size.
     Sized(Expression)
 }
 
+/// A single element making up an [`Expression`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionMember {
-    ShortDecimal(u8), // number between 0-31
-    Value(Value),     // decimal/hexadecimal/binary 8/16/custom
+    /// A small literal in `0x00`-`0x1F`, stored directly as its value (0-31).
+    ShortDecimal(u8),
+    /// A decimal/hexadecimal/binary literal, 8/16-bit or custom-width (see [`Value`]).
+    Value(Value),
+    /// A binary or unary operator.
     Operator(Operator),
-    LabelRef(LabelRef),                // Label reference 0x60-0xFF
-    LocalLabelRef(LabelRef),           // Local label reference starting with '.'
-    Space,                             // 0x20
-    Dollar,                            // 0x24 ($)
-    DoubleDollar,                      // 0x44 ($$)
-    UnaryMinus(Box<ExpressionMember>), // '#'
+    /// A label reference (source bytes `0x60`-`0xFF`).
+    LabelRef(LabelRef),
+    /// A local label reference, i.e. a [`LabelRef`] preceded by `.` in the source.
+    LocalLabelRef(LabelRef),
+    /// A literal space character (`0x20`).
+    Space,
+    /// The current-address symbol `$` (`0x24`).
+    Dollar,
+    /// The start-of-chunk address symbol `$$` (`0x44`).
+    DoubleDollar,
+    /// A unary minus applied to the inner member (`#`, e.g. `#5` for `-5`).
+    UnaryMinus(Box<ExpressionMember>),
+    /// A string literal.
     String(SizedString),
+    /// A sub-expression wrapped in `(...)`.
     ParenthesizedExpression(Vec<ExpressionMember>),
-    Iter(u8) // 'I', 'J', 'K'
+    /// A repeat-block iteration variable: `1` for `#`/`I`, `2` for `##`/`J`, `3` for `###`/`K`.
+    Iter(u8)
 }
 
+/// A binary or unary operator usable inside an [`Expression`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
+    /// Bitwise/logical OR (`@`), displayed as `OR`.
     Or,
+    /// Bitwise/logical XOR (`!`), displayed as `XOR`.
     Xor,
 
+    /// Less-than comparison (`<`).
     LessThan,
+    /// Greater-than comparison (`>`).
     GreaterThan,
+    /// Equality comparison (`=`), displayed as `==`.
     Equal,
 
-    LessEqual,    // 'L'
-    GreaterEqual, // 'M'
-    NotEqual,     //
+    /// Less-than-or-equal comparison (`'L'`), displayed as `<=`.
+    LessEqual,
+    /// Greater-than-or-equal comparison (`'M'`), displayed as `>=`.
+    GreaterEqual,
+    /// Not-equal comparison (`'N'`), displayed as `!=`.
+    NotEqual,
 
+    /// Bitwise/logical AND (`0x26`, `&`), displayed as `AND`.
     And,
-    Plus,       // 0x2b
-    Minus,      // 0x2d
-    Multiply,   // 0x2a
-    Divide,     // 0x2f
-    Modulo,     // 0x25
-    ParenOpen,  // 0x28
-    ParenClose  // 0x29
+    /// Addition (`0x2b`, `+`).
+    Plus,
+    /// Subtraction (`0x2d`, `-`).
+    Minus,
+    /// Multiplication (`0x2a`, `*`).
+    Multiply,
+    /// Division (`0x2f`, `/`).
+    Divide,
+    /// Modulo (`0x25`, `MOD`).
+    Modulo,
+    /// Opening parenthesis (`0x28`).
+    ParenOpen,
+    /// Closing parenthesis (`0x29`).
+    ParenClose
 }
 
+/// The number base a numeric [`Value`] was written in, which controls how [`Value::display`]
+/// renders it (plain digits, `&`-prefixed hex, or `%`-prefixed binary).
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValueBasis {
+    /// Decimal (base 10) literal.
     Decimal,
+    /// Hexadecimal (base 16) literal, displayed with a leading `&`.
     Hexadecimal,
+    /// Binary (base 2) literal, displayed with a leading `%`.
     Binary
 }
 
+/// The width/storage form of a numeric [`Value`], independent of its [`ValueBasis`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValueContent {
+    /// An 8-bit value.
     EightBits(u8),
+    /// A 16-bit value, stored little-endian in the file.
     SixteenBits(u16),
+    /// A "custom"-width value: the raw content bytes read after the length byte of an
+    /// `EXP_*_CUSTOM`/`EXP_*_CUSTOM_LONG` marker, kept as-is without further interpretation.
     Custom(Vec<u8>)
 }
 
+/// A numeric literal, combining its number base and its width/storage form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Value {
+    /// The number base the literal was written in.
     pub basis: ValueBasis,
+    /// The literal's width and raw content.
     pub content: ValueContent
 }
 
 impl Value {
+    /// Re-encodes this value back to its original marker-byte-prefixed binary form.
     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
         // Outputs the appropriate encoding marker followed by the value content
         match (&self.basis, &self.content) {
@@ -762,6 +914,7 @@ impl Value {
 }
 
 impl ExpressionMember {
+    /// Re-encodes this expression member back to its original binary representation.
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         match self {
             ExpressionMember::Iter(n) => {
@@ -827,6 +980,8 @@ impl ExpressionMember {
 }
 
 impl Expression {
+    /// Re-encodes this expression back to its original binary representation (wrapping it with
+    /// the multi-term begin/end markers for [`Expression::MultiTerm`]).
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut result = Vec::new();
 
@@ -848,6 +1003,8 @@ impl Expression {
 }
 
 impl SizedExpression {
+    /// Re-encodes this expression back to its original size-byte-prefixed binary form (a lone
+    /// `0` byte for [`SizedExpression::Empty`]).
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         match self {
             SizedExpression::Empty => vec![0],
@@ -862,10 +1019,12 @@ impl SizedExpression {
         }
     }
 
+    /// Returns `true` if this is [`SizedExpression::Empty`], i.e. no expression was present.
     pub fn is_empty(&self) -> bool {
         matches!(self, SizedExpression::Empty)
     }
 
+    /// Returns the inner expression, or `None` if this is [`SizedExpression::Empty`].
     pub fn expr(&self) -> Option<&Expression> {
         match self {
             SizedExpression::Empty => None,
@@ -873,6 +1032,7 @@ impl SizedExpression {
         }
     }
 
+    /// Renders this expression as Orgams source text (`"0"` for [`SizedExpression::Empty`]).
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
             SizedExpression::Empty => "0".into(),
@@ -881,13 +1041,18 @@ impl SizedExpression {
     }
 }
 
+/// An assignment statement (`label = expression`), introduced in the binary stream by the
+/// assignment marker (`0x64`, `'d'`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Assign {
+    /// The label being assigned to.
     pub label: LabelRef,
+    /// The assigned value.
     pub expression: SizedExpression
 }
 
 impl Assign {
+    /// Re-encodes this assignment back to its original binary representation.
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(MARKER_ASSIGN);
@@ -905,6 +1070,8 @@ impl Assign {
 }
 
 impl Expression {
+    /// Renders this expression as Orgams source text, resolving any label reference against
+    /// `table`.
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
             Expression::MultiTerm(members) => {
@@ -921,6 +1088,8 @@ impl Expression {
 }
 
 impl ExpressionMember {
+    /// Renders this expression member as Orgams source text, resolving any label reference
+    /// against `table`.
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
             ExpressionMember::Iter(n) => {
@@ -956,6 +1125,7 @@ impl ExpressionMember {
 }
 
 impl Operator {
+    /// Returns the Orgams source text for this operator (e.g. `"AND"`, `"+"`, `"<="`).
     pub fn as_str(&self) -> &'static str {
         match self {
             Operator::And => "AND",
@@ -979,6 +1149,10 @@ impl Operator {
 }
 
 impl Value {
+    /// Renders this literal as Orgams source text: plain digits for [`ValueBasis::Decimal`],
+    /// `&`-prefixed hex for [`ValueBasis::Hexadecimal`], `%`-prefixed binary for
+    /// [`ValueBasis::Binary`]. A [`ValueContent::Custom`] value is not currently decoded and
+    /// renders as the placeholder `"<custom>"`.
     pub fn display(&self) -> String {
         match &self.content {
             ValueContent::EightBits(val) => {
@@ -1001,6 +1175,7 @@ impl Value {
 }
 
 impl Assign {
+    /// Renders this assignment as Orgams source text (`"label = expression"`).
     pub fn display(&self, table: &StringTable) -> String {
         format!(
             "{} = {}",
@@ -1010,15 +1185,22 @@ impl Assign {
     }
 }
 
+/// A `MACRO name param1,param2,...` definition header (the body of the macro is the sequence of
+/// [`Item`]s that follows it in the source, up to the matching [`Statement::EndMacro`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct MacroDef {
     /// Original block length from file (preserved for exact binary reconstruction)
     pub def_block_len: u8,
+    /// The macro's name.
     pub name: LabelRef,
+    /// The macro's formal parameter names, in declaration order.
     pub params: Vec<LabelRef>
 }
 
 impl MacroDef {
+    /// Re-encodes this macro header back to its original binary representation, padding with
+    /// the observed `0x41` separator byte up to `def_block_len` if the recomputed content is
+    /// shorter (mirrors padding/separator bytes observed in real files).
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut content = Vec::new();
         content.extend_from_slice(&self.name.bytes(table));
@@ -1053,6 +1235,8 @@ impl MacroDef {
         bytes
     }
 
+    /// Renders this macro header as Orgams source text (`"MACRO name"` or
+    /// `"MACRO name param1,param2,..."`).
     pub fn display(&self, table: &StringTable) -> String {
         let name = self.name.get(table);
         if self.params.is_empty() {
@@ -1074,28 +1258,65 @@ impl MacroDef {
 /// Statements
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
+    /// `BRK` statement, a debugger breakpoint marker.
     Brk,
+    /// `BYTE e1,e2,...` directive: a list of 8-bit-sized expressions (or a string, whose
+    /// characters each count as one element) to emit as raw bytes.
     Byte(Vec<Expression>),
+    /// `ELSE` branch of an enclosing [`Statement::If`].
     Else,
+    /// `END` statement, marking the end of the assembled program.
     End,
+    /// A second flavor of end marker (distinct byte from [`Statement::End`], observed as a
+    /// closing marker in some contexts); it renders as an empty string.
     EndBis,
+    /// `ENDM` statement, closing the body of the [`MacroDef`] that started it.
     EndMacro,
+    /// `ENT expr` directive: sets the program's entry point address.
     Ent(SizedExpression),
+    /// `FILL count,value` directive: fills `count` bytes with `value`.
     Fill(SizedExpression, SizedExpression),
+    /// `IF condition` statement, guarding the items up to the matching [`Statement::Else`] or
+    /// [`Statement::End`].
     If(SizedExpression),
+    /// `IMPORT "path"` directive: includes another source file.
     Import(SizedString),
+    /// A single Z80 instruction.
     Instruction(Instruction),
+    /// Invocation of a macro by name with argument expressions (`name(arg1,arg2,...)`).
     MacroUse(Expression, Vec<Expression>),
+    /// `ORG expr` directive: sets the current assembly address.
     Org(SizedExpression),
+    /// `ORG expr1,expr2` directive: the two-argument form of `ORG` (logical and physical
+    /// address).
     Org2(SizedExpression, SizedExpression),
+    /// Raw text emitted verbatim into the rendered output, with no quoting or marker prefix
+    /// (introduced by the `CMD_ASIS` escaped command).
     RawString(OrgamsEncodedString),
+    /// `SKIP expr` directive: advances the current assembly address by `expr` bytes without
+    /// emitting data.
     Skip(SizedExpression),
+    /// Single-item star-repeat (`count ** item`): repeats the wrapped [`Item`] `count` times.
+    /// Distinct from the multi-line [`Statement::StartRepeatBloc`]/[`Statement::StopRepeatBloc`]
+    /// pair, which brackets a whole block of lines instead of a single item.
     RepeatInstruction(Box<SizedExpression>, Box<Item>),
+    /// `RESTORE` statement, restoring a previously stored program-counter/address context (see
+    /// [`Statement::StorePcInstr`]/[`Statement::StorePcLine`]).
     Restore,
+    /// Opening marker of a multi-line star-repeat block (`count ** [`): repeats every line up to
+    /// the matching [`Statement::StopRepeatBloc`] `count` times.
     StartRepeatBloc(SizedExpression),
+    /// Closing marker (`]`) of a multi-line star-repeat block opened by
+    /// [`Statement::StartRepeatBloc`].
     StopRepeatBloc,
-    StorePcInstr, // hidden instruction
-    StorePcLine,  // hidden instruction
+    /// Hidden pseudo-instruction that records the current program counter for internal
+    /// per-instruction bookkeeping; it renders as nothing.
+    StorePcInstr,
+    /// Hidden pseudo-instruction that records the current program counter for internal
+    /// per-line bookkeeping; it renders as nothing.
+    StorePcLine,
+    /// `WORD e1,e2,...` directive: a list of 16-bit-sized expressions to emit as raw
+    /// little-endian words.
     Word(Vec<Expression>)
 }
 
@@ -1122,6 +1343,7 @@ fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTab
 }
 
 impl Statement {
+    /// Re-encodes this statement back to its original binary representation.
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
 
@@ -1249,6 +1471,8 @@ impl Statement {
         bytes
     }
 
+    /// Renders this statement as Orgams source text, resolving any label reference against
+    /// `table`.
     pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
         match self {
             Statement::StartRepeatBloc(expr) => format!("{} ** [", expr.display(table)).into(),
@@ -1323,17 +1547,22 @@ impl Statement {
     }
 }
 
+/// A single Z80 instruction, as an optional prefix, an opcode byte, and its coded operand
+/// expressions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Instruction {
-    // prefix for IX/IY related instructions
+    /// Prefix for `IX`/`IY`-related (and `ED`/`CB`-extended) instructions.
     pub prefix: InstructionPrefix,
-    // opcode of the instruction. Can explicitely encode operands
+    /// The opcode byte, indexing into `prefix.disassembler_table()`.
     pub opcode: u8,
-    // operands as expressions
+    /// The instruction's operands, each encoded as a [`SizedExpression`] in the order their
+    /// `nn`/`nnnn` placeholders appear in the disassembly mnemonic.
     pub coded_operands: Vec<SizedExpression>
 }
 
 impl Instruction {
+    /// Re-encodes this instruction back to its original binary representation (prefix bytes,
+    /// escape byte if the opcode collides with a marker, opcode byte, then operand bytes).
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
 
@@ -1358,6 +1587,10 @@ impl Instruction {
         bytes
     }
 
+    /// Renders this instruction as lowercase Z80 mnemonic text, substituting each `nn`/`nnnn`
+    /// placeholder (or, for opcodes needing an extra expression such as `RST` or `CB`
+    /// `BIT`/`RES`/`SET`, the trailing digit) with its operand's display form, and cleaning up
+    /// Orgams-specific `IX`/`IY`-indirect and negative-offset notation.
     pub fn display(&self, table: &StringTable) -> String {
         let tab = self.prefix.disassembler_table();
 
@@ -1432,24 +1665,43 @@ fn z80str_to_expressions_list(repr: &str) -> SmallVec<[ExpressionKind; 2]> {
     kinds
 }
 
+/// Tracks what was last appended to the line currently being rendered by [`DisplayState`], so
+/// that the next appended token knows whether it needs leading indentation or a `:` separator.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LineState {
+    /// Nothing has been appended to the current line yet.
     Empty,
+    /// A label was just appended; the next token is indented to the instruction/command column.
     AfterLabel,
+    /// An assignment was just appended; the next token is indented like [`LineState::AfterLabel`].
     AfterAssign,
-    AfterStatement(bool), // true if instruction
+    /// A statement was just appended (`true` if it was a Z80 instruction, `false` for a
+    /// directive/command); the next token on the same line is separated with `:`.
+    AfterStatement(bool),
+    /// The opening or closing bracket of a star-repeat block was just appended; the next token
+    /// needs neither indentation nor a separator.
     AfterRepeatBloc
 }
 
+/// Mutable rendering state threaded through [`DisplayState::render_items`]/
+/// [`DisplayState::render_item`] to turn a stream of [`Item`]s into formatted Orgams source
+/// text, one line at a time.
 pub struct DisplayState<'f, 'g> {
+    /// The formatter lines are written to, or `None` to accumulate state without producing
+    /// output (e.g. to only track [`DisplayState::last_line`]).
     pub(crate) f: Option<&'f mut std::fmt::Formatter<'g>>,
+    /// The line currently being built, not yet flushed to `f`.
     pub(crate) current_line: String,
+    /// 1-based number of the line currently being built.
     pub(crate) line_number: usize,
+    /// What was last appended to `current_line`, driving indentation/separator decisions.
     pub(crate) line_state: LineState,
+    /// The last line that was flushed to `f`, if any.
     pub(crate) last_generated_line: Option<String>
 }
 
 impl<'f, 'g> DisplayState<'f, 'g> {
+    /// Creates a fresh rendering state, optionally writing lines to `f` as they are completed.
     pub fn new(f: Option<&'f mut std::fmt::Formatter<'g>>) -> Self {
         Self {
             f,
@@ -1460,10 +1712,12 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         }
     }
 
+    /// Returns the last line that was flushed, if any.
     pub fn last_line(&self) -> Option<&str> {
         self.last_generated_line.as_deref()
     }
 
+    /// Returns the 1-based number of the line currently being built.
     pub fn line_number(&self) -> usize {
         self.line_number
     }
@@ -1586,10 +1840,8 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.current_line.chars().all(|c| c == ' ')
     }
 
-    fn is_empty(&self) -> bool {
-        self.current_line.is_empty()
-    }
-
+    /// Renders every item from `items`, in order, appending to (and periodically flushing) the
+    /// line currently being built.
     pub fn render_items<'i>(
         &mut self,
         items: impl IntoIterator<Item = &'i Item>,
@@ -1601,6 +1853,9 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         Ok(())
     }
 
+    /// Renders a single item, appending it to the line currently being built (with appropriate
+    /// indentation/`:` separators per [`LineState`]), flushing the line when `item` is an
+    /// [`Item::NewLine`] or a comment.
     pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> std::fmt::Result {
         let repr = item.display(labels);
 
@@ -1649,7 +1904,10 @@ impl<'f, 'g> DisplayState<'f, 'g> {
 impl<'f, 'g> Drop for DisplayState<'f, 'g> {
     fn drop(&mut self) {
         if !self.current_line.is_empty() {
-            self.emit_line();
+            // `drop` cannot propagate a `std::fmt::Result`; a failure to flush the last,
+            // still-pending line here would only happen if the underlying `Formatter` write
+            // itself fails, which is already unrecoverable at this point.
+            let _ = self.emit_line();
         }
     }
 }
@@ -1670,6 +1928,14 @@ impl std::fmt::Display for Program {
     }
 }
 
+/// Parses a complete Orgams binary file into a [`Program`]: validates the header and `SRCc`/
+/// `LBLs` section magics, locates and parses the label table first (skipping over the source
+/// chunks without decoding them), then rewinds and fully parses the source chunks with the
+/// resolved label table available.
+///
+/// `debug` enables verbose `DEBUG:`-prefixed tracing to stdout. `groundtruth_iter`, when
+/// `Some`, is forwarded to the source-chunk parser to cross-check each decoded line against an
+/// expected `.Z80` listing while debugging (see `examples/debug_load_orgams.rs`).
 pub fn parse_orgams_file(
     debug: bool,
     groundtruth_iter: &mut Option<std::slice::Iter<String>>
@@ -1815,13 +2081,6 @@ fn parse_items(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
     repeat(.., parse_inner_item).parse_next(input)
 }
 
-/// Parse all items until LBLs
-fn parse_items_untils_lbls(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
-    const LBLS: &[u8] = b"LBLs";
-
-    terminated(parse_items, LBLS).parse_next(input)
-}
-
 fn parse_star_repeat_single(input: &mut Input) -> OrgamsParseResult<Item> {
     consume_marker(CMD_REPEAT)(input)?;
     let expr = cut_err(parse_sized_expression.context(StrContext::Label("Repeat counter")))
@@ -1928,16 +2187,6 @@ fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult
         };
         Ok(item)
     }
-}
-
-/// Parse explicit import directive (0x17)
-fn parse_import(input: &mut Input) -> OrgamsParseResult<SizedString> {
-    consume_marker(CMD_IMPORT)(input)?;
-    parse_sized_text.parse_next(input)
-}
-
-fn parse_item_with_endline(input: &mut Input) -> OrgamsParseResult<Item> {
-    alt((parse_endline, parse_inner_item)).parse_next(input)
 }
 
 /// Parse an indent marker (0x49) followed by space count
@@ -2136,8 +2385,10 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
         },
         EXP_OP_DIV => Ok(ExpressionMember::Operator(Operator::Divide)),
         EXP_OP_MOD => Ok(ExpressionMember::Operator(Operator::Modulo)),
-        EXP_OP_PAREN_OPEN => Ok(ExpressionMember::Operator(Operator::ParenOpen)),
-        EXP_OP_PAREN_CLOSE => Ok(ExpressionMember::Operator(Operator::ParenClose)),
+        // Note: EXP_OP_PAREN_OPEN (b == '(') and EXP_OP_PAREN_CLOSE (b == ')') are already
+        // matched above by the `EXP_OP_PAREN_OPEN` / `EXP_OP_PAREN_CLOSE` arms, which parse a
+        // full parenthesized sub-expression / report an unmatched ')' respectively. A bare
+        // `Operator::ParenOpen`/`Operator::ParenClose` member is therefore never produced here.
         EXP_SPACE => Ok(ExpressionMember::Space),
         EXP_OP_AND => Ok(ExpressionMember::Operator(Operator::And)),
         EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
@@ -2148,7 +2399,6 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
         EXP_OP_LT => Ok(ExpressionMember::Operator(Operator::LessThan)),
         EXP_OP_GT => Ok(ExpressionMember::Operator(Operator::GreaterThan)),
         EXP_OP_EQ => Ok(ExpressionMember::Operator(Operator::Equal)),
-        EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
         0x24 => Ok(ExpressionMember::Dollar), // TO BE CHECKED
         0x44 => Ok(ExpressionMember::DoubleDollar), // TO BE CHECKED
 
@@ -2254,13 +2504,6 @@ fn parse_assign(input: &mut Input) -> OrgamsParseResult<Assign> {
     .parse_next(input)?;
 
     Ok(Assign { label, expression })
-}
-
-/// Parse a standalone label reference (0x60-0xDF)
-/// These appear at item boundaries and are standalone items
-fn parse_label_ref_item(input: &mut Input) -> OrgamsParseResult<Item> {
-    let label = parse_label.parse_next(input)?;
-    Ok(Item::Label(label))
 }
 
 /// Parse a line according to orgams t_line grammar
@@ -2694,16 +2937,6 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
             )));
             Err(ErrMode::Cut(err))
         }
-    }
-}
-
-fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
-    match prefix {
-        IX_CODE | MARKER_IX_IND => &TABINSTRDD,
-        IY_CODE | MARKER_IY_IND => &TABINSTRFD,
-        0xED => &TABINSTRED,
-        0xCB => &TABINSTRCB,
-        _ => panic!("Unsupported prefix: 0x{:02X}", prefix)
     }
 }
 
