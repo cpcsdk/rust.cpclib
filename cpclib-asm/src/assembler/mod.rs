@@ -192,15 +192,17 @@ impl EnvOptions {
     }
 }
 
-fn add_index(m: &mut Bytes, idx: i32, env: &mut Env) -> Result<(), Box<AssemblerError>> {
-    if !(-128..=127).contains(&idx) {
-        env.add_warning(Box::new(AssemblerWarning::AssemblingError {
-            msg: format!("index {idx} does not fit in 8 bits")
-        }));
+impl Env {
+    fn add_index(&mut self, m: &mut Bytes, idx: i32) -> Result<(), Box<AssemblerError>> {
+        if !(-128..=127).contains(&idx) {
+            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
+                msg: format!("index {idx} does not fit in 8 bits")
+            }));
+        }
+        let val = (idx & 0xFF) as u8;
+        add_byte(m, val);
+        Ok(())
     }
-    let val = (idx & 0xFF) as u8;
-    add_byte(m, val);
-    Ok(())
 }
 
 fn add_byte(m: &mut Bytes, b: u8) {
@@ -5975,74 +5977,10 @@ impl Env {
 
         let mask = kind.mask();
 
-        fn output(
-            env: &mut Env,
-            val: i32,
-            delta: i32,
-            mask: u16
-        ) -> Result<(), Box<AssemblerError>> {
-            let val: i32 = val + delta;
-
-            if mask == 0xFF {
-                let b = env.checked_byte(val);
-                env.output_byte(b)?;
-            }
-            else {
-                let w = env.checked_word(val);
-                let high = (w >> 8) as u8;
-                let low = (w & 0xFF) as u8;
-                env.output_byte(low)?;
-                env.output_byte(high)?;
-            }
-            Ok(())
-        }
-
-        fn output_expr_result(
-            env: &mut Env,
-            expr: &ExprResult,
-            delta: i32,
-            mask: u16
-        ) -> Result<(), Box<AssemblerError>> {
-            match &expr {
-                ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
-                    let raw = env.int_forward(expr)?;
-                    output(env, raw, delta, mask)
-                },
-                ExprResult::Char(c) => {
-                    // XXX here it is problematci c shold be a char and not a byte
-                    let _c = env.charset_encoding.transform_char(*c as char);
-                    let raw = env.int_forward(expr)?;
-                    output(env, raw, delta, mask)
-                },
-                ExprResult::String(s) => {
-                    let bytes = env.charset_encoding.transform_string(s);
-
-                    for c in bytes {
-                        output(env, c as _, delta, mask)?;
-                    }
-                    Ok(())
-                },
-                ExprResult::List(l) => {
-                    for c in l.iter() {
-                        output_expr_result(env, c, delta, mask)?;
-                    }
-                    Ok(())
-                },
-                ExprResult::Matrix { .. } => {
-                    for row in expr.matrix_rows() {
-                        for c in row.list_content() {
-                            output_expr_result(env, c, delta, mask)?;
-                        }
-                    }
-                    Ok(())
-                }
-            }
-        }
-
         let backup_address = env.logical_output_address();
         for exp in exprs.iter() {
             let exp = env.resolve_expr_may_fail_in_first_pass(exp)?;
-            output_expr_result(env, &exp, delta, mask)?;
+            env.output_expr_result_masked(&exp, delta, mask)?;
             env.update_dollar();
         }
 
@@ -6109,6 +6047,65 @@ impl Env {
         }
 
         Ok(())
+    }
+
+    fn output_masked(&mut self, val: i32, delta: i32, mask: u16) -> Result<(), Box<AssemblerError>> {
+        let val: i32 = val + delta;
+
+        if mask == 0xFF {
+            let b = self.checked_byte(val);
+            self.output_byte(b)?;
+        }
+        else {
+            let w = self.checked_word(val);
+            let high = (w >> 8) as u8;
+            let low = (w & 0xFF) as u8;
+            self.output_byte(low)?;
+            self.output_byte(high)?;
+        }
+        Ok(())
+    }
+
+    fn output_expr_result_masked(
+        &mut self,
+        expr: &ExprResult,
+        delta: i32,
+        mask: u16
+    ) -> Result<(), Box<AssemblerError>> {
+        match &expr {
+            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
+                let raw = self.int_forward(expr)?;
+                self.output_masked(raw, delta, mask)
+            },
+            ExprResult::Char(c) => {
+                // XXX here it is problematci c shold be a char and not a byte
+                let _c = self.charset_encoding.transform_char(*c as char);
+                let raw = self.int_forward(expr)?;
+                self.output_masked(raw, delta, mask)
+            },
+            ExprResult::String(s) => {
+                let bytes = self.charset_encoding.transform_string(s);
+
+                for c in bytes {
+                    self.output_masked(c as _, delta, mask)?;
+                }
+                Ok(())
+            },
+            ExprResult::List(l) => {
+                for c in l.iter() {
+                    self.output_expr_result_masked(c, delta, mask)?;
+                }
+                Ok(())
+            },
+            ExprResult::Matrix { .. } => {
+                for row in expr.matrix_rows() {
+                    for c in row.list_content() {
+                        self.output_expr_result_masked(c, delta, mask)?;
+                    }
+                }
+                Ok(())
+            }
+        }
     }
 }
 
@@ -6217,14 +6214,6 @@ impl Env {
         }
         Ok(basic.as_bytes())
     }
-}
-
-fn visit_token(token: &Token, env: &mut Env) -> Result<(), Box<AssemblerError>> {
-    let span = None;
-    let _res = visit_token_impl!(token, env, span, Token);
-
-    env.move_delayed_commands_of_functions();
-    Ok(())
 }
 
 /// Assemble DEFS directive
@@ -7211,7 +7200,7 @@ impl Env {
                     else {
                         bytes.push(0x8E);
                     }
-                    add_index(&mut bytes, val, self)?;
+                    self.add_index(&mut bytes, val)?;
                 }
             }
             else if arg2.is_expression() {
@@ -7734,7 +7723,7 @@ impl Env {
                 let val = { let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? };
                 add_index_register_code(&mut bytes, reg);
                 add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
-                add_index(&mut bytes, val, self)?;
+                self.add_index(&mut bytes, val)?;
             }
             else if arg2.is_address_in_register16() {
                 match arg2.get_register16().unwrap() {
