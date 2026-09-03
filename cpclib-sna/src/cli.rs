@@ -92,6 +92,13 @@ impl Command {
             },
             Command::Memory(from, amount) => {
                 let mut output = Pager::new();
+                // `set_exit_strategy` is deprecated in favor of a `PostPagerExit` hook
+                // callback, but that hook only runs cleanup *after* exit - it can't
+                // replicate PagerQuit's actual effect (skip minus's default
+                // process::exit() and return control to this program instead).
+                // Interactive-terminal behavior, so left as-is rather than guessing at
+                // an unverifiable migration.
+                #[allow(deprecated)]
                 output.set_exit_strategy(ExitStrategy::PagerQuit).unwrap();
                 output.set_prompt("MEM").unwrap();
 

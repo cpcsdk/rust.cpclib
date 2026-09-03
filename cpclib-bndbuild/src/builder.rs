@@ -527,7 +527,7 @@ impl BndBuilder {
 
         // Track whether this rule was skipped (already up to date) so we can
         // emit SkippedRule instead of StopRule at the end.
-        let mut skipped = false;
+        let skipped;
 
         if let Some(rule) = this.rule(p) {
             let (disabled, done) = if rule.is_disabled() {

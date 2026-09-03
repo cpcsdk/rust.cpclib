@@ -6,7 +6,6 @@ use std::sync::{Arc, LazyLock};
 
 use camino::Utf8Path;
 use cpclib_common::clap::ArgMatches;
-use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
 use cpclib_runner::runner::assembler::{RASM_CMD, RasmVersion, SJASMPLUS_CMD, VASM_CMD};
@@ -142,7 +141,7 @@ impl Task {
     fn next_id() -> usize {
         static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-        unsafe { COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn id(&self) -> usize {

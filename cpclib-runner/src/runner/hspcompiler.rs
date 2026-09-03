@@ -10,7 +10,7 @@ pub const HSPC_CMD: &str = "hspcompiler";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum HspCompilerVersion {
     #[default]
-    V_2_0 // V2_2_5
+    V2_0 // V2_2_5
 }
 
 impl HspCompilerVersion {
@@ -29,7 +29,7 @@ impl Display for HspCompilerVersion {
 impl GithubInformation for HspCompilerVersion {
     fn version_name(&self) -> &'static str {
         match self {
-            Self::V_2_0 => "v2.0"
+            Self::V2_0 => "v2.0"
         }
     }
 
@@ -53,7 +53,7 @@ impl GithubInformation for HspCompilerVersion {
 impl ExecutableInformation for HspCompilerVersion {
     fn target_os_folder(&self) -> &'static str {
         match self {
-            Self::V_2_0 => "hspcompiler_2_0"
+            Self::V2_0 => "hspcompiler_2_0"
         }
     }
 

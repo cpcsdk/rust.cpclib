@@ -240,30 +240,6 @@ impl Object for DocumentationPage {
                                 "No explicit source item found for file: {}. This is an impossible case",
                                 fname
                             );
-                            // No explicit source item found; try reading file content.
-                            // If reading the provided name fails (likely because it's a
-                            // workspace-relative path while content stores absolute
-                            // paths), attempt to locate the absolute path from
-                            // existing content entries and read that instead.
-                            let mut code = fs_err::read_to_string(&fname).unwrap_or_default();
-                            if code.is_empty()
-                                && let Some(it) = self
-                                    .content
-                                    .iter()
-                                    .find(|it| it.source_file.ends_with(&fname))
-                            {
-                                code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
-                            }
-
-                            files_vec.push(Value::from_object(ItemDocumentation {
-                                item: DocumentedItem::Source(code),
-                                doc: String::new(),
-                                source_file: fname.clone(),
-                                display_source_file: fname.clone(),
-                                line_number: 0,
-                                references: Vec::new(),
-                                linked_source: None
-                            }));
                         }
                     }
                 }
@@ -286,29 +262,6 @@ impl Object for DocumentationPage {
                                 "No explicit source item found for merged file: {}. This is an impossible case, we are not supposed to read files at this point",
                                 mf.source_file
                             );
-                            // No source item found for this merged file; try reading
-                            // the merge-provided path first, then fallback to any
-                            // matching absolute path found in content.
-                            let mut code =
-                                fs_err::read_to_string(&mf.source_file).unwrap_or_default();
-                            if code.is_empty()
-                                && let Some(it) = self
-                                    .content
-                                    .iter()
-                                    .find(|it| it.source_file.ends_with(&mf.source_file))
-                            {
-                                code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
-                            }
-
-                            files_vec.push(Value::from_object(ItemDocumentation {
-                                item: DocumentedItem::Source(code),
-                                doc: String::new(),
-                                source_file: mf.source_file.clone(),
-                                display_source_file: mf.source_file.clone(),
-                                line_number: 0,
-                                references: Vec::new(),
-                                linked_source: None
-                            }));
                         }
                         files_vec.push(Value::from_object(mf));
                     }
@@ -995,19 +948,6 @@ impl DocumentationPage {
     /// Get a sorted list of unique source files (workspace-relative, normalized)
     pub fn file_list(&self) -> &[String] {
         &self.all_files
-    }
-
-    /// Normalize a file path to workspace-relative, using '/' separators
-    #[cfg(feature = "generator")]
-    fn normalize_path(path: &str) -> String {
-        let p = std::path::Path::new(path);
-        // If absolute, strip to file name (simulate workspace-relative)
-        if p.is_absolute()
-            && let Some(fname) = p.file_name().and_then(|s| s.to_str())
-        {
-            return fname.replace('\\', "/");
-        }
-        path.replace('\\', "/")
     }
 
     /// Return a string that encode the documentation page in markdown

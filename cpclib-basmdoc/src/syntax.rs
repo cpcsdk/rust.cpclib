@@ -242,15 +242,3 @@ pub(crate) fn link_symbols_in_source(source: &str, symbols: &[(String, String)])
 
     result
 }
-
-/// Replace a symbol with a link in plain text (not inside HTML tags)
-pub(crate) fn replace_symbol_in_text(text: &str, symbol: &str, key: &str) -> String {
-    let pattern = format!(r"\b{}\b", regex::escape(symbol));
-    if let Ok(re) = regex::Regex::new(&pattern) {
-        let replacement = format!("<a href=\"#{}\" class=\"symbol-link\">{}</a>", key, symbol);
-        re.replace_all(text, replacement.as_str()).to_string()
-    }
-    else {
-        text.to_string()
-    }
-}

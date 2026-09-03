@@ -125,6 +125,7 @@ pub trait RunnerWithClapDerive: RunnerWithClap {
 
 pub struct ExternRunner<E: EventObserver> {
     in_dir: RunInDir,
+    #[cfg(feature = "transparent-x11")]
     transparent: bool,
     _phantom: PhantomData<E>
 }
@@ -139,6 +140,7 @@ impl<E: EventObserver> ExternRunner<E> {
     pub fn new(in_dir: RunInDir) -> Self {
         Self {
             in_dir,
+            #[cfg(feature = "transparent-x11")]
             transparent: false,
             _phantom: Default::default()
         }

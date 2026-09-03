@@ -150,7 +150,7 @@ impl EmuWindow {
     }
 }
 
-enum WindowEventsManager {
+pub(crate) enum WindowEventsManager {
     Enigo(Enigo)
 }
 
@@ -315,16 +315,6 @@ impl WindowEventsManager {
         match self {
             Self::Enigo(_enigo) => {
                 self.enigo_press_with_extra(Key::Control, c);
-            }
-        }
-    }
-
-    pub fn shift_char<K: Into<HostKey>>(&mut self, c: K) {
-        let c = c.into();
-
-        match self {
-            Self::Enigo(_enigo) => {
-                self.enigo_press_with_extra(Key::Shift, c);
             }
         }
     }
@@ -1110,7 +1100,7 @@ fn get_emulator_window_xcap_once(emu: &Emulator) -> Option<EmuWindow> {
     Some(EmuWindow::Xcap(window))
 }
 
-trait UsedEmulator: Sized {
+pub(crate) trait UsedEmulator: Sized {
     /// the default behavior consists in capturing the full window emulator.
     /// This can of course be tailored to get the emulated screen area
     #[cfg(feature = "screenshot")]
@@ -1122,18 +1112,18 @@ trait UsedEmulator: Sized {
     }
 }
 
-struct AceUsedEmulator {}
-struct CpcecUsedEmulator {}
-struct WinapeUsedEmulator {}
-struct AmspiritUsedEmulator {}
-struct SugarBoxV2UsedEmulator {}
-struct CpcEmuPowerUsedEmulator {}
-struct CpcEmuUsedEmulator {}
-struct RetroVmUsedEmulator {}
+pub(crate) struct AceUsedEmulator {}
+pub(crate) struct CpcecUsedEmulator {}
+pub(crate) struct WinapeUsedEmulator {}
+pub(crate) struct AmspiritUsedEmulator {}
+pub(crate) struct SugarBoxV2UsedEmulator {}
+pub(crate) struct CpcEmuPowerUsedEmulator {}
+pub(crate) struct CpcEmuUsedEmulator {}
+pub(crate) struct RetroVmUsedEmulator {}
 
-struct CapriceForeverUsedEmulator {}
-struct CadenceUsedEmulator {}
-struct Emulator1984UsedEmulator {}
+pub(crate) struct CapriceForeverUsedEmulator {}
+pub(crate) struct CadenceUsedEmulator {}
+pub(crate) struct Emulator1984UsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -1186,7 +1176,7 @@ impl UsedEmulator for CapriceForeverUsedEmulator {}
 impl UsedEmulator for CadenceUsedEmulator {}
 impl UsedEmulator for Emulator1984UsedEmulator {}
 
-struct RobotImpl<E: UsedEmulator> {
+pub(crate) struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
     pub(crate) events_manager: WindowEventsManager,
     pub(crate) emu: Emulator,
@@ -1207,7 +1197,7 @@ impl<E: UsedEmulator> DerefMut for RobotImpl<E> {
     }
 }
 
-pub enum Robot {
+pub(crate) enum Robot {
     Ace(RobotImpl<AceUsedEmulator>),
     Cpcec(RobotImpl<CpcecUsedEmulator>),
     Winape(RobotImpl<WinapeUsedEmulator>),
@@ -1440,46 +1430,46 @@ impl Robot {
     pub fn new(
         emu: &Emulator,
         window: Option<EmuWindow>,
-        eventsManager: WindowEventsManager
+        events_manager: WindowEventsManager
     ) -> Self {
         match emu {
             Emulator::Ace(_) => {
-                RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<AceUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::CpcEmu(_) => {
-                RobotImpl::<CpcEmuUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<CpcEmuUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::Cpcec(_) => {
-                RobotImpl::<CpcecUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<CpcecUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::Winape(_) => {
-                RobotImpl::<WinapeUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<WinapeUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::Amspirit(_) => {
-                RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<AmspiritUsedEmulator>::from((window, events_manager, emu)).into()
             },
             // Driven by the same window automation as its bigger sibling: the
             // Lite build presents the same CPC screen and keyboard.
             Emulator::AmspiritLite(_) => {
-                RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<AmspiritUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::SugarBoxV2(_) => {
-                RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<SugarBoxV2UsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::CpcEmuPower(_) => {
-                RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::RetroVm(_) => {
-                RobotImpl::<RetroVmUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<RetroVmUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::CapriceForever(_caprice_forever_version) => {
-                RobotImpl::<CapriceForeverUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<CapriceForeverUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::Cadence(_) => {
-                RobotImpl::<CadenceUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<CadenceUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::Emulator1984(_) => {
-                RobotImpl::<Emulator1984UsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<Emulator1984UsedEmulator>::from((window, events_manager, emu)).into()
             },
         }
     }

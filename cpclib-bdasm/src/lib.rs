@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use cpclib_asm::{Listing, ListingExt, defb_elements, org};
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::event::EventObserver;
@@ -11,7 +11,6 @@ use cpclib_sna::Snapshot;
 
 mod analysis;
 mod control_file;
-mod cpc_strings;
 mod error;
 mod formatting;
 mod parser;
@@ -154,7 +153,6 @@ impl DataBloc {
 #[derive(Debug)]
 struct BdAsmEnv {
     origin: Option<u16>,
-    length: Option<u16>,
     address2label: HashMap<u16, String>,
     blocs: Vec<DataBloc>
 }
@@ -198,7 +196,6 @@ impl BdAsmEnv {
 
         Ok(BdAsmEnv {
             origin,
-            length: None,
             address2label,
             blocs
         })

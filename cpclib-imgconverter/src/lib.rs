@@ -482,13 +482,6 @@ macro_rules! do_export_palette {
     };
 }
 
-/// Compress data using lz4 algorithm.
-/// Should be decompressed on client side.
-/// TODO test: implementation has been modified without any testing...
-fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
-    cpclib::crunchers::lz4::compress(bytes)
-}
-
 /// The palette installation as a single self-contained block.
 ///
 /// `palette_installation_code` keeps its data separate so a display routine can
@@ -705,10 +698,6 @@ vsync_loop
 {palette_data}
     "
     )
-}
-
-fn overscan_display_code(mode: u8, crtc_width: usize, pal: &AnyPalette) -> String {
-    fullscreen_display_code(mode, crtc_width, pal)
 }
 
 fn parse_int(repr: &str) -> usize {
@@ -1061,7 +1050,7 @@ where
     else {
         // Make the conversion before feeding sna or dsk
 
-        /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
+        // TODO manage the presence/absence of file in the dsk, the choice of filename and so on
         if sub_dsk.is_some() || sub_exec.is_some() {
             let code = match &conversion {
                 Output::CPCMemoryStandard(memory, pal) => {

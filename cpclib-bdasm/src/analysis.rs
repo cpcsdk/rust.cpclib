@@ -9,16 +9,6 @@ use cpclib_common::smol_str::SmolStr;
 
 use crate::error::{BdAsmError, Result};
 
-/// Statistics about a disassembly
-#[derive(Debug, Default)]
-pub struct DisassemblyStats {
-    pub total_bytes: usize,
-    pub code_bytes: usize,
-    pub data_bytes: usize,
-    pub instructions: usize,
-    pub labels_generated: usize
-}
-
 /// Resolves the absolute target address of a JR or DJNZ instruction.
 ///
 /// The arithmetic itself now lives in `cpclib_asm::disass`, shared with
@@ -268,65 +258,4 @@ pub fn inject_labels_into_expressions<O: EventObserver>(
     }
 
     Ok(())
-}
-
-/// Generate cross-reference table showing where each label is used
-pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
-    let mut xref: HashMap<String, Vec<u16>> = HashMap::new();
-    let mut current_address: Option<u16> = None;
-
-    for token in listing.iter() {
-        if let Token::Org { val1: address, .. } = token
-            && let Some(addr) = address.eval().ok().and_then(|v| v.int_value().ok())
-        {
-            current_address = Some(addr as u16);
-        }
-
-        // Scan for label references in expressions
-        if let Some(addr) = current_address {
-            match token {
-                Token::OpCode(_, Some(DataAccess::Expression(e)), ..)
-                | Token::OpCode(_, _, Some(DataAccess::Expression(e)), _) => {
-                    if let Expr::Label(label) = e {
-                        xref.entry(label.to_string()).or_default().push(addr);
-                    }
-                },
-                _ => {}
-            }
-        }
-
-        if let Ok(nb) = token.number_of_bytes()
-            && let Some(addr) = current_address
-        {
-            current_address = Some(addr.wrapping_add(nb as u16));
-        }
-    }
-
-    xref
-}
-
-/// Calculate statistics about the disassembly
-pub fn calculate_stats(
-    listing: &Listing,
-    input_bytes_len: usize,
-    labels_count: usize
-) -> DisassemblyStats {
-    let mut stats = DisassemblyStats {
-        total_bytes: input_bytes_len,
-        labels_generated: labels_count,
-        ..Default::default()
-    };
-
-    for token in listing.iter() {
-        if let Token::OpCode(..) = token {
-            stats.instructions += 1
-        }
-
-        if let Ok(nb) = token.number_of_bytes() {
-            stats.code_bytes += nb;
-        }
-    }
-
-    stats.data_bytes = stats.total_bytes.saturating_sub(stats.code_bytes);
-    stats
 }
