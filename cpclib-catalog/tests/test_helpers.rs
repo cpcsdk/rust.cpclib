@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use cpclib_catart::interpret::{BasicMemoryScreen, Interpreter, Locale};
+use cpclib_image::color::AmstradColor;
 use cpclib_image::ga::{Ink, Palette, Pen};
 use cpclib_image::image::Mode;
 use image::{ImageBuffer, Rgb, RgbImage};

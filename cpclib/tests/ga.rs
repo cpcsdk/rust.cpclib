@@ -4,7 +4,7 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        let p = Palette::empty();
+        let p = Palette::<Ink>::empty();
         assert_eq!(p.pens().len(), 0);
         assert!(!p.contains_border());
     }

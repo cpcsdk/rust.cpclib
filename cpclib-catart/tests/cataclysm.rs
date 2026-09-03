@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use cpclib_basic::BasicProgram;
 use cpclib_catart::basic_command::BasicCommandList;
 use cpclib_catart::interpret::{Interpreter, Mode};
+use cpclib_image::color::AmstradColor;
 
 // Border sizes in characters (not hardcoded elsewhere, configurable)
 const BORDER_TOP_CHARS: usize = 5;
