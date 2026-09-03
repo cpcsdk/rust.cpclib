@@ -26,7 +26,7 @@ fs-err.workspace = true
 
 [target."cfg(windows)".build-dependencies]
 ureq.workspace = true
-zip-extract.workspace = true
+zip.workspace = true
 
 [dependencies]
 cpclib-bndbuild.workspace = true

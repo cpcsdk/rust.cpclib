@@ -21,7 +21,10 @@ fn get_graphviz_resources() {
         content.read_to_end(&mut buffer).unwrap();
 
         fs_err::create_dir_all(dst).expect("Unable to create resource dir");
-        zip_extract::extract(Cursor::new(buffer), dst, true)
+        let mut archive = zip::ZipArchive::new(Cursor::new(buffer))
+            .expect("Unable to open graphviz/windows zip");
+        archive
+            .extract_unwrapped_root_dir(dst, zip::read::root_dir_common_filter)
             .expect("Unable to extract graphivz/windows in resources folder");
     }
 }

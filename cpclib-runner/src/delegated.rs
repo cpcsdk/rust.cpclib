@@ -517,7 +517,13 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(">> Unzip archive\n");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true)
+                let mut archive =
+                    zip::ZipArchive::new(Cursor::new(buffer)).map_err(|e| e.to_string())?;
+                archive
+                    .extract_unwrapped_root_dir(
+                        dest.as_std_path(),
+                        zip::read::root_dir_common_filter
+                    )
                     .map_err(|e| e.to_string())?;
             },
             #[cfg(feature = "archive-7z")]
@@ -525,7 +531,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(">> Open 7z archive\n");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                sevenz_rust::decompress(Cursor::new(buffer), dest.as_std_path())
+                sevenz_rust2::decompress(Cursor::new(buffer), dest.as_std_path())
                     .map_err(|e| e.to_string())?;
             }
         }

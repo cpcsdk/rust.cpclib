@@ -154,7 +154,7 @@ impl DownloadableInformation for At3Version {
                     .output();
 
                 // Restore execute bit and ad-hoc sign every regular file under the folder.
-                // zip_extract does not always preserve Unix permissions, and on macOS
+                // Zip extraction does not always preserve Unix permissions, and on macOS
                 // Gatekeeper sends SIGKILL to unsigned binaries before they can run.
                 fn fix_dir(dir: &cpclib_common::camino::Utf8Path) -> Result<(), String> {
                     for entry in fs_err::read_dir(dir).map_err(|e| e.to_string())? {

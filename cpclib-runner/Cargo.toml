@@ -24,7 +24,7 @@ camino-tempfile.workspace = true
 clap = {workspace=true, features=["derive"]}
 delegate.workspace = true
 enigo = {workspace = true, features = ["x11rb"]}
-sevenz-rust = {workspace = true, optional = true}
+sevenz-rust2 = {workspace = true, optional = true}
 shlex.workspace = true
 utf8-chars.workspace = true
 xcap = {workspace = true, optional = true}
@@ -42,7 +42,7 @@ scraper.workspace = true
 transparent = { workspace = true, optional = true }
 xz2.workspace = true
 wmctrl.workspace = true
-zip-extract.workspace = true
+zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 fs_extra.workspace = true
@@ -52,5 +52,5 @@ default = ["fap", "screenshot", "archive-7z"]
 transparent-x11 = ["dep:transparent"]
 screenshot = ["dep:xcap"]
 fap = []
-archive-7z = ["dep:sevenz-rust"]
+archive-7z = ["dep:sevenz-rust2"]
 hfe = ["dep:cpclib-disc", "cpclib-disc/hfe"]

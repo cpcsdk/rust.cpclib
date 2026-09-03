@@ -135,7 +135,13 @@ impl FAPVersion {
                 fs_err::create_dir_all(&release_dir).map_err(|e| e.to_string())?;
 
                 let zip_content = fs_err::read(&release_zip).map_err(|e| e.to_string())?;
-                zip_extract::extract(Cursor::new(zip_content), release_dir.as_std_path(), true)
+                let mut archive = zip::ZipArchive::new(Cursor::new(zip_content))
+                    .map_err(|e| e.to_string())?;
+                archive
+                    .extract_unwrapped_root_dir(
+                        release_dir.as_std_path(),
+                        zip::read::root_dir_common_filter
+                    )
                     .map_err(|e| e.to_string())?;
 
                 let from_play = {
