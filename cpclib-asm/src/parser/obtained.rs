@@ -1398,6 +1398,10 @@ impl ListingElement for LocatedToken {
         self.inner.is_right()
     }
 
+    // `SourceString::as_str` (an extension trait method) may collide with a
+    // future `str::as_str` added to the standard library; keep using ours
+    // rather than chase that instability with fully-qualified syntax.
+    #[allow(unstable_name_collisions)]
     fn warning_message(&self) -> &str {
         match &self.inner {
             either::Right((_inner, msg)) => msg.as_str(),
@@ -2035,6 +2039,9 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
+    // See the same-named method above: `SourceString::as_str` may collide
+    // with a future `str::as_str`.
+    #[allow(unstable_name_collisions)]
     fn warning_message(&self) -> &str {
         match &self {
             LocatedTokenInner::WarningWrapper(_token, message) => message.as_str(),

@@ -669,13 +669,6 @@ document.addEventListener('click', (event) => {
         }
     }
 
-    fn block_end_marker(kind: &HtmlBlockKind) -> &'static str {
-        match kind {
-            HtmlBlockKind::MacroDefinition => "endm",
-            HtmlBlockKind::Repeat => "endr"
-        }
-    }
-
     fn token_kind_name(token_kind: &TokenKind) -> &'static str {
         match token_kind {
             TokenKind::Hidden => "hidden",

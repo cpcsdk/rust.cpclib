@@ -1,3 +1,4 @@
+#[cfg(feature = "indicatif")]
 use core::time::Duration;
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
@@ -10,8 +11,11 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 static PROGRESS: LazyLock<Arc<Mutex<Progress>>> =
     LazyLock::new(|| Arc::new(Mutex::new(Progress::new())));
 
+#[cfg(feature = "indicatif")]
 const REFRESH_RATE: Duration = Duration::from_millis(250);
+#[cfg(feature = "indicatif")]
 const PROGRESS_STYLE: &str = "{prefix:.bold.dim>8}  [{bar}] {pos:>3}/{len:3} {wide_msg}";
+#[cfg(feature = "indicatif")]
 const PASS_STYLE: &str = "{prefix:.bold.dim>8}  [{bar}] ";
 
 #[cfg(feature = "indicatif")]
@@ -54,7 +58,9 @@ struct CountedProgress {
     current_items: hashbag::HashBag<String>,
     nb_expected: u64,
     nb_done: u64,
+    #[allow(unused)]
     prefix: &'static str,
+    #[allow(unused)]
     index: usize,
     freeze_amount: bool,
     last_tick: std::time::SystemTime

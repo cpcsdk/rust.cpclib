@@ -123,12 +123,6 @@ fn write_hex_bytes(out: &mut String, format: &ListingOutputFormat, bytes: &[u8])
     }
 }
 
-fn format_bytes_raw_for_impl(format: &ListingOutputFormat, bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 3);
-    write_hex_bytes(&mut out, format, bytes);
-    out
-}
-
 fn format_bytes_for_impl(
     format: &ListingOutputFormat,
     bytes_per_line: usize,
@@ -356,10 +350,6 @@ pub(crate) fn physical_field_width(format: &ListingOutputFormat) -> usize {
     physical_field_width_impl(format)
 }
 
-pub(crate) fn format_address(format: &ListingOutputFormat, value: u32, width: usize) -> String {
-    format_address_for_impl(format, value, width)
-}
-
 pub(crate) fn format_address_for(format: &ListingOutputFormat, value: u32, width: usize) -> String {
     format_address_for_impl(format, value, width)
 }
@@ -368,68 +358,12 @@ pub(crate) fn blank(width: usize) -> String {
     blank_impl(width)
 }
 
-pub(crate) fn hex_byte(format: &ListingOutputFormat, b: u8) -> String {
-    hex_byte_for_impl(format, b)
-}
-
 pub(crate) fn hex_byte_for(format: &ListingOutputFormat, b: u8) -> String {
     hex_byte_for_impl(format, b)
 }
 
-pub(crate) fn format_bytes_raw(format: &ListingOutputFormat, bytes: &[u8]) -> String {
-    format_bytes_raw_for_impl(format, bytes)
-}
-
-pub(crate) fn format_bytes_raw_for(format: &ListingOutputFormat, bytes: &[u8]) -> String {
-    format_bytes_raw_for_impl(format, bytes)
-}
-
-pub(crate) fn format_bytes(
-    format: &ListingOutputFormat,
-    bytes_per_line: usize,
-    bytes: &[u8]
-) -> String {
-    format_bytes_for_impl(format, bytes_per_line, bytes)
-}
-
-pub(crate) fn format_bytes_for(
-    format: &ListingOutputFormat,
-    bytes_per_line: usize,
-    bytes: &[u8]
-) -> String {
-    format_bytes_for_impl(format, bytes_per_line, bytes)
-}
-
-pub(crate) fn render_source_column_for(line: Option<&str>) -> String {
-    render_source_column_impl(line)
-}
-
 pub(crate) fn render_source_column(line: Option<&str>) -> String {
     render_source_column_impl(line)
-}
-
-pub(crate) fn format_line_with_template(
-    format: &ListingOutputFormat,
-    bytes_per_line: usize,
-    file_index: usize,
-    logical_address: Option<u32>,
-    physical_address_repr: &str,
-    bytes: &[u8],
-    line_number: Option<u32>,
-    source_line_raw: Option<&str>,
-    source_line_expanded: Option<&str>
-) -> String {
-    format_line_with_template_for_impl(
-        format,
-        bytes_per_line,
-        file_index,
-        logical_address,
-        physical_address_repr,
-        bytes,
-        line_number,
-        source_line_raw,
-        source_line_expanded
-    )
 }
 
 pub(crate) fn format_line_with_template_for(
@@ -454,38 +388,6 @@ pub(crate) fn format_line_with_template_for(
         source_line_raw,
         source_line_expanded
     )
-}
-
-pub(crate) fn format_deferred_line_with_template(
-    format: &ListingOutputFormat,
-    bytes_per_line: usize,
-    file_index: usize,
-    specific_content: &str,
-    line_number: Option<u32>,
-    source_line_raw: &str,
-    source_line_expanded: &str
-) -> Vec<String> {
-    format_deferred_line_with_template_for_impl(
-        format,
-        bytes_per_line,
-        file_index,
-        specific_content,
-        line_number,
-        source_line_raw,
-        source_line_expanded
-    )
-}
-
-pub(crate) fn logical_width(format: &ListingOutputFormat) -> usize {
-    logical_address_width_impl(format)
-}
-
-pub(crate) fn physical_width(format: &ListingOutputFormat) -> usize {
-    physical_address_width_impl(format)
-}
-
-pub(crate) fn physical_field_width_for(format: &ListingOutputFormat) -> usize {
-    physical_field_width_impl(format)
 }
 
 pub(crate) fn format_deferred_line_with_template_for(

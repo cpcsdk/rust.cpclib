@@ -227,8 +227,7 @@ macro_rules! resolve_impl {
                                 symbol: expanded_label.clone().into(),
                                 closest:  $env.symbols().closest_symbol(expanded_label.value(), SymbolFor::Number)?.map(|s| s.into()),
                             }
-                        }),
-                        _ => unreachable!()
+                        })
                     }
                 }
             }.map_err(|e| Box::new(e))

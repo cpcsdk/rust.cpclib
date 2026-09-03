@@ -1726,8 +1726,7 @@ impl Env {
                 },
                 (None, Err(l_errors)) => {
                     assert_failures = Some(l_errors);
-                },
-                _ => unimplemented!()
+                }
             }
         };
 
@@ -1793,8 +1792,7 @@ impl Env {
                 },
                 (None, Err(l_errors)) => {
                     print_errors = Some(l_errors);
-                },
-                _ => unreachable!()
+                }
             }
         };
 
@@ -6009,7 +6007,7 @@ impl Env {
 
             // TODO add that in a function to reuse it with DEFS
             // collect the bytes
-            let mut bytes = (0..num_bytes)
+            let bytes = (0..num_bytes)
                 .into_iter()
                 .map(|i| {
                     let addr = backup_address.wrapping_add(i as u16);

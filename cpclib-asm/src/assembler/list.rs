@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_tokens::{Expr, ExprFormat, ExprResult};
+use cpclib_tokens::{ExprFormat, ExprResult};
 use substring::Substring;
 
 use crate::{Env, error::{AssemblerError, ExpressionError}};
@@ -65,7 +65,7 @@ pub fn list_set(
 
 
 
-pub fn list_position_value(env: &mut Env, list: &ExprResult, value: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn list_position_value(_env: &mut Env, list: &ExprResult, value: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => {
             for (i, item) in l.iter().enumerate() {
@@ -205,7 +205,7 @@ pub fn string_get(
     index: usize
 ) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::String(s) => {
+        ExprResult::String(_s) => {
             list_get(list, index)
         },
         _ => {
@@ -237,7 +237,7 @@ pub fn string_upper_case(list: &ExprResult) -> Result<ExprResult, Box<AssemblerE
 
 pub fn string_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::String(s) => list_len(list),
+        ExprResult::String(_s) => list_len(list),
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -473,7 +473,7 @@ pub fn string_filter(
     predicate: &ExprResult
 ) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::String(s) => list_filter(env, list, predicate),
+        ExprResult::String(_s) => list_filter(env, list, predicate),
         _ => {
             return Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -572,7 +572,7 @@ pub fn string_map(
     mapper: &ExprResult
 ) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::String(s) => list_map(env, list, mapper),
+        ExprResult::String(_s) => list_map(env, list, mapper),
         _ => {
             return Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {

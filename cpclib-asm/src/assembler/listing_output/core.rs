@@ -37,7 +37,6 @@ struct ListingTokenItem {
     raw: String,
     expanded: String,
     bytes: Vec<u8>,
-    token_kind: TokenKind,
     /// 1-based column where this token starts on its source line, and where it
     /// ends.
     ///
@@ -233,26 +232,6 @@ impl ListingOutput {
     }
 
     #[cfg(test)]
-    fn format_bytes_raw(&self, bytes: &[u8]) -> String {
-        format_bytes_raw_for(&self.format, bytes)
-    }
-
-    #[cfg(test)]
-    fn format_bytes(&self, bytes: &[u8]) -> String {
-        format_bytes_for(&self.format, self.bytes_per_line(), bytes)
-    }
-
-    #[cfg(test)]
-    fn format_bytes_x(&self, bytes: &[u8]) -> String {
-        format_bytes_for(&self.format, self.bytes_per_line(), bytes)
-    }
-
-    #[cfg(test)]
-    fn render_source_column(line: Option<&str>) -> String {
-        render_source_column(line)
-    }
-
-    #[cfg(test)]
     fn format_line_with_template(
         &self,
         logical_address: Option<u32>,
@@ -269,25 +248,6 @@ impl ListingOutput {
             logical_address,
             physical_address_repr,
             bytes,
-            line_number,
-            source_line_raw,
-            source_line_expanded
-        )
-    }
-
-    #[cfg(test)]
-    fn format_deferred_line_with_template(
-        &self,
-        specific_content: &str,
-        line_number: Option<u32>,
-        source_line_raw: &str,
-        source_line_expanded: &str
-    ) -> Vec<String> {
-        format_deferred_line_with_template_for(
-            &self.format,
-            self.bytes_per_line(),
-            self.current_file_index,
-            specific_content,
             line_number,
             source_line_raw,
             source_line_expanded
@@ -469,7 +429,6 @@ impl ListingOutput {
             raw: self.current_token_raw.clone(),
             expanded: self.current_token_expanded.clone(),
             bytes: self.current_token_bytes.clone(),
-            token_kind: self.current_token_kind.clone(),
             column: self.current_token_column,
             column_end: self.current_token_column_end,
             is_data: self.current_token_is_data
@@ -911,8 +870,7 @@ impl ListingOutput {
                     token_id: token.token_id,
                     raw_text: token.raw.as_str(),
                     expanded_text: token.expanded.as_str(),
-                    bytes: token.bytes.as_slice(),
-                    token_kind: &token.token_kind
+                    bytes: token.bytes.as_slice()
                 }
             })
             .collect_vec();
@@ -933,7 +891,6 @@ impl ListingOutput {
                     &self.format,
                     bytes_per_line,
                     ListingDeferredRender {
-                        row_id: 0,
                         file_index: self.current_file_index,
                         specific_content: if line_delta == 0 {
                             specific_content
@@ -946,11 +903,7 @@ impl ListingOutput {
                         ),
                         source_line_raw: line_raw,
                         source_line_expanded: line_expanded,
-                        token_kind: &self.current_token_kind,
-                        definition_target: None,
-                        highlighted_symbols: &[],
-                        collapsible: false,
-                        collapsed_block: false
+                        token_kind: &self.current_token_kind
                     }
                 );
             }
@@ -1140,8 +1093,7 @@ impl ListingOutput {
                             token_id: token.token_id,
                             raw_text: token.raw.as_str(),
                             expanded_text: token.expanded.as_str(),
-                            bytes: token.bytes.as_slice(),
-                            token_kind: &token.token_kind
+                            bytes: token.bytes.as_slice()
                         }
                     })
                     .collect_vec();
@@ -1151,7 +1103,6 @@ impl ListingOutput {
                     &self.format,
                     bytes_per_line,
                     ListingLineRender {
-                        row_id: 0,
                         file_index: self.current_file_index,
                         logical_address: logical_representation,
                         physical_address_repr: &phys_addr_representation,
@@ -1163,11 +1114,7 @@ impl ListingOutput {
                         is_multiline_continuation,
                         token_kind: &self.current_token_kind,
                         tokens: token_renders.as_slice(),
-                        source_tokens: source_token_renders.as_slice(),
-                        definition_target: None,
-                        highlighted_symbols: &[],
-                        collapsible: false,
-                        collapsed_block: false
+                        source_tokens: source_token_renders.as_slice()
                     }
                 );
             }
@@ -1959,7 +1906,6 @@ endm\n";
                 raw: "ld".to_string(),
                 expanded: "ld".to_string(),
                 bytes: vec![0x3E],
-                token_kind: TokenKind::Displayable,
                 column: 1,
                 column_end: 1,
                 is_data: false
@@ -1969,7 +1915,6 @@ endm\n";
                 raw: "1".to_string(),
                 expanded: "1".to_string(),
                 bytes: vec![0x01],
-                token_kind: TokenKind::Displayable,
                 column: 1,
                 column_end: 1,
                 is_data: false
@@ -2031,7 +1976,6 @@ endm\n";
                 raw: "ld bc, 0xbc00 + 1".to_string(),
                 expanded: "ld bc, 0xbc00 + 1".to_string(),
                 bytes: vec![0x01, 0x01, 0xBC],
-                token_kind: TokenKind::Displayable,
                 column: 1,
                 column_end: 1,
                 is_data: false
@@ -2041,7 +1985,6 @@ endm\n";
                 raw: "out (c), c".to_string(),
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
-                token_kind: TokenKind::Displayable,
                 column: 1,
                 column_end: 1,
                 is_data: false
@@ -2051,7 +1994,6 @@ endm\n";
                 raw: "ld bc, 0xbd00 + 96/2".to_string(),
                 expanded: "ld bc, 0xbd00 + 96/2".to_string(),
                 bytes: vec![0x01, 0x30, 0xBD],
-                token_kind: TokenKind::Displayable,
                 column: 1,
                 column_end: 1,
                 is_data: false
@@ -2061,7 +2003,6 @@ endm\n";
                 raw: "out (c), c".to_string(),
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
-                token_kind: TokenKind::Displayable,
                 column: 1,
                 column_end: 1,
                 is_data: false
@@ -2108,7 +2049,6 @@ endm\n";
             raw: "add hl, de".to_string(),
             expanded: "add hl, de".to_string(),
             bytes: vec![0x19],
-            token_kind: TokenKind::Displayable,
             column: 1,
             column_end: 1,
             is_data: false
@@ -2155,7 +2095,6 @@ endm\n";
             raw: "start".to_string(),
             expanded: "start".to_string(),
             bytes: vec![0x00, 0x01],
-            token_kind: TokenKind::Displayable,
             column: 1,
             column_end: 1,
             is_data: false

@@ -5,7 +5,6 @@ use super::super::TokenKind;
 use super::super::format::{ListingOutputFormat, ListingOutputKind, hex_byte_for};
 
 pub(crate) struct ListingLineRender<'a> {
-    pub(crate) row_id: usize,
     pub(crate) file_index: usize,
     pub(crate) logical_address: Option<u32>,
     pub(crate) physical_address_repr: &'a str,
@@ -17,33 +16,23 @@ pub(crate) struct ListingLineRender<'a> {
     pub(crate) is_multiline_continuation: bool,
     pub(crate) token_kind: &'a TokenKind,
     pub(crate) tokens: &'a [ListingTokenRender<'a>],
-    pub(crate) source_tokens: &'a [ListingTokenRender<'a>],
-    pub(crate) definition_target: Option<usize>,
-    pub(crate) highlighted_symbols: &'a [String],
-    pub(crate) collapsible: bool,
-    pub(crate) collapsed_block: bool
+    pub(crate) source_tokens: &'a [ListingTokenRender<'a>]
 }
 
 pub(crate) struct ListingTokenRender<'a> {
     pub(crate) token_id: usize,
     pub(crate) raw_text: &'a str,
     pub(crate) expanded_text: &'a str,
-    pub(crate) bytes: &'a [u8],
-    pub(crate) token_kind: &'a TokenKind
+    pub(crate) bytes: &'a [u8]
 }
 
 pub(crate) struct ListingDeferredRender<'a> {
-    pub(crate) row_id: usize,
     pub(crate) file_index: usize,
     pub(crate) specific_content: &'a str,
     pub(crate) line_number: Option<u32>,
     pub(crate) source_line_raw: &'a str,
     pub(crate) source_line_expanded: &'a str,
-    pub(crate) token_kind: &'a TokenKind,
-    pub(crate) definition_target: Option<usize>,
-    pub(crate) highlighted_symbols: &'a [String],
-    pub(crate) collapsible: bool,
-    pub(crate) collapsed_block: bool
+    pub(crate) token_kind: &'a TokenKind
 }
 
 pub(crate) enum ListingNotice<'a> {
@@ -59,14 +48,6 @@ pub(crate) enum HtmlBlockKind {
     Repeat
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct HtmlBlock {
-    row_id: usize,
-    kind: HtmlBlockKind,
-    title: String,
-    source_row_ids: Vec<usize>
-}
-
 pub(crate) enum ListingRenderer {
     Text(TextListingRenderer),
     Html(HtmlListingRenderer)
@@ -80,16 +61,10 @@ pub(crate) struct TextListingRenderer {
 #[derive(Default)]
 pub(crate) struct HtmlListingRenderer {
     pub(crate) next_row_id: usize,
-    pub(crate) active_block: Option<HtmlBlock>,
-    pub(crate) blocks: Vec<HtmlBlock>,
     pub(crate) symbol_targets: HashMap<String, usize>,
     pub(crate) symbol_names_by_row: HashMap<usize, String>,
     pub(crate) symbol_values: HashMap<usize, String>,
     pub(crate) current_global_symbol: Option<String>
-}
-
-pub(crate) fn render_html_bytes(format: &ListingOutputFormat, bytes: &[u8]) -> String {
-    render_html_bytes_for_row(format, bytes, None)
 }
 
 pub(crate) fn render_html_bytes_for_row(
@@ -129,49 +104,6 @@ pub(crate) fn escape_html(text: &str) -> String {
             }
         })
         .collect()
-}
-
-pub(crate) fn render_html_tokenized_text(text: &str, class_name: &str) -> String {
-    let mut out = String::new();
-    let mut token = String::new();
-    let mut in_whitespace = None;
-
-    for ch in text.chars() {
-        let is_whitespace = ch.is_whitespace();
-        if in_whitespace == Some(is_whitespace) || in_whitespace.is_none() {
-            token.push(ch);
-            in_whitespace = Some(is_whitespace);
-            continue;
-        }
-
-        if in_whitespace == Some(true) {
-            out.push_str(&escape_html(&token));
-        }
-        else {
-            out.push_str(&format!(
-                "<span class=\"token {class_name}\">{}</span>",
-                escape_html(&token)
-            ));
-        }
-
-        token.clear();
-        token.push(ch);
-        in_whitespace = Some(is_whitespace);
-    }
-
-    if !token.is_empty() {
-        if in_whitespace == Some(true) {
-            out.push_str(&escape_html(&token));
-        }
-        else {
-            out.push_str(&format!(
-                "<span class=\"token {class_name}\">{}</span>",
-                escape_html(&token)
-            ));
-        }
-    }
-
-    out
 }
 
 pub(crate) fn is_identifier_char(ch: char) -> bool {

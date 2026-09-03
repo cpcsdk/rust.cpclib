@@ -12,6 +12,23 @@ homepage.workspace = true
 [package.metadata.workspaces]
 independent = true
 
+[lints.rust]
+# `test_to_clean` is a deliberately-never-set cfg used to keep a large block
+# of not-yet-fixed-up tests (in assembler/mod.rs) out of the build until
+# someone gets around to repairing them, without deleting the tests outright.
+#
+# `feature = "chardetng"` (assembler/file.rs) guards a `chardetng`/`encoding_rs`
+# based encoding-detection routine that predates an upstream API change (its
+# `EncodingDetector::guess`/`Encoding::decode` calls no longer match those
+# crates' current signatures) and doesn't actually compile any more. There is
+# no such Cargo feature (the real feature enabling the `chardetng` dependency
+# is named `chardet`), so this cfg can never be true - which is what keeps the
+# broken routine out of the build in favor of its `unimplemented!()` fallback.
+unexpected_cfgs = { level = "allow", check-cfg = [
+    "cfg(test_to_clean)",
+    "cfg(feature, values(\"chardetng\"))"
+] }
+
 [dependencies]
 cpclib-basic.workspace = true
 cpclib-crunchers.workspace = true

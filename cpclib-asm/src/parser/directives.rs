@@ -79,7 +79,6 @@ const ERR_IF_ERROR_IN_BLOCK: &str = "IF: error in block";
 const ERR_CRUNCHED_NOT_CLOSED: &str = "CRUNCHED SECTION: not closed";
 const ERR_CRUNCHED_ERROR_IN_BLOCK: &str = "CRUNCHED SECTION: error in block";
 const ERR_BASIC_NOT_CLOSED: &str = "BASIC: not closed";
-const ERR_BASIC_ERROR_IN_BLOCK: &str = "BASIC: error in block";
 const ERR_ASMCONTROL_NOT_CLOSED: &str = "ASMCONTROLENV: not closed";
 const ERR_ASMCONTROL_ERROR_IN_BLOCK: &str = "ASMCONTROLENV: error in block";
 

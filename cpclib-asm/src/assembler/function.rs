@@ -9,7 +9,6 @@ use cpclib_tokens::{
     CrunchType, Expr, ExprResult, ExpressionTypeError, ListingElement, TestKindElement,
     ToSimpleToken, Token
 };
-use cpclib_z80flow::regflag::Flag::H;
 use either::Either;
 
 use super::list::{
@@ -78,6 +77,11 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
+    // `Function` derives `Clone` (its callers only ever clone it through an
+    // `Arc<Function>`, which bumps the refcount without calling this), so
+    // this impl exists solely to satisfy that derive's bound and is never
+    // actually invoked; `inner` (`ProcessedToken`) has no real clone story.
+    #[allow(unreachable_code)]
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
@@ -582,7 +586,6 @@ impl HardCodedFunction {
             HardCodedFunction::SectionStart => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStop => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionUsed => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::StringFilter => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::StringFormat => ExpectedNbArgs::AtLeast(1),
