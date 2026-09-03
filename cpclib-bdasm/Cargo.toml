@@ -32,13 +32,13 @@ hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 built.workspace = true
 
 [dev-dependencies]
-escargot = "0.5"
-predicates = "3.1"
+escargot.workspace = true
+predicates.workspace = true
 fs-err.workspace = true
-tempfile = "3.27"
+tempfile.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
-rexpect = "0.7"
+rexpect.workspace = true
 
 [[bin]]
 name = "bdasm"

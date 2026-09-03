@@ -7,17 +7,17 @@ rust-version = "1.74"
 
 [dependencies]
 # CLI tool libraries
-cpclib-basm = { workspace = true }
-cpclib-bdasm = { workspace = true }
-cpclib-basmdoc = { workspace = true }
-cpclib-borgams = { workspace = true }
-cpclib-catalog = { workspace = true }
-cpclib-locomotive = { workspace = true }
-cpclib-cprcli = { path = "../cpclib-cprcli" }
-cpclib-cslcli = { path = "../cpclib-cslcli" }
-cpclib-xfertool = { workspace = true }
-cpclib-imgconverter = { workspace = true }
-cpclib-bndbuild = { workspace = true }
+cpclib-basm = { workspace = true, default-features = true }
+cpclib-bdasm = { workspace = true, default-features = true }
+cpclib-basmdoc = { workspace = true, default-features = true, features = ["generator"] }
+cpclib-borgams = { workspace = true, default-features = true }
+cpclib-catalog = { workspace = true, default-features = true }
+cpclib-locomotive = { workspace = true, default-features = true }
+cpclib-cprcli = { workspace = true, default-features = true }
+cpclib-cslcli = { workspace = true, default-features = true }
+cpclib-xfertool = { workspace = true, default-features = true }
+cpclib-imgconverter = { workspace = true, default-features = true }
+cpclib-bndbuild = { workspace = true, default-features = true }
 cpclib-sna = { workspace = true, features = ["cmdline", "interactive"] }
 
 # For clap Command validation

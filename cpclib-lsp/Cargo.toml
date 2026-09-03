@@ -34,34 +34,34 @@ minijinja.workspace = true
 either.workspace = true
 
 # LSP
-tower-lsp = "0.19"
-tokio = { version = "1", features = ["full"] }
+tower-lsp.workspace = true
+tokio = { workspace = true, features = ["full"] }
 
 # Dynamic clap-based completion for internal bndbuild commands
-clap_complete = { version = "4.6.8", features = ["unstable-dynamic"] }
+clap_complete = { workspace = true, features = ["unstable-dynamic"] }
 shlex.workspace = true
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9"
-toml = "0.8"
-toml_edit = "0.20"
-enumflags2 = "0.7.12"
+serde_json.workspace = true
+serde_yaml.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+enumflags2.workspace = true
 
 # Text processing
-ropey = "1.6"
+ropey.workspace = true
 
 # Error handling
-thiserror = "2"
-anyhow = "1"
+thiserror.workspace = true
+anyhow.workspace = true
 
 # Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Collections
-dashmap = "6"
+dashmap.workspace = true
 
 # Cross-file goto-definition: walking the workspace for .asm files
 walkdir.workspace = true
@@ -69,12 +69,12 @@ ignore.workspace = true
 rayon.workspace = true
 
 [build-dependencies]
-serde_json = "1"
+serde_json.workspace = true
 
 [dev-dependencies]
-tower = { version = "0.4", features = ["util"] }
+tower = { workspace = true, features = ["util"] }
 camino-tempfile.workspace = true
-futures-util = "0.3"
+futures-util.workspace = true
 # Serializes tests that go through `BndBuilder::decode_from_reader`, which
 # mutates the process-wide working directory (`std::env::set_current_dir`) -
 # same hazard, same fix already established in `cpclib-bndbuild`'s own test

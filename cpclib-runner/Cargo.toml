@@ -14,7 +14,7 @@ description = "Dependency for various cpclib crates to help running external app
 # Opening a URL is not three lines of `cfg!`: WSL, snap-confined browsers and
 # `BROWSER=` all need handling, and getting one wrong looks like "it opened
 # nothing and said nothing". Already in the lockfile via the egui crates.
-webbrowser = "1"
+webbrowser.workspace = true
 cpclib-common = {workspace=true, features=["network"]}
 cpclib-asm.workspace=true
 cpclib-csl.workspace=true
@@ -31,21 +31,21 @@ xcap = {workspace = true, optional = true}
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 
 bon.workspace = true
-directories = "6.0.0"
+directories.workspace = true
 portable-pty.workspace = true
-flate2 = "1.1.9"
+flate2.workspace = true
 fs-err.workspace = true
 glob.workspace = true
-tar = "0.4.46"
+tar.workspace = true
 rust-ini.workspace = true
-scraper = "0.27.0"
+scraper.workspace = true
 transparent = { workspace = true, optional = true }
-xz2 = "0.1.7"
-wmctrl = "0.1.8"
+xz2.workspace = true
+wmctrl.workspace = true
 zip-extract.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-fs_extra = "1.3.0"
+fs_extra.workspace = true
 
 [features]
 default = ["fap", "screenshot", "archive-7z"]

@@ -47,7 +47,7 @@ time = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-pretty_assertions = "1.4.1"
+pretty_assertions.workspace = true
 cpclib-asmfmt.workspace = true
 cpclib-basm.workspace = true
 test-generator.workspace = true

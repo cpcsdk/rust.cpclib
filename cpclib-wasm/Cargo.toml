@@ -24,30 +24,27 @@ cpclib-asm.workspace = true
 cpclib-sna.workspace = true
 cpclib-basic.workspace = true
 
-wasm-bindgen = "0.2.126" 
+wasm-bindgen.workspace = true
 
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.7", optional = true }
+console_error_panic_hook = { workspace = true, optional = true }
 
 
-js-sys = "0.3.103" 
+js-sys.workspace = true
 
-[dependencies.web-sys]
-version = "0.3.103"
-features = [
+web-sys = { workspace = true, features = [
   'console',
   'Blob', 'BlobPropertyBag',
-  'Window', 'Document', 
+  'Window', 'Document',
   'HtmlAnchorElement', 'Url',
-
-]
+] }
 
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.76"
+wasm-bindgen-test.workspace = true
 
 

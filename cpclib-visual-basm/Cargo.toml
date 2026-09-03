@@ -20,8 +20,8 @@ claui.workspace = true
 eframe.workspace = true
 
 [build-dependencies]
-built = { version = "0.8.1", features = ["chrono"] }
-static_vcruntime = "3.0"
+built = { workspace = true, features = ["chrono"] }
+static_vcruntime.workspace = true
 
 [[bin]]
 name = "visual-basm"

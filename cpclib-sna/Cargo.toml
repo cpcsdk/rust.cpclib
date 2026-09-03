@@ -17,14 +17,14 @@ independent = true
 cpclib-common.workspace = true
 
 cfg-if.workspace = true
-comfy-table = { version = "7.2.2", optional = true }
+comfy-table = { workspace = true, optional = true }
 delegate.workspace = true
 fs-err.workspace = true
-line-span = { version = "0.1.5", optional = true }
+line-span = { workspace = true, optional = true }
 nutype.workspace = true
 serde.workspace = true
 strum.workspace = true
-cpclib-build-argv-derive = { path = "../cpclib-build-argv-derive", optional = true }
+cpclib-build-argv-derive = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rustyline = { workspace = true, optional = true }

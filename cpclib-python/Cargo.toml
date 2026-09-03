@@ -15,17 +15,17 @@ default = ["extension-module"]
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-pyo3 = { version = "0.28.3", features = ["extension-module"] }
+pyo3 = { workspace = true, features = ["extension-module"] }
 bon.workspace = true
-cpclib-asm = { path = "../cpclib-asm", default-features = false }
-cpclib-basic = { path = "../cpclib-basic", default-features = false }
-cpclib-basm = { path = "../cpclib-basm", default-features = false }
-cpclib-bdasm = { path = "../cpclib-bdasm", default-features = false }
-cpclib-bndbuild = { path = "../cpclib-bndbuild", default-features = false }
-cpclib-cpr = { path = "../cpclib-cpr", default-features = false }
-cpclib-crunchers = { path = "../cpclib-crunchers", default-features = false }
-cpclib-common = { path = "../cpclib-common", default-features = false }
-cpclib-sna = { path = "../cpclib-sna", default-features = false, features = ["cmdline", "interactive"] }
+cpclib-asm = { workspace = true, default-features = false }
+cpclib-basic = { workspace = true, default-features = false }
+cpclib-basm = { workspace = true, default-features = false }
+cpclib-bdasm = { workspace = true, default-features = false }
+cpclib-bndbuild = { workspace = true, default-features = false }
+cpclib-cpr = { workspace = true, default-features = false }
+cpclib-crunchers = { workspace = true, default-features = false }
+cpclib-common = { workspace = true, default-features = false }
+cpclib-sna = { workspace = true, features = ["cmdline", "interactive"], default-features = false }
 
 [package.metadata]
 # Notes: This crate provides Python bindings; extend with real wrappers as needed.
@@ -34,4 +34,4 @@ cpclib-sna = { path = "../cpclib-sna", default-features = false, features = ["cm
 features = ["extension-module"]
 
 [build-dependencies]
-pyo3-build-config = "0.28.3"
+pyo3-build-config.workspace = true

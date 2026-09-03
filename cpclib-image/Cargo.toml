@@ -29,7 +29,7 @@ serde.workspace = true
 #arrays = "0.2.0"
 owo-colors.workspace = true
 delegate = { workspace = true}
-rayon = { version = "1.12", optional = true }
+rayon = { workspace = true, optional = true }
 
 [features]
 default = []
