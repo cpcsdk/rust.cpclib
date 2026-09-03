@@ -11,7 +11,6 @@ use crate::asic::AsicColor;
 use crate::ga::INKS_RGB_VALUES;
 use crate::ink::Ink;
 use image as im;
-use delegate::delegate;
 
 pub trait AmstradColor:
     Default

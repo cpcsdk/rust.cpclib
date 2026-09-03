@@ -3,13 +3,18 @@
 //! by simulating an Amstrad CPC screen and interpreting the char commands to produce a visual output.
 //! This is mainly useful for tests.
 //! #[derive(Clone, Debug)]
+/// Text-cursor position and visibility, in 1-based character coordinates.
 pub struct Cursor {
+    /// 1-based column, clamped to the current mode's character width.
     pub x: u16,
+    /// 1-based row, clamped to the current mode's character height.
     pub y: u16,
+    /// Whether the cursor is currently drawn on screen.
     pub visible: bool
 }
 
 impl Cursor {
+    /// Create a cursor at the top-left corner (1, 1), visible.
     pub fn new() -> Self {
         Self {
             x: 1,
@@ -18,12 +23,15 @@ impl Cursor {
         }
     }
 
+    /// Move the cursor to `(x, y)`, clamped to `mode`'s character resolution.
     pub fn locate(&mut self, x: u16, y: u16, mode: &Mode) {
         let (width, height) = mode.resolution();
         self.x = x.clamp(1, width);
         self.y = y.clamp(1, height);
     }
 
+    /// Advance the cursor one column right, wrapping to the start of the next row when past
+    /// `mode`'s width.
     pub fn inc_x(&mut self, mode: &Mode) {
         let (width, _) = mode.resolution();
         self.x += 1;
@@ -33,6 +41,8 @@ impl Cursor {
         }
     }
 
+    /// Move the cursor one column left, wrapping to the end of the previous row when already
+    /// at the left edge.
     pub fn dec_x(&mut self, mode: &Mode) {
         let (width, _) = mode.resolution();
         if self.x > 1 {
@@ -44,6 +54,7 @@ impl Cursor {
         }
     }
 
+    /// Move the cursor one row down, clamped to `mode`'s height (no wrap-around scrolling here).
     pub fn inc_y(&mut self, mode: &Mode) {
         let (_, height) = mode.resolution();
         self.y += 1;
@@ -52,6 +63,7 @@ impl Cursor {
         }
     }
 
+    /// Move the cursor one row up, if not already at the top.
     pub fn dec_y(&mut self, _mode: &Mode) {
         if self.y > 1 {
             self.y -= 1;
@@ -124,10 +136,16 @@ const CPC_BYTES_PER_CHARACTER_LINE: usize = 80; // Bytes per character row
 const CPC_SCREEN_HEIGHT_PIXELS: usize = 200; // Screen height in pixels
 const CPC_CHARACTER_HEIGHT: usize = 8; // Character height in pixels
 
+/// The interpreter's own screen-mode enum, mirroring the CPC firmware `MODE` screen modes used
+/// by the text-cell [`Screen`] simulation (distinct from `cpclib_image::image::Mode`, see
+/// [`Self::to_image_mode`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
+    /// Mode 0: 160x200, 16 colours, 20 text columns.
     Mode0,
+    /// Mode 1: 320x200, 4 colours, 40 text columns.
     Mode1,
+    /// Mode 2: 640x200, 2 colours, 80 text columns.
     Mode2
 }
 
@@ -141,6 +159,7 @@ impl Mode {
         }
     }
 
+    /// Allocate a blank (space-filled) text-cell buffer sized for this mode's resolution.
     pub fn buffer(&self) -> Vec<Vec<u8>> {
         let (width, height) = self.resolution();
         vec![vec![b' '; width as usize]; height as usize]
@@ -155,6 +174,7 @@ impl Mode {
         }
     }
 
+    /// Number of distinct pens (colours) available in this mode.
     pub fn max_pens(&self) -> usize {
         match self {
             Mode::Mode0 => 16, // Mode 0 supports 16 colors (pens 0-15)
@@ -172,8 +192,6 @@ use cpclib_image::ga::{Ink, Pen};
 // there is no Plus variant of a disc catalogue. Naming the instantiation once
 // keeps every signature below unchanged.
 type Palette = cpclib_image::ga::Palette<Ink>;
-type Sprite = cpclib_image::image::Sprite<Ink>;
-type ColorMatrix = cpclib_image::image::ColorMatrix<Ink>;
 use cpclib_image::pixels;
 
 /// Pixel-accurate memory representation of the CPC screen
@@ -221,16 +239,6 @@ impl BasicMemoryScreen {
         }
     }
 
-    /// Get bytes per character for the current mode
-    fn bytes_per_char(&self) -> usize {
-        match self.mode {
-            cpclib_image::image::Mode::Zero => 2, /* Mode 0: 2 bytes per char (2 bits/pixel, 4 pixels/byte) */
-            cpclib_image::image::Mode::One => 2, /* Mode 1: 2 bytes per char (2 bits/pixel, 4 pixels/byte) */
-            cpclib_image::image::Mode::Two => 1, /* Mode 2: 1 byte per char (1 bit/pixel, 8 pixels/byte) */
-            _ => 2
-        }
-    }
-
     /// Get screen width in pixels for the current mode
     fn screen_width_pixels(&self) -> usize {
         match self.mode {
@@ -241,12 +249,15 @@ impl BasicMemoryScreen {
         }
     }
 
+    /// Switch to a new screen mode, resetting the CRTC scroll offset and clearing the screen
+    /// to `paper`.
     pub fn reset_mode(&mut self, mode: cpclib_image::image::Mode, pen: Pen, paper: Pen) {
         self.mode = mode;
         self.r12r13 = 0; // Reset CRTC offset on mode change
         self.cls(pen, paper);
     }
 
+    /// Fill the whole screen memory with `paper`'s solid colour pattern.
     pub fn cls(&mut self, _pen: Pen, paper: Pen) {
         // Clear memory with paper color pattern
         let paper_pattern = Self::get_paper_pattern(paper, self.mode);
@@ -462,6 +473,8 @@ impl BasicMemoryScreen {
         cpclib_image::image::Sprite::<Ink>::from_pens(&pens, self.mode, Some(self.palette.clone()))
     }
 
+    /// Convert the memory screen to a [`cpclib_image::image::ColorMatrix`] with the default
+    /// border thickness (3 columns horizontal, 4 lines vertical).
     pub fn to_color_matrix(&self) -> Option<cpclib_image::image::ColorMatrix<Ink>> {
         self.to_color_matrix_with_border(3, 4)
     }
@@ -620,19 +633,27 @@ impl BasicMemoryScreen {
     }
 }
 
+/// One character cell of the text-mode [`Screen`] simulation: the printed character plus the
+/// pen/paper colours it was drawn with.
 #[derive(Clone, Debug)]
 pub struct ScreenCell {
+    /// The character code displayed in this cell.
     pub ch: u8,
+    /// The foreground (text) colour used to draw `ch`.
     pub pen: Pen,
+    /// The background colour of this cell.
     pub paper: Pen
 }
 
 impl ScreenCell {
+    /// Create a cell holding character `ch` drawn with `pen` on `paper`.
     pub fn make(ch: u8, pen: Pen, paper: Pen) -> Self {
         Self { ch, pen, paper }
     }
 }
 
+/// A simple character-grid screen buffer (as opposed to [`BasicMemoryScreen`]'s pixel-accurate
+/// simulation), used by [`Interpreter`] for rendering and for tests.
 #[derive(Clone, Debug)]
 pub struct Screen {
     mode: Mode,
@@ -640,15 +661,19 @@ pub struct Screen {
 }
 
 impl Screen {
+    /// Switch to a new mode and clear the screen to `paper`, reallocating the buffer at the
+    /// new mode's resolution.
     pub fn reset_mode(&mut self, mode: Mode, pen: Pen, paper: Pen) {
         self.mode = mode;
         self.buffer = Screen::make_buffer(&self.mode, pen, paper);
     }
 
+    /// Clear the screen to blanks, using `pen`/`paper` as the new default cell colours.
     pub fn cls(&mut self, pen: Pen, paper: Pen) {
         self.buffer = Screen::make_buffer(&self.mode, pen, paper);
     }
 
+    /// Character-grid resolution (width, height) of the current mode.
     pub fn resolution(&self) -> (u16, u16) {
         self.mode.resolution()
     }
@@ -658,6 +683,7 @@ impl Screen {
         vec![vec![ScreenCell::make(b' ', pen, paper); width as usize]; height as usize]
     }
 
+    /// Mutably borrow the cell at 1-based `(x, y)`, or `None` if out of bounds.
     pub fn cell_mut(&mut self, x: u16, y: u16) -> Option<&mut ScreenCell> {
         let (width, height) = self.resolution();
         if x == 0 || y == 0 || x > width || y > height {
@@ -668,6 +694,7 @@ impl Screen {
         }
     }
 
+    /// Borrow the cell at 1-based `(x, y)`, or `None` if out of bounds.
     pub fn cell(&self, x: u16, y: u16) -> Option<&ScreenCell> {
         let (width, height) = self.resolution();
         if x == 0 || y == 0 || x > width || y > height {
@@ -690,8 +717,7 @@ pub struct Interpreter {
     paper: Pen,
     border: Pen,
     window: Option<(u16, u16, u16, u16)>, // (left, right, top, bottom)
-    transparent: bool,                    // Transparency mode for character printing
-    locale: Locale
+    transparent: bool                     // Transparency mode for character printing
 }
 
 #[bon::bon]
@@ -711,6 +737,8 @@ impl Interpreter {
         &self.memory_screen
     }
 
+    /// Create an interpreter that mimics a freshly booted CPC 6128: Mode 1, English locale,
+    /// with the "Amstrad 128K Microcomputer" startup banner already printed to the screen.
     pub fn new_6128() -> Self {
         Self::builder()
             .as_6128(true)
@@ -719,6 +747,8 @@ impl Interpreter {
             .build()
     }
 
+    /// Create a new interpreter with the given starting `screen_mode`, character-font `locale`,
+    /// and (if `as_6128` is true) the CPC 6128 startup banner already printed.
     #[builder]
     pub fn new(screen_mode: Mode, locale: Locale, as_6128: bool) -> Self {
         let pen = Pen::Pen1;
@@ -739,8 +769,7 @@ impl Interpreter {
             border: paper,
             window: None,
             enable_vdu: true,
-            transparent: false,
-            locale
+            transparent: false
         };
 
         if as_6128 {
@@ -771,6 +800,8 @@ impl Interpreter {
             .expect("Initialization failed");
     }
 
+    /// Move the cursor one column right within the current window, wrapping to the start of
+    /// the next row (scrolling if needed) when past the window's right edge.
     pub fn inc_cursor_x(&mut self) {
         let (width, _) = self.screen.resolution();
         let (left, right, ..) = self
@@ -784,6 +815,8 @@ impl Interpreter {
         }
     }
 
+    /// Move the cursor one column left within the current window, wrapping to the end of the
+    /// previous row when already at the window's left edge.
     pub fn dec_cursor_x(&mut self) {
         let (width, _) = self.screen.resolution();
         let (left, right, top, _bottom) =
@@ -800,6 +833,8 @@ impl Interpreter {
         }
     }
 
+    /// Move the cursor one row down within the current window, scrolling the window's content
+    /// up (and keeping the cursor on the last row) when past the bottom edge.
     pub fn inc_cursor_y(&mut self) {
         let (_, height) = self.screen.resolution();
         let (_left, _right, _top, bottom) =
@@ -813,6 +848,7 @@ impl Interpreter {
         }
     }
 
+    /// Move the cursor one row up within the current window, if not already at the top edge.
     pub fn dec_cursor_y(&mut self) {
         let (_, height) = self.screen.resolution();
         let (_left, _right, top, _bottom) =
@@ -823,6 +859,8 @@ impl Interpreter {
         }
     }
 
+    /// Move the cursor to window-relative, 0-based `(x, y)`, clamped to the current window
+    /// (converted internally to the 1-based absolute coordinates the cursor is stored in).
     pub fn locate_cursor(&mut self, x: u16, y: u16) {
         let (width, height) = self.screen.resolution();
         let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
@@ -832,6 +870,8 @@ impl Interpreter {
         self.cursor.y = (y + 1).clamp(top, bottom);
     }
 
+    /// Move the cursor to the left edge of the current window (carriage return), clamping the
+    /// row into the window's vertical bounds.
     pub fn move_cursor_to_left(&mut self) {
         let (width, _) = self.screen.resolution();
         let (left, _, top, bottom) =
@@ -861,6 +901,9 @@ impl Interpreter {
             .write_char(ch, x, y, self.pen, self.paper, self.transparent);
     }
 
+    /// Scroll the current window's content up by one row, blanking the newly exposed bottom
+    /// row. Uses CRTC hardware scrolling when the window covers the full screen, otherwise
+    /// scrolls (and redraws) the text buffer and memory screen in software.
     pub fn scroll_screen_up(&mut self) {
         let width = self.screen.resolution().0;
         let height = self.screen.resolution().1;
@@ -926,6 +969,7 @@ impl Interpreter {
         }
     }
 
+    /// Scroll the current window's content down by one row, blanking the newly exposed top row.
     pub fn scroll_screen_down(&mut self) {
         let width = self.screen.resolution().0;
         let (left, right, top, bottom) =
@@ -967,6 +1011,10 @@ impl Interpreter {
         }
     }
 
+    /// Interpret a sequence of `CharCommand`s, updating the simulated screen/cursor/palette
+    /// state. If `print_ready` is set, also prints the trailing BASIC `Ready` prompt (moving to
+    /// a fresh line first if needed) and draws the text cursor glyph into the pixel-accurate
+    /// memory screen when it is visible.
     pub fn interpret<'a, I>(&mut self, commands: I, print_ready: bool) -> Result<(), String>
     where I: IntoIterator<Item = &'a CharCommand> {
         // Process main commands first
@@ -1015,11 +1063,25 @@ impl Interpreter {
         Ok(())
     }
 
+    /// The interpreter's current screen mode.
+    ///
+    /// # Panics
+    /// Panics (via a debug assertion) if the text screen and pixel-accurate memory screen have
+    /// somehow ended up with different modes, which would indicate an interpreter bug.
     pub fn mode(&self) -> Mode {
         assert_eq!(self.screen.mode.to_image_mode(), self.memory_screen.mode());
         self.screen.mode.clone()
     }
 
+    /// Apply the effect of a single `CharCommand` to the interpreter's state (cursor, screen
+    /// contents, palette, VDU enable flag, etc). Commands other than `DisableVdu`/`EnableVdu`/
+    /// `CursorOn`/`CursorOff` are ignored while the VDU is disabled.
+    ///
+    /// # Errors
+    /// Returns an error for an out-of-range `Mode` command parameter.
+    ///
+    /// # Panics
+    /// Panics (via `todo!`) for any `CharCommand` variant not yet handled by the simulation.
     pub fn interpret_command(&mut self, command: &CharCommand) -> Result<(), String> {
         match command {
             CharCommand::Symbol(..) => {
@@ -1237,7 +1299,7 @@ impl Interpreter {
 
 impl Display for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use owo_colors::{DynColors, OwoColorize};
+        use owo_colors::OwoColorize;
         // Border thickness
         let border = 4;
         let screen_width = self.screen.buffer[0].len();
@@ -1321,7 +1383,7 @@ pub fn display_screen_diff(
     screen2: &Screen,
     palette2: &Palette
 ) -> String {
-    use owo_colors::{DynColors, OwoColorize};
+    use owo_colors::OwoColorize;
 
     let border = 2;
     let _height = screen1.buffer.len();

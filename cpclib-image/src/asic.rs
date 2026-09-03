@@ -16,7 +16,6 @@
 use std::{fmt::{Debug, Formatter, Result}, hash::Hash};
 
 use image as im;
-use owo_colors::OwoColorize;
 
 use crate::{color::AmstradColor, ink::{Ink, InkComponentQuantity}};
 

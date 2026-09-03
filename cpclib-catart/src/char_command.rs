@@ -70,10 +70,12 @@ impl CharCommandList {
         &self.0
     }
 
+    /// Iterate over the commands
     pub fn iter(&self) -> std::slice::Iter<'_, CharCommand> {
         self.0.iter()
     }
 
+    /// Decode a raw byte stream (as it would appear in a catalogue entry) into the sequence of `CharCommand`s it encodes.
     pub fn from_bytes(data: &[u8]) -> Self {
         let mut idx = 0;
         let mut list = Vec::new();
@@ -129,10 +131,12 @@ impl CharCommandList {
         }
     }
 
+    /// Render the whole list as a `:`-separated string of human-readable pseudo-instructions (see [`CharCommand::to_command_string`]).
     pub fn to_command_string(&self) -> String {
         self.0.iter().map(|cmd| cmd.to_command_string()).join(":")
     }
 
+    /// Render the whole list as a `:`-separated string of BASIC statements, dropping commands with no BASIC equivalent (see [`CharCommand::to_basic_string`]).
     pub fn to_basic_string(&self) -> String {
         self.0
             .iter()
@@ -141,6 +145,7 @@ impl CharCommandList {
             .join(":")
     }
 
+    /// Convert all commands in the list to a flat sequence of raw control codes and bytes for the CPC.
     pub fn bytes(&self) -> Vec<u8> {
         self.0.iter().flat_map(|cmd| cmd.bytes()).collect()
     }
@@ -211,6 +216,7 @@ pub enum CharCommand {
     CursorUp,
     /// Clear Screen (0x0C)
     Cls,
+    /// Escape (0x1B). Not itself a printable command; used as a prefix escape by the firmware.
     Esc,
     /// Carriage Return (0x0D)
     CarriageReturn,
@@ -252,7 +258,8 @@ pub enum CharCommand {
     Locate(u8, u8),
     /// Standard character
     Char(u8),
-    String(Vec<u8>) // list of ascii chars
+    /// A run of consecutive plain ASCII characters, printed as-is (list of ascii chars)
+    String(Vec<u8>)
 }
 
 impl Debug for CharCommand {
@@ -310,6 +317,7 @@ impl Debug for CharCommand {
 }
 
 impl CharCommand {
+    /// Render this command as a human-readable pseudo-instruction (e.g. `"LOCATE 3, 4"`), mostly for debugging/display purposes rather than valid BASIC.
     pub fn to_command_string(&self) -> String {
         match self {
             CharCommand::Nop => "NOP".to_string(),
@@ -363,26 +371,40 @@ impl CharCommand {
         }
     }
 
+    /// Number of raw bytes (control code plus any parameters) this command occupies once encoded.
     pub fn len(&self) -> usize {
         self.bytes().len()
     }
 
+    /// The first encoded byte of this command (its control code, or the character itself for [`CharCommand::Char`]).
+    ///
+    /// # Panics
+    /// Panics if the command encodes to zero bytes.
     #[inline]
     pub fn first_byte(&self) -> u8 {
         self.bytes()[0]
     }
 
+    /// The second encoded byte of this command (typically its first parameter).
+    ///
+    /// # Panics
+    /// Panics if the command encodes to fewer than two bytes.
     #[inline]
     pub fn second_byte(&self) -> u8 {
         self.bytes()[1]
     }
 
+    /// The third encoded byte of this command (typically its second parameter).
+    ///
+    /// # Panics
+    /// Panics if the command encodes to fewer than three bytes.
     #[inline]
     pub fn third_byte(&self) -> u8 {
         self.bytes()[2]
     }
 
-    // Ensure some Char are translated to their command
+    /// Rewrite a plain [`CharCommand::Char`] holding a control character that has its own dedicated variant
+    /// (currently `NAK`/`ACK`) into that variant, leaving every other command unchanged.
     pub fn normalize(self) -> Self {
         match self {
             Self::Char(NAK) => Self::DisableVdu,
@@ -512,34 +534,50 @@ impl CharCommand {
         Ok(CharCommandList::from(res))
     }
 
+    /// True if this is a `Mode` command.
     pub fn is_mode(&self) -> bool {
         matches!(self, CharCommand::Mode(_))
     }
 
+    /// True if this is a `Pen` command.
     pub fn is_pen(&self) -> bool {
         matches!(self, CharCommand::Pen(_))
     }
 
+    /// True if this is a `Paper` command.
     pub fn is_paper(&self) -> bool {
         matches!(self, CharCommand::Paper(_))
     }
 
+    /// True if this is an `Ink` command.
     pub fn is_ink(&self) -> bool {
         matches!(self, CharCommand::Ink(_, _, _))
     }
 
+    /// True if this is a `Border` command.
     pub fn is_border(&self) -> bool {
         matches!(self, CharCommand::Border(_, _))
     }
 
+    /// True if this is a `Locate` command.
     pub fn is_locate(&self) -> bool {
         matches!(self, CharCommand::Locate(_, _))
     }
 
+    /// True if this is a `PrintSymbol` command.
     pub fn is_print_symbol(&self) -> bool {
         matches!(self, CharCommand::PrintSymbol(_))
     }
 
+    /// Convert this command back to the equivalent [`BasicCommand`], when one exists.
+    ///
+    /// Position-based commands (`Locate`, `Window`) are converted from the char command's
+    /// 0-based coordinates back to BASIC's 1-based ones. Commands with no BASIC keyword
+    /// equivalent (e.g. cursor movement) are expressed as a `PRINT` of the matching control
+    /// code. Returns `None` for [`CharCommand::Nop`], which has no BASIC equivalent at all.
+    ///
+    /// # Panics
+    /// Panics (via `unimplemented!`) for any command variant not yet handled by this mapping.
     pub fn to_basic_command(&self) -> Option<BasicCommand> {
         match self {
             CharCommand::Mode(m) => Some(BasicCommand::Mode(*m)),
@@ -656,6 +694,12 @@ impl CharCommand {
         }
     }
 
+    /// Render this command as the BASIC statement text produced by [`CharCommand::to_basic_command`],
+    /// or an empty string for a [`CharCommand::Nop`].
+    ///
+    /// # Panics
+    /// Panics for any command with neither a BASIC equivalent nor the `Nop` special case (see
+    /// [`CharCommand::to_basic_command`]).
     pub fn to_basic_string(&self) -> String {
         self.to_basic_command()
             .map(|cmd: BasicCommand| cmd.to_string())

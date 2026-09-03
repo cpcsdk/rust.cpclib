@@ -5,7 +5,6 @@
 //! 32 bytes, two per colour, in pen order. See [`crate::asic`] for the layout
 //! of one entry.
 
-use std::path::Path;
 
 use cpclib_common::camino::Utf8Path;
 

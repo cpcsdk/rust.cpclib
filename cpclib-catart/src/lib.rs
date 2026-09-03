@@ -8,9 +8,11 @@
 pub mod basic_chars;
 /// Command definitions (e.g. PRINT, LOCATE, etc.)
 pub mod basic_command;
+/// Character-level cat art commands and their rendering primitives
 pub mod char_command;
 /// Conversion utilities
 pub mod convert;
+/// Catalogue entries (cat art "programs") and the catalogue they populate
 pub mod entry;
 /// Error definitions
 pub mod error;

@@ -310,6 +310,7 @@ impl BasicCommand {
         BasicCommand::PrintString(data.into(), PrintTerminator::CrLf)
     }
 
+    /// Create a PRINT command that emits a line feed to move the cursor down one row without scrolling the rest of the line.
     pub fn move_cursor_down() -> Self {
         BasicCommand::PrintString(LF.into(), PrintTerminator::None)
     }
@@ -336,6 +337,7 @@ impl BasicCommand {
 }
 
 impl BasicCommandList {
+    /// Convert every command in the list to its `CharCommand` equivalents, in order.
     pub fn to_char_commands(&self) -> Result<CharCommandList, String> {
         let mut result = CharCommandList::new();
         for cmd in &self.0 {
@@ -385,7 +387,7 @@ impl BasicCommand {
             BasicCommand::Paper(pen) => Ok(CharCommandList::from(vec![CharCommand::Paper(*pen)])),
             BasicCommand::Pen(pen) => Ok(CharCommandList::from(vec![CharCommand::Pen(*pen)])),
             BasicCommand::PrintString(data, terminator) => {
-                let mut cmds = CharCommand::from_string(&data.bytes())?;
+                let cmds = CharCommand::from_string(&data.bytes())?;
                 let mut cmds_vec = cmds.into_vec();
                 match terminator {
                     PrintTerminator::CrLf => {

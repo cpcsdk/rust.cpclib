@@ -8,9 +8,8 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use image as im;
-use owo_colors::{DynColors, OwoColorize};
+use owo_colors::OwoColorize;
 
-use crate::asic::AsicColor;
 use crate::color::AmstradColor;
 use crate::ga::*;
 use crate::pixels;

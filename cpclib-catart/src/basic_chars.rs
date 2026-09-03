@@ -7,8 +7,6 @@
 //! The control characters (0x00-0x1F) have special functions and many
 //! have corresponding BASIC commands.
 
-use paste::paste;
-
 /// Macro to define character constants with their BASIC equivalents
 ///
 /// # Arguments
@@ -44,6 +42,7 @@ macro_rules! define_basic_char {
         pub const $basic_equiv: u8 = $const_name;
 
         paste::item! {
+            #[allow(non_upper_case_globals)]
             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
         }
     };
@@ -66,6 +65,7 @@ macro_rules! define_basic_char {
         pub const $const_name: u8 = $hex_value;
 
         paste::item! {
+            #[allow(non_upper_case_globals)]
             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
         }
     };

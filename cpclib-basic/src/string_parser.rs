@@ -61,43 +61,11 @@ macro_rules! simple_keyword_parser {
     };
 }
 
-/// Helper function to build a token vector by appending multiple token vectors.
-#[inline]
-fn build_tokens(parts: Vec<&mut Vec<BasicToken>>) -> Vec<BasicToken> {
-    let mut res = Vec::new();
-    for part in parts {
-        res.append(part);
-    }
-    res
-}
-
-/// Helper function to build a token vector with a base token followed by multiple token vectors.
-#[inline]
-fn build_tokens_with_base(base: BasicToken, parts: Vec<&mut Vec<BasicToken>>) -> Vec<BasicToken> {
-    let mut res = vec![base];
-    for part in parts {
-        res.append(part);
-    }
-    res
-}
-
 /// Helper function to conditionally append an optional token vector.
 #[inline]
 fn append_optional(res: &mut Vec<BasicToken>, opt: Option<Vec<BasicToken>>) {
     if let Some(mut tokens) = opt {
         res.append(&mut tokens);
-    }
-}
-
-/// Helper function to append optional pair of token vectors (e.g., comma + expression).
-#[inline]
-fn append_optional_pair(
-    res: &mut Vec<BasicToken>,
-    opt: Option<(Vec<BasicToken>, Vec<BasicToken>)>
-) {
-    if let Some((mut first, mut second)) = opt {
-        res.append(&mut first);
-        res.append(&mut second);
     }
 }
 
@@ -1308,8 +1276,8 @@ keyword_expr_parser!(
     NumericExpressionConstraint::Integer,
     "Address expected"
 );
-/// FILL ink - had no parser at all, so any use of it was an unparseable
-/// program (confirmed against yingyang.bas's `fill 1`).
+// FILL ink - had no parser at all, so any use of it was an unparseable
+// program (confirmed against yingyang.bas's `fill 1`).
 keyword_expr_parser!(
     parse_fill,
     "FILL",

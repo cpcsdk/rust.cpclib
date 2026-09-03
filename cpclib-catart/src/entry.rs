@@ -2,18 +2,14 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
-use bon::{Builder, builder};
+use bon::Builder;
 use cpclib_basic::BasicProgram;
-use cpclib_common::clap::Command;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
-use cpclib_image::image::Mode;
-use owo_colors::OwoColorize;
-use owo_colors::colors::css::ForestGreen;
 
-use crate::basic_chars::{ACK, BS, CAN, DC1, DLE, EOT, ETB, NAK, SI, SO, SUB, US};
+use crate::basic_chars::{ACK, BS, CAN, EOT, ETB, NAK, SI, US};
 use crate::char_command::{CharCommand, CharCommandList};
-use crate::{Locale, entry, interpret};
+use crate::interpret;
 
 // Extract only the actual command bytes based on entry structure
 //
@@ -84,6 +80,7 @@ use crate::{Locale, entry, interpret};
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Catalog {
+    /// The 64 raw directory entries, in on-disc order. Unused slots hold [`PrintableEntry::empty`].
     pub entries: [PrintableEntry; 64]
 }
 
@@ -92,7 +89,7 @@ impl IntoIterator for Catalog {
     type Item = PrintableEntry;
 
     fn into_iter(self) -> Self::IntoIter {
-        std::array::IntoIter::new(self.entries)
+        self.entries.into_iter()
     }
 }
 
@@ -124,6 +121,8 @@ impl TryFrom<&[PrintableEntryFileName]> for Catalog {
 }
 
 impl Catalog {
+    /// Render each entry's raw filename bytes as a numbered BASIC listing, one entry per line.
+    ///
     /// XXX does not take into account any ordering or mode.
     /// so it is quite buggy and can only serve for debbubing purposes
     /// TODO handle ordering and mode to be able to use this for catart generation
@@ -135,8 +134,11 @@ impl Catalog {
             .join("\n")
     }
 
+    /// Reconstruct the original hand-authored BASIC program from a catalogue that was built
+    /// with the sequential cat art encoding (mode/enable/disable-VDU markers and dot-hiding
+    /// removed), one BASIC line per catalogue file entry.
     // Here we want to obtain the basic program written by a human and injected in the catalaog.
-    pub fn extract_basic_from_sequential_catart(&self, show_headers: bool) -> BasicProgram {
+    pub fn extract_basic_from_sequential_catart(&self, _show_headers: bool) -> BasicProgram {
         let kind = CatalogType::Cat; // TODO handle this properly
         let mode = ScreenMode::Mode1; // TODO handle this properly
         let num_columns = 2; // kind.num_columns(mode);
@@ -172,7 +174,7 @@ impl Catalog {
                 let is_dot_handling = matches!(c, CharCommand::GraphicsInkMode(46));
 
                 let is_nop = matches!(c, CharCommand::Nop);
-                let is_enable = matches!(c, CharCommand::EnableVdu);
+                let _is_enable = matches!(c, CharCommand::EnableVdu);
                 let is_visible_char_handling =
                     matches!(c, CharCommand::Char(c) if c.is_ascii_graphic() && c!=b'"');
 
@@ -234,24 +236,32 @@ impl Catalog {
         }
     }
 
+    /// Create a catalog whose 64 slots are all empty entries.
     pub fn empty() -> Self {
         Catalog {
             entries: [PrintableEntry::empty(); 64]
         }
     }
 
+    /// Wrap an already-built array of 64 raw entries into a `Catalog`.
     pub fn new(entries: [PrintableEntry; 64]) -> Self {
         Catalog { entries }
     }
 
+    /// True if every one of the 64 slots is an empty entry.
     pub fn is_empty(&self) -> bool {
         self.entries.iter().all(|e| e.is_empty())
     }
 
+    /// Number of non-empty entries in the catalog.
     pub fn len(&self) -> usize {
         self.entries.iter().filter(|e| !e.is_empty()).count()
     }
 
+    /// Store `entry` in the first empty slot.
+    ///
+    /// # Errors
+    /// Returns an error if every slot is already occupied.
     pub fn add(&mut self, entry: PrintableEntry) -> Result<(), String> {
         let available = self
             .entries
@@ -263,6 +273,7 @@ impl Catalog {
         Ok(())
     }
 
+    /// Iterate over the non-empty entries, in slot order.
     pub fn entries(&self) -> impl Iterator<Item = &PrintableEntry> {
         self.entries.iter().filter(|e| !e.is_empty())
     }
@@ -284,6 +295,7 @@ impl Catalog {
 /// DIR order is respected
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnifiedCatalog {
+    /// The distinct files in the catalog, each with its fragments merged into a single size.
     pub entries: Vec<UnifiedPrintableEntry>
 }
 
@@ -305,6 +317,7 @@ impl From<&[PrintableEntryFileName]> for UnifiedCatalog {
 }
 
 impl UnifiedCatalog {
+    /// Wrap a fixed array of 64 unified entries into a `UnifiedCatalog`.
     pub fn new(entries: [UnifiedPrintableEntry; 64]) -> Self {
         let entries_vec = entries.to_vec();
         UnifiedCatalog {
@@ -312,12 +325,18 @@ impl UnifiedCatalog {
         }
     }
 
+    /// Create a `UnifiedCatalog` with no entries.
     pub fn empty() -> Self {
         UnifiedCatalog {
             entries: Vec::new()
         }
     }
 
+    /// Append `entry` to the catalog.
+    ///
+    /// # Errors
+    /// Returns an error if the catalog already has 64 entries, or if an entry with the same
+    /// filename is already present.
     pub fn push(&mut self, entry: UnifiedPrintableEntry) -> Result<(), String> {
         // an entry is valid if no file has the same name and if there is space
         if self.entries.len() >= 64 {
@@ -332,10 +351,12 @@ impl UnifiedCatalog {
         Ok(())
     }
 
+    /// Total size in kilobytes of all entries in the catalog.
     pub fn size_kb(&self) -> u16 {
         self.entries.iter().map(|e| e.size_kb()).sum()
     }
 
+    /// Kilobytes remaining on a standard 178K disc after accounting for all entries.
     pub fn remaining_size_kb(&self) -> u16 {
         178 - self.size_kb()
     }
@@ -368,10 +389,15 @@ impl From<Catalog> for UnifiedCatalog {
     }
 }
 
+/// A single logical file in a [`UnifiedCatalog`]: one filename with its fragmented
+/// [`PrintableEntry`] sizes merged into one total.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnifiedPrintableEntry {
-    pub user: u8, // Currently ignored. TODO handle user
+    /// AMSDOS user number owning the file. Currently ignored. TODO handle user
+    pub user: u8,
+    /// The 8.3 filename, as displayed in the catalogue.
     pub fname: PrintableEntryFileName,
+    /// Total size of the file, in kilobytes.
     pub size_kb: u16
 }
 
@@ -425,6 +451,7 @@ impl DerefMut for UnifiedPrintableEntry {
 }
 
 impl UnifiedPrintableEntry {
+    /// Create an entry with an empty filename, user 0, and size 0.
     pub fn empty() -> Self {
         UnifiedPrintableEntry {
             user: 0,
@@ -433,10 +460,12 @@ impl UnifiedPrintableEntry {
         }
     }
 
+    /// Borrow the entry's filename.
     pub fn fname(&self) -> &PrintableEntryFileName {
         &self.fname
     }
 
+    /// The full 17-byte display line for this entry (12-byte filename + a 5-byte `"NNNNK"` size suffix).
     // BUG does not handle file protection display
     pub fn all_generated_bytes(&self) -> [u8; 17] {
         let fname = self.fname.all_generated_bytes();
@@ -450,6 +479,8 @@ impl UnifiedPrintableEntry {
         ]
     }
 
+    /// Build the `CharCommand::Char` sequence that prints this entry's display line
+    /// ([`Self::all_generated_bytes`]) verbatim, one command per byte.
     pub fn commands(&self) -> CharCommandList {
         let bytes = self.all_generated_bytes();
         let commands = bytes
@@ -459,18 +490,28 @@ impl UnifiedPrintableEntry {
         CharCommandList::from(commands)
     }
 
+    /// Size of the file in kilobytes.
     pub fn size_kb(&self) -> u16 {
         self.size_kb
     }
 }
 
 // https://cpc.sylvestre.org/technique/technique_catart1.html
+/// One raw 32-byte AMSDOS directory entry, as it is physically stored on disc.
+///
+/// A single file may span several of these (one per group of allocated sectors); see
+/// [`UnifiedPrintableEntry`] for the version that merges same-named entries into one.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Builder)]
 pub struct PrintableEntry {
-    pub user: u8, // 0 to be printed
+    /// AMSDOS user number. Must be 0 for the entry to be printed in the catalogue.
+    pub user: u8,
+    /// The 8.3 filename, as displayed in the catalogue.
     pub fname: PrintableEntryFileName,
+    /// The 4 extent/record-count header bytes of the AMSDOS directory entry. Currently only
+    /// ever written to a constant value (never inspected) by this crate.
     pub pieces: [u8; 4],
+    /// The 16 allocated-block numbers for this entry; a non-zero value marks an allocated sector.
     pub sectors: [u8; 16]
 }
 
@@ -488,6 +529,8 @@ impl From<PrintableEntryFileName> for PrintableEntry {
 }
 
 impl PrintableEntry {
+    /// Create an unused directory entry: every byte set to `0xE5`, the AMSDOS "deleted/free
+    /// slot" marker.
     pub fn empty() -> Self {
         PrintableEntry {
             user: 0xE5,
@@ -529,49 +572,79 @@ impl PrintableEntry {
         self.sectors.iter().all(|&s| s == 0) && !self.fname.is_empty()
     }
 
+    /// True if the entry's filename is empty (i.e. the slot holds no file).
     pub fn is_empty(&self) -> bool {
         self.fname.is_empty()
     }
 
+    /// Size of the fragment described by this entry, in kilobytes (one kilobyte per allocated sector).
     pub fn size_kb(&self) -> u16 {
         self.sectors.iter().filter(|&&s| s != 0).count() as u16
     }
 }
 
+/// The 11 raw bytes of an AMSDOS directory entry's filename field (8-byte name + 3-byte
+/// extension), addressed byte-by-byte (`f1..f8` for the name, `e1..e3` for the extension).
+///
+/// The catalogue's own printing routine displays these bytes as characters, so a cat art
+/// entry reuses them to smuggle in control codes and command parameters (see the
+/// `unsorted_*`/`sequential_*` constructors below) rather than an actual filename. High bit
+/// of `e1` marks read-only, high bit of `e2` marks a hidden/system file.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PrintableEntryFileName {
+    /// Byte 1 of the 8-character name part.
     pub f1: u8,
+    /// Byte 2 of the 8-character name part.
     pub f2: u8,
+    /// Byte 3 of the 8-character name part.
     pub f3: u8,
+    /// Byte 4 of the 8-character name part.
     pub f4: u8,
+    /// Byte 5 of the 8-character name part.
     pub f5: u8,
+    /// Byte 6 of the 8-character name part.
     pub f6: u8,
+    /// Byte 7 of the 8-character name part.
     pub f7: u8,
+    /// Byte 8 of the 8-character name part.
     pub f8: u8,
+    /// Byte 1 of the 3-character extension. Its high bit marks the file as read-only.
     pub e1: u8,
+    /// Byte 2 of the 3-character extension. Its high bit marks the file as hidden/system.
     pub e2: u8,
+    /// Byte 3 of the 3-character extension.
     pub e3: u8
 }
 
+/// The CPC firmware screen mode a catalogue/cat art display is rendered in, which determines
+/// the resolution and number of catalogue columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScreenMode {
+    /// Mode 0: 160x200, 16 colours, 1 catalogue column.
     Mode0,
+    /// Mode 1: 320x200, 4 colours, 2 catalogue columns.
     Mode1,
+    /// Mode 2: 640x200, 2 colours, 4 catalogue columns.
     Mode2
 }
 
+/// How the separator dot between a filename and its extension is hidden or otherwise
+/// consumed when it would otherwise interfere with the surrounding command bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DotHiding {
-    // Dot is an argument of mode change
+    /// The dot is smuggled in as the parameter byte of a preceding mode-change command.
     AsModeParameter,
-    // Dot is reased after being printed
+    /// The dot is printed, then erased with a following backspace.
     Erased,
-    // Dot is displayed as is
+    /// The dot is left in place and displayed as-is.
     KeptAsArgument
 }
 
 impl DotHiding {
+    /// Extra byte counts `[before, after]` this dot-hiding strategy adds to the two command
+    /// slots surrounding the dot, on top of their base size. Used by [`EntryKind::constraint`]
+    /// to size the constraint's `Any(...)` slots.
     pub fn constraint_helper(&self) -> [usize; 2] {
         match self {
             DotHiding::AsModeParameter => [0, 1],
@@ -664,6 +737,7 @@ impl<'cat> EntriesGrid<'cat> {
         self.columns.get(index)
     }
 
+    /// Get the entry at the given row and column, if any.
     pub fn get(&self, row: usize, col: usize) -> Option<&Cow<'cat, UnifiedPrintableEntry>> {
         self.columns.get(col).and_then(|column| column.get(row))
     }
@@ -699,10 +773,14 @@ impl<'cat> EntriesGrid<'cat> {
         EntriesGrid::new(owned_columns, self.mode, self.order)
     }
 
+    /// Build the full command sequence to display this grid, including the `cat`/`dir` header,
+    /// drive/user line, and trailing "free space" line.
     pub fn commands(&self) -> CharCommandList {
         self.commands_with_params(true)
     }
 
+    /// Build the command sequence to display this grid, optionally omitting the header,
+    /// drive/user line, and trailing "free space" line (`show_headers`).
     pub fn commands_with_params(&self, show_headers: bool) -> CharCommandList {
         let mut available: u16 = 178;
         let mut commands = CharCommandList::new();
@@ -724,7 +802,7 @@ impl<'cat> EntriesGrid<'cat> {
 
         // Iterate over rows using the new grid structure
         for row_entries in self.rows() {
-            for (col, entry) in row_entries.flatten().enumerate() {
+            for (_col, entry) in row_entries.flatten().enumerate() {
                 available = available.saturating_sub(entry.size_kb());
                 commands.extend(entry.commands());
 
@@ -754,6 +832,11 @@ impl<'cat> EntriesGrid<'cat> {
 /// Implementation of various builder patterns
 /// https://cpc.sylvestre.org/technique/technique_catart2.html
 impl PrintableEntryFileName {
+    /// Build a normal (non-cat-art) filename entry from a `"NAME.EXT"` string: uppercased,
+    /// split on the last dot, and space-padded to 8.3.
+    ///
+    /// # Panics
+    /// Panics if the name part is longer than 8 characters or the extension longer than 3.
     pub fn new<S: AsRef<str>>(fname: S) -> Self {
         // extract fname and extension
         let fname = fname.as_ref().to_ascii_uppercase();
@@ -828,6 +911,10 @@ impl PrintableEntryFileName {
         }
     }
 
+    /// The unsorted-display counterpart of [`Self::sequential_first_with_mode`]: this entry
+    /// sets the screen mode (`f1` = EOT, `f2` = mode) and packs 7 further command/character
+    /// bytes (`cmd1..cmd7`) into the remaining slots, honoring `dot_hiding` for the
+    /// filename/extension boundary.
     pub fn unsorted_heterogeneous_first(
         dot_hiding: DotHiding,
         mode: u8,
@@ -1041,20 +1128,26 @@ impl PrintableEntryFileName {
 }
 
 impl PrintableEntryFileName {
+    /// True if this entry should not be listed in the catalogue: it is a system file or an
+    /// empty slot.
     pub fn is_hidden(&self) -> bool {
         self.is_system() || self.is_empty()
     }
 
+    /// True if the system/hidden bit (high bit of `e2`) is set.
     pub fn is_system(&self) -> bool {
         self.e2 & 1 << 7 != 0
     }
 
+    /// True if the read-only bit (high bit of `e1`) is set.
     pub fn is_read_only(&self) -> bool {
         self.e1 & 1 << 7 != 0
     }
 }
 
 impl PrintableEntryFileName {
+    /// Create an unused filename entry: every byte set to `0xE5`, the AMSDOS "deleted/free
+    /// slot" marker.
     pub fn empty() -> Self {
         PrintableEntryFileName {
             f1: 0xE5,
@@ -1071,14 +1164,23 @@ impl PrintableEntryFileName {
         }
     }
 
+    /// True if every byte equals the `0xE5` "free slot" marker (see [`Self::empty`]).
     pub fn is_empty(&self) -> bool {
         self == &PrintableEntryFileName::empty()
     }
 
+    /// The 8-byte name part (`f1..f8`) as a byte slice.
+    ///
+    /// # Safety
+    /// Relies on `#[repr(C)]` field layout to view `f1..f8` as a contiguous slice.
     pub fn filename(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(&self.f1 as *const u8, 8) }
     }
 
+    /// The 3-byte extension part (`e1..e3`) as a byte slice.
+    ///
+    /// # Safety
+    /// Relies on `#[repr(C)]` field layout to view `e1..e3` as a contiguous slice.
     pub fn extension(&self) -> &[u8] {
         unsafe { std::slice::from_raw_parts(&self.e1 as *const u8, 3) }
     }
@@ -1095,6 +1197,8 @@ impl PrintableEntryFileName {
             .unwrap()
     }
 
+    /// The filename as it would be shown to a user: just the trimmed name if the extension is
+    /// blank, otherwise `"name.ext"` with trailing spaces/NULs stripped.
     pub fn display_name(&self) -> String {
         if self.extension() == [b' ', b' ', b' '] {
             String::from_utf8_lossy(self.filename().as_ref())
@@ -1139,6 +1243,7 @@ impl PrintableEntryFileName {
     }
 }
 
+/// The two overall strategies for laying out a cat art across catalogue entries.
 pub enum CatArtMode {
     /// Each file requires a locate and we don't care of the display order
     Global,
@@ -1146,17 +1251,24 @@ pub enum CatArtMode {
     Sequential
 }
 
+/// Which firmware command lists a catalogue's entries: `CAT` (alphabetically sorted) or
+/// `|DIR`/`DIR` (directory/on-disc order).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CatalogType {
+    /// Listed with `CAT`: entries sorted alphabetically by filename.
     Cat,
+    /// Listed with `|DIR`: entries in their original on-disc/directory order.
     Dir
 }
 
 impl UnifiedCatalog {
+    /// Iterate over the entries that are not hidden/system files.
     pub fn visible_entries(&self) -> impl Iterator<Item = &UnifiedPrintableEntry> {
         self.entries.iter().filter(|e| !e.is_hidden())
     }
 
+    /// Collect the visible entries, sorted alphabetically by filename for [`CatalogType::Cat`]
+    /// or left in their original order for [`CatalogType::Dir`].
     pub fn visible_sorted_entries(&self, order: CatalogType) -> Vec<&UnifiedPrintableEntry> {
         let mut entries: Vec<&UnifiedPrintableEntry> = self.visible_entries().collect();
 
@@ -1175,11 +1287,14 @@ impl UnifiedCatalog {
         entries
     }
 
+    /// Lay out the visible, sorted entries into an [`EntriesGrid`] with the number of columns
+    /// appropriate for `mode` (1/2/4 for Mode0/1/2). `CAT` fills columns top-to-bottom
+    /// (column-major); `|DIR` fills them left-to-right (row-major).
     pub fn visible_entries_by_mode_and_order(
         &self,
         mode: ScreenMode,
         order: CatalogType
-    ) -> EntriesGrid {
+    ) -> EntriesGrid<'_> {
         let entries = self.visible_sorted_entries(order);
 
         // TODO compute that with order or mode
@@ -1217,6 +1332,7 @@ impl UnifiedCatalog {
         EntriesGrid::new(columns, mode, order)
     }
 
+    /// Build the full command sequence (with headers) to display this catalog in `mode`/`order`.
     pub fn commands_by_mode_and_order(
         &self,
         mode: ScreenMode,
@@ -1225,6 +1341,9 @@ impl UnifiedCatalog {
         self.commands_by_mode_and_order_with_params(mode, order, true)
     }
 
+    /// Build the command sequence to display this catalog in `mode`/`order`, optionally
+    /// omitting the header/footer lines (`show_headers`), with adjacent bytes re-merged
+    /// into their canonical commands.
     pub fn commands_by_mode_and_order_with_params(
         &self,
         mode: ScreenMode,
@@ -1273,22 +1392,31 @@ impl Display for UnifiedCatalog {
         let mut interpreter = interpret::Interpreter::new_6128();
         interpreter
             .interpret(&commands, true)
-            .map_err(|e| std::fmt::Error {})?;
+            .map_err(|_e| std::fmt::Error {})?;
         let content = interpreter.to_string();
         write!(f, "{}", content)?;
         Ok(())
     }
 }
 
+/// One slot of an [`EntryConstraint`]: what kind of command (if any specific kind) must occupy
+/// the corresponding position in a catalogue entry's command bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryConstraintItem {
-    Mode,   // Mode command is expected
-    Locate, // Locate command is expected
-    Pen,    // Pen command is expected
+    /// A `Mode` command is expected here.
+    Mode,
+    /// A `Locate` command is expected here.
+    Locate,
+    /// A `Pen` command is expected here.
+    Pen,
+    /// Any command(s) are accepted, as long as their combined encoded size (in bytes) fits
+    /// within the given budget.
     Any(usize)
 }
 
 impl EntryConstraintItem {
+    /// True if `cmd` may legally occupy this slot: a matching command kind, or (for `Any`) a
+    /// command whose byte length does not exceed the remaining budget.
     pub fn respect(&self, cmd: &CharCommand) -> bool {
         match self {
             EntryConstraintItem::Mode => matches!(cmd, CharCommand::Mode(_)),
@@ -1298,6 +1426,12 @@ impl EntryConstraintItem {
         }
     }
 
+    /// Account for `cmd` having filled (part of) this slot. Returns the remaining `Any` budget
+    /// if there is still room left in this slot, or `None` once it is fully consumed.
+    ///
+    /// # Panics
+    /// Panics (via an internal assertion) if `cmd` does not [`respect`](Self::respect) a
+    /// non-`Any` slot.
     pub fn consume(self, cmd: &CharCommand) -> Option<EntryConstraintItem> {
         match self {
             EntryConstraintItem::Any(size) => {
@@ -1341,6 +1475,8 @@ impl EntryConstraintItem {
         }
     }
 
+    /// True if the command's control-code byte itself is implied by the slot kind and should
+    /// not be included when packing this slot's bytes into the entry (only `Any` slots keep it).
     pub fn skip_first_byte(&self) -> bool {
         match self {
             EntryConstraintItem::Any(_) => false,
@@ -1348,6 +1484,8 @@ impl EntryConstraintItem {
         }
     }
 }
+/// The ordered sequence of [`EntryConstraintItem`] slots that the commands packed into one
+/// catalogue entry must satisfy, as determined by an [`EntryKind`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryConstraint {
     slots: SmallVec<[EntryConstraintItem; 3]>
@@ -1362,14 +1500,18 @@ impl Deref for EntryConstraint {
 }
 
 impl EntryConstraint {
+    /// Total size, in bytes, that the commands filling all slots must add up to.
     pub fn real_size(&self) -> usize {
         self.iter().map(|item| item.real_size()).sum()
     }
 
+    /// Total size, in bytes, actually stored in the entry once implied control-code bytes are
+    /// omitted (see [`EntryConstraintItem::skip_first_byte`]).
     pub fn encoded_size(&self) -> usize {
         self.iter().map(|item| item.encoded_size()).sum()
     }
 
+    /// Iterate over the constraint's slots, in order.
     pub fn iter(&self) -> impl Iterator<Item = &EntryConstraintItem> {
         self.slots.iter()
     }
@@ -1407,6 +1549,8 @@ impl EntryConstraint {
         }
     }
 
+    /// Pad out all remaining slots with [`CharCommand::Nop`] commands, returning the total
+    /// number of NOPs consumed (including the one that finally exhausts the constraint).
     pub fn consume_with_nops(mut self) -> usize {
         let mut nops = 0;
         loop {
@@ -1423,23 +1567,25 @@ impl EntryConstraint {
 
 /// Represents a familly of catart entries
 pub enum EntryKind {
-    // Enties are sequentially ordered and the first one must set the mode
+    /// Entries are sequentially ordered and the first one must set the mode
     SequentialFirstWithMode(DotHiding),
-    // Enties are sequentially ordered and the first does not set the mode
+    /// Entries are sequentially ordered and the first does not set the mode
     SequentialFirstWithoutMode(DotHiding),
-    // Entries are sequentially ordered. This one does not represents the first
+    /// Entries are sequentially ordered. This one does not represents the first
     SequentialBasic(DotHiding),
-    // Entries do not need to be sorted
+    /// Entries do not need to be sorted; one colour (pen) is used throughout
     UnsortedHomogeneous(DotHiding),
-    // Entries do not need to be sorted
+    /// Entries do not need to be sorted; this is the first entry, which also sets the mode
     UnsortedHeterogeneousFirst(DotHiding),
-    // Entries do not need to be sorted
+    /// Entries do not need to be sorted; commands are packed around a locate, in the catalogue's base colour
     UnsortedHeterogeneousBaseColor(DotHiding),
-    // Entries do not need to be sorted
+    /// Entries do not need to be sorted; commands are packed around a locate, using the pen/paper-exchange trick for an extra colour
     UnsortedHeterogeneousAdditionalColor(DotHiding)
 }
 
 impl EntryKind {
+    /// True only for [`EntryKind::SequentialFirstWithMode`], the sole kind whose first packed
+    /// command must be a `Mode` command.
     pub fn requires_mode_as_first_command(&self) -> bool {
         match self {
             EntryKind::SequentialFirstWithMode(_) => true,
@@ -1503,6 +1649,13 @@ impl EntryKind {
         bytes
     }
 
+    /// Pack `cmds` into a [`PrintableEntryFileName`] using the appropriate `PrintableEntryFileName`
+    /// constructor for this kind. `index` supplies the sorting index byte and is required (and
+    /// only used) for [`EntryKind::SequentialBasic`].
+    ///
+    /// # Panics
+    /// Panics if `cmds` does not encode to exactly this kind's [`Self::constraint`] real size
+    /// (via [`Self::bytes_for_commands`]), or if `index` is `None` for `SequentialBasic`.
     pub fn build_entry(&self, cmds: &[CharCommand], index: Option<u8>) -> PrintableEntryFileName {
         let args = self.bytes_for_commands(cmds); // by construction, we know this is the right amount of bytes
         match self {
@@ -1607,6 +1760,8 @@ impl EntryKind {
         }
     }
 
+    /// The [`EntryConstraint`] (fixed command slots, plus dot-hiding padding) that commands
+    /// packed into an entry of this kind must satisfy.
     pub fn constraint(&self) -> EntryConstraint {
         let dot_help = self.constraint_helper();
         match self {
@@ -1680,6 +1835,7 @@ impl EntryKind {
 pub struct SerialCatalogBuilder {}
 
 impl SerialCatalogBuilder {
+    /// Create a new builder.
     pub fn new() -> Self {
         SerialCatalogBuilder {}
     }
@@ -1700,7 +1856,7 @@ impl SerialCatalogBuilder {
     fn build_entries(
         &self,
         commands: &CharCommandList,
-        start_mode: ScreenMode
+        _start_mode: ScreenMode
     ) -> Vec<PrintableEntryFileName> {
         assert!(
             commands.len() > 0,
@@ -1791,6 +1947,9 @@ impl SerialCatalogBuilder {
         entries
     }
 
+    /// Renumber freshly-built `entries`' sorting index (`f1`) bytes to match the order they
+    /// will actually be displayed in under `start_mode`'s `CAT` grid, then wrap them into a
+    /// [`UnifiedCatalog`].
     pub fn index_entries(
         &self,
         entries: Vec<PrintableEntryFileName>,
@@ -1810,7 +1969,7 @@ impl SerialCatalogBuilder {
         let ordered_idx = grid
             .entries_display_order()
             .enumerate()
-            .map(|(new_idx, entry)| entry.f1)
+            .map(|(_new_idx, entry)| entry.f1)
             .collect::<Vec<u8>>();
         for (entry, new_number) in cat.entries.iter_mut().zip(ordered_idx.into_iter()) {
             if !entry.is_empty() {

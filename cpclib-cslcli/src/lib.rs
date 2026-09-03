@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use cpclib_common::event::EventObserver;
 use cpclib_csl::parse_csl_with_rich_errors;
 

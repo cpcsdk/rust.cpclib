@@ -632,6 +632,7 @@ pub fn standard_sprite_compiler<C: AmstradColor>(
     comp.compile(&spr, &msk)
 }
 
+#[allow(unreachable_code, unused_variables)]
 pub fn standard_sprite_with_background_backup_and_restore_compiler<C: AmstradColor>(
     label: &str,
     _spr: &SpriteOutput<C>,
