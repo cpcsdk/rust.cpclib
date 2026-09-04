@@ -1155,7 +1155,7 @@ impl AssemblyAnalyzer {
                 // here rather than only there, consistent with how EQU
                 // constants and macros are already offered everywhere too.
                 if let Token::Range(name, start, stop) = token.to_token().into_owned() {
-                    syms.push((name, format!("section {start}..{stop}")));
+                    syms.push((String::from(name), format!("section {start}..{stop}")));
                 }
             }
         }

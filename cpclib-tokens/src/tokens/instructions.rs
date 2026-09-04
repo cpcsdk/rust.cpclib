@@ -687,7 +687,7 @@ pub enum Token {
     Bank(Option<Expr>),
     Bankset(Expr),
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
-    Basic(Option<Vec<SmolStr>>, Option<Vec<Expr>>, String),
+    Basic(Option<Vec<SmolStr>>, Option<Vec<Expr>>, Box<str>),
     Break,
     Breakpoint {
         address: Option<Box<Expr>>,
@@ -705,7 +705,7 @@ pub enum Token {
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
     Charset(CharsetFormat),
-    Comment(String),
+    Comment(Box<str>),
     CrunchedBinary(CrunchType, SmolStr),
     CrunchedSection(CrunchType, Listing),
     Defb(Vec<Expr>),
@@ -772,7 +772,7 @@ pub enum Token {
     Macro {
         name: SmolStr,
         params: Vec<SmolStr>,
-        content: String,
+        content: Box<str>,
         flavor: AssemblerFlavor,
         tokenized_content: TokenizedMacroContent,
         has_variadic: bool
@@ -811,7 +811,7 @@ pub enum Token {
     Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
     /// Define a named section in the current page
-    Range(String, Expr, Expr),
+    Range(Box<str>, Expr, Expr),
     /// Duplicate the token stream
     Repeat(
         // number of loops

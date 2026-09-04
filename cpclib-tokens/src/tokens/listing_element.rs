@@ -421,7 +421,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn comment(&self) -> &str {
             match self.unwrapped() {
-                Self::Comment(content, ..) => content.as_str(),
+                Self::Comment(content, ..) => content.as_ref(),
                 _ => unreachable!()
             }
         }
@@ -566,7 +566,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn macro_definition_code(&self) -> &str {
             match self.unwrapped() {
-                Self::Macro { content, .. } => content.as_str(),
+                Self::Macro { content, .. } => content.as_ref(),
                 _ => unreachable!()
             }
         }
@@ -878,7 +878,8 @@ impl Listing {
 
     /// Add a new comment to the listing
     pub fn add_comment<S: Into<String>>(&mut self, comment: S) {
-        self.listing_mut().push(Token::Comment(comment.into()));
+        self.listing_mut()
+            .push(Token::Comment(comment.into().into_boxed_str()));
     }
 
     /// Add a list of bytes to the listing

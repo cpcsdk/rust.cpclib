@@ -530,7 +530,7 @@ mod tests {
             );
 
             assert!(
-                Token::Basic(None, None, "".to_owned())
+                Token::Basic(None, None, "".into())
                     .estimated_duration()
                     .is_err()
             );

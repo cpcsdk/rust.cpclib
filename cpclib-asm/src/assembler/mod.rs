@@ -8619,7 +8619,7 @@ mod test {
 
     #[test]
     pub fn basic_no_variable() {
-        let tokens = vec![Token::Basic(None, None, "10 PRINT &DEAD".to_owned())];
+        let tokens = vec![Token::Basic(None, None, "10 PRINT &DEAD".into())];
 
         let env = visit_tokens(&tokens);
         println!("{:?}", env);
@@ -8631,7 +8631,7 @@ mod test {
         let tokens = vec![Token::Basic(
             Some(vec!["STUFF".into()]),
             None,
-            "10 PRINT {STUFF}".to_owned()
+            "10 PRINT {STUFF}".into()
         )];
 
         let env = visit_tokens(&tokens);

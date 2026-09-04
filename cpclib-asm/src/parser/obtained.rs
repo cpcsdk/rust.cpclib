@@ -1535,7 +1535,7 @@ impl LocatedTokenInner {
                     *arg3
                 )
             },
-            Self::Comment(cmt) => Token::Comment(cmt.to_string()),
+            Self::Comment(cmt) => Token::Comment(cmt.as_str().into()),
             Self::Org { val1, val2 } => {
                 Token::Org {
                     val1: val1.to_expr_owned(),
@@ -1666,7 +1666,7 @@ impl LocatedTokenInner {
                 Token::Macro {
                     name: name.into(),
                     params: params.iter().map(|p| p.into()).collect_vec(),
-                    content: content.as_str().to_owned(),
+                    content: content.as_str().into(),
                     flavor: *flavor,
                     tokenized_content: tokenized_content.clone(),
                     has_variadic: *has_variadic
@@ -1748,7 +1748,7 @@ impl LocatedTokenInner {
             },
 
             Self::Range(label, start, stop) => {
-                Token::Range(label.as_str().to_string(), start.to_expr_owned(), stop.to_expr_owned())
+                Token::Range(label.as_str().into(), start.to_expr_owned(), stop.to_expr_owned())
             },
             Self::Section(label) => Token::Section(label.as_str().into()),
             Self::SnaSet(flag, value) => Token::SnaSet(*flag, value.clone()),

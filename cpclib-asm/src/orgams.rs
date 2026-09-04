@@ -311,7 +311,7 @@ where
         let comment_token = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
             let repr = token.to_string();
             let repr: String = repr.lines().map(|l| format!(" ; {l}")).join("\n");
-            let token = Token::Comment(format!("; {repr}",));
+            let token = Token::Comment(format!("; {repr}",).into());
             let res = token.to_orgams_string()?;
             Ok(res.into_owned().into())
         };

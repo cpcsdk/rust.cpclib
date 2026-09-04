@@ -97,6 +97,18 @@ impl SourceString for &SmolStr {
     }
 }
 
+impl SourceString for &Box<str> {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl SourceString for Box<str> {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
 impl SourceString for str {
     fn as_str(&self) -> &str {
         self

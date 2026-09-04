@@ -215,7 +215,7 @@ impl AssemblyAnalyzer {
                         let pos = super::token::locate_name_in_statement(token, &name);
                         (
                             name.len(),
-                            name,
+                            String::from(name),
                             SymbolCategory::Section,
                             SymbolKind::NAMESPACE,
                             Some(format!("{start}..{stop}")),

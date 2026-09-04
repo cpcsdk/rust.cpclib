@@ -95,7 +95,7 @@ pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
 /// Generate a comment
 #[allow(missing_docs)]
 pub fn comment<S: AsRef<str>>(label: S) -> Token {
-    Token::Comment(label.as_ref().to_owned())
+    Token::Comment(label.as_ref().into())
 }
 
 pub fn r#if(cond: TestKind, lst: Listing) -> Token {
