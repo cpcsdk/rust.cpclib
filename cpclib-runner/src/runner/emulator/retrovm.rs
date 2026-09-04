@@ -70,9 +70,7 @@ impl DownloadableInformation for RetroVmVersion {
     fn target_os_postinstall<E: cpclib_common::event::EventObserver>(
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
-        let post_install: Box<
-            dyn Fn(&crate::delegated::DelegateApplicationDescription<E>) -> Result<(), String>
-        > = Box::new(|d| {
+        let post_install: Box<crate::delegated::PostInstallFn<E>> = Box::new(|d| {
             use std::os::unix::fs::PermissionsExt;
 
             let fname = d.exec_fname();
@@ -90,9 +88,7 @@ impl DownloadableInformation for RetroVmVersion {
     fn target_os_postinstall<E: cpclib_common::event::EventObserver>(
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
-        let post_install: Box<
-            dyn Fn(&crate::delegated::DelegateApplicationDescription<E>) -> Result<(), String>
-        > = Box::new(|d| {
+        let post_install: Box<crate::delegated::PostInstallFn<E>> = Box::new(|d| {
             use std::process::Command;
 
             use cpclib_common::camino::Utf8PathBuf;

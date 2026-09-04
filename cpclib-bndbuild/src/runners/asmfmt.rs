@@ -3,7 +3,7 @@ use std::path::Path;
 
 use clap::{Arg, ArgAction, Command, CommandFactory};
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::ASMFMT_CMDS;

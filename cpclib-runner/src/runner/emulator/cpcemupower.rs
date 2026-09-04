@@ -5,9 +5,9 @@ use std::sync::OnceLock;
 
 use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation,
-    InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
+    InternetStaticCompiledApplication, MutiplatformUrls, PostInstallFn, StaticInformation
 };
-use crate::runner::runner::RunInDir;
+use crate::runner::exec::RunInDir;
 
 pub const CPCEMUPOWER_CMD: &str = "cpcemupower";
 
@@ -73,7 +73,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
         let fname = self.target_os_exec_fname().to_owned();
         let fname = Utf8PathBuf::from(fname);
 
-        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+        let post_install: Box<PostInstallFn<E>> =
             Box::new(move |d: &DelegateApplicationDescription<E>| {
                 use std::os::unix::fs::PermissionsExt;
 

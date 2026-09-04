@@ -12,7 +12,7 @@
 
 use cpclib_common::camino::Utf8Path;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, UrlGenerator};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, PostInstallFn, UrlGenerator};
 use crate::event::EventObserver;
 
 pub const AMSPIRIT_LITE_CMD: &str = "amspiritlite";
@@ -111,9 +111,7 @@ impl AmspiritLiteVersion {
         // A downloaded AppImage arrives without its executable bit.
         #[cfg(target_os = "linux")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     ensure_executable(&desc.exec_fname())
                 }
@@ -123,9 +121,7 @@ impl AmspiritLiteVersion {
 
         #[cfg(target_os = "macos")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     super::cadence::install_macos_dmg_release(
                         &desc.cache_folder(),

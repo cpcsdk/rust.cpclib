@@ -4,9 +4,9 @@ use cpclib_common::event::EventObserver;
 
 use crate::delegated::{
     ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation,
-    InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
+    InternetStaticCompiledApplication, MutiplatformUrls, PostInstallFn, StaticInformation
 };
-use crate::runner::runner::RunInDir;
+use crate::runner::exec::RunInDir;
 
 pub const AMSPIRIT_CMD: &str = "amspirit";
 
@@ -95,7 +95,7 @@ impl DownloadableInformation for AmspiritVersion {
         };
         let owned_result = self.target_os_exec_fname().to_owned();
 
-        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+        let post_install: Box<PostInstallFn<E>> =
             Box::new(move |d: &DelegateApplicationDescription<E>| {
                 fs_err::rename(
                     d.cache_folder().join(&owned_original),

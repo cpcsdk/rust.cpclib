@@ -4,7 +4,7 @@ use camino::Utf8Path;
 use clap::ArgMatches;
 use cpclib_common::clap::{self, Command};
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;

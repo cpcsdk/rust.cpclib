@@ -24,7 +24,7 @@ use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
 use crate::runner::Runner;
 use crate::runner::emulator::Emulator;
-use crate::runner::runner::RunnerWithClap;
+use crate::runner::exec::RunnerWithClap;
 
 #[cfg(feature = "screenshot")]
 type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
@@ -1347,17 +1347,11 @@ impl OrgamsRobotAction<'_, '_> {
     }
 
     pub fn edit(&self) -> bool {
-        match self {
-            OrgamsRobotAction::LoadOrImportAndEdit { .. } => true,
-            _ => false
-        }
+        matches!(self, OrgamsRobotAction::LoadOrImportAndEdit { .. })
     }
 
     pub fn jump(&self) -> bool {
-        match self {
-            OrgamsRobotAction::LoadOrImportAndAssembleJump { .. } => true,
-            _ => false
-        }
+        matches!(self, OrgamsRobotAction::LoadOrImportAndAssembleJump { .. })
     }
 
     pub fn save_orgams_binary_source(&self) -> Option<&str> {
@@ -1939,8 +1933,8 @@ pub struct EmulatorListEntry {
     pub debuggable: bool,
     pub installed: bool,
     /// The exact string `cpclib-dap`'s own launch-time `emulator` property
-    /// wants (`lib.rs`'s `chosen_emulator.eq_ignore_ascii_case(...)` checks)
-    /// - a *different* naming scheme from `id` above (this crate's own
+    /// wants (`lib.rs`'s `chosen_emulator.eq_ignore_ascii_case(...)` checks) -
+    /// a *different* naming scheme from `id` above (this crate's own
     /// `--emulator` flag), so a caller driving the DAP layer directly (an
     /// editor's debug launch) needs this instead of `id`. `None` for every
     /// non-`debuggable` entry, since the DAP layer has no name for those at
@@ -2307,7 +2301,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .transparent(cli.transparent)
         .maybe_drive_a(cli.drive_a.clone().map(|a| a.into()))
         .maybe_drive_b(cli.drive_b.clone().map(|a| a.into()))
-        .maybe_crtc(cli.crtc.map(|c| c.try_into().unwrap()))
+        .maybe_crtc(cli.crtc)
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
@@ -2394,7 +2388,9 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         ace_conf.set("KTRANS", 1);
         ace_conf.set("KGTRANS", 1);
 
-        let extra_roms: &[(AmstradRom, &[(&str, usize, Option<AceConfigFlag>)])] = &[
+        // (rom filename, ACE slot number, optional plugin flag it also enables)
+        type RomFile = (&'static str, usize, Option<AceConfigFlag>);
+        let extra_roms: &[(AmstradRom, &[RomFile])] = &[
             (
                 AmstradRom::Unidos,
                 &[
@@ -2577,11 +2573,16 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
                 )
             })?;
             let enigo_settings = {
-                let mut settings = Settings::default();
-                settings.linux_delay = 1000 / 10;
+                let mut settings = Settings {
+                    linux_delay: 1000 / 10,
+                    ..Default::default()
+                };
                 if let EmuWindow::Xvfb(display, _) = &window {
+                    // The X11 DISPLAY convention is `:N` (see the identical
+                    // `std::env::set_var("DISPLAY", ...)` call above) - a
+                    // second, colon-less assignment used to immediately
+                    // overwrite this with a value X11 wouldn't recognize.
                     settings.x11_display = Some(format!(":{display}"));
-                    settings.x11_display = Some(format!("{display}"));
                 }
                 settings
             };
@@ -2644,11 +2645,14 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
                     )
                 })?;
                 let enigo_settings = {
-                    let mut settings = Settings::default();
-                    settings.linux_delay = 1000 / 10;
+                    let mut settings = Settings {
+                        linux_delay: 1000 / 10,
+                        ..Default::default()
+                    };
                     if let EmuWindow::Xvfb(display, _) = &window {
+                        // See the identical fix's comment in the other
+                        // enigo_settings block above.
                         settings.x11_display = Some(format!(":{display}"));
-                        settings.x11_display = Some(format!("{display}"));
                     }
                     settings
                 };

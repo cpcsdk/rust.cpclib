@@ -9,7 +9,7 @@ use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication,
     GithubInformation
 };
-use crate::runner::runner::RunInDir;
+use crate::runner::exec::RunInDir;
 
 pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 

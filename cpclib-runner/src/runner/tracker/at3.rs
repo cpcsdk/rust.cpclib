@@ -142,9 +142,9 @@ impl DownloadableInformation for At3Version {
     ) -> Option<crate::delegated::PostInstall<E>> {
         use std::os::unix::fs::PermissionsExt;
 
-        use crate::delegated::DelegateApplicationDescription;
+        use crate::delegated::{DelegateApplicationDescription, PostInstallFn};
 
-        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+        let post_install: Box<PostInstallFn<E>> =
             Box::new(|desc: &DelegateApplicationDescription<E>| {
                 let folder = desc.cache_folder();
 

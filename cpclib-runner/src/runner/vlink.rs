@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::process::Command;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, PostInstallFn};
 use crate::event::EventObserver;
 
 pub const VLINK_CMD: &str = "vlink";
@@ -92,9 +92,8 @@ impl Vlink {
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         #[cfg(target_os = "macos")]
         {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(|desc| Self::build_vlink(desc, ArchiveFormat::TarGz, "vlink"));
+            let post_install: Box<PostInstallFn<E>> =
+                Box::new(|desc| Self::build_vlink(desc, ArchiveFormat::TarGz, "vlink"));
 
             DelegateApplicationDescription::builder()
                 .download_fn_url("http://sun.hasenbraten.de/vlink/release/vlink.tar.gz")
@@ -117,9 +116,8 @@ impl Vlink {
 
         #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
         {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(|desc| Self::build_vlink(desc, ArchiveFormat::TarGz, "vlink"));
+            let post_install: Box<PostInstallFn<E>> =
+                Box::new(|desc| Self::build_vlink(desc, ArchiveFormat::TarGz, "vlink"));
 
             DelegateApplicationDescription::builder()
                 .download_fn_url("http://sun.hasenbraten.de/vlink/release/vlink.tar.gz")

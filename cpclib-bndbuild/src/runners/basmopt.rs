@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use clap::{Arg, ArgAction, Command, CommandFactory, FromArgMatches};
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::BASMOPT_CMDS;

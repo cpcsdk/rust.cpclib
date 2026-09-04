@@ -1,5 +1,5 @@
 pub mod arguments;
-pub mod runner;
+pub mod exec;
 
 pub mod assembler;
 pub mod ay;
@@ -16,4 +16,4 @@ pub mod tracker;
 pub mod extra;
 pub mod twocdt;
 pub mod vlink;
-pub use runner::{ExternRunner, Runner, RunnerWithClap};
+pub use exec::{ExternRunner, Runner, RunnerWithClap};

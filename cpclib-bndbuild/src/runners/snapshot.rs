@@ -1,7 +1,7 @@
 pub const SNAPSHOT_CMD: &str = "SNAPSHOT";
 
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 use cpclib_sna;
 

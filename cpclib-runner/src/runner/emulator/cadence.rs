@@ -1,6 +1,6 @@
 use cpclib_common::camino::Utf8Path;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, UrlGenerator};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, PostInstallFn, UrlGenerator};
 use crate::event::EventObserver;
 
 pub const CADENCE_CMD: &str = "cadence";
@@ -131,9 +131,7 @@ impl CadenceVersion {
 
         #[cfg(target_os = "linux")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     ensure_executable(&desc.exec_fname())
                 }
@@ -143,9 +141,7 @@ impl CadenceVersion {
 
         #[cfg(target_os = "macos")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 move |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     let cache_folder = desc.cache_folder();
 

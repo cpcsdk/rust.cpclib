@@ -6,7 +6,7 @@ use cpclib_common::camino::Utf8PathBuf;
 use cpclib_cpr::Cpr;
 use cpclib_cprcli::commands::Command;
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::built_info;

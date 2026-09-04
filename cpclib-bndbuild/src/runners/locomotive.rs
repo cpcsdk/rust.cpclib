@@ -2,7 +2,7 @@ use clap::{Arg, ArgAction, CommandFactory, Parser};
 use cpclib_common::clap::Command;
 use cpclib_locomotive::Cli;
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::task::LOCOMOTIVE_CMDS;

@@ -4,9 +4,11 @@ use cpclib_common::camino::Utf8Path;
 #[cfg(any(target_os = "macos", target_os = "openbsd"))]
 use cpclib_common::camino::Utf8PathBuf;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, MutiplatformUrls};
+use crate::delegated::{
+    ArchiveFormat, DelegateApplicationDescription, MutiplatformUrls, PostInstallFn
+};
 use crate::event::EventObserver;
-use crate::runner::runner::RunInDir;
+use crate::runner::exec::RunInDir;
 
 pub const EMULATOR_1984_CMD: &str = "1984";
 pub const DOWNLOAD_URL_V0_4_3_LINUX: &str =
@@ -96,9 +98,7 @@ impl Emulator1984Version {
 
         #[cfg(target_os = "linux")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     use std::os::unix::fs::PermissionsExt;
 
@@ -141,9 +141,7 @@ impl Emulator1984Version {
 
         #[cfg(any(target_os = "macos", target_os = "openbsd"))]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     use std::thread::available_parallelism;
 
@@ -203,9 +201,7 @@ impl Emulator1984Version {
 
         #[cfg(target_os = "windows")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     // Download required ROM files
                     let rom_dir = desc.cache_folder();
@@ -275,7 +271,7 @@ impl crate::delegated::DownloadableInformation for Emulator1984Version {
 
     #[cfg(any(target_os = "macos", target_os = "openbsd"))]
     fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
-        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+        let post_install: Box<PostInstallFn<E>> =
             Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     use std::thread::available_parallelism;

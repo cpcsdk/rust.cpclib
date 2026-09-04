@@ -2,7 +2,7 @@ use cpclib_common::event::EventObserver;
 use cpclib_crunch::CrunchArgs;
 #[allow(unused_imports)]
 use cpclib_runner::runner::Runner;
-use cpclib_runner::runner::runner::RunnerWithClapDerive;
+use cpclib_runner::runner::exec::RunnerWithClapDerive;
 
 use crate::task::CRUNCH_CMDS;
 

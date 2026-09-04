@@ -2,7 +2,7 @@ use clap::{Arg, ArgAction, Parser};
 use cpclib_catalog::cli::CatalogApp;
 use cpclib_common::clap::{self, Command, CommandFactory};
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::task::{CATALOG_CMDS, DISC_CMDS};

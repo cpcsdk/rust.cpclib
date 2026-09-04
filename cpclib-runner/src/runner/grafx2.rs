@@ -1,4 +1,4 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, PostInstallFn};
 use crate::event::EventObserver;
 
 pub const GRAFX2_CMD: &str = "grafx2";
@@ -63,9 +63,7 @@ impl Grafx2Version {
         // On linux it is needed to add execution right to the downloaded appimage
         #[cfg(target_os = "linux")]
         let builder = {
-            let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(
+            let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     use std::os::unix::fs::PermissionsExt;
 

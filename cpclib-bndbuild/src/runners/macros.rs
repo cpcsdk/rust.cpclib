@@ -236,7 +236,7 @@ macro_rules! define_clap_derive_runner {
             ).bin_name($command_name)
         );
 
-        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapDerive for $runner_name<E> {
+        impl<E: EventObserver> cpclib_runner::runner::exec::RunnerWithClapDerive for $runner_name<E> {
             type Args = $args_type;
         }
 
@@ -263,7 +263,7 @@ macro_rules! define_clap_derive_runner {
             ).bin_name($command_name)
         );
 
-        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapDerive for $runner_name<E> {
+        impl<E: EventObserver> cpclib_runner::runner::exec::RunnerWithClapDerive for $runner_name<E> {
             type Args = $args_type;
         }
 
@@ -329,7 +329,7 @@ macro_rules! define_custom_builder_runner {
             )
         );
 
-        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapMatches for $runner_name<E> {}
+        impl<E: EventObserver> cpclib_runner::runner::exec::RunnerWithClapMatches for $runner_name<E> {}
 
         $crate::__define_runner_impl!(matches_o: $runner_name, $command_name, $process_fn);
     };
@@ -357,7 +357,7 @@ macro_rules! define_custom_builder_runner {
             )
         );
 
-        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapMatches for $runner_name<E> {}
+        impl<E: EventObserver> cpclib_runner::runner::exec::RunnerWithClapMatches for $runner_name<E> {}
 
         $crate::__define_runner_impl!(matches_with_cmd_o: $runner_name, $command_name, $process_fn);
     };
@@ -385,7 +385,7 @@ macro_rules! define_custom_builder_runner {
             )
         );
 
-        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapMatches for $runner_name<E> {}
+        impl<E: EventObserver> cpclib_runner::runner::exec::RunnerWithClapMatches for $runner_name<E> {}
 
         $crate::__define_runner_impl!(matches: $runner_name, $command_name, $process_fn);
     };
@@ -412,7 +412,7 @@ macro_rules! define_custom_builder_runner {
             )
         );
 
-        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapMatches for $runner_name<E> {}
+        impl<E: EventObserver> cpclib_runner::runner::exec::RunnerWithClapMatches for $runner_name<E> {}
 
         $crate::__define_runner_impl!(matches_with_cmd: $runner_name, $command_name, $process_fn);
     };

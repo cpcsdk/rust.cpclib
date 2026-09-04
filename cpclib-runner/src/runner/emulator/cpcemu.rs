@@ -4,7 +4,7 @@ use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation,
     InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
 };
-use crate::runner::runner::RunInDir;
+use crate::runner::exec::RunInDir;
 
 pub const CPCEMU_CMD: &str = "cpcemu";
 

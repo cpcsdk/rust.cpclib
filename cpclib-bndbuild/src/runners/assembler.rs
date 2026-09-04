@@ -10,7 +10,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::{EmuCli, handle_arguments};
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::assembler::ExternAssembler;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::exec::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;

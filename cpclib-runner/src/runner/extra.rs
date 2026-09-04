@@ -87,7 +87,7 @@ where BaseTool: Clone + Debug + PartialEq + Eq + Hash
         }
     }
 
-    fn target_os_run_in_dir(&self) -> super::runner::RunInDir {
+    fn target_os_run_in_dir(&self) -> super::exec::RunInDir {
         self.tool.target_os_run_in_dir()
     }
 }

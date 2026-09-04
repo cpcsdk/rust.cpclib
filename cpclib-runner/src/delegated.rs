@@ -15,7 +15,7 @@ use tar::Archive;
 use xz2::read::XzDecoder;
 
 use crate::event::EventObserver;
-use crate::runner::runner::{ExternRunner, RunInDir, Runner};
+use crate::runner::exec::{ExternRunner, RunInDir, Runner};
 
 static GITHUB_URL: &str = "https://github.com/";
 
@@ -95,7 +95,7 @@ pub trait CompilableInformation {
     /// Produces the function that executes the list of commands
     fn target_os_compiler<E: EventObserver>(&self) -> Option<Compiler<E>> {
         if let Some(commands) = self.target_os_commands() {
-            let install: Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> =
+            let install: Box<CompilerFn<E>> =
                 Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String> {
                     for command in commands.iter() {
                         ExternRunner::default().inner_run(command, o)?;
@@ -365,37 +365,41 @@ impl Deref for UrlGenerator {
     }
 }
 
+/// A per-target-OS compile step: given the install directory, run whatever
+/// builds the tool in place.
+pub type CompilerFn<E> = dyn Fn(&Utf8Path, &E) -> Result<(), String>;
+
 #[derive(Clone)]
-pub struct Compiler<E>(Rc<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>>);
-impl<E> From<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>> for Compiler<E> {
-    fn from(value: Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>) -> Self {
+pub struct Compiler<E>(Rc<Box<CompilerFn<E>>>);
+impl<E> From<Box<CompilerFn<E>>> for Compiler<E> {
+    fn from(value: Box<CompilerFn<E>>) -> Self {
         Self(Rc::new(value))
     }
 }
 
 impl<E> Deref for Compiler<E> {
-    type Target = Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>;
+    type Target = Box<CompilerFn<E>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-#[derive(Clone)]
-pub struct PostInstall<E: EventObserver>(
-    Rc<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
-);
+/// A step run once installation has finished, given the description of what
+/// was just installed.
+pub type PostInstallFn<E> = dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>;
 
-impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
-    for PostInstall<E>
-{
-    fn from(value: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>) -> Self {
+#[derive(Clone)]
+pub struct PostInstall<E: EventObserver>(Rc<Box<PostInstallFn<E>>>);
+
+impl<E: EventObserver> From<Box<PostInstallFn<E>>> for PostInstall<E> {
+    fn from(value: Box<PostInstallFn<E>>) -> Self {
         Self(Rc::new(value))
     }
 }
 
 impl<E: EventObserver> Deref for PostInstall<E> {
-    type Target = Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>;
+    type Target = Box<PostInstallFn<E>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
