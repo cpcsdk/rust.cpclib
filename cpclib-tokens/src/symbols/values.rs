@@ -87,7 +87,7 @@ impl Struct {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceLocation {
-    fname: String,
+    fname: Box<str>,
     line: usize,
     column: usize
 }
@@ -99,9 +99,9 @@ impl Display for SourceLocation {
 }
 
 impl SourceLocation {
-    pub fn new(fname: String, line: usize, column: usize) -> Self {
+    pub fn new(fname: impl Into<Box<str>>, line: usize, column: usize) -> Self {
         SourceLocation {
-            fname,
+            fname: fname.into(),
             line,
             column
         }
@@ -127,7 +127,7 @@ pub struct ValueMacro {
     // The name of its arguments
     params: Vec<SmolStr>,
     // The content
-    code: String,
+    code: Box<str>,
     segments: TokenizedMacroContent,
     // Origin of the macro (for error messages)
     source: Option<SourceLocation>,
@@ -142,7 +142,7 @@ impl ValueMacro {
     pub fn new(
         name: SmolStr,
         params: &[&str],
-        code: String,
+        code: impl Into<Box<str>>,
         tokenized_content: crate::macro_segment::TokenizedMacroContent,
         source: Option<SourceLocation>,
         flavor: AssemblerFlavor,
@@ -151,7 +151,7 @@ impl ValueMacro {
         ValueMacro {
             name,
             params: params.iter().map(|&s| SmolStr::from(s)).collect(),
-            code,
+            code: code.into(),
             segments: tokenized_content,
             source,
             flavor,
