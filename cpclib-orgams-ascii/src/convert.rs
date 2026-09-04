@@ -9,8 +9,7 @@ pub fn binary_orgams_to_utf8(input: &[u8]) -> Result<String, String> {
         .parse_next(&mut input_wrapper)
         .map_err(|e| format!("Failed to parse Orgams binary file: {:?}", e))?;
 
-    let output = orgams_file.to_string();
-    Ok(output)
+    orgams_file.try_render()
 }
 
 #[cfg(test)]

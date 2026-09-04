@@ -625,14 +625,21 @@ impl Item {
 
     /// Renders this item as Orgams source text (as it would appear inside a line), resolving
     /// any label reference against `labels`.
-    pub fn display<'i>(&'i self, labels: &StringTable) -> Cow<'i, str> {
-        match self {
+    ///
+    /// Returns `Err` if a label reference in this item is out of range for `labels`.
+    pub fn display<'i>(&'i self, labels: &StringTable) -> Result<Cow<'i, str>, String> {
+        Ok(match self {
             Item::Comment(text) => format!(";{}", ***text).into(),
             Item::NewLine => "\n".into(),
             Item::Indent(count) => " ".repeat(count.0 as usize).into(),
             Item::Assign(assign) => {
-                let label = labels.label(&assign.label).unwrap();
-                let expr_repr = assign.expression.display(labels);
+                let label = labels.label(&assign.label).ok_or_else(|| {
+                    format!(
+                        "label reference {:?} is out of range for the label table",
+                        assign.label
+                    )
+                })?;
+                let expr_repr = assign.expression.display(labels)?;
 
                 // Heuristic: Left padding for short labels
                 let label_len = label.len();
@@ -644,11 +651,23 @@ impl Item {
                 }
                 .into()
             },
-            Item::Label(label) => label.get(labels).to_string().into(),
-            Item::LocalLabel(label) => format!(".{}", label.get(labels)).into(),
-            Item::MacroDef(m) => m.display(labels).into(),
-            Item::Statement(s) => s.display(labels)
-        }
+            Item::Label(label) => label
+                .get(labels)
+                .ok_or_else(|| {
+                    format!("label reference {label:?} is out of range for the label table")
+                })?
+                .to_string()
+                .into(),
+            Item::LocalLabel(label) => format!(
+                ".{}",
+                label.get(labels).ok_or_else(|| format!(
+                    "label reference {label:?} is out of range for the label table"
+                ))?
+            )
+            .into(),
+            Item::MacroDef(m) => m.display(labels)?.into(),
+            Item::Statement(s) => s.display(labels)?
+        })
     }
 }
 
@@ -678,10 +697,9 @@ impl LabelRef {
 
     /// Resolves this reference to its label text in `table`.
     ///
-    /// # Panics
-    /// Panics if the referenced index is out of range for `table`.
-    pub fn get<'t>(&self, table: &'t StringTable) -> &'t OrgamsEncodedString {
-        table.label(self).unwrap()
+    /// Returns `None` if the referenced index is out of range for `table`.
+    pub fn get<'t>(&self, table: &'t StringTable) -> Option<&'t OrgamsEncodedString> {
+        table.label(self)
     }
 
     /// Re-encodes this reference back to its original one- or two-byte binary form.
@@ -693,8 +711,12 @@ impl LabelRef {
     }
 
     /// Renders this reference as its label text (resolved against `table`).
-    pub fn display(&self, table: &StringTable) -> String {
-        self.get(table).to_string()
+    ///
+    /// Returns `Err` if the referenced index is out of range for `table`.
+    pub fn display(&self, table: &StringTable) -> Result<String, String> {
+        self.get(table)
+            .map(|s| s.to_string())
+            .ok_or_else(|| format!("label reference {self:?} is out of range for the label table"))
     }
 }
 
@@ -1033,11 +1055,13 @@ impl SizedExpression {
     }
 
     /// Renders this expression as Orgams source text (`"0"` for [`SizedExpression::Empty`]).
-    pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
-        match self {
+    ///
+    /// Returns `Err` if a label reference inside this expression is out of range for `table`.
+    pub fn display(&self, table: &StringTable) -> Result<Cow<'_, str>, String> {
+        Ok(match self {
             SizedExpression::Empty => "0".into(),
-            SizedExpression::Sized(expr) => expr.display(table)
-        }
+            SizedExpression::Sized(expr) => expr.display(table)?
+        })
     }
 }
 
@@ -1072,26 +1096,30 @@ impl Assign {
 impl Expression {
     /// Renders this expression as Orgams source text, resolving any label reference against
     /// `table`.
-    pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
-        match self {
+    ///
+    /// Returns `Err` if a label reference in this expression is out of range for `table`.
+    pub fn display(&self, table: &StringTable) -> Result<Cow<'_, str>, String> {
+        Ok(match self {
             Expression::MultiTerm(members) => {
                 members
                     .iter()
                     .map(|m| m.display(table))
-                    .collect::<Vec<_>>()
+                    .collect::<Result<Vec<_>, String>>()?
                     .join("")
                     .into()
             },
-            Expression::SingleTerm(member) => member.display(table)
-        }
+            Expression::SingleTerm(member) => member.display(table)?
+        })
     }
 }
 
 impl ExpressionMember {
     /// Renders this expression member as Orgams source text, resolving any label reference
     /// against `table`.
-    pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
-        match self {
+    ///
+    /// Returns `Err` if a label reference in this member is out of range for `table`.
+    pub fn display(&self, table: &StringTable) -> Result<Cow<'_, str>, String> {
+        Ok(match self {
             ExpressionMember::Iter(n) => {
                 match n {
                     1 => "#".into(),
@@ -1101,12 +1129,24 @@ impl ExpressionMember {
                 }
             },
             ExpressionMember::String(s) => format!("\"{}\"", **s).into(),
-            ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
+            ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)?).into(),
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
             ExpressionMember::Value(v) => v.display().into(),
             ExpressionMember::Operator(op) => op.as_str().into(),
-            ExpressionMember::LabelRef(l) => l.get(table).to_string().into(),
-            ExpressionMember::LocalLabelRef(l) => format!(".{}", l.get(table)).into(),
+            ExpressionMember::LabelRef(l) => l
+                .get(table)
+                .ok_or_else(|| {
+                    format!("label reference {l:?} is out of range for the label table")
+                })?
+                .to_string()
+                .into(),
+            ExpressionMember::LocalLabelRef(l) => format!(
+                ".{}",
+                l.get(table).ok_or_else(|| format!(
+                    "label reference {l:?} is out of range for the label table"
+                ))?
+            )
+            .into(),
             ExpressionMember::Space => " ".into(),
             ExpressionMember::Dollar => "$".into(),
             ExpressionMember::DoubleDollar => "$$".into(),
@@ -1115,12 +1155,12 @@ impl ExpressionMember {
                     "[{}]",
                     expr.iter()
                         .map(|e| e.display(table))
-                        .collect::<Vec<_>>()
+                        .collect::<Result<Vec<_>, String>>()?
                         .join("")
                 )
                 .into()
             },
-        }
+        })
     }
 }
 
@@ -1176,12 +1216,16 @@ impl Value {
 
 impl Assign {
     /// Renders this assignment as Orgams source text (`"label = expression"`).
-    pub fn display(&self, table: &StringTable) -> String {
-        format!(
-            "{} = {}",
-            self.label.get(table),
-            self.expression.display(table)
-        )
+    ///
+    /// Returns `Err` if a label reference in the assignment is out of range for `table`.
+    pub fn display(&self, table: &StringTable) -> Result<String, String> {
+        let label = self.label.get(table).ok_or_else(|| {
+            format!(
+                "label reference {:?} is out of range for the label table",
+                self.label
+            )
+        })?;
+        Ok(format!("{} = {}", label, self.expression.display(table)?))
     }
 }
 
@@ -1237,21 +1281,34 @@ impl MacroDef {
 
     /// Renders this macro header as Orgams source text (`"MACRO name"` or
     /// `"MACRO name param1,param2,..."`).
-    pub fn display(&self, table: &StringTable) -> String {
-        let name = self.name.get(table);
-        if self.params.is_empty() {
+    ///
+    /// Returns `Err` if the macro name or one of its parameter labels is out of range for
+    /// `table`.
+    pub fn display(&self, table: &StringTable) -> Result<String, String> {
+        let name = self.name.get(table).ok_or_else(|| {
+            format!(
+                "label reference {:?} is out of range for the label table",
+                self.name
+            )
+        })?;
+        Ok(if self.params.is_empty() {
             format!("MACRO {}", name)
         }
         else {
-            let _params = String::new();
             let params = self
                 .params
                 .iter()
-                .map(|p| p.get(table).to_string())
-                .collect::<Vec<_>>()
+                .map(|p| {
+                    p.get(table)
+                        .map(|s| s.to_string())
+                        .ok_or_else(|| format!(
+                            "label reference {p:?} is out of range for the label table"
+                        ))
+                })
+                .collect::<Result<Vec<_>, String>>()?
                 .join(",");
             format!("MACRO {} {}", name, params)
-        }
+        })
     }
 }
 
@@ -1473,14 +1530,16 @@ impl Statement {
 
     /// Renders this statement as Orgams source text, resolving any label reference against
     /// `table`.
-    pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
-        match self {
-            Statement::StartRepeatBloc(expr) => format!("{} ** [", expr.display(table)).into(),
+    ///
+    /// Returns `Err` if a label reference in this statement is out of range for `table`.
+    pub fn display<'a>(&'a self, table: &StringTable) -> Result<Cow<'a, str>, String> {
+        Ok(match self {
+            Statement::StartRepeatBloc(expr) => format!("{} ** [", expr.display(table)?).into(),
             Statement::StopRepeatBloc => "]".into(),
             Statement::Brk => "BRK".into(),
             Statement::Restore => "RESTORE".into(),
             Statement::If(expr) => {
-                let cond = expr.display(table);
+                let cond = expr.display(table)?;
                 format!("IF {}", cond).into()
             },
             Statement::Else => "ELSE".into(),
@@ -1490,8 +1549,8 @@ impl Statement {
             Statement::Fill(count_expr, value_expr) => {
                 format!(
                     "FILL {},{}",
-                    count_expr.display(table),
-                    value_expr.display(table)
+                    count_expr.display(table)?,
+                    value_expr.display(table)?
                 )
                 .into()
             },
@@ -1511,39 +1570,50 @@ impl Statement {
                 }
             },
             Statement::RawString(s) => s.to_string().into(),
-            Statement::Ent(e) => format!("ENT {}", e.display(table)).into(),
-            Statement::Org(e) => format!("ORG {}", e.display(table)).into(),
+            Statement::Ent(e) => format!("ENT {}", e.display(table)?).into(),
+            Statement::Org(e) => format!("ORG {}", e.display(table)?).into(),
             Statement::Org2(e1, e2) => {
-                format!("ORG {},{}", e1.display(table), e2.display(table)).into()
+                format!("ORG {},{}", e1.display(table)?, e2.display(table)?).into()
             },
-            Statement::Skip(e) => format!("SKIP {}", e.display(table)).into(),
+            Statement::Skip(e) => format!("SKIP {}", e.display(table)?).into(),
             Statement::Byte(exprs) => {
-                let exprs = exprs.iter().map(|e| e.display(table)).join(",");
+                let exprs = exprs
+                    .iter()
+                    .map(|e| e.display(table))
+                    .collect::<Result<Vec<_>, String>>()?
+                    .into_iter()
+                    .join(",");
                 format!("BYTE {}", exprs).into()
             },
             Statement::Word(exprs) => {
-                format!("WORD {}", exprs.iter().map(|e| e.display(table)).join(",")).into()
+                let exprs = exprs
+                    .iter()
+                    .map(|e| e.display(table))
+                    .collect::<Result<Vec<_>, String>>()?
+                    .into_iter()
+                    .join(",");
+                format!("WORD {}", exprs).into()
             },
             Statement::StorePcInstr | Statement::StorePcLine => {
                 // norepresentation is expected
                 "".into()
             },
             Statement::RepeatInstruction(expr, item) => {
-                format!("{} ** {}", expr.display(table), item.display(table)).into()
+                format!("{} ** {}", expr.display(table)?, item.display(table)?).into()
             },
             Statement::MacroUse(name, args) => {
                 // let name_str = name.get(table).to_string();
-                let name_str = name.display(table);
+                let name_str = name.display(table)?;
                 let args_str = args
                     .iter()
                     .map(|e| e.display(table))
-                    .collect::<Vec<_>>()
+                    .collect::<Result<Vec<_>, String>>()?
                     .join(",");
 
                 format!("{}({})", name_str, args_str).into()
             },
-            Statement::Instruction(instr) => instr.display(table).into()
-        }
+            Statement::Instruction(instr) => instr.display(table)?.into()
+        })
     }
 }
 
@@ -1591,7 +1661,10 @@ impl Instruction {
     /// placeholder (or, for opcodes needing an extra expression such as `RST` or `CB`
     /// `BIT`/`RES`/`SET`, the trailing digit) with its operand's display form, and cleaning up
     /// Orgams-specific `IX`/`IY`-indirect and negative-offset notation.
-    pub fn display(&self, table: &StringTable) -> String {
+    ///
+    /// Returns `Err` if a label reference in one of this instruction's operands is out of range
+    /// for `table`.
+    pub fn display(&self, table: &StringTable) -> Result<String, String> {
         let tab = self.prefix.disassembler_table();
 
         let mut result = tab[self.opcode as usize].to_lowercase();
@@ -1599,21 +1672,22 @@ impl Instruction {
         let mut i = 0;
         while i < self.coded_operands.len() {
             if let Some(pos) = result.find("nnnn") {
-                let expr_str = self.coded_operands[i].display(table);
+                let expr_str = self.coded_operands[i].display(table)?;
                 result.replace_range(pos..pos + 4, &expr_str);
                 i += 1;
             }
             else if let Some(pos) = result.find("nn") {
-                let expr_str = self.coded_operands[i].display(table);
+                let expr_str = self.coded_operands[i].display(table)?;
                 result.replace_range(pos..pos + 2, &expr_str);
                 i += 1;
             }
             else {
                 assert_eq!(i, 0);
                 if self.prefix.requires_extra_expression(self.opcode) {
+                    let expr_str = self.coded_operands[i].display(table)?; //0 may be a rel expression
                     result = result
                         .replace("00", "0") // because of RST
-                        .replace("0", &self.coded_operands[i].display(table)); //0 may be a rel expression
+                        .replace("0", &expr_str);
                 }
                 else {
                     unimplemented!("Too many coded operands for instruction display");
@@ -1636,7 +1710,7 @@ impl Instruction {
             result = result.replace("+nn", "");
         }
 
-        result
+        Ok(result)
     }
 }
 
@@ -1690,6 +1764,9 @@ pub struct DisplayState<'f, 'g> {
     /// The formatter lines are written to, or `None` to accumulate state without producing
     /// output (e.g. to only track [`DisplayState::last_line`]).
     pub(crate) f: Option<&'f mut std::fmt::Formatter<'g>>,
+    /// When set, every flushed line is also appended here (used by [`Program::try_render`] to
+    /// collect the full rendered output without going through a [`std::fmt::Formatter`]).
+    pub(crate) buffer: Option<String>,
     /// The line currently being built, not yet flushed to `f`.
     pub(crate) current_line: String,
     /// 1-based number of the line currently being built.
@@ -1705,6 +1782,21 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     pub fn new(f: Option<&'f mut std::fmt::Formatter<'g>>) -> Self {
         Self {
             f,
+            buffer: None,
+            current_line: String::new(),
+            line_number: 1,
+            line_state: LineState::Empty,
+            last_generated_line: None
+        }
+    }
+
+    /// Creates a fresh rendering state that writes to no [`std::fmt::Formatter`] but instead
+    /// accumulates every flushed line into an internal buffer, retrievable with
+    /// [`DisplayState::take_buffer`].
+    pub fn new_buffered() -> Self {
+        Self {
+            f: None,
+            buffer: Some(String::new()),
             current_line: String::new(),
             line_number: 1,
             line_state: LineState::Empty,
@@ -1721,14 +1813,24 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     pub fn line_number(&self) -> usize {
         self.line_number
     }
+
+    /// Takes the buffer accumulated so far (see [`DisplayState::new_buffered`]), leaving an
+    /// empty one in its place.
+    pub fn take_buffer(&mut self) -> String {
+        self.buffer.take().unwrap_or_default()
+    }
 }
 
 impl<'f, 'g> DisplayState<'f, 'g> {
-    fn emit_line(&mut self) -> std::fmt::Result {
+    fn emit_line(&mut self) -> Result<(), String> {
         // we have rendering bug to fix. In the meanwhile here is a workaround
         let line = self.current_line.clone();
         if let Some(f) = self.f.as_mut() {
-            write!(f, "{}\r\n", line)?;
+            write!(f, "{}\r\n", line).map_err(|e| e.to_string())?;
+        }
+        if let Some(buffer) = self.buffer.as_mut() {
+            buffer.push_str(&line);
+            buffer.push_str("\r\n");
         }
 
         self.last_generated_line = Some(line);
@@ -1795,7 +1897,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.line_state = LineState::AfterStatement(is_instruction);
     }
 
-    fn append_comment<S: AsRef<str>>(&mut self, c: S) -> std::fmt::Result {
+    fn append_comment<S: AsRef<str>>(&mut self, c: S) -> Result<(), String> {
         if self.line_state == LineState::Empty || self.has_only_indents() {
             // nothing to do
         }
@@ -1846,7 +1948,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         &mut self,
         items: impl IntoIterator<Item = &'i Item>,
         labels: &StringTable
-    ) -> std::fmt::Result {
+    ) -> Result<(), String> {
         for item in items {
             self.render_item(item, labels)?;
         }
@@ -1856,8 +1958,8 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     /// Renders a single item, appending it to the line currently being built (with appropriate
     /// indentation/`:` separators per [`LineState`]), flushing the line when `item` is an
     /// [`Item::NewLine`] or a comment.
-    pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> std::fmt::Result {
-        let repr = item.display(labels);
+    pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> Result<(), String> {
+        let repr = item.display(labels)?;
 
         match item {
             Item::Statement(Statement::StorePcInstr | Statement::StorePcLine) => {
@@ -1904,27 +2006,47 @@ impl<'f, 'g> DisplayState<'f, 'g> {
 impl<'f, 'g> Drop for DisplayState<'f, 'g> {
     fn drop(&mut self) {
         if !self.current_line.is_empty() {
-            // `drop` cannot propagate a `std::fmt::Result`; a failure to flush the last,
-            // still-pending line here would only happen if the underlying `Formatter` write
-            // itself fails, which is already unrecoverable at this point.
+            // `drop` cannot propagate a `Result`; a failure to flush the last, still-pending
+            // line here would only happen if the underlying `Formatter` write itself fails,
+            // which is already unrecoverable at this point. A label-reference-out-of-range
+            // failure cannot happen here: by the time `try_render`/`Display::fmt` reach `drop`,
+            // every item has already been rendered successfully (any such failure surfaces
+            // earlier, via `?`, before this pending line would be dropped).
             let _ = self.emit_line();
         }
     }
 }
 
+impl Program {
+    /// Renders this program as Orgams source text, resolving every label reference in every
+    /// chunk against `self.labels`.
+    ///
+    /// Returns `Err` if any label reference anywhere in the program is out of range for
+    /// `self.labels` (as can happen with a corrupted/malformed input file whose `LBLs` label
+    /// table is inconsistent with a label reference elsewhere in the file) instead of panicking.
+    pub fn try_render(&self) -> Result<String, String> {
+        let mut state = DisplayState::new_buffered();
+        for item in self.chunks.iter().flat_map(|c| c.items()) {
+            state.render_item(item, &self.labels)?;
+        }
+        if !state.current_line.is_empty() {
+            state.emit_line()?;
+        }
+        Ok(state.take_buffer())
+    }
+}
+
 impl std::fmt::Display for Program {
+    /// Lossy convenience wrapper around [`Program::try_render`] for contexts (e.g. `{}`
+    /// formatting, `.to_string()`) that require an infallible [`Display`] impl: on a label
+    /// reference out of range, renders a `<render error: ...>` placeholder instead of panicking
+    /// or silently producing empty output. Prefer [`Program::try_render`] directly whenever the
+    /// caller can act on the error.
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let _iter = self.chunks.iter().flat_map(|c| c.items()).peekable();
-
-        let _state = DisplayState {
-            f: Some(f),
-            current_line: String::new(),
-            line_number: 1,
-            last_generated_line: None,
-            line_state: LineState::Empty
-        };
-
-        Ok(())
+        let rendered = self
+            .try_render()
+            .unwrap_or_else(|e| format!("<render error: {e}>"));
+        write!(f, "{rendered}")
     }
 }
 
@@ -3387,5 +3509,82 @@ mod tests {
     #[ignore]
     fn test_parse_macro_i() {
         verify_parsing_and_reconstruction("tests/orgams-main/MACRO.I");
+    }
+
+    /// Regression test for the panic-on-malformed-input bug: a real, well-formed `.O` file's
+    /// `LBLs` section is truncated to zero labels directly in the raw bytes (header and `SRCc`
+    /// source bytes are left completely untouched), simulating a corrupted/truncated label
+    /// table. The result still parses cleanly (the winnow grammar does not know how many labels
+    /// the table is "supposed" to have) since every label reference in the source is re-encoded
+    /// as a plain index, independent of the table's actual contents — but every one of those
+    /// references is now out of range, and rendering must now fail gracefully with `Err`
+    /// instead of panicking.
+    #[test]
+    fn test_render_fails_on_label_reference_out_of_range() {
+        let path = "tests/orgams-main/FARCALL.O";
+        let data = fs::read(path).unwrap();
+
+        // Sanity check: the original, uncorrupted file parses and renders fine.
+        crate::convert::binary_orgams_to_utf8(&data)
+            .unwrap_or_else(|e| panic!("Failed to render unmodified {path}: {e}"));
+
+        let mut input_wrapper = Input::new(data.as_slice());
+        let program = parse_orgams_file(false, &mut Option::<std::slice::Iter<String>>::None)
+            .parse_next(&mut input_wrapper)
+            .unwrap_or_else(|e| panic!("Failed to parse {path}: {e:?}"));
+
+        assert!(
+            !program.labels.strings.is_empty(),
+            "fixture {path} is expected to have a non-empty label table for this test to be \
+             meaningful"
+        );
+
+        // Locate the `LBLs` section in the raw file bytes, and the `ChCk` checksum section that
+        // follows it, so we can splice in a corrupted `LBLs` section while leaving the header
+        // and `SRCc` source bytes (and therefore every label reference's raw encoding) exactly
+        // as they were.
+        let lbls_pos = data
+            .windows(4)
+            .position(|w| w == b"LBLs")
+            .expect("fixture should contain an LBLs section");
+        let chck_pos = data[lbls_pos..]
+            .windows(4)
+            .position(|w| w == b"ChCk")
+            .map(|p| lbls_pos + p)
+            .unwrap_or(data.len());
+
+        let mut corrupted = Vec::new();
+        corrupted.extend_from_slice(&data[..lbls_pos]);
+        corrupted.extend_from_slice(b"LBLs");
+        corrupted.push(2); // version
+        corrupted.push(0); // null terminator: zero labels, so every reference used by the
+        // (untouched) source is now out of range for this table.
+        corrupted.extend_from_slice(&data[chck_pos..]);
+
+        let mut corrupted_input = Input::new(corrupted.as_slice());
+        let reparsed = parse_orgams_file(false, &mut Option::<std::slice::Iter<String>>::None)
+            .parse_next(&mut corrupted_input)
+            .unwrap_or_else(|e| panic!("Corrupted file should still parse cleanly: {e:?}"));
+        assert_eq!(
+            reparsed.labels.len(),
+            0,
+            "corrupted label table should be empty"
+        );
+
+        // The actual assertion: rendering a program with an out-of-range label reference must
+        // return `Err`, not panic.
+        let render_result = reparsed.try_render();
+        assert!(
+            render_result.is_err(),
+            "rendering a program with an out-of-range label reference should fail gracefully, \
+             not succeed"
+        );
+
+        // The full public entry point must behave the same way.
+        let full_pipeline_result = crate::convert::binary_orgams_to_utf8(&corrupted);
+        assert!(
+            full_pipeline_result.is_err(),
+            "binary_orgams_to_utf8 should return Err on a corrupted label table, not panic"
+        );
     }
 }
