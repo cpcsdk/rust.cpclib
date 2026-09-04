@@ -585,7 +585,7 @@ pub struct Env {
     /// Keyed by the same normalized symbol name `SymbolsTable` itself uses,
     /// so a lookup here always agrees with `contains_symbol`/`any_value`
     /// regardless of case-sensitivity settings.
-    symbol_definition_chains: HashMap<String, Vec<String>>,
+    symbol_definition_chains: HashMap<String, Box<[Box<str>]>>,
 
     charset_encoding: CharsetEncoding,
 
@@ -694,7 +694,7 @@ pub struct Env {
     repeat_step: ExprResult,
 
     // Output filename if set by OUTPUT directive
-    output_filename: Option<String>,
+    output_filename: Option<Box<str>>,
 
     // temporary stuff
     extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
@@ -3070,7 +3070,7 @@ impl Env {
                     .cloned()
                     .unwrap_or_default()
                 {
-                    e = e.with_chain_note(note);
+                    e = e.with_chain_note(note.to_string());
                 }
                 e
             }
@@ -3827,7 +3827,7 @@ impl Env {
 
         // Store the output filename in the environment
         // This will be used later when saving the assembled output
-        self.output_filename = Some(fname.to_string());
+        self.output_filename = Some(fname.as_str().into());
         Ok(())
     }
 
@@ -5741,7 +5741,7 @@ impl Env {
                 .cloned()
                 .unwrap_or_default()
             {
-                error = error.with_chain_note(note);
+                error = error.with_chain_note(note.to_string());
             }
             Err(error)
         }
@@ -8038,7 +8038,7 @@ impl Env {
     /// `macro_chain_note`/`include_chain_note`) so it is safe to keep around
     /// after the `Z80Span`s in `active_frames` stop being valid (see
     /// `Env::symbol_definition_chains`).
-    fn active_frames_as_notes(&self) -> Vec<String> {
+    fn active_frames_as_notes(&self) -> Box<[Box<str>]> {
         self.active_frames
             .iter()
             .rev()
@@ -8049,6 +8049,7 @@ impl Env {
                     },
                     ActiveFrame::Include(include) => include_chain_note(&include.call_site)
                 }
+                .into_boxed_str()
             })
             .collect()
     }
