@@ -34,8 +34,10 @@ impl TokenKind {
 #[derive(Clone)]
 struct ListingTokenItem {
     token_id: usize,
-    raw: String,
-    expanded: String,
+    raw: Box<str>,
+    expanded: Box<str>,
+    // NOT a Box<[u8]>: process_current_line() genuinely splits/truncates this
+    // (split_off/truncate) to wrap a token's bytes across output rows.
     bytes: Vec<u8>,
     /// 1-based column where this token starts on its source line, and where it
     /// ends.
@@ -426,8 +428,8 @@ impl ListingOutput {
 
         self.current_line_tokens.push(ListingTokenItem {
             token_id: self.next_token_id,
-            raw: self.current_token_raw.clone(),
-            expanded: self.current_token_expanded.clone(),
+            raw: self.current_token_raw.as_str().into(),
+            expanded: self.current_token_expanded.as_str().into(),
             bytes: self.current_token_bytes.clone(),
             column: self.current_token_column,
             column_end: self.current_token_column_end,
@@ -868,8 +870,8 @@ impl ListingOutput {
             .map(|token| {
                 ListingTokenRender {
                     token_id: token.token_id,
-                    raw_text: token.raw.as_str(),
-                    expanded_text: token.expanded.as_str(),
+                    raw_text: token.raw.as_ref(),
+                    expanded_text: token.expanded.as_ref(),
                     bytes: token.bytes.as_slice()
                 }
             })
@@ -1084,8 +1086,8 @@ impl ListingOutput {
                     .map(|token| {
                         ListingTokenRender {
                             token_id: token.token_id,
-                            raw_text: token.raw.as_str(),
-                            expanded_text: token.expanded.as_str(),
+                            raw_text: token.raw.as_ref(),
+                            expanded_text: token.expanded.as_ref(),
                             bytes: token.bytes.as_slice()
                         }
                     })
@@ -1917,8 +1919,8 @@ endm\n";
         output.current_line_tokens = vec![
             ListingTokenItem {
                 token_id: 0,
-                raw: "ld".to_string(),
-                expanded: "ld".to_string(),
+                raw: "ld".into(),
+                expanded: "ld".into(),
                 bytes: vec![0x3E],
                 column: 1,
                 column_end: 1,
@@ -1926,8 +1928,8 @@ endm\n";
             },
             ListingTokenItem {
                 token_id: 1,
-                raw: "1".to_string(),
-                expanded: "1".to_string(),
+                raw: "1".into(),
+                expanded: "1".into(),
                 bytes: vec![0x01],
                 column: 1,
                 column_end: 1,
@@ -1987,8 +1989,8 @@ endm\n";
         output.current_line_tokens = vec![
             ListingTokenItem {
                 token_id: 29,
-                raw: "ld bc, 0xbc00 + 1".to_string(),
-                expanded: "ld bc, 0xbc00 + 1".to_string(),
+                raw: "ld bc, 0xbc00 + 1".into(),
+                expanded: "ld bc, 0xbc00 + 1".into(),
                 bytes: vec![0x01, 0x01, 0xBC],
                 column: 1,
                 column_end: 1,
@@ -1996,8 +1998,8 @@ endm\n";
             },
             ListingTokenItem {
                 token_id: 30,
-                raw: "out (c), c".to_string(),
-                expanded: "out (c), c".to_string(),
+                raw: "out (c), c".into(),
+                expanded: "out (c), c".into(),
                 bytes: vec![0xED, 0x49],
                 column: 1,
                 column_end: 1,
@@ -2005,8 +2007,8 @@ endm\n";
             },
             ListingTokenItem {
                 token_id: 31,
-                raw: "ld bc, 0xbd00 + 96/2".to_string(),
-                expanded: "ld bc, 0xbd00 + 96/2".to_string(),
+                raw: "ld bc, 0xbd00 + 96/2".into(),
+                expanded: "ld bc, 0xbd00 + 96/2".into(),
                 bytes: vec![0x01, 0x30, 0xBD],
                 column: 1,
                 column_end: 1,
@@ -2014,8 +2016,8 @@ endm\n";
             },
             ListingTokenItem {
                 token_id: 32,
-                raw: "out (c), c".to_string(),
-                expanded: "out (c), c".to_string(),
+                raw: "out (c), c".into(),
+                expanded: "out (c), c".into(),
                 bytes: vec![0xED, 0x49],
                 column: 1,
                 column_end: 1,
@@ -2060,8 +2062,8 @@ endm\n";
         output.current_token_kind = TokenKind::Displayable;
         output.current_line_tokens = vec![ListingTokenItem {
             token_id: 0,
-            raw: "add hl, de".to_string(),
-            expanded: "add hl, de".to_string(),
+            raw: "add hl, de".into(),
+            expanded: "add hl, de".into(),
             bytes: vec![0x19],
             column: 1,
             column_end: 1,
@@ -2106,8 +2108,8 @@ endm\n";
         output.current_token_kind = TokenKind::Displayable;
         output.current_line_tokens = vec![ListingTokenItem {
             token_id: 0,
-            raw: "start".to_string(),
-            expanded: "start".to_string(),
+            raw: "start".into(),
+            expanded: "start".into(),
             bytes: vec![0x00, 0x01],
             column: 1,
             column_end: 1,
