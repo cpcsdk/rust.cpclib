@@ -65,8 +65,8 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-    name: String,
-    args: Vec<String>,
+    name: Box<str>,
+    args: Box<[Box<str>]>,
     inner: RwLock<Vec<ProcessedToken<'token, T>>>
 }
 
@@ -126,8 +126,12 @@ where
         inner: Vec<ProcessedToken<'token, T>>
     ) -> Self {
         AnyFunction {
-            name: name.as_ref().to_owned(),
-            args: args.iter().map(|s| s.borrow().into()).collect_vec(),
+            name: name.as_ref().into(),
+            args: args
+                .iter()
+                .map(|s| s.borrow().into())
+                .collect::<Vec<Box<str>>>()
+                .into_boxed_slice(),
             inner: inner.into()
         }
     }
@@ -148,7 +152,7 @@ where
         if self.args.len() != params.len() {
             return Err(Box::new(
                 AssemblerError::FunctionWithWrongNumberOfArguments(
-                    self.name.clone(),
+                    self.name.to_string(),
                     Either::Left(self.args.len()),
                     params.len()
                 )
@@ -171,7 +175,7 @@ where
             for token in inner.iter_mut() {
                 token
                     .visited(env)
-                    .map_err(|e| AssemblerError::FunctionError(self.name.clone(), e))?;
+                    .map_err(|e| AssemblerError::FunctionError(self.name.to_string(), e))?;
 
                 if let Some(return_value) = env.return_value.take() {
                     return Ok(return_value);
@@ -199,7 +203,7 @@ where
             }
 
             Err(Box::new(AssemblerError::FunctionWithoutReturn(
-                self.name.clone()
+                self.name.to_string()
             )))
         };
 
