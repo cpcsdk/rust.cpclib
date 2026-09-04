@@ -164,7 +164,7 @@ impl IncludeState {
                 let content = read_source(fname.clone(), options.parse_options())?;
 
                 if options.show_progress() {
-                    Progress::progress().add_parse(progress::normalize(fname));
+                    Progress::instance().add_parse(progress::normalize(fname));
                 }
 
                 let builder = options
@@ -176,7 +176,7 @@ impl IncludeState {
 
                 // Remove the progression
                 if options.show_progress() {
-                    Progress::progress().remove_parse(progress::normalize(fname));
+                    Progress::instance().remove_parse(progress::normalize(fname));
                 }
 
                 let include_state = IncludeStateInnerTryBuilder {
@@ -694,7 +694,7 @@ where
                                 if token.include_is_standard_include()
                                     && env.read().unwrap().options().show_progress()
                                 {
-                                    Progress::progress().remove_parse(progress::normalize(&fname));
+                                    Progress::instance().remove_parse(progress::normalize(&fname));
                                 }
 
                                 let include_state = IncludeStateInnerTryBuilder {
@@ -891,7 +891,7 @@ where
         );
 
         // inform the progress bar in one go
-        Progress::progress().add_parses(include_fnames.iter().map(String::as_str));
+        Progress::instance().add_parses(include_fnames.iter().map(String::as_str));
     }
 
     // the files will be read here while token are built
@@ -933,7 +933,7 @@ where
 
     if options.show_progress() {
         // setup the amount of tokens that will be processed
-        Progress::progress().add_expected_to_pass(tokens.len() as _);
+        Progress::instance().add_expected_to_pass(tokens.len() as _);
         for chunk in &tokens.iter_mut().chunks(64) {
             let mut visited = 0;
             for token in chunk {
@@ -941,7 +941,7 @@ where
                 visited += 1;
             }
 
-            Progress::progress().add_visited_to_pass(visited);
+            Progress::instance().add_visited_to_pass(visited);
         }
     }
     else {
@@ -1351,9 +1351,9 @@ where
                                         "{} seems to be a source code and not a binary file.",
                                         fname
                                     );
-                                    env.add_warning(Box::new(dbg!(
-                                        AssemblerWarning::AssemblingError { msg: warning }
-                                    )));
+                                    env.add_warning(dbg!(AssemblerWarning::AssemblingError {
+                                        msg: warning
+                                    }));
                                 },
                                 _ => {}
                             }
@@ -1395,7 +1395,7 @@ where
                                         warning
                                     };
 
-                                    env.add_warning(Box::new(warning))
+                                    env.add_warning(warning)
                                 }
 
                                 entry.insert(data.into())
@@ -1691,7 +1691,7 @@ where
                             column: column as u32,
                             len: len as u32
                         };
-                        env.add_warning(Box::new(warning));
+                        env.add_warning(warning);
                         token.visited(env)
                     },
                     Some(ProcessedTokenState::While(SimpleListingState {
@@ -1715,11 +1715,9 @@ where
                 env.update_dollar();
             }
 
-            if deferred {
-                // SAFETY: This transmute is only safe when T is LocatedToken.
-                // This is guaranteed by the type system at the call site.
-                let outer_token = unsafe { std::mem::transmute::<&T, &LocatedToken>(self.token) };
-
+            if deferred
+                && let Some(outer_token) = self.token.as_located_token()
+            {
                 env.handle_output_trigger(outer_token);
             }
             Ok(())

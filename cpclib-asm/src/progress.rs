@@ -239,7 +239,7 @@ impl Default for Progress {
 }
 
 impl Progress {
-    pub fn progress() -> MutexGuard<'static, Progress> {
+    pub fn instance() -> MutexGuard<'static, Progress> {
         PROGRESS.lock().unwrap()
     }
 

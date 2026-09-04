@@ -55,7 +55,9 @@ macro_rules! macro_params_to_orgams {
         fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
             let repr: String = if self.is_single() {
                 let arg = self.single_argument();
-                let (_ctx, mut code) = ctx_and_span(unsafe { std::mem::transmute(arg.deref()) });
+                let (_ctx, mut code) = ctx_and_span(unsafe {
+                    std::mem::transmute::<&str, &'static str>(arg.deref())
+                });
                 let value = crate::located_expr(&mut code);
                 match value {
                     Ok(expr) => expr.to_orgams_string()?.into_owned(),
@@ -248,7 +250,7 @@ impl ToOrgams for LocatedDataAccess {
 
 impl<T> ToOrgams for T
 where
-    T: TokenExt + MayHaveSpan + ListingElement + ToString + ?Sized,
+    T: TokenExt + MayHaveSpan + ListingElement + ToString,
     T::DataAccess: ToOrgams,
     T::Expr: ToOrgams,
     T::TestKind: ToOrgams,

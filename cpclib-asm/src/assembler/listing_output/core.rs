@@ -949,11 +949,8 @@ impl ListingOutput {
             let phys_addr_representation = if is_continuation_without_data
                 || !self.format.show_physical_address
                 || (current_inner_line_raw.is_none() && current_inner_data.is_none())
-            {
-                Self::blank(self.physical_field_width())
-            }
-            else if current_offset == logical_address
-                && self.current_address_kind == AddressKind::Address
+                || (current_offset == logical_address
+                    && self.current_address_kind == AddressKind::Address)
             {
                 Self::blank(self.physical_field_width())
             }

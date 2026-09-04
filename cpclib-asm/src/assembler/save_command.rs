@@ -43,7 +43,7 @@ impl SaveCommand {
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, Box<AssemblerError>> {
         assert_eq!(env.ga_mmr, self.ga_mmr);
         if env.options().show_progress() {
-            Progress::progress().add_save(progress::normalize(&self.file.filename()));
+            Progress::instance().add_save(progress::normalize(&self.file.filename()));
         }
 
         let from = match self.from {
@@ -92,7 +92,7 @@ impl SaveCommand {
         }
 
         if env.options().show_progress() {
-            Progress::progress().remove_save(progress::normalize(&self.file.filename()));
+            Progress::instance().remove_save(progress::normalize(&self.file.filename()));
         }
 
         Ok(SavedFile {

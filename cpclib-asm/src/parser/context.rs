@@ -696,7 +696,7 @@ impl ParserContext {
     #[inline]
     pub fn relative_line_and_column(&self, offset: usize) -> (usize, usize) {
         if self.line_col_lut.read().unwrap().is_none() {
-            let src: &'static str = unsafe { std::mem::transmute(self.source.deref()) };
+            let src: &'static str = unsafe { std::str::from_utf8_unchecked(self.source.deref()) };
 
             self.line_col_lut
                 .write()

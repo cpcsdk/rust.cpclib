@@ -332,7 +332,7 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
     let fname_repr = fname.as_str();
 
     let progress = if options.show_progress {
-        Progress::progress().add_load(fname_repr);
+        Progress::instance().add_load(fname_repr);
         Some(fname_repr)
     }
     else {
@@ -368,7 +368,7 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
     };
 
     if let Some(progress) = progress {
-        Progress::progress().remove_load(progress);
+        Progress::instance().remove_load(progress);
     }
     Ok(content)
 }

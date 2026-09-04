@@ -584,7 +584,7 @@ mod test_super {
         };
 
         assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
-        match &*env.warnings()[0] {
+        match &env.warnings()[0] {
             AssemblerError::AlreadyRenderedWarningWithLocation {
                 msg,
                 line,
@@ -622,7 +622,7 @@ mod test_super {
         };
 
         assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
-        match &*env.warnings()[0] {
+        match &env.warnings()[0] {
             AssemblerError::AlreadyRenderedWarningWithLocation { msg, len, .. } => {
                 assert!(msg.contains("truncated to integer"), "{msg}");
                 assert_eq!(*len, "3.5 << 1".len() as u32, "{msg}");
@@ -655,7 +655,7 @@ mod test_super {
         };
 
         assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
-        match &*env.warnings()[0] {
+        match &env.warnings()[0] {
             AssemblerError::AlreadyRenderedWarningWithLocation { msg, len, .. } => {
                 assert!(msg.contains("truncated to integer"), "{msg}");
                 assert_eq!(*len, "ld a, 10/3".len() as u32, "{msg}");
@@ -710,7 +710,7 @@ mod test_super {
             .unwrap();
 
         assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
-        match &*env.warnings()[0] {
+        match &env.warnings()[0] {
             AssemblerError::ExpressionWarning(w) => {
                 assert_eq!(w.kind, cpclib_tokens::ExprWarningKind::PrecisionLoss);
                 assert!(w.message.contains("truncated to integer"), "{}", w.message);

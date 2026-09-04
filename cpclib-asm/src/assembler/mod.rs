@@ -125,9 +125,10 @@ impl Default for EnvOptions {
 
 impl From<AssemblingOptions> for EnvOptions {
     fn from(ass: AssemblingOptions) -> EnvOptions {
-        let mut opt = Self::default();
-        opt.assemble = ass;
-        opt
+        Self {
+            assemble: ass,
+            ..Default::default()
+        }
     }
 }
 
@@ -195,9 +196,9 @@ impl EnvOptions {
 impl Env {
     fn add_index(&mut self, m: &mut Bytes, idx: i32) -> Result<(), Box<AssemblerError>> {
         if !(-128..=127).contains(&idx) {
-            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
+            self.add_warning(AssemblerWarning::AssemblingError {
                 msg: format!("index {idx} does not fit in 8 bits")
-            }));
+            });
         }
         let val = (idx & 0xFF) as u8;
         add_byte(m, val);
@@ -377,10 +378,9 @@ impl CharsetEncoding {
             CharsetFormat::Reset => self.reset(),
             CharsetFormat::CharsList(l, s) => {
                 let result = env.resolve_expr_must_never_fail(s)?;
-                let mut s = env.int_forward(&result)?;
-                for c in l.iter() {
-                    self.lut.insert(*c, s);
-                    s += 1;
+                let s = env.int_forward(&result)?;
+                for (idx, c) in l.iter().enumerate() {
+                    self.lut.insert(*c, s + idx as i32);
                 }
             },
             CharsetFormat::Char(c, i) => {
@@ -393,10 +393,9 @@ impl CharsetEncoding {
                 let a = env.resolve_expr_must_never_fail(a)?.char()?;
                 let b = env.resolve_expr_must_never_fail(b)?.char()?;
                 let result = env.resolve_expr_must_never_fail(s)?;
-                let mut s = env.int_forward(&result)?;
-                for c in a..=b {
-                    self.lut.insert(c, s);
-                    s += 1;
+                let s = env.int_forward(&result)?;
+                for (idx, c) in (a..=b).enumerate() {
+                    self.lut.insert(c, s + idx as i32);
                 }
             }
         }
@@ -511,7 +510,7 @@ pub struct Env {
     /// duplicate of the output address to be sure to select the appropriate page info
     output_address: u16,
     /// Memoized `(output_address, ga_mmr, page index)` for `active_page_index`
-    /// - see that method's doc comment. Needs interior mutability because
+    /// (see that method's doc comment). Needs interior mutability because
     /// `active_page_info` (many other accessors' foundation) takes `&self`;
     /// self-invalidating on the key, so this can never go stale, only
     /// briefly not-yet-warm. `Mutex`, not `Cell`: `Env` crosses threads via
@@ -622,8 +621,8 @@ pub struct Env {
     /// Listing of symbols generator
     symbols_output: SymbolOutputGenerator,
 
-    warnings: Vec<Box<AssemblerWarning>>,
-    /// Monotonic count of every `Box<AssemblerWarning>` ever pushed via
+    warnings: Vec<AssemblerWarning>,
+    /// Monotonic count of every `AssemblerWarning` ever pushed via
     /// `add_warning` - unlike `warnings.len()`, this never shrinks (
     /// `merge_overriding_warnings` truncates `warnings` as it merges
     /// adjacent entries), so it is what `cleanup_warnings` compares against
@@ -663,7 +662,7 @@ pub struct Env {
     /// recorded - there is no meaningful "position" to key it by.
     ///
     /// Only populated when `AssemblingOptions::record_token_addresses` is set
-    /// - see that field's doc comment. Overwritten (never reset) pass over
+    /// (see that field's doc comment). Overwritten (never reset) pass over
     /// pass, since one `Env` is reused across the whole multi-pass assemble
     /// (`visit_tokens_all_passes_with_options`), so it naturally converges to
     /// the final pass's real addresses.
@@ -1289,7 +1288,7 @@ impl Env {
         env
     }
 
-    pub fn warnings(&self) -> &[Box<AssemblerWarning>] {
+    pub fn warnings(&self) -> &[AssemblerWarning] {
         &self.warnings
     }
 
@@ -1472,7 +1471,7 @@ impl Env {
 
             if self.options.show_progress() {
                 #[cfg(not(target_arch = "wasm32"))]
-                Progress::progress().new_pass();
+                Progress::instance().new_pass();
             }
         }
 
@@ -1858,7 +1857,7 @@ impl Env {
 
         if self.options.show_progress() {
             #[cfg(not(target_arch = "wasm32"))]
-            Progress::progress().create_save_bar(nb_files_to_save);
+            Progress::instance().create_save_bar(nb_files_to_save);
         }
 
         // save from snapshot. cannot be done in parallel
@@ -1904,7 +1903,7 @@ impl Env {
 
         if self.options().show_progress() {
             #[cfg(not(target_arch = "wasm32"))]
-            Progress::progress().finish_save();
+            Progress::instance().finish_save();
         }
         // restor memory conf
         self.ga_mmr = backup;
@@ -2260,7 +2259,7 @@ impl Env {
         let r#override = if already_used {
             let r#override = AssemblerWarning::OverrideMemory(physical_output_address, 1);
             if self.allow_memory_override() {
-                self.add_warning(Box::new(r#override));
+                self.add_warning(r#override);
                 true
             }
             else {
@@ -2356,14 +2355,7 @@ impl Env {
                             .warnings
                             .iter_mut()
                             .rev()
-                            .position(|w| {
-                                if let AssemblerError::OverrideMemory(..) = &**w {
-                                    true
-                                }
-                                else {
-                                    false
-                                }
-                            })
+                            .position(|w| matches!(w, AssemblerError::OverrideMemory(..)))
                             .unwrap(); // cannot fail by construction
                         self.warnings
                             .remove(self.warnings.len() - 1 - extra_override_idx); // rev impose to change index order
@@ -2373,18 +2365,11 @@ impl Env {
                             .warnings
                             .iter_mut()
                             .rev()
-                            .find(|w| {
-                                if let AssemblerError::OverrideMemory(..) = &***w {
-                                    true
-                                }
-                                else {
-                                    false
-                                }
-                            })
+                            .find(|w| matches!(w, AssemblerError::OverrideMemory(..)))
                             .unwrap(); // cannot fail by construction
 
                         // increase its size
-                        match &mut **r#override {
+                        match &mut *r#override {
                             AssemblerError::OverrideMemory(_, size) => {
                                 *size += 1;
                             },
@@ -2511,7 +2496,7 @@ impl Env {
 
 impl Env {
     #[inline(always)]
-    pub fn add_warning(&mut self, warning: Box<AssemblerWarning>) {
+    pub fn add_warning(&mut self, warning: AssemblerWarning) {
         let opts = self.options().assemble_options();
         if opts.enable_warnings && opts.is_warning_category_enabled(warning.warning_category()) {
             self.warnings.push(warning);
@@ -2525,7 +2510,7 @@ impl Env {
     #[inline(always)]
     pub fn add_expression_warnings(&mut self, warnings: Vec<cpclib_tokens::ExprWarning>) {
         for w in warnings {
-            self.add_warning(Box::new(AssemblerError::ExpressionWarning(w)));
+            self.add_warning(AssemblerError::ExpressionWarning(w));
         }
     }
 
@@ -2543,7 +2528,7 @@ impl Env {
     #[inline(always)]
     pub(crate) fn locate_warnings_since(&mut self, from: usize, span: Z80Span) {
         for warning in &mut self.warnings[from..] {
-            **warning = warning.clone().locate_warning(span.clone());
+            *warning = warning.clone().locate_warning(span.clone());
         }
     }
 
@@ -2589,6 +2574,22 @@ impl Env {
         self.add_expression_warnings(warnings);
         Ok(val)
     }
+}
+
+/// Bundled arguments for `Env::visit_breakpoint`, mirroring `Token::Breakpoint`'s fields.
+struct BreakpointVisitArgs<'e, E> {
+    address: Option<&'e E>,
+    r#type: Option<&'e RemuBreakPointType>,
+    access: Option<&'e RemuBreakPointAccessMode>,
+    run: Option<&'e RemuBreakPointRunMode>,
+    mask: Option<&'e E>,
+    size: Option<&'e E>,
+    value: Option<&'e E>,
+    value_mask: Option<&'e E>,
+    condition: Option<&'e E>,
+    name: Option<&'e E>,
+    step: Option<&'e E>,
+    span: Option<&'e Z80Span>
 }
 
 /// Visit directives
@@ -2682,19 +2683,23 @@ impl Env {
 
     fn visit_breakpoint<E: ExprEvaluationExt + ExprElement + MayHaveSpan>(
         &mut self,
-        address: Option<&E>,
-        r#type: Option<&RemuBreakPointType>,
-        access: Option<&RemuBreakPointAccessMode>,
-        run: Option<&RemuBreakPointRunMode>,
-        mask: Option<&E>,
-        size: Option<&E>,
-        value: Option<&E>,
-        value_mask: Option<&E>,
-        condition: Option<&E>,
-        name: Option<&E>,
-        step: Option<&E>,
-        span: Option<&Z80Span>
+        args: BreakpointVisitArgs<'_, E>
     ) -> Result<(), Box<AssemblerError>> {
+        let BreakpointVisitArgs {
+            address,
+            r#type,
+            access,
+            run,
+            mask,
+            size,
+            value,
+            value_mask,
+            condition,
+            name,
+            step,
+            span
+        } = args;
+
         let brk = if r#type.is_none()
             && access.is_none()
             && run.is_none()
@@ -2765,12 +2770,14 @@ impl Env {
         else {
             // here we manipulate an advanced breakpoint of Ace
 
-            let mut brk = AdvancedRemuBreakPoint::default();
-            brk.addr = if let Some(address) = address {
-                ({ let __r = self.resolve_expr_must_never_fail(address)?; self.int_forward(&__r)? }) as u16
-            }
-            else {
-                self.logical_code_address()
+            let mut brk = AdvancedRemuBreakPoint {
+                addr: if let Some(address) = address {
+                    ({ let __r = self.resolve_expr_must_never_fail(address)?; self.int_forward(&__r)? }) as u16
+                }
+                else {
+                    self.logical_code_address()
+                },
+                ..Default::default()
             };
             if let Some(r#type) = r#type {
                 brk.brk_type = r#type.clone();
@@ -3201,10 +3208,10 @@ impl Env {
                 || t.ends_with("\tMACRO")
         });
         if has_swallowed_macro {
-            self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(format!(
+            self.add_warning(AssemblerWarning::AlreadyRenderedError(format!(
                 "Macro `{name}` body contains what looks like another MACRO definition — \
                  likely caused by a missing ENDM/MEND before `{name}`."
-            ))));
+            )));
         }
 
         let tokenized_content =
@@ -3220,17 +3227,17 @@ impl Env {
                         let text: &str = source_span.as_ref();
                         text.lines().next().map(str::len).unwrap_or(0)
                     };
-                    self.add_warning(Box::new(
+                    self.add_warning(
                         AssemblerWarning::AlreadyRenderedWarningWithLocation {
                             msg,
                             line: line as u32,
                             column: column as u32,
                             len: len as u32
                         }
-                    ));
+                    );
                 },
                 None => {
-                    self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(msg)));
+                    self.add_warning(AssemblerWarning::AlreadyRenderedError(msg));
                 }
             }
         }
@@ -3433,7 +3440,7 @@ impl Env {
         }
 
         if let Some(warning) = warning {
-            self.add_warning(Box::new(warning));
+            self.add_warning(warning);
         }
 
         Ok(())
@@ -3798,7 +3805,7 @@ impl Env {
             .map(|info| self.prepropress_string_formatted_expression(info))
             .unwrap_or_else(|| Ok(Default::default()))?;
         let warning = AssemblerWarning::AlreadyRenderedError(format!("Warning: {}", repr));
-        self.add_warning(Box::new(warning));
+        self.add_warning(warning);
         Ok(())
     }
 
@@ -4233,11 +4240,11 @@ impl Env {
         // - no LIMIT/PROTECT has been used in the crunched area
         // - a possible forbidden write has been done (maybe too complex to implement)
         if could_display_warning_message {
-            self.add_warning(Box::new(
+            self.add_warning(
                 AssemblerWarning::AssemblingError{
                     msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".into()
                 }
-            ));
+            );
         }
 
         Ok(())
@@ -4270,7 +4277,7 @@ impl Env {
         Ok(bytes)
     }
 }
-/// Visit the tokens during several passes without providing a specific symbol table.
+// Visit the tokens during several passes without providing a specific symbol table.
 // pub fn visit_tokens_all_passes<
 // 'token,
 // T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
@@ -4450,6 +4457,14 @@ impl Env {
 
 /// Visit the tokens during several passes by providing a specific symbol table.
 /// Warning Listing output is only possible for LocatedToken
+///
+/// The `Err` tuple returns the partially-built `Env` alongside the error so
+/// callers can still inspect what was assembled so far - this is a public,
+/// foundational API destructured by pattern-matching at 40+ call sites
+/// across a dozen crates, so boxing it to satisfy `result_large_err`/
+/// `type_complexity` would be a sweeping, high-risk API break for a
+/// lint-only benefit; not done here.
+#[allow(clippy::result_large_err, clippy::type_complexity)]
 pub fn visit_tokens_all_passes_with_options<'token, T>(
     tokens: &'token [T],
     options: EnvOptions
@@ -4515,8 +4530,10 @@ pub fn visit_tokens_one_pass<T: Visited>(
     tokens: &[T],
     o: Arc<dyn EnvEventObserver>
 ) -> Result<Env, Box<AssemblerError>> {
-    let mut opt = EnvOptions::default();
-    opt.observer = o;
+    let opt = EnvOptions {
+        observer: o,
+        ..Default::default()
+    };
     let mut env = Env::new(opt);
 
     for token in tokens.iter() {
@@ -4557,20 +4574,20 @@ macro_rules! visit_token_impl {
                 name,
                 step
             } => {
-                $env.visit_breakpoint(
-                    address.as_ref(),
-                    r#type.as_ref(),
-                    access.as_ref(),
-                    run.as_ref(),
-                    mask.as_ref(),
-                    size.as_ref(),
-                    value.as_ref(),
-                    value_mask.as_ref(),
-                    condition.as_ref(),
-                    name.as_ref(),
-                    step.as_ref(),
-                    $span
-                )
+                $env.visit_breakpoint(BreakpointVisitArgs {
+                    address: address.as_ref(),
+                    r#type: r#type.as_ref(),
+                    access: access.as_ref(),
+                    run: run.as_ref(),
+                    mask: mask.as_ref(),
+                    size: size.as_ref(),
+                    value: value.as_ref(),
+                    value_mask: value_mask.as_ref(),
+                    condition: condition.as_ref(),
+                    name: name.as_ref(),
+                    step: step.as_ref(),
+                    span: $span
+                })
             },
             $cls::BuildCpr => $env.visit_buildcpr(),
             $cls::BuildSna(v) => $env.visit_buildsna(v.as_ref()),
@@ -4726,7 +4743,8 @@ impl Env {
         // Listing trigger is handled in ProcessedToken::visited to preserve
         // deferred/non-deferred token ordering.
 
-        let span = Some(outer_token.span());
+        let located_span = outer_token.span();
+        let span = Some(located_span);
 
         if self.options().assemble_options().record_token_addresses() {
             let span = outer_token.span();
@@ -4756,16 +4774,16 @@ impl Env {
         // any warning added since `nb_warnings`, so no eager span capture
         // is needed here either.
         if outer_token.is_warning() {
-            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
+            self.add_warning(AssemblerWarning::AssemblingError {
                 msg: outer_token.warning_message().into()
-            }));
+            });
         }
 
         // get the token to handle (after remobing handling wrapping)
         let token = outer_token.deref();
 
         visit_token_impl!(token, self, span, LocatedTokenInner)
-            .map_err(|e| e.locate(span.unwrap().clone()))?;
+            .map_err(|e| e.locate(located_span.clone()))?;
 
         let span = outer_token.span();
 
@@ -4773,7 +4791,7 @@ impl Env {
         let nb_additional_warnings = self.warnings.len() - nb_warnings;
         for i in 0..nb_additional_warnings {
             let warning = &mut self.warnings[i + nb_warnings];
-            **warning = warning.clone().locate_warning(span.clone());
+            *warning = warning.clone().locate_warning(span.clone());
 
             // TODO check why it has been done this way
             //      maybe source code is not retrained and there are random crashes ?
@@ -5244,17 +5262,17 @@ impl Env {
                     let text: &str = span.as_ref();
                     text.lines().next().map(str::len).unwrap_or(0)
                 };
-                self.add_warning(Box::new(
+                self.add_warning(
                     AssemblerError::AlreadyRenderedWarningWithLocation {
                         msg,
                         line: line as u32,
                         column: column as u32,
                         len: len as u32
                     }
-                ));
+                );
             },
             None => {
-                self.add_warning(Box::new(AssemblerError::AlreadyRenderedError(msg)));
+                self.add_warning(AssemblerError::AlreadyRenderedError(msg));
             }
         }
     }
@@ -5395,7 +5413,7 @@ impl Env {
 
     /// Generate a string that is helpfull for assertion understanding (i.e. show the operation and evaluate the rest)
     /// Crash if expression cannot be computed
-    fn to_assert_string<E>(&mut self, exp: &E) -> String
+    fn build_assert_string<E>(&mut self, exp: &E) -> String
     where
         E: ExprEvaluationExt + ExprElement,
         <E as ExprElement>::Expr: ExprEvaluationExt
@@ -5493,8 +5511,8 @@ impl Env {
         while current_warning_idx < self.warnings.len() {
             // Check if we need to fuse successive override memory warnings
             let (new_size, new_span) = match (
-                &*self.warnings[previous_warning_idx],
-                &*self.warnings[current_warning_idx]
+                &self.warnings[previous_warning_idx],
+                &self.warnings[current_warning_idx]
             ) {
                 // we fuse two consecutive override memory warnings
                 (
@@ -5567,7 +5585,7 @@ impl Env {
             if let Some(new_size) = new_size {
                 if let Some(new_span) = new_span {
                     if let AssemblerError::RelocatedWarning { warning, span } =
-                        &mut *self.warnings[previous_warning_idx]
+                        &mut self.warnings[previous_warning_idx]
                         && let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
                             warning.as_mut()
                     {
@@ -5576,7 +5594,7 @@ impl Env {
                     }
                 }
                 else if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
-                    &mut *self.warnings[previous_warning_idx]
+                    &mut self.warnings[previous_warning_idx]
                 {
                     *prev_size = new_size;
                 }
@@ -5619,7 +5637,7 @@ impl Env {
         // usable location at all downstream (the LSP fell back to a
         // location-less diagnostic for every one of them).
         self.warnings.iter_mut().for_each(|w| {
-            match &**w {
+            match &*w {
                 AssemblerError::AssemblingError { .. }
                 | AssemblerError::AlreadyRenderedWarningWithLocation { .. } => {
                     // already in a final, safe-to-keep shape
@@ -5627,8 +5645,8 @@ impl Env {
                 AssemblerError::RelocatedWarning { span, .. } => {
                     let (line, column) = span.relative_line_and_column();
                     let len = span.as_str().len();
-                    let msg = (**w).to_string();
-                    **w = AssemblerError::AlreadyRenderedWarningWithLocation {
+                    let msg = (*w).to_string();
+                    *w = AssemblerError::AlreadyRenderedWarningWithLocation {
                         msg,
                         line: line as u32,
                         column: column as u32,
@@ -5636,8 +5654,8 @@ impl Env {
                     };
                 },
                 _ => {
-                    **w = AssemblerWarning::AssemblingError {
-                        msg: (**w).to_string()
+                    *w = AssemblerWarning::AssemblingError {
+                        msg: (*w).to_string()
                     }
                 },
             }
@@ -5649,8 +5667,8 @@ impl Env {
     /// see `render_warnings`'s doc comment for why the rendering itself
     /// can't be skipped or deferred.
     ///
-    /// Called at the end of *every* `visit_processed_tokens` (`processed_token.rs`)
-    /// - once per macro/struct expansion, `INCLUDE`, `IF` branch and `REPEAT`
+    /// Called at the end of *every* `visit_processed_tokens` (`processed_token.rs`),
+    /// once per macro/struct expansion, `INCLUDE`, `IF` branch and `REPEAT`
     /// iteration visited, not just once per pass - because any of those can
     /// be the last chance to render a warning before the buffer its span
     /// points into gets reused. Both `merge_overriding_warnings` and
@@ -5775,7 +5793,7 @@ impl Env {
                         label
                     )
                 };
-                self.add_warning(Box::new(warning));
+                self.add_warning(warning);
             }
 
             // XXX Disabled behavior the 12/01/2024
@@ -5898,7 +5916,7 @@ impl Env {
         }
     }
 
-    pub fn visit_assign<'e, E: ExprEvaluationExt + ExprElement + Clone, S: AsRef<str>>(
+    pub fn visit_assign<E: ExprEvaluationExt + ExprElement + Clone, S: AsRef<str>>(
         &mut self,
         label: S,
         exp: &E,
@@ -6247,13 +6265,13 @@ impl Env {
             }));
         }
 
-        let value = if fill.is_none() {
-            0
-        }
-        else {
-            let result = self.resolve_expr_may_fail_in_first_pass(fill.unwrap())?;
+        let value = if let Some(fill) = fill {
+            let result = self.resolve_expr_may_fail_in_first_pass(fill)?;
             let raw = self.int_forward(&result)?;
             self.checked_byte(raw)
+        }
+        else {
+            0
         };
 
         let mut bytes = Bytes::with_capacity(count as usize);
@@ -6270,13 +6288,13 @@ impl Env {
     ) -> Result<Bytes, Box<AssemblerError>> {
         let expression = { let __r = self.resolve_expr_must_never_fail(expr)?; self.int_forward(&__r)? } as u16;
         let current = self.symbols().current_address()?;
-        let value = if fill.is_none() {
-            0
-        }
-        else {
-            let result = self.resolve_expr_may_fail_in_first_pass(fill.unwrap())?;
+        let value = if let Some(fill) = fill {
+            let result = self.resolve_expr_may_fail_in_first_pass(fill)?;
             let raw = self.int_forward(&result)?;
             self.checked_byte(raw)
+        }
+        else {
+            0
         };
 
         // compute the number of 0 to put
@@ -6868,8 +6886,8 @@ impl Env {
                 unreachable!()
             };
 
-            if hidden.is_some() {
-                let delta: i8 = match hidden.unwrap().get_register8().unwrap() {
+            if let Some(hidden) = hidden {
+                let delta: i8 = match hidden.get_register8().unwrap() {
                     Register8::A => 1,
                     Register8::L => -1,
                     Register8::H => -2,
@@ -7243,7 +7261,9 @@ impl Env {
                 }
             }
         }
-        else if arg1.as_ref().unwrap().is_register_hl() {
+        else if let Some(arg1) = arg1
+            && arg1.is_register_hl()
+        {
             if arg2.is_register16() {
                 let reg = arg2.get_register16().unwrap();
                 let base = if is_add {
@@ -7257,8 +7277,10 @@ impl Env {
                 bytes.push(base | (register16_to_code_with_sp(reg) << 4));
             }
         }
-        else if arg1.as_ref().unwrap().is_indexregister16() {
-            let reg1 = arg1.as_ref().unwrap().get_indexregister16().unwrap();
+        else if let Some(arg1) = arg1
+            && arg1.is_indexregister16()
+        {
+            let reg1 = arg1.get_indexregister16().unwrap();
             {
                 if arg2.is_register16() {
                     let reg2 = arg2.get_register16().unwrap();
@@ -7467,8 +7489,8 @@ impl Env {
                 let delta = ({ let __r = self.resolve_index_may_fail_in_first_pass(idx)?; self.int_forward(&__r)? } & 0xFF) as u8;
                 add_byte(&mut bytes, delta);
 
-                if hidden.is_some() {
-                    let fix: i8 = match hidden.unwrap() {
+                if let Some(hidden) = hidden {
+                    let fix: i8 = match hidden {
                         Register8::A => 1,
                         Register8::L => -1,
                         Register8::H => -2,
@@ -7547,8 +7569,8 @@ impl Env {
                 else {
                     self.absolute_to_relative_may_fail_in_first_pass(address, 2)?
                 };
-                if flag_code.is_some() {
-                    add_byte(&mut bytes, 0b0010_0000 | (flag_code.unwrap() << 3));
+                if let Some(flag_code) = flag_code {
+                    add_byte(&mut bytes, 0b0010_0000 | (flag_code << 3));
                 }
                 else {
                     add_byte(&mut bytes, 0b0001_1000);
@@ -7563,8 +7585,8 @@ impl Env {
                 add_word(&mut bytes, address as u16);
             }
             else {
-                if flag_code.is_some() {
-                    add_byte(&mut bytes, 0b1100_0010 | (flag_code.unwrap() << 3))
+                if let Some(flag_code) = flag_code {
+                    add_byte(&mut bytes, 0b1100_0010 | (flag_code << 3))
                 }
                 else {
                     add_byte(&mut bytes, 0xC3);
@@ -8051,15 +8073,15 @@ impl Env {
             Ok(value) => {
                 if !value.bool()? {
                     Err(Box::new(AssemblerError::AssertionFailed {
-                        msg: (if txt.is_some() {
-                            self.prepropress_string_formatted_expression(txt.unwrap())?
+                        msg: (if let Some(txt) = txt {
+                            self.prepropress_string_formatted_expression(txt)?
                                 .to_string()
                         }
                         else {
                             "".to_owned()
                         }),
                         test: exp.to_string(),
-                        guidance: self.to_assert_string(exp)
+                        guidance: self.build_assert_string(exp)
                     }))
                 }
                 else {
@@ -8161,9 +8183,9 @@ impl Env {
                         && self.symbols().contains_symbol(&label)?
                         && self.symbols().int_value(&label).unwrap().unwrap() != count as i32
                     {
-                        self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(
+                        self.add_warning(AssemblerWarning::AlreadyRenderedError(
                             format!("Symbol {label} has been overwritten")
-                        )));
+                        ));
                     }
 
                     // force the injection of the value

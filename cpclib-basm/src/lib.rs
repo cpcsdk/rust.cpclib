@@ -230,14 +230,14 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
         .to_owned();
 
     if options.show_progress {
-        Progress::progress().add_parse(&fname);
+        Progress::instance().add_parse(&fname);
     };
 
     let res = crate::parse_z80_with_context_builder(code, builder)
         .map_err(|e| BasmError::from(e.render()));
 
     if options.show_progress {
-        Progress::progress().remove_parse(&fname);
+        Progress::instance().remove_parse(&fname);
     };
 
     Ok((res?, options))
@@ -708,7 +708,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         {
             #[cfg(feature = "indicatif")]
             let bar = if show_progress {
-                Some(Progress::progress().add_bar("Send to M4"))
+                Some(Progress::instance().add_bar("Send to M4"))
             }
             else {
                 None
@@ -720,7 +720,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
             #[cfg(feature = "indicatif")]
             if let Some(bar) = bar {
-                Progress::progress().remove_bar_ok(&bar);
+                Progress::instance().remove_bar_ok(&bar);
             }
         }
     }
@@ -736,7 +736,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
             #[cfg(feature = "indicatif")]
             let bar = if show_progress {
-                Some(Progress::progress().add_bar("Send to M4"))
+                Some(Progress::instance().add_bar("Send to M4"))
             }
             else {
                 None
@@ -748,7 +748,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 
             #[cfg(feature = "indicatif")]
             if let Some(bar) = bar {
-                Progress::progress().remove_bar_ok(&bar);
+                Progress::instance().remove_bar_ok(&bar);
             }
         }
     }
@@ -836,7 +836,8 @@ pub fn process(
 
     //  o.emit_stderr(format!("TODO: include parse warnings");
     // warnings.extend_from_slice(env.warnings());
-    let warnings = env.warnings().to_vec();
+    let warnings: Vec<Box<AssemblerError>> =
+        env.warnings().iter().cloned().map(Box::new).collect();
 
     if matches.get_flag("WERROR") && !warnings.is_empty() {
         const KEPT: usize = 10;

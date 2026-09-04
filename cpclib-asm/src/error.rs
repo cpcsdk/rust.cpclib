@@ -533,8 +533,8 @@ impl AssemblerError {
     /// the actual failure), `note` is appended after them, keeping the
     /// overall list innermost-first as an error propagates out through
     /// nested macro calls/`INCLUDE`s one level at a time.
-    pub fn with_chain_note(self: Box<Self>, note: String) -> Box<Self> {
-        match *self {
+    pub fn with_chain_note(self, note: String) -> Box<Self> {
+        match self {
             AssemblerError::WithChainNotes { error, mut notes } => {
                 notes.push(note);
                 Box::new(AssemblerError::WithChainNotes { error, notes })
@@ -652,11 +652,11 @@ impl Display for AssemblerError {
 
 impl AssemblerError {
     pub fn is_already_rendered(&self) -> bool {
-        match self {
-            AssemblerError::AlreadyRenderedError(_) => true,
-            AssemblerError::AlreadyRenderedWarningWithLocation { .. } => true,
-            _ => false
-        }
+        matches!(
+            self,
+            AssemblerError::AlreadyRenderedError(_)
+                | AssemblerError::AlreadyRenderedWarningWithLocation { .. }
+        )
     }
 
     pub fn render(self) -> Self {
@@ -1465,9 +1465,10 @@ fn config() -> codespan_reporting::term::Config {
         codespan_reporting::term::Config::default()
     }
     else {
-        let mut conf = codespan_reporting::term::Config::default();
-        conf.chars = Chars::ascii();
-        conf
+        codespan_reporting::term::Config {
+            chars: Chars::ascii(),
+            ..Default::default()
+        }
     }
 }
 
