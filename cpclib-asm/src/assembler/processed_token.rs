@@ -401,7 +401,7 @@ pub(crate) struct MacroExpansionKey {
     name: SmolStr,
     /// `ValueMacro`/`Struct::source()` stringified via `Display` - disambiguates
     /// a redefined macro/struct that happens to share a name.
-    def_location: Option<String>,
+    def_location: Option<Box<str>>,
     /// One entry per call argument for a macro (`None` = an argument the
     /// macro body never referenced - collapsing this to `None` is correct,
     /// not just convenient: the body cannot observe a value it never reads,
@@ -409,7 +409,7 @@ pub(crate) struct MacroExpansionKey {
     /// struct, a single entry holding the whole post-expansion code text
     /// (structs are cached post-splice, not before - see the doc comment on
     /// the struct branch in `update_macro_or_struct_state`).
-    resolved_args: Vec<Option<String>>
+    resolved_args: Vec<Option<Box<str>>>
 }
 
 /// Store for each branch (if passed at some point) the test result and the listing
@@ -1074,14 +1074,14 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             // from the raw call-site argument text or the post-splice code.
             if let Some(r#macro) = &r#macro {
                 let source = r#macro.source();
-                let def_location = source.map(|s| s.to_string());
+                let def_location = source.map(|s| s.to_string().into_boxed_str());
 
                 match r#macro.flavor() {
                     AssemblerFlavor::Basm => {
                         let (expanded_args, capacity) = r#macro.resolve_referenced_args(env)?;
-                        let resolved_args: Vec<Option<String>> = expanded_args
+                        let resolved_args: Vec<Option<Box<str>>> = expanded_args
                             .iter()
-                            .map(|a| a.as_ref().map(|c| c.to_string()))
+                            .map(|a| a.as_ref().map(|c| c.to_string().into_boxed_str()))
                             .collect();
                         let key = MacroExpansionKey {
                             kind: MacroOrStruct::Macro,
@@ -1109,8 +1109,10 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     },
                     AssemblerFlavor::Orgams => {
                         let resolved = r#macro.resolve_all_args_for_orgams(env)?;
-                        let resolved_args: Vec<Option<String>> =
-                            resolved.iter().map(|c| Some(c.to_string())).collect();
+                        let resolved_args: Vec<Option<Box<str>>> = resolved
+                            .iter()
+                            .map(|c| Some(c.to_string().into_boxed_str()))
+                            .collect();
                         let key = MacroExpansionKey {
                             kind: MacroOrStruct::Macro,
                             name: SmolStr::from(name),
@@ -1140,7 +1142,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     .as_ref()
                     .expect("BUG: r#struct should be Some when r#macro is None");
                 let source = r#struct.source();
-                let def_location = source.map(|s| s.to_string());
+                let def_location = source.map(|s| s.to_string().into_boxed_str());
 
                 // A struct's expansion is written from scratch - `DB`/`DW`
                 // lines built from its fields - rather than substituted into
@@ -1154,7 +1156,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     kind: MacroOrStruct::Struct,
                     name: SmolStr::from(name),
                     def_location,
-                    resolved_args: vec![Some(code.clone())]
+                    resolved_args: vec![Some(code.clone().into_boxed_str())]
                 };
 
                 let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();
