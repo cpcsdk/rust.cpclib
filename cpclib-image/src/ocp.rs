@@ -97,6 +97,11 @@ pub struct OcpPalette {
 }
 
 impl OcpPalette {
+    /// How many bytes a `.pal` OCP palette file holds: 3 header bytes, then
+    /// 17 pens (0-16 inclusive) across 12 palettes, then 16 excluded + 16
+    /// projected pen bytes (`3 + 17 * NB_PAL + 16 + 16`).
+    pub const BYTE_SIZE: usize = 3 + 17 * NB_PAL + 16 + 16;
+
     /// Get the palette of interest (0..12)
     pub fn palette(&self, nb: usize) -> &Palette<Ink> {
         assert!(nb < 12);
@@ -107,8 +112,11 @@ impl OcpPalette {
         &self.palettes
     }
 
-    pub fn from_buffer(data: &[u8]) -> Self {
-        let mut data = data.iter().cloned();
+    /// Decode a palette from exactly [`Self::BYTE_SIZE`] bytes. Infallible:
+    /// the fixed-size input already guarantees every byte this decoding
+    /// order needs is present.
+    pub fn from_bytes(bytes: [u8; Self::BYTE_SIZE]) -> Self {
+        let mut data = bytes.into_iter();
 
         let screen_mode: Mode = (data.next().unwrap()).into();
         let cycling = data.next().unwrap() == 0xFF;
@@ -132,7 +140,7 @@ impl OcpPalette {
             projected[x] = data.next().unwrap();
         }
 
-        assert!(data.next().is_none());
+        debug_assert!(data.next().is_none());
 
         Self {
             screen_mode,
@@ -142,6 +150,19 @@ impl OcpPalette {
             excluded,
             projected
         }
+    }
+
+    /// Decode a palette from a byte buffer of any length, rejecting one that
+    /// isn't exactly [`Self::BYTE_SIZE`] instead of panicking.
+    pub fn from_buffer(data: &[u8]) -> Result<Self, String> {
+        let bytes: [u8; Self::BYTE_SIZE] = data.try_into().map_err(|_| {
+            format!(
+                "OCP palette data is {} bytes; expected exactly {}",
+                data.len(),
+                Self::BYTE_SIZE
+            )
+        })?;
+        Ok(Self::from_bytes(bytes))
     }
 }
 

@@ -306,7 +306,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<AnyLockablePalette,
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
         let (mut data, _header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
-        let pal = OcpPalette::from_buffer(data);
+        let pal = OcpPalette::from_buffer(data)?;
         Ok(LockablePalette::unlocked(pal.palette(0).clone()).into())
     }
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("GA_PAL") {
@@ -1684,6 +1684,7 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
         else {
             // this is the real OCP format
             OcpPalette::from_buffer(data)
+                .map_err(anyhow::Error::msg)?
                 .palettes()
                 .iter()
                 .cloned()
@@ -1889,7 +1890,7 @@ impl FadePaletteArgs {
         else if let Some(fname) = &self.pal {
             let (mut data, _header) = cpclib::disc::read(fname)?;
             let data = data.make_contiguous();
-            let pal = OcpPalette::from_buffer(data);
+            let pal = OcpPalette::from_buffer(data)?;
             Ok(LockablePalette::unlocked(pal.palette(0).clone()))
         }
         else {
