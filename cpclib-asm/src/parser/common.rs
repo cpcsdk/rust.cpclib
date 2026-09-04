@@ -281,12 +281,21 @@ pub(crate) fn build_span(
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn build_span_covering(span: &Z80Span, right: &Z80Span) -> InnerZ80Span {
-    // Safety: We assume both spans are from the same buffer/context.
     let left = &span.0;
     let right = &right.0;
-    debug_assert!(
+    // `ParserContext` compares by value (source/filename/context_name/options),
+    // not by pointer identity, so this genuinely checks "same source buffer
+    // content", not just "same allocation" - and it must be a real check, not
+    // a debug-only one, since it's the first half of what makes the raw
+    // pointer arithmetic below safe. (`current_token_start()`/`ctx.source`
+    // can't be used to compute this slice safely instead: the offset
+    // `current_token_start()` returns is relative to whatever buffer was
+    // passed to `Z80Span::new_extra`, which for macro-expanded spans is a
+    // synthetic buffer distinct from `ctx.source` - confirmed by this
+    // function's own regression tests failing under that approach.)
+    assert!(
         left.state == right.state,
-        "Spans must have the same context"
+        "build_span_covering: spans must come from the same parsing context"
     );
 
     // If either is empty, return the other
@@ -302,9 +311,20 @@ pub fn build_span_covering(span: &Z80Span, right: &Z80Span) -> InnerZ80Span {
 
     let start_ptr = left_bytes.as_ptr();
     let end_ptr = unsafe { right_bytes.as_ptr().add(right_bytes.len()) };
-    let total_len = (end_ptr as usize).wrapping_sub(start_ptr as usize);
+    // Second half of the precondition, previously entirely unchecked: a
+    // reversed pair (`right` starting before `left`) must not reach the
+    // pointer arithmetic below, where it would have silently wrapped to a
+    // huge length via `wrapping_sub` and then read wildly out of bounds.
+    assert!(
+        end_ptr as usize >= start_ptr as usize,
+        "build_span_covering: `right` must not start before `left`"
+    );
+    let total_len = end_ptr as usize - start_ptr as usize;
 
-    // Safety: start_ptr and total_len are valid and within the same buffer
+    // SAFETY: both asserts above hold, so `start_ptr` and `end_ptr` are two
+    // in-bounds pointers into the same live allocation (`left.state`'s
+    // shared source buffer) with `start_ptr <= end_ptr`, making this a
+    // valid subslice of it.
     let covering_bytes = unsafe { std::slice::from_raw_parts(start_ptr, total_len) };
     left.update_slice(covering_bytes)
 }

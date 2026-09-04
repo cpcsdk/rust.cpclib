@@ -1204,12 +1204,9 @@ where
         // Always work with Arc<RwLock<&mut Env>>
         let mut really_does_the_job = |possible_span: Option<&Z80Span>| {
             let deferred = self.token.defer_listing_output();
-            if !deferred {
-                // dbg!(&self.token, deferred);
-                // SAFETY: This transmute is only safe when T is LocatedToken.
-                // This is guaranteed by the type system at the call site.
-                let outer_token = unsafe { std::mem::transmute::<&T, &LocatedToken>(self.token) };
-
+            if !deferred
+                && let Some(outer_token) = self.token.as_located_token()
+            {
                 env.handle_output_trigger(outer_token);
             }
 

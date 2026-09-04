@@ -2178,6 +2178,15 @@ pub trait MayHaveSpan {
     fn possible_span(&self) -> Option<&Z80Span>;
     fn span(&self) -> &Z80Span;
     fn has_span(&self) -> bool;
+
+    /// `Some(self)` when this value genuinely *is* a `LocatedToken`; `None`
+    /// otherwise. Lets code generic over `T: MayHaveSpan` recover
+    /// location-tracking behavior only for the `T = LocatedToken`
+    /// instantiation, monomorphized statically rather than by unsafely
+    /// type-punning a `&T` into a `&LocatedToken`.
+    fn as_located_token(&self) -> Option<&LocatedToken> {
+        None
+    }
 }
 
 impl<T> MayHaveSpan for Box<T>
@@ -2193,6 +2202,10 @@ where T: MayHaveSpan
 
     fn has_span(&self) -> bool {
         (**self).has_span()
+    }
+
+    fn as_located_token(&self) -> Option<&LocatedToken> {
+        (**self).as_located_token()
     }
 }
 
@@ -2236,6 +2249,10 @@ impl MayHaveSpan for LocatedToken {
     /// Get the span of the current token
     fn span(&self) -> &Z80Span {
         &self.span
+    }
+
+    fn as_located_token(&self) -> Option<&LocatedToken> {
+        Some(self)
     }
 }
 
