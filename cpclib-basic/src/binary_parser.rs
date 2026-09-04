@@ -42,6 +42,15 @@ pub fn line_or_end(bytes: &mut &[u8]) -> ModalResult<Option<BasicLine>, ContextE
         return Ok(None);
     }
 
+    // A line's declared length must cover at least itself (2 bytes), the
+    // line number (2 bytes) and the trailing 0 byte `take(length - 4)`
+    // below assumes exists - otherwise `length - 4` underflows (a value of
+    // 1-3 is impossible for a real BASIC line but trivially producible by a
+    // corrupted/adversarial file).
+    if length < 4 {
+        return Err(winnow::error::ErrMode::Cut(ContextError::new()));
+    }
+
     let line_number =
         cut_err(le_u16.context(StrContext::Label("Expecting a line number"))).parse_next(bytes)?;
 
@@ -64,7 +73,9 @@ pub fn line_or_end(bytes: &mut &[u8]) -> ModalResult<Option<BasicLine>, ContextE
 pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextError<StrContext>> {
     let mut tokens = Vec::with_capacity(bytes.len());
     while !bytes.is_empty() {
-        let code = BasicTokenNoPrefix::try_from(u8.parse_next(bytes)?).unwrap();
+        let byte = u8.parse_next(bytes)?;
+        let code = BasicTokenNoPrefix::try_from(byte)
+            .map_err(|_| winnow::error::ErrMode::Cut(ContextError::new()))?;
 
         match code {
             // Constant numbers 0-10 (no additional bytes needed)
@@ -156,7 +167,9 @@ pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextEr
             },
 
             BasicTokenNoPrefix::AdditionalTokenMarker => {
-                let code2 = BasicTokenPrefixed::try_from(u8.parse_next(bytes)?).unwrap();
+                let byte2 = u8.parse_next(bytes)?;
+                let code2 = BasicTokenPrefixed::try_from(byte2)
+                    .map_err(|_| winnow::error::ErrMode::Cut(ContextError::new()))?;
                 let token = BasicToken::PrefixedToken(code2);
                 tokens.push(token);
             },
