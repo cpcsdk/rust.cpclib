@@ -116,6 +116,11 @@ impl RegistersStore {
 
 #[derive(Builder)]
 //#[builder(start_fn = with_header)]
+// clippy's duplicated_attributes lint doesn't understand bon's `on(Type,
+// modifier)` sub-attribute syntax - it sees the `into` token twice (once
+// per type it applies to) and mistakes that for a literal duplicate
+// attribute, not two independent per-type modifiers.
+#[allow(clippy::duplicated_attributes)]
 #[builder(on(String, into), on(SmolStr, into))]
 pub struct Compiler {
     //  #[builder(start_fn)]
