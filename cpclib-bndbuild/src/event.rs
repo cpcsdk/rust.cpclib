@@ -430,7 +430,9 @@ where E: BndBuilderObserved
 pub struct BndBuilderDefaultObserver {}
 
 impl BndBuilderDefaultObserver {
-    pub fn new() -> Rc<RefCell<Box<dyn BndBuilderObserver>>> {
+    /// Build a default observer already wrapped the way callers needing a
+    /// shared `dyn BndBuilderObserver` expect it.
+    pub fn new_shared() -> Rc<RefCell<Box<dyn BndBuilderObserver>>> {
         Rc::new(RefCell::new(Box::new(BndBuilderDefaultObserver {})))
     }
 }

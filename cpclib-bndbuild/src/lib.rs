@@ -491,8 +491,8 @@ pub fn expand_glob_in(p: &str, base_dir: &Utf8Path) -> Vec<String> {
                                 // Skip paths with invalid UTF-8 instead of failing
                                 if let Ok(utf8_path) = Utf8PathBuf::from_path_buf(path) {
                                     let s = utf8_path.to_string();
-                                    if s.starts_with(".\\") {
-                                        results.push(s[2..].to_owned());
+                                    if let Some(stripped) = s.strip_prefix(".\\") {
+                                        results.push(stripped.to_owned());
                                     }
                                     else {
                                         results.push(s);
@@ -541,8 +541,10 @@ impl From<(serde_yaml::Error, &Utf8Path, &str)> for BndBuilderError {
                 (codespan_reporting::term::Config::default(), Buffer::ansi())
             }
             else {
-                let mut conf = codespan_reporting::term::Config::default();
-                conf.chars = Chars::ascii();
+                let conf = codespan_reporting::term::Config {
+                    chars: Chars::ascii(),
+                    ..Default::default()
+                };
                 (conf, Buffer::no_color())
             };
             config.start_context_lines = 2;

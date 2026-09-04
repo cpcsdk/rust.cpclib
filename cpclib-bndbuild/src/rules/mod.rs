@@ -1,11 +1,11 @@
 mod dot;
 pub mod graph;
 pub mod rule;
-pub mod rules;
+pub mod ruleset;
 
 pub use graph::*;
 pub use rule::*;
-pub use rules::*;
+pub use ruleset::*;
 
 #[cfg(test)]
 mod test {

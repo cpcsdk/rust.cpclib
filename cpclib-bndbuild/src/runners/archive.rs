@@ -220,7 +220,6 @@ fn create_zip<E: EventObserver>(
             add_dir_to_zip(
                 &mut zip,
                 path,
-                path,
                 strip_prefix,
                 basename_only,
                 options,
@@ -267,7 +266,6 @@ fn add_file_to_zip<W: Write + std::io::Seek, E: EventObserver>(
 fn add_dir_to_zip<W: Write + std::io::Seek, E: EventObserver>(
     zip: &mut zip::ZipWriter<W>,
     dir: &Utf8Path,
-    base: &Utf8Path,
     strip_prefix: Option<&str>,
     basename_only: bool,
     options: zip::write::SimpleFileOptions,
@@ -284,7 +282,7 @@ fn add_dir_to_zip<W: Write + std::io::Seek, E: EventObserver>(
             add_file_to_zip(zip, &path, strip_prefix, basename_only, options, o)?;
         }
         else if path.is_dir() {
-            add_dir_to_zip(zip, &path, base, strip_prefix, basename_only, options, o)?;
+            add_dir_to_zip(zip, &path, strip_prefix, basename_only, options, o)?;
         }
     }
 

@@ -60,14 +60,10 @@ impl InnerTask {
                 }
             },
 
-            InnerTask::Assembler(a, _) => {
-                match a {
-                    Assembler::Extern(extern_assembler) => {
-                        Some(extern_assembler.configuration::<E>())
-                    },
-                    _ => None
-                }
+            InnerTask::Assembler(Assembler::Extern(extern_assembler), _) => {
+                Some(extern_assembler.configuration::<E>())
             },
+            InnerTask::Assembler(_, _) => None,
 
             InnerTask::YmCruncher(c, _) => {
                 match c {
@@ -78,12 +74,8 @@ impl InnerTask {
                 }
             },
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
-            InnerTask::Disassembler(d, _) => {
-                match d {
-                    Disassembler::Extern(e) => Some(e.configuration()),
-                    _ => None
-                }
-            },
+            InnerTask::Disassembler(Disassembler::Extern(e), _) => Some(e.configuration()),
+            InnerTask::Disassembler(_, _) => None,
 
             InnerTask::Grafx2(_) => Some(Grafx2Version::default().configuration()),
 

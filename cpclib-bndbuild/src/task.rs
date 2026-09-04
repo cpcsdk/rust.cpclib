@@ -388,8 +388,8 @@ impl<'de> Deserialize<'de> for InnerTask {
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where E: serde::de::Error {
                 let (code, next) = v.split_once(" ").unwrap_or((v, ""));
-                let (code, ignore) = if code.starts_with("-") {
-                    (&code[1..], true)
+                let (code, ignore) = if let Some(stripped) = code.strip_prefix("-") {
+                    (stripped, true)
                 }
                 else {
                     (code, false)
@@ -912,10 +912,7 @@ impl InnerTask {
     /// For now, only BndBuild tasks are considered non-parallelizable because they
     /// modify the current working directory.
     pub fn is_parallelizable(&self) -> bool {
-        match self {
-            InnerTask::BndBuild(..) => false,
-            _ => true
-        }
+        !matches!(self, InnerTask::BndBuild(..))
     }
 
     fn standard_task_arguments(&self) -> &StandardTaskArguments {

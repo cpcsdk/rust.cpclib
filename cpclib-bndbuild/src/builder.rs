@@ -239,8 +239,10 @@ impl BndBuilder {
                     (codespan_reporting::term::Config::default(), Buffer::ansi())
                 }
                 else {
-                    let mut conf = codespan_reporting::term::Config::default();
-                    conf.chars = Chars::ascii();
+                    let conf = codespan_reporting::term::Config {
+                        chars: Chars::ascii(),
+                        ..Default::default()
+                    };
                     (conf, Buffer::no_color())
                 };
                 let _ = emit_to_io_write(&mut buffer, &config, &file, &diagnostic);

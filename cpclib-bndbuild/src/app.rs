@@ -172,10 +172,7 @@ impl Deref for BndBuilderCommand {
 
 impl BndBuilderCommandInner {
     pub fn is_build(&self) -> bool {
-        match self {
-            Self::Build { .. } => true,
-            _ => false
-        }
+        matches!(self, Self::Build { .. })
     }
 }
 
@@ -1239,9 +1236,8 @@ impl BndBuilderApp {
                     .get_many::<String>("target")
                     .map(|targets_provided| {
                         targets_provided
-                            .cloned()
                             .map(|s| {
-                                Utf8PathBuf::from_str(&s)
+                                Utf8PathBuf::from_str(s)
                                     .expect("Clap-provided strings should be valid UTF-8 paths")
                             })
                             .collect::<Vec<Utf8PathBuf>>()
