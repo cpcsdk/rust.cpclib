@@ -96,11 +96,11 @@ impl std::fmt::Display for LocatedExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UnescapedString(pub(crate) String, pub(crate) Z80Span);
+pub struct UnescapedString(pub(crate) Box<str>, pub(crate) Z80Span);
 
 impl AsRef<str> for UnescapedString {
     fn as_ref(&self) -> &str {
-        self.0.as_str()
+        self.0.as_ref()
     }
 }
 

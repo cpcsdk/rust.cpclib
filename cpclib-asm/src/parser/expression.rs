@@ -1356,7 +1356,7 @@ pub fn parse_string(input: &mut InnerZ80Span) -> ModalResult<UnescapedString, Z8
 
     let slice = (*input).update_slice(slice);
 
-    Ok(UnescapedString(string, slice.into()))
+    Ok(UnescapedString(string.into(), slice.into()))
 }
 
 pub fn parse_stringlike_without_quote(
@@ -1379,7 +1379,7 @@ pub fn parse_stringlike_without_quote(
 
     let slice = (*input).update_slice(slice);
 
-    Ok(UnescapedString(string, slice.into()))
+    Ok(UnescapedString(string.into(), slice.into()))
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline(always))]
