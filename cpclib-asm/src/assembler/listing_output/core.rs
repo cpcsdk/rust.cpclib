@@ -241,17 +241,16 @@ impl ListingOutput {
         source_line_raw: Option<&str>,
         source_line_expanded: Option<&str>
     ) -> String {
-        format_line_with_template_for(
-            &self.format,
-            self.bytes_per_line(),
-            self.current_file_index,
+        format_line_with_template_for(&self.format, LineTemplateFields {
+            bytes_per_line: self.bytes_per_line(),
+            file_index: self.current_file_index,
             logical_address,
             physical_address_repr,
             bytes,
             line_number,
             source_line_raw,
             source_line_expanded
-        )
+        })
     }
 
     fn hex_byte(&self, b: u8) -> String {
@@ -329,8 +328,9 @@ impl ListingOutput {
         symbols: Option<*const SymbolsTable>
     ) {
         // keep the source pointer stable, but avoid copying the source string itself
-        self.current_source =
-            Some(unsafe { std::mem::transmute(token.context().complete_source()) });
+        self.current_source = Some(unsafe {
+            std::mem::transmute::<&str, &'static str>(token.context().complete_source())
+        });
         let raw_line = Self::extract_code(token);
         let expanded_line = if !Self::should_expand_source_for_token(token) {
             raw_line.clone()
@@ -930,10 +930,9 @@ impl ListingOutput {
                 is_multiline_continuation && current_inner_data.is_none();
 
             let logical_address = self.current_first_address.wrapping_add(byte_offset as u32);
-            let logical_representation = if is_continuation_without_data {
-                None
-            }
-            else if current_inner_line_raw.is_none() && current_inner_data.is_none() {
+            let logical_representation = if is_continuation_without_data
+                || (current_inner_line_raw.is_none() && current_inner_data.is_none())
+            {
                 None
             }
             else {
@@ -947,13 +946,10 @@ impl ListingOutput {
                 PhysicalAddress::Cpr(adr) => adr.address() as _
             };
             let current_offset = base_offset.wrapping_add(byte_offset as u32);
-            let phys_addr_representation = if is_continuation_without_data {
-                Self::blank(self.physical_field_width())
-            }
-            else if !self.format.show_physical_address {
-                Self::blank(self.physical_field_width())
-            }
-            else if current_inner_line_raw.is_none() && current_inner_data.is_none() {
+            let phys_addr_representation = if is_continuation_without_data
+                || !self.format.show_physical_address
+                || (current_inner_line_raw.is_none() && current_inner_data.is_none())
+            {
                 Self::blank(self.physical_field_width())
             }
             else if current_offset == logical_address
@@ -1358,7 +1354,9 @@ impl ListingOutputTrigger {
     /// Override the address value by the expression result
     /// BUGGY when it is not a number ...
     pub fn replace_code_address(&mut self, address: &ExprResult) {
-        Self::result_to_address(address).map(|a| self.start = a);
+        if let Some(a) = Self::result_to_address(address) {
+            self.start = a;
+        }
     }
 
     /// Applies the conversion when possible

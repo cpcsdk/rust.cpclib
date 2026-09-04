@@ -155,17 +155,29 @@ fn render_source_column_impl(line: Option<&str>) -> String {
     trimmed.chars().take(MAX_RENDERED_SOURCE_COLUMN_CHARS).collect()
 }
 
-fn format_line_with_template_for_impl(
-    format: &ListingOutputFormat,
-    bytes_per_line: usize,
-    file_index: usize,
-    logical_address: Option<u32>,
-    physical_address_repr: &str,
-    bytes: &[u8],
-    line_number: Option<u32>,
-    source_line_raw: Option<&str>,
-    source_line_expanded: Option<&str>
-) -> String {
+pub(crate) struct LineTemplateFields<'a> {
+    pub bytes_per_line: usize,
+    pub file_index: usize,
+    pub logical_address: Option<u32>,
+    pub physical_address_repr: &'a str,
+    pub bytes: &'a [u8],
+    pub line_number: Option<u32>,
+    pub source_line_raw: Option<&'a str>,
+    pub source_line_expanded: Option<&'a str>
+}
+
+fn format_line_with_template_for_impl(format: &ListingOutputFormat, fields: LineTemplateFields<'_>) -> String {
+    let LineTemplateFields {
+        bytes_per_line,
+        file_index,
+        logical_address,
+        physical_address_repr,
+        bytes,
+        line_number,
+        source_line_raw,
+        source_line_expanded
+    } = fields;
+
     let template = format.listing_line_template.as_str();
     let mut output = String::with_capacity(template.len() + 32);
     // Borrows placeholder names straight out of `template` instead of
@@ -290,17 +302,16 @@ fn format_deferred_line_with_template_for_impl(
 ) -> Vec<String> {
     let source_marker_raw = "\u{1f}SOURCE_RAW\u{1f}";
     let source_marker_expanded = "\u{1f}SOURCE_EXPANDED\u{1f}";
-    let rendered = format_line_with_template_for(
-        format,
+    let rendered = format_line_with_template_for(format, LineTemplateFields {
         bytes_per_line,
         file_index,
-        None,
-        &blank_impl(physical_field_width_impl(format)),
-        &[],
+        logical_address: None,
+        physical_address_repr: &blank_impl(physical_field_width_impl(format)),
+        bytes: &[],
         line_number,
-        Some(source_marker_raw),
-        Some(source_marker_expanded)
-    );
+        source_line_raw: Some(source_marker_raw),
+        source_line_expanded: Some(source_marker_expanded)
+    });
 
     let anchor = if format.show_line_numbers {
         line_number
@@ -368,26 +379,9 @@ pub(crate) fn render_source_column(line: Option<&str>) -> String {
 
 pub(crate) fn format_line_with_template_for(
     format: &ListingOutputFormat,
-    bytes_per_line: usize,
-    file_index: usize,
-    logical_address: Option<u32>,
-    physical_address_repr: &str,
-    bytes: &[u8],
-    line_number: Option<u32>,
-    source_line_raw: Option<&str>,
-    source_line_expanded: Option<&str>
+    fields: LineTemplateFields<'_>
 ) -> String {
-    format_line_with_template_for_impl(
-        format,
-        bytes_per_line,
-        file_index,
-        logical_address,
-        physical_address_repr,
-        bytes,
-        line_number,
-        source_line_raw,
-        source_line_expanded
-    )
+    format_line_with_template_for_impl(format, fields)
 }
 
 pub(crate) fn format_deferred_line_with_template_for(

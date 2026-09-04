@@ -285,8 +285,8 @@ impl Compiler {
                             .build();
 
                         ListingSelector::default()
-                            .add(choice1)
-                            .add(choice2)
+                            .with_choice(choice1)
+                            .with_choice(choice2)
                             .select()
                     }
                 };

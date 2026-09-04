@@ -2,8 +2,8 @@ use std::io::Write;
 
 use super::super::TokenKind;
 use super::super::format::{
-    ListingOutputFormat, blank, format_address_for, format_deferred_line_with_template_for,
-    format_line_with_template_for, logical_address_width
+    ListingOutputFormat, LineTemplateFields, blank, format_address_for,
+    format_deferred_line_with_template_for, format_line_with_template_for, logical_address_width
 };
 use super::shared::{
     ListingDeferredRender, ListingLineRender, ListingNotice, TextListingRenderer,
@@ -116,17 +116,16 @@ impl TextListingRenderer {
         let source_line_raw = self.qualify_locals_in_line(line.source_line_raw);
         let source_line_expanded = self.qualify_locals_in_line(line.source_line_expanded);
 
-        let rendered = format_line_with_template_for(
-            format,
+        let rendered = format_line_with_template_for(format, LineTemplateFields {
             bytes_per_line,
-            line.file_index,
-            line.logical_address,
-            line.physical_address_repr,
-            line.bytes,
-            line.line_number,
-            Some(&source_line_raw),
-            Some(&source_line_expanded)
-        );
+            file_index: line.file_index,
+            logical_address: line.logical_address,
+            physical_address_repr: line.physical_address_repr,
+            bytes: line.bytes,
+            line_number: line.line_number,
+            source_line_raw: Some(&source_line_raw),
+            source_line_expanded: Some(&source_line_expanded)
+        });
         let rendered = if rendered.trim().is_empty() {
             format!(
                 "{} {} {:bytes_width$} {}",

@@ -279,7 +279,7 @@ impl AsRef<InnerZ80Span> for Z80Span {
 
 impl Z80Span {
     pub fn new_extra<S: ?Sized + AsRef<[u8]>>(src: &S, ctx: &ParserContext) -> Self {
-        let src = unsafe { std::mem::transmute(BStr::new(src)) };
+        let src = unsafe { std::mem::transmute::<&BStr, &'static BStr>(BStr::new(src)) };
         let ctx = unsafe { &*(ctx as *const ParserContext) as &'static ParserContext };
 
         Self(Stateful {

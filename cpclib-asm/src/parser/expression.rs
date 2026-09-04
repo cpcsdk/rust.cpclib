@@ -817,7 +817,7 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     );
 
     // Parse ternary operator: condition ? true_expr : false_expr
-    if let Some(_) = opt(preceded(my_space0, '?')).parse_next(input)? {
+    if opt(preceded(my_space0, '?')).parse_next(input)?.is_some() {
         let _ = my_space0(input)?;
         let true_expr = expr2(input)?;
         let _ = my_space0(input)?;
@@ -864,7 +864,7 @@ pub fn parse_any_function_call(
 /// Parser for functions taking into argument a token
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn token_function<'a>(
+pub fn token_function(
     function_name: &'static str
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -1289,10 +1289,12 @@ pub fn ignore_ascii_case_allowed_label(
     dotted_directive: bool,
     flavor: AssemblerFlavor
 ) -> bool {
+    type LabelLengthBucketFn = fn(usize) -> &'static [&'static str];
+
     let len = name.len();
 
     // Get min/max and bucket function based on flavor and dotted directive
-    let (min_max, bucket_fn): ((usize, usize), fn(usize) -> &'static [&'static str]) =
+    let (min_max, bucket_fn): ((usize, usize), LabelLengthBucketFn) =
         match (flavor, dotted_directive) {
             (AssemblerFlavor::Basm, true) => {
                 (DOTTED_MIN_MAX_LABEL_SIZE, dotted_impossible_by_length)
@@ -1382,12 +1384,13 @@ pub fn parse_stringlike_without_quote(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn my_escaped<'a, I: 'a, Error, F, G, O1, O2>(
+pub fn my_escaped<'a, I, Error, F, G, O1, O2>(
     mut normal: F,
     control_char: char,
     mut escapable: G
 ) -> impl Parser<I, String, Error>
 where
+    I: 'a,
     I: cpclib_common::winnow::stream::StreamIsPartial,
     I: Stream,
     I: AsBStr,
@@ -1500,8 +1503,9 @@ where
             }
         }
 
-        let mut res: CollectedString =
-            CollectedString::new(unsafe { std::mem::transmute(input.as_bstr()) });
+        let mut res: CollectedString = CollectedString::new(unsafe {
+            std::mem::transmute::<&[u8], &'static [u8]>(input.as_bstr())
+        });
 
         while input.eof_offset() > 0 {
             let current_len = input.eof_offset();
@@ -1573,7 +1577,7 @@ pub fn string_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
 
 #[cfg(test)]
 pub mod test {
-    use crate::parser::parser::test::parse_test;
+    use crate::parser::dispatch::test::parse_test;
     use crate::{parse_expr_bracketed_list, parse_proximity_label_usage};
 
     #[test]

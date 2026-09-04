@@ -55,7 +55,7 @@ impl AssemblyAnalyzer {
         let disabled = disabled_parser_warning_categories(&self.config().warnings);
         let result = match Self::parse_source(&document.text(), Some(&document.uri), disabled) {
             Ok(l) => Ok(Arc::new(l)),
-            Err(l) => Err(Arc::new(l))
+            Err(l) => Err(Arc::new(*l))
         };
         self.parse_cache
             .insert(document.uri.clone(), (document.version, result.clone()));
@@ -83,7 +83,7 @@ impl AssemblyAnalyzer {
         text: &str,
         doc_uri: Option<&Url>,
         disabled_categories: BitFlags<WarningCategory>
-    ) -> Result<LocatedListing, LocatedListing> {
+    ) -> Result<LocatedListing, Box<LocatedListing>> {
         // `quiet`: a `PRINT_PARSE` directive prints at *parse* time, before
         // any `Env`/`dry_run` exists to gate it — must be suppressed here
         // instead, since the LSP's real stdout carries JSON-RPC traffic.

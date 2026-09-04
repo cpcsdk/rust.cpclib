@@ -203,14 +203,16 @@ pub struct ListingSelector {
     strategy: ListingSelectorStrategy
 }
 
+type ListingSelectorKeyFn = Box<dyn Fn(&Listing) -> (usize, usize)>;
+
 impl ListingSelector {
-    pub fn add(mut self, lst: Listing) -> Self {
+    pub fn with_choice(mut self, lst: Listing) -> Self {
         self.choices.push(lst);
         self
     }
 
     pub fn select(mut self) -> Listing {
-        let key_fn: Box<dyn Fn(&Listing) -> (usize, usize)> = match self.strategy {
+        let key_fn: ListingSelectorKeyFn = match self.strategy {
             ListingSelectorStrategy::Speed => {
                 Box::new(|l: &Listing| {
                     (

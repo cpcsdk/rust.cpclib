@@ -35,9 +35,9 @@ pub fn ensure_orgams_type(e: ExprResult, env: &mut Env) -> Result<ExprResult, Bo
 }
 
 /// Add all important methods to expression-like structures that are not available in the cpclib_tokens crate.
-
+///
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
-
+///
 /// Evaluate an expression
 pub trait ExprEvaluationExt: Display {
     /// Simple evaluation without context => can only evaluate number based operations.

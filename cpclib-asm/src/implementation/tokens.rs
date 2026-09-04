@@ -120,19 +120,19 @@ impl TokenExt for Token {
     fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, Box<AssemblerError>>> {
         if let Token::Repeat(expr, tokens, _counter_label, _counter_start) = self {
             let count: Result<ExprResult, Box<AssemblerError>> = expr.resolve(env);
-            if count.is_err() {
-                Some(Err(count.err().unwrap()))
-            }
-            else {
-                let count = env.int_forward(&count.unwrap()).unwrap();
-                let mut res = Vec::with_capacity(count as usize * tokens.len());
-                for _i in 0..count {
-                    // TODO add a specific token to control the loop counter (and change the return type)
-                    for t in tokens.iter() {
-                        res.push(t);
+            match count {
+                Err(e) => Some(Err(e)),
+                Ok(count) => {
+                    let count = env.int_forward(&count).unwrap();
+                    let mut res = Vec::with_capacity(count as usize * tokens.len());
+                    for _i in 0..count {
+                        // TODO add a specific token to control the loop counter (and change the return type)
+                        for t in tokens.iter() {
+                            res.push(t);
+                        }
                     }
+                    Some(Ok(res))
                 }
-                Some(Ok(res))
             }
         }
         else {

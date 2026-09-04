@@ -1,9 +1,9 @@
 //! Where each source line ended up, kept rather than printed.
 //!
 //! The listing already computes everything a debugger needs to map a line to
-//! an address and back - which file, which line, what address, how many bytes
-//! - and then formats it into text and forgets it. This collects the same
-//! records instead, as a side channel: `--lst` and a source map are not
+//! an address and back (which file, which line, what address, how many
+//! bytes), and then formats it into text and forgets it. This collects the
+//! same records instead, as a side channel: `--lst` and a source map are not
 //! mutually exclusive, and asking for one must not change the other's output.
 //!
 //! Rows arrive in assembly order, so a `REPEAT` body or a macro called five

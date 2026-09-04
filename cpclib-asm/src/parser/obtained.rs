@@ -177,17 +177,11 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_negated(&self) -> bool {
-        match self {
-            Self::UnaryOperation(UnaryOperation::Neg, ..) => true,
-            _ => false
-        }
+        matches!(self, Self::UnaryOperation(UnaryOperation::Neg, ..))
     }
 
     fn is_relative(&self) -> bool {
-        match self {
-            Self::RelativeDelta(..) => true,
-            _ => false
-        }
+        matches!(self, Self::RelativeDelta(..))
     }
 
     fn relative_delta(&self) -> i8 {
@@ -211,10 +205,7 @@ impl ExprElement for LocatedExpr {
 
     /// Check if it is necessary to read within a symbol table
     fn is_context_independant(&self) -> bool {
-        match self {
-            Self::Label(..) => false,
-            _ => true
-        }
+        !matches!(self, Self::Label(..))
     }
 
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
@@ -230,10 +221,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_value(&self) -> bool {
-        match self {
-            Self::Value(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Value(..))
     }
 
     fn value(&self) -> i32 {
@@ -244,10 +232,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_char(&self) -> bool {
-        match self {
-            Self::Char(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Char(..))
     }
 
     fn char(&self) -> char {
@@ -258,10 +243,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_bool(&self) -> bool {
-        match self {
-            Self::Bool(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Bool(..))
     }
 
     fn bool(&self) -> bool {
@@ -272,10 +254,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_string(&self) -> bool {
-        match self {
-            Self::String(..) => true,
-            _ => false
-        }
+        matches!(self, Self::String(..))
     }
 
     fn string(&self) -> &str {
@@ -286,10 +265,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_float(&self) -> bool {
-        match self {
-            Self::Float(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Float(..))
     }
 
     fn float(&self) -> OrderedFloat<f64> {
@@ -300,10 +276,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_list(&self) -> bool {
-        match self {
-            Self::List(..) => true,
-            _ => false
-        }
+        matches!(self, Self::List(..))
     }
 
     fn list(&self) -> &[Self] {
@@ -314,10 +287,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_label(&self) -> bool {
-        match self {
-            Self::Label(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Label(..))
     }
 
     fn label(&self) -> &str {
@@ -329,15 +299,12 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_token_operation(&self) -> bool {
-        match self {
-            Self::UnaryTokenOperation(..) => true,
-            _ => false
-        }
+        matches!(self, Self::UnaryTokenOperation(..))
     }
 
     fn token_operation(&self) -> &UnaryTokenOperation {
         match self {
-            Self::UnaryTokenOperation(op, __, _) => op,
+            Self::UnaryTokenOperation(op, ..) => op,
             _ => unreachable!()
         }
     }
@@ -350,10 +317,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_prefix_label(&self) -> bool {
-        match self {
-            Self::PrefixedLabel(..) => true,
-            _ => false
-        }
+        matches!(self, Self::PrefixedLabel(..))
     }
 
     fn prefix(&self) -> &LabelPrefix {
@@ -364,10 +328,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_binary_operation(&self) -> bool {
-        match self {
-            Self::BinaryOperation(..) => true,
-            _ => false
-        }
+        matches!(self, Self::BinaryOperation(..))
     }
 
     fn binary_operation(&self) -> BinaryOperation {
@@ -403,10 +364,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_unary_operation(&self) -> bool {
-        match self {
-            Self::UnaryOperation(..) => true,
-            _ => false
-        }
+        matches!(self, Self::UnaryOperation(..))
     }
 
     fn unary_operation(&self) -> UnaryOperation {
@@ -417,24 +375,15 @@ impl ExprElement for LocatedExpr {
     }
 
     fn is_paren(&self) -> bool {
-        match self {
-            Self::Paren(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Paren(..))
     }
 
     fn is_rnd(&self) -> bool {
-        match self {
-            Self::Rnd(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Rnd(_))
     }
 
     fn is_any_function(&self) -> bool {
-        match self {
-            Self::AnyFunction(..) => true,
-            _ => false
-        }
+        matches!(self, Self::AnyFunction(..))
     }
 
     fn function_name(&self) -> &str {
@@ -729,24 +678,15 @@ impl DataAccessElem for LocatedDataAccess {
     }
 
     fn is_port_c(&self) -> bool {
-        match self {
-            Self::PortC(..) => true,
-            _ => false
-        }
+        matches!(self, Self::PortC(..))
     }
 
     fn is_register_i(&self) -> bool {
-        match self {
-            Self::SpecialRegisterI(..) => true,
-            _ => false
-        }
+        matches!(self, Self::SpecialRegisterI(..))
     }
 
     fn is_register_r(&self) -> bool {
-        match self {
-            Self::SpecialRegisterR(..) => true,
-            _ => false
-        }
+        matches!(self, Self::SpecialRegisterR(..))
     }
 
     fn to_data_access(&self) -> Cow<'_, DataAccess> {
@@ -932,7 +872,7 @@ impl TestKindElement for LocatedTestKind {
 pub enum LocatedAssemblerControlCommand {
     RestrictedAssemblingEnvironment {
         passes: Option<LocatedExpr>,
-        lst: LocatedListing
+        lst: Box<LocatedListing>
     },
     PrintAtParsingState(Vec<FormattedExpr>), // completely ignored during assembling
     PrintAtAssemblingState(Vec<FormattedExpr>)
@@ -2026,10 +1966,7 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn is_warning(&self) -> bool {
-        match self {
-            LocatedTokenInner::WarningWrapper(..) => true,
-            _ => false
-        }
+        matches!(self, LocatedTokenInner::WarningWrapper(..))
     }
 
     fn warning_token(&self) -> &Self {
@@ -2101,10 +2038,7 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn is_confined(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Confined(..) => true,
-            _ => false
-        }
+        matches!(self, LocatedTokenInner::Confined(..))
     }
 
     fn confined_listing(&self) -> &[Self] {
@@ -2416,8 +2350,8 @@ impl LocatedToken {
 
     /// Whether this token is specifically a redundant, explicit `A,`
     /// accumulator prefix (`CP A,r`/`SUB A,r`/`AND A,r`/`OR A,r`/`XOR A,r`/
-    /// `ADD A,r`/`ADC A,r`, all equivalent to the shorter, implicit-`A` form)
-    /// - see `is_fake_instruction`'s own doc comment for why a dedicated
+    /// `ADD A,r`/`ADC A,r`, all equivalent to the shorter, implicit-`A` form).
+    /// See `is_fake_instruction`'s own doc comment for why a dedicated
     /// query beats guessing from `is_warning()`/`warning_message()` alone.
     pub fn is_redundant_accumulator_prefix(&self) -> bool {
         self.is_warning()
@@ -2526,7 +2460,6 @@ impl LocatedToken {
     // }
 }
 /// Implement this trait for type previousy defined without source location.
-
 pub trait Locate {
     type Output;
 
@@ -2710,7 +2643,7 @@ impl LocatedListing {
     pub fn new_complete_source<S: Into<String>>(
         code: S,
         builder: ParserContextBuilder
-    ) -> Result<LocatedListing, LocatedListing> {
+    ) -> Result<LocatedListing, Box<LocatedListing>> {
         // generate the listing
         let listing = LocatedListingBuilder {
             // source code is a string owned by the listing
@@ -2735,13 +2668,7 @@ impl LocatedListing {
                 // really make the parsing
                 let res: Result<
                     Vec<LocatedToken>,
-                    cpclib_common::winnow::error::ParseError<
-                        cpclib_common::winnow::Stateful<
-                            cpclib_common::winnow::stream::LocatingSlice<&BStr>,
-                            &ParserContext
-                        >,
-                        Z80ParserError
-                    >
+                    cpclib_common::winnow::error::ParseError<InnerZ80Span, Z80ParserError>
                 > = parse_lines.parse(input_start.0);
 
                 // analyse result and can generate error even if parsing was ok
@@ -2770,7 +2697,7 @@ impl LocatedListing {
 
         match listing.borrow_parse_result() {
             ParseResult::SuccessComplete(_) => Ok(listing),
-            ParseResult::FailureComplete(_) => Err(listing),
+            ParseResult::FailureComplete(_) => Err(Box::new(listing)),
             _ => unreachable!()
         }
     }

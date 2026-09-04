@@ -135,7 +135,7 @@ parse_any_register8!(parse_register_l, b"l", Register8::L);
 fn register16_parser(
     representation: &'static str,
     register: Register16
-) -> impl for<'src, 'ctx> Fn(&mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
@@ -290,13 +290,13 @@ macro_rules! parse_any_indexregister8 {
             #[cfg_attr(target_arch = "wasm32", inline(never))]
             pub fn [<parse_register_ $reg:lower>] (input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
                 let _start = input.clone();
-                let span = ((
+                let span = (
                     alt((
                         parse_word( stringify!($reg).as_bytes()),
                         parse_word( stringify!($alias1).as_bytes()),
                         parse_word( stringify!($alias2).as_bytes()),
                     ))
-                    , not(alphanumeric1)))
+                    , not(alphanumeric1))
                 .take()
                 .parse_next(input)?;
 

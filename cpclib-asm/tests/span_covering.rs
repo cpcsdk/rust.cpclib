@@ -1,7 +1,7 @@
 #![feature(box_patterns)]
 
 use cpclib_asm::parser::expression::located_expr;
-use cpclib_asm::parser::parser::ctx_and_span;
+use cpclib_asm::parser::dispatch::ctx_and_span;
 use cpclib_asm::{InnerZ80Span, MayHaveSpan};
 use cpclib_common::winnow::stream::AsBStr;
 

@@ -5003,7 +5003,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_confined<'token, E: ExprEvaluationExt, T>(
+    pub fn visit_confined<'token, E, T>(
         &mut self,
         lst: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>

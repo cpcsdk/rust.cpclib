@@ -41,7 +41,7 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
-pub use super::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
+pub use super::dispatch::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
 use super::source::Z80Span;
 use crate::hashed_choice;
 use crate::preamble::*;
@@ -1961,10 +1961,7 @@ fn parse_directive_of_size_8(
 
 fn parse_directive_of_size_7(
     input: &mut InnerZ80Span,
-    input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
-        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
-    >,
+    input_start: &Z80Checkpoint,
     _is_orgams: bool,
     _within_struct: bool,
     word: &[u8]
@@ -1990,10 +1987,7 @@ fn parse_directive_of_size_7(
 
 fn parse_directive_of_size_6(
     input: &mut InnerZ80Span,
-    input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
-        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
-    >,
+    input_start: &Z80Checkpoint,
     is_orgams: bool,
     _within_struct: bool,
     word: &[u8]
@@ -2592,25 +2586,24 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
         ))
         .parse_next(input);
 
-        if first_loop && if_token_or_error.is_err() {
-            input.reset(&if_start);
-            return Err(if_token_or_error.unwrap_err());
-        }
-
-        let condition = if let Ok(test_kind) = if_token_or_error {
-            let cond = parse_block_error(
-                cut_err(
-                    delimited(my_space0, parse_conditional_condition(test_kind), my_space0)
-                        .context(StrContext::Label("Condition: error in the condition"))
-                ),
-                if_start_span,
-                ERR_IF_ERROR_IN_BLOCK
-            )
-            .parse_next(input)?;
-            Some(cond)
-        }
-        else {
-            None
+        let condition = match if_token_or_error {
+            Err(e) if first_loop => {
+                input.reset(&if_start);
+                return Err(e);
+            },
+            Ok(test_kind) => {
+                let cond = parse_block_error(
+                    cut_err(
+                        delimited(my_space0, parse_conditional_condition(test_kind), my_space0)
+                            .context(StrContext::Label("Condition: error in the condition"))
+                    ),
+                    if_start_span,
+                    ERR_IF_ERROR_IN_BLOCK
+                )
+                .parse_next(input)?;
+                Some(cond)
+            },
+            Err(_) => None
         };
 
         let _ = parse_block_error(
@@ -2794,7 +2787,7 @@ pub fn parse_assembler_control_max_passes_number(
     Ok(LocatedTokenInner::AssemblerControl(
         LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment {
             passes: Some(count),
-            lst: inner
+            lst: Box::new(inner)
         }
     )
     .into_located_token_between(&asmctrl_start, *input))
@@ -3344,7 +3337,7 @@ directive_with_expr!(parse_return, Return);
 mod tests {
 
     use super::*;
-    use crate::parser::parser::test::parse_test;
+    use crate::parser::dispatch::test::parse_test;
 
     #[test]
     fn test_parse_assert_cases() {

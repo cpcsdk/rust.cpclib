@@ -1,4 +1,4 @@
-/// This file is a copy/pasted version of https://crates.io/crates/line-col with some modifications to compile with this project
+//! This file is a copy/pasted version of https://crates.io/crates/line-col with some modifications to compile with this project
 
 /// Pre-cached line/column lookup table for a string slice.
 #[derive(Debug, Clone)]
@@ -15,7 +15,7 @@ impl<'source> LineColLookup<'source> {
         let line_heads: Vec<usize> = std::iter::once(0)
             .chain(
                 src.char_indices()
-                    .filter_map(|(i, c)| Some(i + 1).filter(|_| c == '\n'))
+                    .filter_map(|(i, c)| (c == '\n').then_some(i + 1))
             )
             .collect();
 

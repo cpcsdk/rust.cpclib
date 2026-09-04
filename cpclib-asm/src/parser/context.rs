@@ -4,6 +4,8 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
 
+use fs_err::PathExt;
+
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::winnow::BStr;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
@@ -278,13 +280,13 @@ impl ParserOptions {
 
         if path.is_dir() {
             #[cfg(not(target_arch = "wasm32"))]
-            let path = path.canonicalize().unwrap();
+            let path = path.fs_err_canonicalize().unwrap();
 
             // manual fix for for windows. No idea why
             let path = path.to_str().unwrap();
             const PREFIX: &str = "\\\\?\\";
-            let path = if path.starts_with(PREFIX) {
-                path[PREFIX.len()..].to_string()
+            let path = if let Some(stripped) = path.strip_prefix(PREFIX) {
+                stripped.to_string()
             }
             else {
                 path.to_string()
@@ -310,7 +312,7 @@ impl ParserOptions {
         file: P
     ) -> Result<(), AssemblerError> {
         let file = file.into();
-        let path = file.canonicalize();
+        let path = file.fs_err_canonicalize();
 
         match path {
             Ok(path) => {
@@ -408,7 +410,7 @@ impl ParserOptions {
         {
             let current_path = search.join(fname);
             if current_path.is_file() {
-                return Ok(current_path.try_into().unwrap());
+                return Ok(current_path);
             }
             else {
                 does_not_exists.push(current_path.to_string());
@@ -678,7 +680,7 @@ impl ParserContext {
 
     #[inline]
     pub fn complete_source(&self) -> &str {
-        unsafe { std::mem::transmute(self.source.deref()) }
+        unsafe { std::str::from_utf8_unchecked(self.source.deref()) }
     }
 
     #[inline(always)]

@@ -761,8 +761,8 @@ impl HardCodedFunction {
             HardCodedFunction::Assemble => assemble(params[0].as_ref().clone(), env),
             HardCodedFunction::StringConcat => {
                 let mut base = params[0].as_ref().clone();
-                for i in 1..params.len() {
-                    base = string_push(base, params[i].as_ref().clone())?
+                for param in &params[1..] {
+                    base = string_push(base, param.as_ref().clone())?
                 }
                 Ok(base)
             },
@@ -922,6 +922,7 @@ impl HardCodedFunction {
 }
 
 impl Function {
+    /// # Safety
     /// Be sure the function lives shorter than inner
     pub unsafe fn new_located<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
@@ -935,12 +936,17 @@ impl Function {
                 )));
             }
 
-            let inner = std::mem::transmute(inner);
+            let inner = std::mem::transmute::<
+                Vec<ProcessedToken<'_, LocatedToken>>,
+                Vec<ProcessedToken<'static, LocatedToken>>
+            >(inner);
 
             Ok(Function::Located(AnyFunction::new(name, args, inner)))
         }
     }
 
+    /// # Safety
+    /// Be sure the function lives shorter than inner
     pub unsafe fn new_standard<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
@@ -953,13 +959,14 @@ impl Function {
                 )));
             }
 
-            let inner = std::mem::transmute(inner);
+            let inner = std::mem::transmute::<
+                Vec<ProcessedToken<'_, Token>>,
+                Vec<ProcessedToken<'static, Token>>
+            >(inner);
 
             Ok(Function::Standard(AnyFunction::new(name, args, inner)))
         }
     }
-
-    /// Be sure the function lives shorter than inner
 
     pub fn eval<E: AsRef<ExprResult>+Clone>(
         &self,
@@ -975,7 +982,9 @@ impl Function {
 }
 
 pub trait FunctionBuilder {
-    unsafe fn new<S1: AsRef<str>, S2: Borrow<str>>(
+    /// # Safety
+    /// Same lifetime contract as `Function::new_located`/`Function::new_standard`.
+    unsafe fn build<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
         inner: Vec<Self>
@@ -985,7 +994,7 @@ pub trait FunctionBuilder {
 }
 
 impl FunctionBuilder for ProcessedToken<'_, LocatedToken> {
-    unsafe fn new<S1: AsRef<str>, S2: Borrow<str>>(
+    unsafe fn build<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
         inner: Vec<Self>
@@ -998,7 +1007,7 @@ impl FunctionBuilder for ProcessedToken<'_, LocatedToken> {
 }
 
 impl FunctionBuilder for ProcessedToken<'_, Token> {
-    unsafe fn new<S1: AsRef<str>, S2: Borrow<str>>(
+    unsafe fn build<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
         inner: Vec<Self>

@@ -1318,7 +1318,7 @@ where
                             let inner =
                                 build_processed_tokens_list(inner, Arc::new(RwLock::new(env)))?;
                             let f =
-                                Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
+                                Arc::new(unsafe { FunctionBuilder::build(&name, &params, inner) }?);
                             option.replace(f.clone());
 
                             env.functions.insert(name.to_owned(), f);

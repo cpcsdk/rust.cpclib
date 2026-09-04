@@ -2,7 +2,7 @@ use cpclib_asm::located_expr;
 use cpclib_asm::parser::InnerZ80Span;
 use cpclib_asm::parser::expression::{parse_factor, prefixed_label_expr};
 use cpclib_asm::parser::obtained::LocatedExpr;
-use cpclib_asm::parser::parser::ctx_and_span;
+use cpclib_asm::parser::dispatch::ctx_and_span;
 use cpclib_asm::parser::source::SourceString;
 
 #[test]

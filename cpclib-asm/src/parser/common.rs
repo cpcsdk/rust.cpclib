@@ -27,7 +27,7 @@ pub use super::registers::{
 };
 use super::*;
 use crate::hashed_choice;
-use crate::parser::parser::{DOTTED_END_DIRECTIVE, END_DIRECTIVE};
+use crate::parser::dispatch::{DOTTED_END_DIRECTIVE, END_DIRECTIVE};
 use crate::preamble::*;
 
 // Compile-time, case-insensitive FNV-1a hash for ASCII
@@ -341,10 +341,10 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
     builder: ParserContextBuilder
 ) -> Result<LocatedListing, AssemblerError> {
     LocatedListing::new_complete_source(str, builder)
-        .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)))
+        .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(*l)))
 }
 
-/// TODO better to build parse_z80_with_options from parse_z80_span than the opposite
+// TODO better to build parse_z80_with_options from parse_z80_span than the opposite
 // pub fn parse_z80_span(span: InnerZ80Span) -> Result<LocatedListing, AssemblerError> {
 //    let ctx = span.extra.clone();
 //    parse_z80_with_options(span.as_str(), ctx)

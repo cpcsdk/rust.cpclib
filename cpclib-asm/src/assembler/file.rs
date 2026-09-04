@@ -125,10 +125,7 @@ impl<'fname> AnyFileName<'fname> {
     }
 
     pub fn use_image(&self) -> bool {
-        match self {
-            AnyFileName::InImage { .. } => true,
-            _ => false
-        }
+        matches!(self, AnyFileName::InImage { .. })
     }
 
     pub fn image_filename(&self) -> Option<&str> {

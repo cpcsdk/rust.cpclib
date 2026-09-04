@@ -205,7 +205,7 @@ pub enum AssemblerError {
     //#[fail(display = "Parser bug: {}. Context: {:?}", error, context)]
     BugInParser {
         error: String,
-        context: ParserContext
+        context: Box<ParserContext>
     },
 
     // TODO add more information

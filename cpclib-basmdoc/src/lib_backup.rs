@@ -1570,7 +1570,7 @@ fn highlight_z80_syntax(source: &str) -> String {
         };
         
         static ref DIRECTIVES_REGEX: regex::Regex = {
-            use cpclib_asm::parser::parser::*;
+            use cpclib_asm::parser::dispatch::*;
             // SAFETY: Directive constants are guaranteed to be valid UTF-8 by cpclib_asm
             let directives = STAND_ALONE_DIRECTIVE.iter()
                 .chain(START_DIRECTIVE.iter())

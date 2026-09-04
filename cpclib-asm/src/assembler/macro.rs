@@ -11,6 +11,10 @@ use crate::parser::context::ExpansionColumnMap;
 use crate::error::AssemblerError;
 use crate::preamble::{Z80ParserError, Z80Span};
 
+/// Per-argument expansion of a macro call, resolved lazily - see
+/// `MacroWithArgs::resolve_referenced_args`.
+type ExpandedMacroArgs<'s> = Vec<Option<beef::lean::Cow<'s, str>>>;
+
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
     /// Returns a string version of the element after expansion
@@ -178,8 +182,8 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     pub(crate) fn resolve_referenced_args<'s>(
         &'s self,
         env: &mut Env
-    ) -> Result<(Vec<Option<beef::lean::Cow<'s, str>>>, usize), Box<AssemblerError>> {
-        let mut expanded_args: Vec<Option<beef::lean::Cow<'_, str>>> = vec![None; self.args.len()];
+    ) -> Result<(ExpandedMacroArgs<'s>, usize), Box<AssemblerError>> {
+        let mut expanded_args: ExpandedMacroArgs<'_> = vec![None; self.args.len()];
         let arg_count = self.args.len().to_string();
 
         // First pass: expand all arguments and calculate exact capacity.
@@ -261,7 +265,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     /// substitution moved the text around it. See [`ExpansionColumnMap`].
     pub(crate) fn finish_expand_for_basm(
         &self,
-        expanded_args: Vec<Option<beef::lean::Cow<'_, str>>>,
+        expanded_args: ExpandedMacroArgs<'_>,
         capacity: usize
     ) -> Result<(String, ExpansionColumnMap), Box<AssemblerError>> {
         let listing = self.r#macro.code();
