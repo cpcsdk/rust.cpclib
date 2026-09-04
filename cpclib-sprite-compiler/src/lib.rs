@@ -116,8 +116,7 @@ impl RegistersStore {
 
 #[derive(Builder)]
 //#[builder(start_fn = with_header)]
-#[builder(on(String, into))]
-#[builder(on(SmolStr, into))]
+#[builder(on(String, into), on(SmolStr, into))]
 pub struct Compiler {
     //  #[builder(start_fn)]
     header_comment: Option<String>,

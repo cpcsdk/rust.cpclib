@@ -391,6 +391,6 @@ pub fn balance_branches<T: ListingElement>(
     }
     let postdom = compute_postdominators(&cfg);
     let mut edits = balance(&cfg, &postdom, tokens, &labels, &cost)?;
-    edits.sort_unstable_by(|a, b| b.anchor_index().cmp(&a.anchor_index()));
+    edits.sort_unstable_by_key(|a| std::cmp::Reverse(a.anchor_index()));
     Ok(edits)
 }

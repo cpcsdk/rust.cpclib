@@ -86,16 +86,18 @@ pub enum Usage {
 /// as any other loss of certainty.
 const MAX_STATES: usize = 20_000;
 
+/// Return addresses of the calls currently entered. `None` means the stack
+/// is no longer trustworthy (something modified `SP` in a way this analysis
+/// does not model), so any `RET` from here is unknowable.
+type CallStack = Option<Vec<usize>>;
+
 /// One node of the search: where we are, what is still live, and how we got
 /// here.
 #[derive(Debug, Clone)]
 struct State {
     position: usize,
     dependency: Dependency,
-    /// Return addresses of the calls currently entered. `None` means the
-    /// stack is no longer trustworthy (something modified `SP` in a way this
-    /// analysis does not model), so any `RET` from here is unknowable.
-    call_stack: Option<Vec<usize>>
+    call_stack: CallStack
 }
 
 /// Walk forward from `start` and report whether `dependency` is ever read.
@@ -143,7 +145,7 @@ where
     // position, holding every distinct (dependency, stack) seen there - the
     // same shape upstream uses, and the reason a loop whose body narrows the
     // dependency differently is still explored rather than skipped.
-    let mut seen: HashMap<usize, Vec<(Dependency, Option<Vec<usize>>)>> = HashMap::new();
+    let mut seen: HashMap<usize, Vec<(Dependency, CallStack)>> = HashMap::new();
     let mut expanded = 0usize;
     let mut witness: Option<usize> = None;
 
@@ -268,8 +270,8 @@ fn successors_of<T>(
     ops: &[AnalysisOp<'_, T>],
     labels: &HashMap<String, usize>,
     position: usize,
-    call_stack: &Option<Vec<usize>>
-) -> Option<Vec<(usize, Option<Vec<usize>>)>>
+    call_stack: &CallStack
+) -> Option<Vec<(usize, CallStack)>>
 where
     T: ListingElement,
     T::DataAccess: DataAccessElem

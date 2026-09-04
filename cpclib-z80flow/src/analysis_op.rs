@@ -73,7 +73,10 @@ pub enum AnalysisOp<'t, T> {
         /// fields would silently drop, and a whole token stays correct if the
         /// shape ever grows again. `Token: ListingElement` too, so the
         /// accessors below are literally the same calls for both variants.
-        op: Token
+        /// Boxed: `Token` is large enough that an unboxed copy here made
+        /// every `AnalysisOp` pay for it regardless of which variant was
+        /// actually active.
+        op: Box<Token>
     },
 
     /// A token that isn't an instruction: a label (a jump target), a data
@@ -280,7 +283,7 @@ mod tests {
             origin: &origin,
             step: 0,
             total: 3,
-            op: opcode(Mnemonic::ExHlDe, None, None, None)
+            op: Box::new(opcode(Mnemonic::ExHlDe, None, None, None))
         };
 
         assert_eq!(op.mnemonic(), Some(Mnemonic::ExHlDe));
@@ -314,7 +317,7 @@ mod tests {
             origin: &other,
             step: 0,
             total: 1,
-            op: token.clone()
+            op: Box::new(token.clone())
         };
         assert_eq!(expanded.arg3(), Some(Register8::B));
     }
@@ -345,7 +348,7 @@ mod tests {
             origin: &origin,
             step: 0,
             total: 1,
-            op: nop.clone()
+            op: Box::new(nop.clone())
         };
         assert_eq!(expanded.classify(), OpClass::Executes);
 

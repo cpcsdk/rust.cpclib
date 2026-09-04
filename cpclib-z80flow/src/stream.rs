@@ -61,7 +61,7 @@ where
                             origin: token,
                             step,
                             total,
-                            op
+                            op: Box::new(op)
                         });
                     }
                 }

@@ -110,7 +110,7 @@ pub struct Register16 {
 
 impl Debug for Register16 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?}, {:?})", &self.high, &self.low)
+        write!(f, "({:?}, {:?})", self.high, self.low)
     }
 }
 

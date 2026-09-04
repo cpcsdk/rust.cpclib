@@ -784,6 +784,12 @@ pub fn parse_csl_script<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
 }
 
 /// Parse a CSL script from a string with enhanced error reporting
+// `CslError` deliberately carries the full source text plus filename/span/
+// notes for rich diagnostics - its size is the point, not an oversight.
+// Boxing it would ripple into ~30 call sites across this crate's tests, an
+// example, and cpclib-cslcli, for no real benefit given how this function
+// is actually used (the error is inspected/printed, not held long-term).
+#[allow(clippy::result_large_err)]
 pub fn parse_csl_with_rich_errors(
     input: &str,
     filename: Option<String>

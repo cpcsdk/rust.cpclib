@@ -735,6 +735,11 @@ impl StringTable {
         self.strings.len()
     }
 
+    /// Whether the table has no label strings at all.
+    pub fn is_empty(&self) -> bool {
+        self.strings.is_empty()
+    }
+
     /// Iterates over every label string, in table order (i.e. in short-index order, followed by
     /// long-index order).
     pub fn iter(&self) -> impl Iterator<Item = &Bit7OnString> {
@@ -1078,8 +1083,7 @@ pub struct Assign {
 impl Assign {
     /// Re-encodes this assignment back to its original binary representation.
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.push(MARKER_ASSIGN);
+        let bytes = vec![MARKER_ASSIGN];
 
         bytes
             .into_iter()
@@ -1267,9 +1271,10 @@ impl MacroDef {
             bytes.push(self.def_block_len);
             bytes.extend_from_slice(&content);
             // Fill gap. END_MARKER was the observed separator.
-            for _ in 0..(self.def_block_len - computed_len) {
-                bytes.push(END_MARKER);
-            }
+            bytes.extend(std::iter::repeat_n(
+                END_MARKER,
+                (self.def_block_len - computed_len) as usize
+            ));
         }
         else {
             bytes.push(computed_len);
