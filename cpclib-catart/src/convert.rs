@@ -67,13 +67,10 @@ fn consume_comma(iter: &mut Vec<(u16, &BasicToken)>) -> Result<(), CatArtError> 
             },
             BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma) => {
                 // found comma, consume optional spaces after
-                loop {
-                    match iter.last() {
-                        Some((_, BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace))) => {
-                            iter.pop();
-                        },
-                        _ => break
-                    }
+                while let Some((_, BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace))) =
+                    iter.last()
+                {
+                    iter.pop();
                 }
                 return Ok(());
             },
@@ -141,9 +138,12 @@ fn consume_window_arguments(
 }
 
 /// Consume SYMBOL arguments: character code followed by 8 row bytes
+/// A `SYMBOL` command's arguments: character code followed by its 8 row bytes.
+type SymbolArguments = (u8, [u8; 8]);
+
 fn consume_symbol_arguments(
     iter: &mut Vec<(u16, &BasicToken)>
-) -> Result<(u8, u8, u8, u8, u8, u8, u8, u8, u8), CatArtError> {
+) -> Result<SymbolArguments, CatArtError> {
     let char_code = consume_integer_argument(iter)?;
     consume_comma(iter)?;
     let r1 = consume_integer_argument(iter)?;
@@ -161,7 +161,7 @@ fn consume_symbol_arguments(
     let r7 = consume_integer_argument(iter)?;
     consume_comma(iter)?;
     let r8 = consume_integer_argument(iter)?;
-    Ok((char_code, r1, r2, r3, r4, r5, r6, r7, r8))
+    Ok((char_code, [r1, r2, r3, r4, r5, r6, r7, r8]))
 }
 
 /// Consume optional spaces
@@ -186,14 +186,13 @@ fn consume_print_statement(
 
     // Check if empty print (just PRINT)
     consume_spaces(iter);
-    if let Some((_, token)) = iter.last() {
-        match token {
-            BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)
-            | BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator) => {
-                return Ok((PrintArgument::Composite(args), PrintTerminator::CrLf));
-            },
-            _ => {}
-        }
+    if let Some((
+        _,
+        BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)
+        | BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator)
+    )) = iter.last()
+    {
+        return Ok((PrintArgument::Composite(args), PrintTerminator::CrLf));
     }
 
     loop {
@@ -387,11 +386,8 @@ pub fn basic_to_commands<'b>(basic: &'b BasicProgram) -> Result<BasicCommandList
             // bytes, which CatArt ignores) - the caller decides whether to
             // warn about it.
             BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol) => {
-                let (char_code, r1, r2, r3, r4, r5, r6, r7, r8) =
-                    consume_symbol_arguments(&mut line_token_pairs)?;
-                commands.push(BasicCommand::symbol(
-                    char_code, r1, r2, r3, r4, r5, r6, r7, r8
-                ));
+                let (char_code, rows) = consume_symbol_arguments(&mut line_token_pairs)?;
+                commands.push(BasicCommand::symbol(char_code, rows));
             },
             // Skip statement separators, end-of-line markers, spaces, and colon (:) separators
             BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)
@@ -509,7 +505,7 @@ mod test {
         let result = basic_to_commands(&basic).expect("Conversion failed");
         assert_eq!(
             result,
-            vec![BasicCommand::symbol(65, 1, 2, 3, 4, 5, 6, 7, 8)].into()
+            vec![BasicCommand::symbol(65, [1, 2, 3, 4, 5, 6, 7, 8])].into()
         );
     }
 }

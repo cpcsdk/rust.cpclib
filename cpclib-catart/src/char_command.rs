@@ -376,6 +376,12 @@ impl CharCommand {
         self.bytes().len()
     }
 
+    /// Whether this command encodes to zero bytes (never true in practice: every command
+    /// encodes at least its own control code).
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// The first encoded byte of this command (its control code, or the character itself for [`CharCommand::Char`]).
     ///
     /// # Panics

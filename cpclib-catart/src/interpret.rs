@@ -13,6 +13,12 @@ pub struct Cursor {
     pub visible: bool
 }
 
+impl Default for Cursor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cursor {
     /// Create a cursor at the top-left corner (1, 1), visible.
     pub fn new() -> Self {
@@ -288,10 +294,10 @@ impl BasicMemoryScreen {
     /// Convert a bitmap line (8 bits) to an array of Pens based on pen/paper colors
     fn bitmap_to_pens(bitmap_line: u8, pen: Pen, paper: Pen) -> [Pen; 8] {
         let mut pens = [paper; 8];
-        for bit_idx in 0..8 {
+        for (bit_idx, slot) in pens.iter_mut().enumerate() {
             let mask = 1 << (7 - bit_idx);
             if (bitmap_line & mask) != 0 {
-                pens[bit_idx] = pen;
+                *slot = pen;
             }
         }
         pens

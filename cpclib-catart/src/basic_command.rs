@@ -315,18 +315,9 @@ impl BasicCommand {
         BasicCommand::PrintString(LF.into(), PrintTerminator::None)
     }
 
-    /// Create a SYMBOL command
-    pub fn symbol(
-        char_code: u8,
-        r1: u8,
-        r2: u8,
-        r3: u8,
-        r4: u8,
-        r5: u8,
-        r6: u8,
-        r7: u8,
-        r8: u8
-    ) -> Self {
+    /// Create a SYMBOL command from a character code and its 8 row bytes
+    pub fn symbol(char_code: u8, rows: [u8; 8]) -> Self {
+        let [r1, r2, r3, r4, r5, r6, r7, r8] = rows;
         BasicCommand::Symbol(char_code, r1, r2, r3, r4, r5, r6, r7, r8)
     }
 
@@ -350,7 +341,6 @@ impl BasicCommandList {
 
 impl BasicCommand {
     /// Convert the command to a sequence of control codes and bytes for the CPC
-
     pub fn bytes(&self) -> Vec<u8> {
         match self.to_char_commands() {
             Ok(cmds) => {
@@ -468,7 +458,6 @@ impl Display for BasicCommand {
 
 impl BasicCommandList {
     /// Convert all commands in the list to a sequence of bytes
-
     pub fn bytes(&self) -> Vec<u8> {
         self.0.iter().flat_map(|cmd| cmd.bytes()).collect()
     }

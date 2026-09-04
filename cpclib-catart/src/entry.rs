@@ -549,13 +549,13 @@ impl PrintableEntry {
 
         while remaining_size > 0 {
             let mut sectors = [0u8; 16];
-            for i in 0..16 {
+            for sector in &mut sectors {
                 if remaining_size > 0 {
-                    sectors[i] = 1; // allocate one sector
+                    *sector = 1; // allocate one sector
                     remaining_size -= 1;
                 }
                 else {
-                    sectors[i] = 0; // no more sectors needed
+                    *sector = 0; // no more sectors needed
                 }
             }
             entry.sectors = sectors;
@@ -725,6 +725,11 @@ impl<'cat> EntriesGrid<'cat> {
     /// Get the total number of entries in the grid (always <= 64)
     pub fn len(&self) -> usize {
         self.columns.iter().map(|col| col.len()).sum()
+    }
+
+    /// Whether the grid has no entries at all
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Get the number of rows (maximum height of any column)
@@ -915,17 +920,8 @@ impl PrintableEntryFileName {
     /// sets the screen mode (`f1` = EOT, `f2` = mode) and packs 7 further command/character
     /// bytes (`cmd1..cmd7`) into the remaining slots, honoring `dot_hiding` for the
     /// filename/extension boundary.
-    pub fn unsorted_heterogeneous_first(
-        dot_hiding: DotHiding,
-        mode: u8,
-        cmd1: u8,
-        cmd2: u8,
-        cmd3: u8,
-        cmd4: u8,
-        cmd5: u8,
-        cmd6: u8,
-        cmd7: u8
-    ) -> Self {
+    pub fn unsorted_heterogeneous_first(dot_hiding: DotHiding, mode: u8, cmds: [u8; 7]) -> Self {
+        let [cmd1, cmd2, cmd3, cmd4, cmd5, cmd6, cmd7] = cmds;
         let (f8, e1) = Self::handle_dot_hiding(dot_hiding, cmd6);
         PrintableEntryFileName {
             f1: EOT, // Set mode; 4 is supposed to be printed first
@@ -951,12 +947,9 @@ impl PrintableEntryFileName {
         dot_hiding: DotHiding,
         x: u8,
         y: u8,
-        char1: u8,
-        char2: u8,
-        char3: u8,
-        char4: u8,
-        char5: u8
+        chars: [u8; 5]
     ) -> Self {
+        let [char1, char2, char3, char4, char5] = chars;
         let (f8, e1) = Self::handle_dot_hiding(dot_hiding, char4);
         PrintableEntryFileName {
             f1: ACK, // Enable VDU
@@ -1034,17 +1027,8 @@ impl PrintableEntryFileName {
     /// AA 06 -- -- -- -- -- 17 (point) -- -- 15
     ///
     /// Le premier octet AA sera en fait l'index de l'entrée. Cet index ne sera pas affiché s'il est précédé d'une ligne identique à celle-ci. L'index sera suivi de &06 pour autoriser l'affichage des octets suivants. Le &17 (négociable selon les cas de figures avec d'autres bidouilles) sert à éviter l'affichage du point par le système. Il reste encore 2 octets affichés, et enfin l'octet &15 qui interdit l'affichage par le système des informations de taille de fichier et de ce précieux octet d'index qui commencera l'entrée suivante.
-    pub fn sequential_basic(
-        dot_hiding: DotHiding,
-        index: u8,
-        char1: u8,
-        char2: u8,
-        char3: u8,
-        char4: u8,
-        char5: u8,
-        char6: u8,
-        char7: u8
-    ) -> Self {
+    pub fn sequential_basic(dot_hiding: DotHiding, index: u8, chars: [u8; 7]) -> Self {
+        let [char1, char2, char3, char4, char5, char6, char7] = chars;
         assert!(
             index > 4,
             "Index must be greater than 4 for sequential basic entries"
@@ -1070,16 +1054,8 @@ impl PrintableEntryFileName {
     /// 04 xx -- -- -- -- -- 17 (point) -- -- 15
     ///
     /// Si on est certain que &04 est le plus petit chiffre du CAT, afin qu'il soit au début (il est souvent utile de commencer par choisir un mode).
-    pub fn sequential_first_with_mode(
-        dot_hiding: DotHiding,
-        mode: u8,
-        char1: u8,
-        char2: u8,
-        char3: u8,
-        char4: u8,
-        char5: u8,
-        char6: u8
-    ) -> Self {
+    pub fn sequential_first_with_mode(dot_hiding: DotHiding, mode: u8, chars: [u8; 6]) -> Self {
+        let [char1, char2, char3, char4, char5, char6] = chars;
         let (f8, e1) = Self::handle_dot_hiding(dot_hiding, char5);
         PrintableEntryFileName {
             f1: b' ',  // Index
@@ -1099,17 +1075,8 @@ impl PrintableEntryFileName {
     /// Si on ne souhaite pas changer le mode, le &00 n'affichera rien, et l'entrée aura un octet libéré :
     ///
     /// 00 -- -- -- -- -- -- 17 (point) -- -- 15
-    pub fn sequential_first_without_mode(
-        dot_hiding: DotHiding,
-        char1: u8,
-        char2: u8,
-        char3: u8,
-        char4: u8,
-        char5: u8,
-        char6: u8,
-        char7: u8,
-        char8: u8
-    ) -> Self {
+    pub fn sequential_first_without_mode(dot_hiding: DotHiding, chars: [u8; 8]) -> Self {
+        let [char1, char2, char3, char4, char5, char6, char7, char8] = chars;
         let (f8, e1) = Self::handle_dot_hiding(dot_hiding, char7);
         PrintableEntryFileName {
             f1: 0,     // Displays nothing, frees one byte
@@ -1312,11 +1279,11 @@ impl UnifiedCatalog {
                 // but entries are already sorted alphabetically
                 let max_height = entries.len().div_ceil(num_columns); // ceil division
                 let mut entries_iter = entries.into_iter();
-                for col in 0..num_columns {
+                for column in columns.iter_mut().take(num_columns) {
                     for _ in 0..max_height {
                         if let Some(entry) = entries_iter.next() {
                             assert!(!entry.is_system());
-                            columns[col].push(Cow::Borrowed(entry));
+                            column.push(Cow::Borrowed(entry));
                         }
                     }
                 }
@@ -1478,10 +1445,7 @@ impl EntryConstraintItem {
     /// True if the command's control-code byte itself is implied by the slot kind and should
     /// not be included when packing this slot's bytes into the entry (only `Any` slots keep it).
     pub fn skip_first_byte(&self) -> bool {
-        match self {
-            EntryConstraintItem::Any(_) => false,
-            _ => true
-        }
+        !matches!(self, EntryConstraintItem::Any(_))
     }
 }
 /// The ordered sequence of [`EntryConstraintItem`] slots that the commands packed into one
@@ -1587,10 +1551,7 @@ impl EntryKind {
     /// True only for [`EntryKind::SequentialFirstWithMode`], the sole kind whose first packed
     /// command must be a `Mode` command.
     pub fn requires_mode_as_first_command(&self) -> bool {
-        match self {
-            EntryKind::SequentialFirstWithMode(_) => true,
-            _ => false
-        }
+        matches!(self, EntryKind::SequentialFirstWithMode(_))
     }
 
     /// Generate the bytes for the command.
@@ -1663,38 +1624,20 @@ impl EntryKind {
                 PrintableEntryFileName::sequential_first_with_mode(
                     *dot_hiding,
                     args[0],
-                    args[1],
-                    args[2],
-                    args[3],
-                    args[4],
-                    args[5],
-                    args[6]
+                    args[1..7].try_into().unwrap()
                 )
             },
             EntryKind::SequentialFirstWithoutMode(dot_hiding) => {
                 PrintableEntryFileName::sequential_first_without_mode(
                     *dot_hiding,
-                    args[0],
-                    args[1],
-                    args[2],
-                    args[3],
-                    args[4],
-                    args[5],
-                    args[6],
-                    args[7]
+                    args[0..8].try_into().unwrap()
                 )
             },
             EntryKind::SequentialBasic(dot_hiding) => {
                 PrintableEntryFileName::sequential_basic(
                     *dot_hiding,
                     index.unwrap(),
-                    args[0],
-                    args[1],
-                    args[2],
-                    args[3],
-                    args[4],
-                    args[5],
-                    args[6]
+                    args[0..7].try_into().unwrap()
                 )
             },
             EntryKind::UnsortedHomogeneous(dot_hiding) => {
@@ -1712,13 +1655,7 @@ impl EntryKind {
                 PrintableEntryFileName::unsorted_heterogeneous_first(
                     *dot_hiding,
                     args[0],
-                    args[1],
-                    args[2],
-                    args[3],
-                    args[4],
-                    args[5],
-                    args[6],
-                    args[7]
+                    args[1..8].try_into().unwrap()
                 )
             },
             EntryKind::UnsortedHeterogeneousBaseColor(dot_hiding) => {
@@ -1726,11 +1663,7 @@ impl EntryKind {
                     *dot_hiding,
                     args[0],
                     args[1],
-                    args[2],
-                    args[3],
-                    args[4],
-                    args[5],
-                    args[6]
+                    args[2..7].try_into().unwrap()
                 )
             },
             EntryKind::UnsortedHeterogeneousAdditionalColor(dot_hiding) => {
@@ -1832,6 +1765,7 @@ impl EntryKind {
 }
 
 /// Serial catalog builder. Only works with CAT
+#[derive(Default)]
 pub struct SerialCatalogBuilder {}
 
 impl SerialCatalogBuilder {
