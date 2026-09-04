@@ -1012,10 +1012,10 @@ impl Expr {
     // }
     // }
 
-    pub fn do_apply_macro_labels_modification(s: &mut std::string::String, seed: usize) {
+    pub fn do_apply_macro_labels_modification(s: &mut Box<str>, seed: usize) {
         assert!(!s.is_empty());
         if s.starts_with('@') {
-            let mut new = format!("__macro__{seed}__{s}");
+            let mut new: Box<str> = format!("__macro__{seed}__{s}").into();
             std::mem::swap(&mut new, s);
         }
     }

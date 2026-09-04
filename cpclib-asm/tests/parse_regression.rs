@@ -197,7 +197,7 @@ fn macro_args_single() {
 
     assert_eq!(
         arg.to_macro_param(),
-        MacroParam::RawArgument("1".to_string())
+        MacroParam::RawArgument("1".into())
     )
 }
 
@@ -209,7 +209,7 @@ fn macro_args_list_1() {
 
     assert_eq!(
         arg.to_macro_param(),
-        MacroParam::List(vec![Box::new(MacroParam::RawArgument("1".to_string()))])
+        MacroParam::List(vec![Box::new(MacroParam::RawArgument("1".into()))])
     )
 }
 
@@ -222,8 +222,8 @@ fn macro_args_list_2() {
     assert_eq!(
         arg.to_macro_param(),
         MacroParam::List(vec![
-            Box::new(MacroParam::RawArgument("1".to_string())),
-            Box::new(MacroParam::RawArgument("3".to_string())),
+            Box::new(MacroParam::RawArgument("1".into())),
+            Box::new(MacroParam::RawArgument("3".into())),
         ])
     )
 }
@@ -237,9 +237,9 @@ fn macro_args_list_3() {
     assert_eq!(
         arg.to_macro_param(),
         MacroParam::List(vec![
-            Box::new(MacroParam::RawArgument("1".to_string())),
-            Box::new(MacroParam::RawArgument("".to_string())),
-            Box::new(MacroParam::RawArgument("3".to_string())),
+            Box::new(MacroParam::RawArgument("1".into())),
+            Box::new(MacroParam::RawArgument("".into())),
+            Box::new(MacroParam::RawArgument("3".into())),
         ])
     )
 }

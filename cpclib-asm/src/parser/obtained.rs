@@ -776,11 +776,11 @@ impl LocatedMacroParam {
             },
 
             LocatedMacroParam::RawArgument(_) | LocatedMacroParam::Empty => {
-                MacroParam::RawArgument(self.single_argument().to_string())
+                MacroParam::RawArgument(self.single_argument().as_ref().into())
             },
 
             LocatedMacroParam::EvaluatedArgument(_) => {
-                MacroParam::EvaluatedArgument(self.single_argument().to_string())
+                MacroParam::EvaluatedArgument(self.single_argument().as_ref().into())
             },
         }
     }

@@ -20,8 +20,8 @@ use crate::{Listing, Register8};
 /// However, it can be a list of parameters to allows nested structs
 pub enum MacroParam {
     /// Standard argument
-    RawArgument(String),
-    EvaluatedArgument(String),
+    RawArgument(Box<str>),
+    EvaluatedArgument(Box<str>),
     /// A list of argument that will be provided in a nested macro call
     List(Vec<Box<MacroParam>>)
 }
@@ -63,7 +63,7 @@ impl MacroParamElement for MacroParam {
     }
 
     fn empty() -> Self {
-        Self::RawArgument("".to_owned())
+        Self::RawArgument("".into())
     }
 
     fn is_single(&self) -> bool {
