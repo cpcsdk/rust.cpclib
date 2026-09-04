@@ -3460,7 +3460,7 @@ impl Env {
             let section = section.read().unwrap();
             if start != section.start
                 || stop != section.stop
-                || name.as_str() != section.name
+                || name.as_str() != section.name.as_ref()
                 || mmr != section.mmr
             {
                 return Err(Box::new(AssemblerError::AssemblingError {

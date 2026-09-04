@@ -3,7 +3,7 @@ use crate::{AssemblerError, Env, ExprResult};
 #[derive(Clone, Debug)]
 pub struct Section {
     /// Name of the section
-    pub(crate) name: String,
+    pub(crate) name: Box<str>,
     /// Start address of the section
     pub(crate) start: u16,
     /// Last (included) address of the section
@@ -20,7 +20,7 @@ impl Section {
     pub(crate) fn new(name: &str, start: u16, stop: u16, mmr: u8) -> Self {
         Section {
             mmr,
-            name: name.to_owned(),
+            name: name.into(),
             start,
             stop,
 
