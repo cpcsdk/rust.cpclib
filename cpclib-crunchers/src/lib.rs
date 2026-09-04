@@ -19,9 +19,9 @@ pub mod lz4;
 #[cfg(all(feature = "pucrunch", not(target_arch = "wasm32")))]
 pub mod pucrunch;
 
-#[cfg(all(feature = "lz48"))]
+#[cfg(feature = "lz48")]
 pub mod lz48;
-#[cfg(all(feature = "lz49"))]
+#[cfg(feature = "lz49")]
 pub mod lz49;
 #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
 pub mod zx0;
@@ -47,11 +47,11 @@ pub enum CompressMethod {
     Exomizer,
     #[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
     Lz4,
-    #[cfg(all(feature = "lz48"))]
+    #[cfg(feature = "lz48")]
     Lz48,
-    #[cfg(all(feature = "lz49"))]
+    #[cfg(feature = "lz49")]
     Lz49,
-    #[cfg(all(feature = "lzsa"))]
+    #[cfg(feature = "lzsa")]
     Lzsa(LzsaVersion, Option<LzsaMinMatch>),
     #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
     Shrinkler(ShrinklerConfiguration),
@@ -133,11 +133,11 @@ impl CompressMethod {
             CompressMethod::Exomizer => Ok(exomizer::compress(data).into()),
             #[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
             CompressMethod::Lz4 => Ok(lz4::compress(data).into()),
-            #[cfg(all(feature = "lz48"))]
+            #[cfg(feature = "lz48")]
             CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data).into()),
-            #[cfg(all(feature = "lz49"))]
+            #[cfg(feature = "lz49")]
             CompressMethod::Lz49 => Ok(lz49_encode_legacy(data).into()),
-            #[cfg(all(feature = "lzsa"))]
+            #[cfg(feature = "lzsa")]
             CompressMethod::Lzsa(version, minmatch) => {
                 lzsa::compress(data, *version, *minmatch)
                     .map(|r| r.into())
