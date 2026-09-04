@@ -4428,13 +4428,23 @@ impl Env {
         name: &'res str,
         params: &[E]
     ) -> Result<ExprResult, Box<AssemblerError>> {
-        let f = match HardCodedFunction::by_name(name) {
-            Some(f) => Ok(f),
-            None => self.user_defined_function(name)
-        }?;
+        // Hard-coded functions are `'static`, so no borrow of `self` to
+        // release before calling `.eval(self, ...)`.
+        if let Some(f) = HardCodedFunction::by_name(name) {
+            return f.eval(self, params);
+        }
 
-        let f: *const Function = f as *const _; // XXX remove the link with environment
-        unsafe { (*f).eval(self, params) }
+        // User-defined functions live in `self.functions`; cloning the
+        // `Arc` (a cheap refcount bump, not `Function::clone()` which
+        // panics via `todo!()` for some variants) releases the borrow of
+        // `self` before the `&mut self` needed by `.eval()` below.
+        let f = self
+            .functions
+            .get(name)
+            .cloned()
+            .ok_or_else(|| Box::new(AssemblerError::FunctionUnknown(name.to_owned())))?;
+
+        f.eval(self, params)
     }
 }
 
@@ -4712,9 +4722,6 @@ impl Env {
         outer_token: &LocatedToken
     ) -> Result<(), Box<AssemblerError>> {
         let nb_warnings = self.warnings.len();
-
-        // cheat on the lifetime of tokens
-        let outer_token = unsafe { (outer_token as *const LocatedToken).as_ref().unwrap() };
 
         // Listing trigger is handled in ProcessedToken::visited to preserve
         // deferred/non-deferred token ordering.

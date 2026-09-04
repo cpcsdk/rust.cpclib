@@ -15,7 +15,12 @@ pub trait HasValue {
 }
 
 /// Represents an 8 bit register
+// SAFETY (see `Register16` below): must stay a single `u8` field with no
+// padding for the `val: u16` / `units: [Register8; 2]` union punning to be
+// sound. `#[repr(transparent)]` makes the compiler guarantee that layout
+// instead of it merely happening to hold today.
 #[derive(Copy,Clone,Debug)]
+#[repr(transparent)]
 pub struct Register8{
     val: u8
 }
@@ -44,6 +49,12 @@ impl HasValue for Register8 {
 
 
 /// Represents a 16 bits register
+// SAFETY: `#[repr(C)]` plus `Register8` being `#[repr(transparent)]` over a
+// bare `u8` guarantees `val` and `units` occupy the same 2 bytes with no
+// padding, so reading/writing either field is defined. `low()`/`high()`
+// index `units[0]`/`units[1]` as the low/high byte of `val`, which only
+// matches on little-endian targets (true of every platform this crate
+// currently builds for).
 #[derive(Copy,Clone)]
 #[repr(C)]
 pub union Register16 {

@@ -245,6 +245,13 @@ impl BdAsmEnv {
 
         // Retrieve the listing
         let mut listing: Listing = if !data_blocs_offsets.is_empty() {
+            if input_bytes.is_empty() {
+                return Err(BdAsmError::InvalidDataBloc(
+                    "Data blocs are declared but there are no input bytes to disassemble"
+                        .to_string()
+                ));
+            }
+
             let mut data_blocs_mut = data_blocs_offsets.clone();
             data_blocs_mut.sort_by_key(|range| *range.start());
 

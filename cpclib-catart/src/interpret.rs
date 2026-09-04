@@ -280,7 +280,7 @@ impl BasicMemoryScreen {
         // Font data is directly from CPC ROM (no header)
         let offset = (ch as usize) * 8;
         if offset + 8 <= font_data.len() {
-            unsafe { &*(font_data.as_ptr().add(offset) as *const [u8; 8]) }
+            (&font_data[offset..offset + 8]).try_into().unwrap()
         }
         else {
             // Return empty bitmap for out of range chars

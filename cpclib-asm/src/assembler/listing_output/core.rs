@@ -1285,6 +1285,25 @@ impl ListingOutput {
     }
 }
 
+// SAFETY: `token`/`symbols` stand in for borrowed data whose real lifetime
+// can't be named without threading a lifetime parameter through `Env`
+// (which owns a `ListingOutputTrigger`). Dereferencing them (in
+// `new_token()`/`finish()`, via `unsafe { &**token }`) is only sound as
+// long as the pointee is still alive at that point - traced invariant:
+// `new_token()` always flushes and drops the *previous* pointer (via
+// `add_token()`) before overwriting `self.token` with the new one, so a
+// stale pointer is never read back later; this relies on callers keeping
+// the pointed-to `LocatedToken`/`SymbolsTable` alive for at least that long,
+// which isn't checked here.
+//
+// `Send`/`Sync` are load-bearing, not vestigial: `Env` (which owns this
+// struct) crosses threads via `Arc<RwLock<&mut Env>>` for parallel
+// token-tree construction under the `rayon` feature (see the comment on
+// `Env::active_page_index_cache`), and that outer `RwLock` is what actually
+// serializes access - these raw pointers are never dereferenced from two
+// threads at once in practice, but nothing in this struct enforces that;
+// it would silently regress if that calling pattern ever changed. A real
+// fix means lifetime-parameterizing `Env` itself; out of scope here.
 unsafe impl Send for ListingOutputTrigger {}
 unsafe impl Sync for ListingOutputTrigger {}
 
