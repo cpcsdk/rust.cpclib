@@ -21,7 +21,7 @@ fn resolve_jr_djnz_target(
 ) -> Result<u16> {
     cpclib_asm::disass::resolve_jr_djnz_target(offset_expr, current_address).ok_or_else(|| {
         BdAsmError::UnknownAssemblerAddress {
-            instruction: instruction.clone(),
+            instruction: Box::new(instruction.clone()),
             bytes: 0
         }
     })
@@ -112,7 +112,7 @@ pub fn collect_addresses_from_expressions(
                 None => {
                     if nb_bytes != 0 {
                         return Err(BdAsmError::UnknownAssemblerAddress {
-                            instruction: current_instruction.clone(),
+                            instruction: Box::new(current_instruction.clone()),
                             bytes: nb_bytes
                         });
                     }
@@ -198,7 +198,7 @@ pub fn inject_labels_into_expressions<O: EventObserver>(
                 None => {
                     if nb_bytes != 0 {
                         return Err(BdAsmError::UnknownAssemblerAddress {
-                            instruction: current_instruction.clone(),
+                            instruction: Box::new(current_instruction.clone()),
                             bytes: nb_bytes
                         });
                     }
@@ -238,19 +238,13 @@ pub fn inject_labels_into_expressions<O: EventObserver>(
             };
 
             // Check and replace first argument
-            if let Some(arg) = arg1 {
-                match arg {
-                    DataAccess::Expression(e) | DataAccess::Memory(e) => replace_if_label(e),
-                    _ => {}
-                }
+            if let Some(DataAccess::Expression(e) | DataAccess::Memory(e)) = arg1 {
+                replace_if_label(e);
             }
 
             // Check and replace second argument
-            if let Some(arg) = arg2 {
-                match arg {
-                    DataAccess::Expression(e) | DataAccess::Memory(e) => replace_if_label(e),
-                    _ => {}
-                }
+            if let Some(DataAccess::Expression(e) | DataAccess::Memory(e)) = arg2 {
+                replace_if_label(e);
             }
         }
 

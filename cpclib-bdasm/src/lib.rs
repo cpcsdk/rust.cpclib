@@ -351,7 +351,9 @@ fn defb_elements_chunked(bytes: &[u8]) -> Listing {
 /// Parse a data bloc specification supporting two syntaxes:
 /// - START-LENGTH: where START is address and LENGTH is size
 /// - START..END: where both are addresses (END is exclusive)
-/// Each component can be a numeric value or a label name
+///
+/// Each component can be a numeric value or a label name.
+///
 /// Benediction disassembler
 #[derive(Parser, Debug)]
 #[command(name = "bdasm")]
@@ -370,6 +372,7 @@ pub struct BdAsmCli {
     /// - START-LENGTH: address and size (e.g., 0x1211-7 or message-7)
     /// - START..END: address range with exclusive end (e.g., 0x1211..0x1222 or message..new_line)
     /// - START..=END: address range with inclusive end (e.g., 0x1211..=0x1218 or message..=end_label)
+    ///
     /// Addresses are in assembly space. START, LENGTH, and END can be numeric values or label names.
     #[arg(short = 'd', long = "data")]
     pub data_bloc: Vec<DataBlocString>,

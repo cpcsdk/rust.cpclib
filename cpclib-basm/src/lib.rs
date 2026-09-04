@@ -58,7 +58,7 @@ pub enum BasmError {
     },
     ErrorWithListing {
         error: Box<BasmError>,
-        listing: LocatedListing
+        listing: Box<LocatedListing>
     },
 
     // #[fail(display = "Invalid Amsdos filename: {}", filename)]
@@ -830,7 +830,7 @@ pub fn process(
     let env = assemble(matches, &listing, options, o.clone()).map_err(move |error| {
         BasmError::ErrorWithListing {
             error: Box::new(error),
-            listing
+            listing: Box::new(listing)
         }
     })?;
 

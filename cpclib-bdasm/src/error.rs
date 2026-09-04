@@ -12,7 +12,10 @@ pub enum BdAsmError {
     #[error(
         "Unable to determine assembling address for instruction: {instruction:?} ({bytes} bytes)"
     )]
-    UnknownAssemblerAddress { instruction: Token, bytes: usize },
+    UnknownAssemblerAddress {
+        instruction: Box<Token>,
+        bytes: usize
+    },
 
     #[error("Failed to assemble listing: {0}")]
     AssemblyFailed(String),
