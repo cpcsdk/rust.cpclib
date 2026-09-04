@@ -479,7 +479,7 @@ fn read_name(buffer: &[u8], mut idx: usize) -> Option<(String, usize)> {
 /// regardless of what gets loaded on top.
 pub fn build_launch_snapshot(program_bytes: &[u8]) -> Result<cpclib_sna::Snapshot, String> {
     let mut sna = cpclib_sna::Snapshot::new_6128()?;
-    sna.unwrap_memory_chunks();
+    sna.unwrap_memory_chunks()?;
     sna.add_data(program_bytes, PROGRAM_START as usize)
         .map_err(|e| format!("{e:?}"))?;
 
@@ -513,7 +513,7 @@ mod tests {
         // cpclib-sna update changing the embedded base snapshot fails this
         // test rather than silently breaking BASIC launches.
         let mut sna = cpclib_sna::Snapshot::new_6128().unwrap();
-        sna.unwrap_memory_chunks();
+        sna.unwrap_memory_chunks().unwrap();
 
         assert_eq!(peek16(&sna, PTR_END_OF_RESERVED_AREA), PROGRAM_START - 1);
         // An empty program: PTR_PROGRAM_END/PTR_VARIABLES_START/

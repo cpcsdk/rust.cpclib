@@ -3014,37 +3014,54 @@ impl<P: DapPeer> Session<P> {
                     let address = pending.address_override.unwrap_or_else(|| {
                         crate::inspect::crtc_screen_start_address(regs[12], regs[13])
                     });
-                    let full_memory = sna.memory_dump();
-                    // The full 64K address space, from 0 - not just one
-                    // page. See `complete_screen_view_ga`'s identical
-                    // comment. Capped at exactly 0x10000: a 128K machine's
-                    // own snapshot carries more than that, and the wrap
-                    // must stay at the real 16-bit boundary regardless.
-                    let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
-                    // `request` is `None` for a silent refresh
-                    // (`refresh_screen_view`, called on every stop) rather
-                    // than something a person typed - `screen_view_answer`
-                    // already handles that (event only, no response
-                    // receipt), same as `complete_screen_view_memory`'s
-                    // identical direct-endpoint path.
-                    out.extend(self.screen_view_answer(
-                        pending.request.as_ref(),
-                        address,
-                        pending.width_override,
-                        pending.height_override,
-                        pending.row_height_override,
-                        &pending.palette_override,
-                        pending.encoding_override,
-                        // Only AMSpiriT Lite can honour an explicit RAM
-                        // configuration - a `.sna`'s own memory dump has
-                        // no live paging concept to read anything else
-                        // from.
-                        None,
-                        &regs,
-                        mode,
-                        &palette,
-                        &memory
-                    ));
+                    match sna.memory_dump() {
+                        Ok(full_memory) => {
+                            // The full 64K address space, from 0 - not just one
+                            // page. See `complete_screen_view_ga`'s identical
+                            // comment. Capped at exactly 0x10000: a 128K machine's
+                            // own snapshot carries more than that, and the wrap
+                            // must stay at the real 16-bit boundary regardless.
+                            let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
+                            // `request` is `None` for a silent refresh
+                            // (`refresh_screen_view`, called on every stop) rather
+                            // than something a person typed - `screen_view_answer`
+                            // already handles that (event only, no response
+                            // receipt), same as `complete_screen_view_memory`'s
+                            // identical direct-endpoint path.
+                            out.extend(self.screen_view_answer(
+                                pending.request.as_ref(),
+                                address,
+                                pending.width_override,
+                                pending.height_override,
+                                pending.row_height_override,
+                                &pending.palette_override,
+                                pending.encoding_override,
+                                // Only AMSpiriT Lite can honour an explicit RAM
+                                // configuration - a `.sna`'s own memory dump has
+                                // no live paging concept to read anything else
+                                // from.
+                                None,
+                                &regs,
+                                mode,
+                                &palette,
+                                &memory
+                            ));
+                        },
+                        // Same convention as the "no machine to describe
+                        // itself" branch below: a silent refresh drops the
+                        // failure, an explicit `-sv` request gets a real
+                        // answer.
+                        Err(e) => {
+                            if let Some(request) = &pending.request {
+                                let seq = self.next_seq();
+                                out.push(protocol::failure(
+                                    request,
+                                    &format!("the snapshot's memory is corrupted: {e}"),
+                                    seq
+                                ));
+                            }
+                        }
+                    }
                 },
                 // No machine to describe itself: a silent refresh drops
                 // the failure (nobody is waiting on a response, same

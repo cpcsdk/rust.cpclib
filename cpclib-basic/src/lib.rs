@@ -489,7 +489,7 @@ impl BasicProgram {
     pub fn as_sna(&self) -> Result<Snapshot, String> {
         let bytes = self.as_bytes();
         let mut sna = Snapshot::new_6128()?;
-        sna.unwrap_memory_chunks();
+        sna.unwrap_memory_chunks()?;
         sna.add_data(&bytes, PROGRAM_START as usize)
             .map_err(|e| format!("{e:?}"))?;
         Ok(sna)

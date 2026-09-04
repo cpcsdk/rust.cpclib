@@ -545,7 +545,12 @@ fn save_source_map(
         .with_address_symbols(address_symbols)
         .with_program(
         env.assembled_breakpoints(),
-        &env.sna().memory_dump(),
+        // This snapshot was built by the assembler itself, never loaded
+        // from an external file, so the RLE-corruption path memory_dump()
+        // can fail on is unreachable here.
+        &env.sna()
+            .memory_dump()
+            .expect("assembler-built snapshot memory is always well-formed"),
         entry_point
     );
 

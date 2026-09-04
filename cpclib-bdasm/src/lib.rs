@@ -427,7 +427,7 @@ fn load_input_bytes<O: EventObserver>(
 
         // Get the full memory from snapshot (includes both hardcoded memory and chunks)
         // Truncate to Z80 address space (64KB = 0x10000 bytes)
-        let memory = snapshot.memory_dump();
+        let memory = snapshot.memory_dump().map_err(std::io::Error::other)?;
         let memory = &memory[..memory.len().min(0x10000)];
 
         // If origin is specified, extract memory starting from that address

@@ -4042,7 +4042,11 @@ impl Env {
             }
         })?;
 
-        self.sna.unwrap_memory_chunks();
+        self.sna.unwrap_memory_chunks().map_err(|e| {
+            AssemblerError::AssemblingError {
+                msg: format!("Error while unpacking loaded snapshot's memory. {e}")
+            }
+        })?;
 
         Ok(())
     }

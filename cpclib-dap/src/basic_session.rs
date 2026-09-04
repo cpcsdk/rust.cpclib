@@ -2362,7 +2362,17 @@ impl<P: DapPeer> BasicSession<P> {
                     let address = address_override.unwrap_or_else(|| {
                         crate::inspect::crtc_screen_start_address(regs[12], regs[13])
                     });
-                    let full_memory = sna.memory_dump();
+                    let full_memory = match sna.memory_dump() {
+                        Ok(memory) => memory,
+                        Err(e) => {
+                            let seq = self.next_seq();
+                            return vec![protocol::failure(
+                                &request,
+                                &format!("the emulator's snapshot memory is corrupted: {e}"),
+                                seq
+                            )];
+                        }
+                    };
                     // The full 64K address space, from 0 - see
                     // `Purpose::ScreenViewGa`'s identical comment. Capped
                     // at exactly 0x10000: a 128K machine's own snapshot

@@ -132,7 +132,8 @@ pub fn asm_assemble_snapshot(
                     console::log_1(&"SNA OK".into());
                     let sna = env.sna();
                     let mut sna = sna.clone();
-                    sna.unwrap_memory_chunks();
+                    sna.unwrap_memory_chunks()
+                        .expect("assembler-built snapshot memory is always well-formed");
                     sna.into()
                 })
         })

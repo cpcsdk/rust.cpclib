@@ -102,11 +102,17 @@ impl Command {
                 output.set_exit_strategy(ExitStrategy::PagerQuit).unwrap();
                 output.set_prompt("MEM").unwrap();
 
-                sna.unwrap_memory_chunks();
+                if let Err(e) = sna.unwrap_memory_chunks() {
+                    eprintln!("Error while decoding the snapshot's memory. {e}");
+                    return;
+                }
                 let mem = mem_to_string(sna, from, amount);
 
                 if let Some((_, sna2)) = sna2 {
-                    sna2.unwrap_memory_chunks();
+                    if let Err(e) = sna2.unwrap_memory_chunks() {
+                        eprintln!("Error while decoding the second snapshot's memory. {e}");
+                        return;
+                    }
                     let mem2 = mem_to_string(sna2, from, amount);
                     let diff = diff_lines(&mem, &mem2);
                     let _ = write!(output, "{diff}");

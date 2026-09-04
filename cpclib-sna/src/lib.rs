@@ -486,7 +486,12 @@ impl Snapshot {
         let memory_dump_size = sna.memory_size_header() as usize;
         let version = sna.version_header();
 
-        assert!(memory_dump_size * 1024 <= file_content.len());
+        if memory_dump_size * 1024 > file_content.len() {
+            return Err(format!(
+                "SNA header declares {memory_dump_size}KB of memory but only {} bytes remain",
+                file_content.len()
+            ));
+        }
         sna.memory = SnapshotMemory::new(file_content.drain(0..memory_dump_size * 1024).as_slice());
 
         if version == 3 {
@@ -523,8 +528,12 @@ impl Snapshot {
 
     /// Create a new snapshot that contains only information understandable
     /// by the required version
-    /// TODO return an error in case of failure instead of panicing
-    pub fn fix_version(&self, version: SnapshotVersion) -> Self {
+    /// TODO return an error in case of failure instead of panicing for the
+    /// "memory size doesn't fit this version" cases below - only the
+    /// corrupted-RLE-chunk case is a real Result so far, since it is the one
+    /// directly reachable (through `save`/`write_all`) from a snapshot
+    /// `Snapshot::load`ed from an untrusted file.
+    pub fn fix_version(&self, version: SnapshotVersion) -> Result<Self, String> {
         // Clone the snapshot in order to patch it
         let mut cloned = self.clone();
 
@@ -549,7 +558,7 @@ impl Snapshot {
 
         // We have to modify the memory coding and remove the chunks
         if !cloned.chunks.is_empty() && version != SnapshotVersion::V3 {
-            let memory = self.memory_dump();
+            let memory = self.memory_dump()?;
             let memory_size = memory.len() / 1024;
             if memory_size > 128 {
                 panic!("V1 or V2 snapshots cannot code more than 128kb of memory");
@@ -580,7 +589,7 @@ impl Snapshot {
             cloned.set_memory_size_header(0);
         }
 
-        cloned
+        Ok(cloned)
     }
 
     /// Save the snapshot V2 on disc
@@ -604,7 +613,7 @@ impl Snapshot {
         version: SnapshotVersion
     ) -> Result<(), std::io::Error> {
         // Convert the snapshot to ensure header is correct
-        let sna = self.fix_version(version);
+        let sna = self.fix_version(version).map_err(std::io::Error::other)?;
 
         // Write header
         buffer.write_all(&sna.header)?;
@@ -692,7 +701,8 @@ impl Snapshot {
 
     /// Ensure the sna has the appropriate number of pages
     pub fn resize(&mut self, nb_pages: usize) {
-        self.unwrap_memory_chunks();
+        self.unwrap_memory_chunks()
+            .expect("snapshot memory chunk is corrupted");
 
         while self.nb_pages() < nb_pages {
             self.memory = self.memory.increased_size();
@@ -708,10 +718,10 @@ impl Snapshot {
 
     /// To play easier with memory, remove all the memory chunks and use a linearized memory version
     /// Memory array MUST be empty before calling this method
-    pub fn unwrap_memory_chunks(&mut self) {
+    pub fn unwrap_memory_chunks(&mut self) -> Result<(), String> {
         if self.memory.is_empty() {
             // uncrunch the memory blocks
-            self.memory = SnapshotMemory::new(&self.memory_dump());
+            self.memory = SnapshotMemory::new(&self.memory_dump()?);
 
             // remove the memory chunks
             let mut idx = 0;
@@ -728,12 +738,14 @@ impl Snapshot {
             // update the memory size
             self.set_memory_size_header((self.memory.len() / 1024) as u16);
         }
+        Ok(())
     }
 
     /// Change a memory value. Panic if memory size is not appropriate
     /// If memory is saved insided chuncks, the chuncks are unwrapped
     pub fn set_byte(&mut self, address: u32, value: u8) {
-        self.unwrap_memory_chunks();
+        self.unwrap_memory_chunks()
+            .expect("snapshot memory chunk is corrupted");
         let address = address as usize;
 
         // resize if needed
@@ -752,7 +764,7 @@ impl Snapshot {
     }
 
     /// Returns all the memory of the snapshot in a linear way by mixing both the hardcoded memory of the snapshot and the memory of chunks
-    pub fn memory_dump(&self) -> Vec<u8> {
+    pub fn memory_dump(&self) -> Result<Vec<u8>, String> {
         // by default, the memory i already coded
         let mut memory = self.memory.clone();
 
@@ -762,7 +774,7 @@ impl Snapshot {
         for chunk in &self.chunks {
             if let Some(memory_chunk) = chunk.memory_chunk() {
                 let address = memory_chunk.abstract_address();
-                let content = memory_chunk.uncrunched_memory();
+                let content = memory_chunk.uncrunched_memory()?;
                 max_memory = address + 64 * 1024;
 
                 if memory.len() < max_memory {
@@ -777,7 +789,7 @@ impl Snapshot {
             memory = memory.increased_size();
         }
 
-        memory.memory()[..max_memory].to_vec()
+        Ok(memory.memory()[..max_memory].to_vec())
     }
 
     /// Check if the snapshot has some memory chunk
@@ -1134,11 +1146,11 @@ mod tests {
     fn test_resize() {
         let mut sna = Snapshot::default();
         assert_eq!(sna.nb_pages(), 1);
-        assert_eq!(sna.memory_dump().len(), BANK_SIZE * 4);
+        assert_eq!(sna.memory_dump().unwrap().len(), BANK_SIZE * 4);
 
         sna.resize(2);
         assert_eq!(sna.nb_pages(), 2);
-        assert_eq!(sna.memory_dump().len(), BANK_SIZE * 4 * 2);
+        assert_eq!(sna.memory_dump().unwrap().len(), BANK_SIZE * 4 * 2);
     }
 
     #[cfg(all(test, feature = "cmdline"))]

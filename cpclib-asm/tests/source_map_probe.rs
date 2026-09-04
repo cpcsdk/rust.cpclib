@@ -359,7 +359,7 @@ fn snainit_can_start_from_an_embedded_snapshot() {
     // The machine it started from is a real one: the firmware ROM is paged in
     // and its memory is the size the header claims.
     let sna = env.sna();
-    assert!(sna.memory_dump().len() >= 0x1_0000, "a whole machine");
+    assert!(sna.memory_dump().unwrap().len() >= 0x1_0000, "a whole machine");
 }
 
 /// A name that is not embedded says which ones are, rather than reporting a

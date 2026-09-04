@@ -1364,7 +1364,7 @@ mod tests {
         assert_eq!(address, 0xC000, "regs: {regs:?}");
 
         let (mode, palette) = mode_and_palette_from_snapshot(&sna);
-        let full_memory = sna.memory_dump();
+        let full_memory = sna.memory_dump().unwrap();
         let memory = &full_memory[..0x10000.min(full_memory.len())];
         let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
             cpclib_image::image::ColorMatrix::from_screen_at(
@@ -1533,7 +1533,7 @@ mod tests {
         assert_eq!(address, 0xC5E0, "regs: {regs:?}");
 
         let (mode, palette) = mode_and_palette_from_snapshot(&sna);
-        let full_memory = sna.memory_dump();
+        let full_memory = sna.memory_dump().unwrap();
         // The full 64K address space, from 0 - not just from `address`
         // (0xC5E0, mid-page): `data` is still addressed as the whole 64K
         // buffer even though `from_screen_at` itself confines the actual

@@ -15,7 +15,8 @@ pub(crate) struct SnaAssembler {
 impl Default for SnaAssembler {
     fn default() -> Self {
         let mut sna = Snapshot::default(); // Snapshot::new_6128().unwrap();
-        sna.unwrap_memory_chunks();
+        sna.unwrap_memory_chunks()
+            .expect("Snapshot::default() memory is always well-formed");
 
         let nb_pages = (sna.memory_size_header() / 64) as usize;
 

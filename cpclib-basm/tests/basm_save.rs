@@ -45,9 +45,9 @@ fn bankset_check_save() {
     let (env, _) = process(&args, Arc::new(())).expect("Unable to assemble the file");
 
     let sna = env.sna();
-    dbg!(sna.memory_size_header(), sna.memory_dump().len());
+    dbg!(sna.memory_size_header(), sna.memory_dump().unwrap().len());
     assert_eq!(sna.memory_size_header(), 128);
-    let mem = sna.memory_dump();
+    let mem = sna.memory_dump().unwrap();
 
     static DATA_0_0: [u8; 4] = [1, 2, 3, 4];
     static DATA_0_1: [u8; 4] = [5, 6, 7, 8];

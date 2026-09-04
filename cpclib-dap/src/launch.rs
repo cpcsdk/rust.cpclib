@@ -130,7 +130,7 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
     }
 
     let breakpoints = env.assembled_breakpoints();
-    let image = env.sna().memory_dump();
+    let image = env.sna().memory_dump()?;
     let entry_point = match env.sna().get_value(&cpclib_sna::SnapshotFlag::Z80_PC) {
         cpclib_sna::FlagValue::Word(pc) => Some(pc),
         cpclib_sna::FlagValue::Byte(pc) => Some(pc as u16),

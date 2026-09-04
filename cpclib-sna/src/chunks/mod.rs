@@ -44,11 +44,21 @@ impl MemoryChunk {
     }
 
     pub fn print_info(&self) {
-        println!(
-            "\t* Address: 0x{:X}\n\t* Size: 0x{:X}",
-            self.abstract_address(),
-            self.uncrunched_memory().len()
-        );
+        match self.uncrunched_memory() {
+            Ok(memory) => {
+                println!(
+                    "\t* Address: 0x{:X}\n\t* Size: 0x{:X}",
+                    self.abstract_address(),
+                    memory.len()
+                );
+            },
+            Err(e) => {
+                println!(
+                    "\t* Address: 0x{:X}\n\t* Size: <corrupted RLE data: {e}>",
+                    self.abstract_address()
+                );
+            }
+        }
     }
 
     /// Create a memory chunk.
@@ -147,7 +157,12 @@ impl MemoryChunk {
 
             // #[cfg(debug_assertions)]
             {
-                let produced = chunk.uncrunched_memory();
+                // This chunk was just built from `data` we crunched ourselves
+                // a few lines up, not from untrusted input - a failure here
+                // is a real bug in this function, not a malformed file.
+                let produced = chunk
+                    .uncrunched_memory()
+                    .expect("chunk just built from our own crunched data must round-trip");
                 assert_eq!(&data, &produced);
             }
 
@@ -155,10 +170,15 @@ impl MemoryChunk {
         }
     }
 
-    /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory
-    pub fn uncrunched_memory(&self) -> Vec<u8> {
+    /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory.
+    ///
+    /// Returns `Err` if the RLE stream is truncated (an `0xE5` escape byte
+    /// with no `amount` byte, or no `amount`+`value` pair, following it) or
+    /// if it decodes to something other than exactly 64KB - both reachable
+    /// from a corrupted or adversarial `.sna` v3 "MEMx" chunk.
+    pub fn uncrunched_memory(&self) -> Result<Vec<u8>, String> {
         if !self.is_crunched() {
-            return self.riff.data().to_vec();
+            return Ok(self.riff.data().to_vec());
         }
 
         let mut content = Vec::new();
@@ -178,12 +198,15 @@ impl MemoryChunk {
         while let Some(byte) = read_byte() {
             match byte {
                 0xE5 => {
-                    let amount = read_byte().unwrap();
+                    let amount = read_byte()
+                        .ok_or_else(|| "truncated RLE-compressed memory chunk (missing amount byte after 0xE5)".to_string())?;
                     if amount == 0 {
                         content.push(0xE5)
                     }
                     else {
-                        let val = read_byte().unwrap();
+                        let val = read_byte().ok_or_else(|| {
+                            "truncated RLE-compressed memory chunk (missing value byte after 0xE5 amount)".to_string()
+                        })?;
                         content.reserve(content.len() + amount as usize);
                         for _idx in 0..amount {
                             content.push(val);
@@ -196,8 +219,14 @@ impl MemoryChunk {
             }
         }
 
-        assert_eq!(content.len(), 64 * 1024);
-        content
+        if content.len() != 64 * 1024 {
+            return Err(format!(
+                "decompressed memory chunk is {} bytes, expected {}",
+                content.len(),
+                64 * 1024
+            ));
+        }
+        Ok(content)
     }
 
     /// Returns the address in the memory array

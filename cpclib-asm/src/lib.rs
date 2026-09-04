@@ -199,7 +199,11 @@ impl AssemblingOptions {
     }
 
     pub fn set_snapshot_model(&mut self, mut sna: Snapshot) -> &mut Self {
-        sna.unwrap_memory_chunks();
+        // Not reached from an externally-loaded file today (its one caller
+        // builds `sna` programmatically), so the RLE-corruption path this
+        // could otherwise fail on is unreachable here.
+        sna.unwrap_memory_chunks()
+            .expect("programmatically-built snapshot memory is always well-formed");
         self.snapshot_model = Some(sna);
         self
     }
