@@ -641,7 +641,13 @@ impl AmsdosEntry {
     }
 
     fn track_and_sector<D: Disc>(&self, disc: &D, head: Head) -> (u8, u8) {
-        let min_sect = disc.global_min_sector(head);
+        // Both callers (erase_entry, update_entry) already document
+        // themselves as "Panic if dsk is invalid" and already .unwrap() the
+        // read/write right next to this call - this matches that existing,
+        // documented contract rather than introducing a new one.
+        let min_sect = disc
+            .global_min_sector(head)
+            .expect("disc has no formatted tracks");
         let sector_id = (self.idx >> 4) + min_sect;
         let track = if min_sect == 0x41 {
             2
@@ -1106,7 +1112,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         };
 
         // handle the case where a file is already present
-        if let Some(_file) = self.get_file(filename) {
+        if let Some(_file) = self.get_file(filename)? {
             match behavior {
                 AmsdosAddBehavior::FailIfPresent => {
                     return Err(AmsdosError::FileAlreadyExists(format!("{filename:?}")));
@@ -1118,13 +1124,13 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     let mut backup_fname = filename;
                     backup_fname.set_extension("BAK");
 
-                    if self.entries_for(backup_fname).is_some() {
+                    if self.entries_for(backup_fname)?.is_some() {
                         self.erase_file(backup_fname, true)?;
                     }
-                    assert!(self.get_file(backup_fname).is_none());
+                    assert!(self.get_file(backup_fname)?.is_none());
                     self.rename(filename, backup_fname)?;
-                    assert!(self.get_file(filename).is_none());
-                    assert!(self.get_file(backup_fname).is_some());
+                    assert!(self.get_file(filename)?.is_none());
+                    assert!(self.get_file(backup_fname)?.is_some());
                 },
                 AmsdosAddBehavior::ReplaceAndEraseIfPresent => {
                     self.erase_file(filename, true)?;
@@ -1139,12 +1145,12 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         let file_size = content.len();
         let mut nb_entries = 0;
 
-        let mut available_blocs = self.catalog().available_blocs();
+        let mut available_blocs = self.catalog()?.available_blocs();
 
         // println!("File size {} bytes", file_size);
         while file_pos < file_size {
             //     println!("File pos {}", file_pos);
-            let entry_idx = match self.catalog().one_empty_entry() {
+            let entry_idx = match self.catalog()?.one_empty_entry() {
                 Some(entry) => entry.idx,
                 None => return Err(AmsdosError::NoEntriesAvailable)
             };
@@ -1213,7 +1219,9 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         // More tests are needed to check if it can work without that
         assert_eq!(content.len(), DATA_SECTOR_SIZE * 2);
 
-        let access_info = self.bloc_access_information(bloc_idx);
+        let access_info = self
+            .bloc_access_information(bloc_idx)
+            .map_err(|e| e.to_string())?;
 
         // Copy in first sector
         self.disc.sector_write_bytes(
@@ -1246,13 +1254,13 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         clear_sectors: bool
     ) -> Result<(), AmsdosError> {
         let entries = self
-            .entries_for(filename)
+            .entries_for(filename)?
             .ok_or_else(|| AmsdosError::FileDoesNotExist(format!("{filename:?}")))?;
 
         if clear_sectors {
-            entries.iter().flat_map(|e| e.used_blocs()).for_each(|b| {
-                self.erase_bloc(*b).unwrap();
-            });
+            for b in entries.iter().flat_map(|e| e.used_blocs()) {
+                self.erase_bloc(*b).map_err(AmsdosError::from)?;
+            }
         }
 
         entries.iter().for_each(|e| {
@@ -1267,7 +1275,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         source: AmsdosFileName,
         destination: AmsdosFileName
     ) -> Result<(), AmsdosError> {
-        match self.entries_for(source) {
+        match self.entries_for(source)? {
             Some(entries) => {
                 entries.into_iter().for_each(|mut e| {
                     e.file_name = destination;
@@ -1279,7 +1287,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         }
     }
 
-    pub fn catalog<'mngr: 'dsk>(&'dsk self) -> AmsdosEntries {
+    pub fn catalog<'mngr: 'dsk>(&'dsk self) -> Result<AmsdosEntries, AmsdosError> {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.catalog()
     }
@@ -1287,7 +1295,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     fn bloc_access_information<'mngr: 'dsk>(
         &'mngr self,
         bloc_idx: BlocIdx
-    ) -> BlocAccessInformation {
+    ) -> Result<BlocAccessInformation, AmsdosError> {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.bloc_access_information(bloc_idx)
     }
@@ -1295,7 +1303,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     pub fn get_file<'mngr: 'dsk, F: Into<AmsdosFileName>>(
         &'mngr self,
         filename: F
-    ) -> Option<AmsdosFile> {
+    ) -> Result<Option<AmsdosFile>, AmsdosError> {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.get_file(filename)
     }
@@ -1303,7 +1311,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     fn entries_for<'mngr: 'dsk, F: Into<AmsdosFileName>>(
         &'mngr self,
         filename: F
-    ) -> Option<Vec<AmsdosEntry>> {
+    ) -> Result<Option<Vec<AmsdosEntry>>, AmsdosError> {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.entries_for(filename)
     }
@@ -1347,7 +1355,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 
     /// Return the raw bytes of the Amsdos catalog (2048 bytes = 64 entries * 32 bytes/entry)
     /// This is useful for tools that need to work with the raw catalog data without parsing
-    pub fn catalog_slice(&self) -> Vec<u8> {
+    pub fn catalog_slice(&self) -> Result<Vec<u8>, AmsdosError> {
         let (sector_id, track) = if self.is_data() {
             (DATA_FIRST_SECTOR_NUMBER, 0)
         }
@@ -1360,23 +1368,31 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         };
         self.disc
             .consecutive_sectors_read_bytes(self.head, track, sector_id, 4)
-            .expect("Unable to read catalog sectors")
+            .ok_or_else(|| AmsdosError::Various("Unable to read catalog sectors".to_string()))
     }
 
-    /// Check if the disc is in DATA format by looking at the first sector of track 0
+    /// Check if the disc is in DATA format by looking at the first sector of track 0.
+    /// `false`, not a panic, if track 0 is unformatted - that is simply "not data format".
     pub fn is_data(&self) -> bool {
-        self.disc.track_min_sector(self.head, 0) == 0xC1
+        self.disc.track_min_sector(self.head, 0) == Some(0xC1)
     }
 
     pub fn is_system(&self) -> bool {
-        self.disc.track_min_sector(self.head, 0) == 0x41
+        self.disc.track_min_sector(self.head, 0) == Some(0x41)
     }
 
     /// Return the entries of the Amsdos catalog
-    /// Panic if dsk is not compatible
-    pub fn catalog(&self) -> AmsdosEntries {
+    pub fn catalog(&self) -> Result<AmsdosEntries, AmsdosError> {
         let mut entries = Vec::new();
-        let bytes = self.catalog_slice();
+        let bytes = self.catalog_slice()?;
+
+        if bytes.len() < DIRECTORY_SIZE * 32 {
+            return Err(AmsdosError::Various(format!(
+                "Catalog sectors only yielded {} bytes, need {}",
+                bytes.len(),
+                DIRECTORY_SIZE * 32
+            )));
+        }
 
         for idx in 0..DIRECTORY_SIZE
         // (bytes.len() / 32)
@@ -1386,12 +1402,18 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
             entries.push(entry);
         }
 
-        AmsdosEntries { entries }
+        Ok(AmsdosEntries { entries })
     }
 
     /// Print the catalog on screen
     pub fn print_catalog(&self) {
-        let entries = self.catalog();
+        let entries = match self.catalog() {
+            Ok(entries) => entries,
+            Err(e) => {
+                eprintln!("Unable to read the catalog: {e}");
+                return;
+            }
+        };
         for entry in entries.visible_entries() {
             if !entry.is_erased() && !entry.is_system() {
                 println!("{}", entry.format());
@@ -1400,41 +1422,51 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
     }
 
     /// Retrieve the AmsdosEntry dedidacted to the specific file
-    fn entries_for<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<Vec<AmsdosEntry>> {
+    fn entries_for<F: Into<AmsdosFileName>>(
+        &self,
+        filename: F
+    ) -> Result<Option<Vec<AmsdosEntry>>, AmsdosError> {
         let filename = filename.into();
         let entries = self
-            .catalog()
+            .catalog()?
             .for_file(&filename)
             .map(Clone::clone)
             .collect::<Vec<_>>();
         if entries.is_empty() {
-            None
+            Ok(None)
         }
         else {
-            Some(entries)
+            Ok(Some(entries))
         }
     }
 
-    fn read_entries(&self, entries: &[AmsdosEntry]) -> Vec<u8> {
-        entries
-            .iter()
-            .flat_map(|entry| self.read_entry(entry))
-            .collect::<Vec<u8>>()
+    fn read_entries(&self, entries: &[AmsdosEntry]) -> Result<Vec<u8>, AmsdosError> {
+        let mut content = Vec::new();
+        for entry in entries {
+            content.extend(self.read_entry(entry)?);
+        }
+        Ok(content)
     }
 
     /// Return the file if it exists
-    pub fn get_file<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<AmsdosFile> {
+    pub fn get_file<F: Into<AmsdosFileName>>(
+        &self,
+        filename: F
+    ) -> Result<Option<AmsdosFile>, AmsdosError> {
         // Collect the entries for the given file
-        let entries = self.entries_for(filename)?;
+        let entries = match self.entries_for(filename)? {
+            Some(entries) => entries,
+            None => return Ok(None)
+        };
 
         //     println!("{:?}", &entries);
 
         // Retreive the binary data
-        let content = self.read_entries(&entries);
+        let content = self.read_entries(&entries)?;
         let mut file = AmsdosFile::from_buffer(&content);
         file.shrink_content_to_fit_header_size();
 
-        Some(file)
+        Ok(Some(file))
     }
 
     /// Returns a Vec<u8> of the right size by padding 0
@@ -1455,12 +1487,19 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 
     /// Returns the appropriate information to access the bloc
     /// Blindly stolen to iDSK
-    fn bloc_access_information(&self, bloc_idx: BlocIdx) -> BlocAccessInformation {
+    fn bloc_access_information(
+        &self,
+        bloc_idx: BlocIdx
+    ) -> Result<BlocAccessInformation, AmsdosError> {
         assert!(bloc_idx.is_valid());
 
         // Compute the information to access the first sector
         let sector_pos = bloc_idx.sector();
-        let min_sector = self.disc.track_min_sector(self.head, 0);
+        let min_sector = self.disc.track_min_sector(self.head, 0).ok_or_else(|| {
+            AmsdosError::Various(
+                "Disc has no formatted track 0: cannot locate bloc.".to_string()
+            )
+        })?;
         let track = {
             let mut track = bloc_idx.track();
             if min_sector == 0x41 {
@@ -1473,12 +1512,12 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         };
 
         if track > self.disc.nb_tracks_per_head() - 1 {
-            unimplemented!(
+            return Err(AmsdosError::Various(format!(
                 "Need to format track. [{:?}] => {} > {}",
                 bloc_idx,
                 track,
                 self.disc.nb_tracks_per_head() - 1
-            );
+            )));
         }
 
         let track1 = track;
@@ -1495,44 +1534,60 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
             }
         };
 
-        BlocAccessInformation {
+        Ok(BlocAccessInformation {
             track1,
             sector1_id,
             track2,
             sector2_id
-        }
+        })
     }
 
     /// Read the content of the given bloc
-    pub fn read_bloc(&self, bloc_idx: BlocIdx) -> Vec<u8> {
+    pub fn read_bloc(&self, bloc_idx: BlocIdx) -> Result<Vec<u8>, AmsdosError> {
         assert!(bloc_idx.is_valid());
-        let access_info = self.bloc_access_information(bloc_idx);
+        let access_info = self.bloc_access_information(bloc_idx)?;
 
         let sector1_data = self
             .disc
             .sector_read_bytes(self.head, access_info.track1, access_info.sector1_id)
-            .unwrap();
+            .ok_or_else(|| {
+                AmsdosError::Various(format!(
+                    "Unable to read sector {}/{}",
+                    access_info.track1, access_info.sector1_id
+                ))
+            })?;
 
         let sector2_data = self
             .disc
             .sector_read_bytes(self.head, access_info.track2, access_info.sector2_id)
-            .unwrap();
+            .ok_or_else(|| {
+                AmsdosError::Various(format!(
+                    "Unable to read sector {}/{}",
+                    access_info.track2, access_info.sector2_id
+                ))
+            })?;
 
         let mut content = sector1_data;
         content.extend(sector2_data);
 
-        assert_eq!(content.len(), DATA_SECTOR_SIZE * 2);
+        if content.len() != DATA_SECTOR_SIZE * 2 {
+            return Err(AmsdosError::Various(format!(
+                "Corrupted disc: bloc sectors total {} bytes, expected {}",
+                content.len(),
+                DATA_SECTOR_SIZE * 2
+            )));
+        }
 
-        content
+        Ok(content)
     }
 
     /// Read the content of the given entry
-    pub fn read_entry(&self, entry: &AmsdosEntry) -> Vec<u8> {
-        entry
-            .used_blocs()
-            .iter()
-            .flat_map(|bloc_idx| self.read_bloc(*bloc_idx))
-            .collect::<Vec<u8>>()
+    pub fn read_entry(&self, entry: &AmsdosEntry) -> Result<Vec<u8>, AmsdosError> {
+        let mut content = Vec::new();
+        for bloc_idx in entry.used_blocs() {
+            content.extend(self.read_bloc(*bloc_idx)?);
+        }
+        Ok(content)
     }
 }
 

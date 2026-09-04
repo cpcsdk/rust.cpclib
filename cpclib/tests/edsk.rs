@@ -308,7 +308,7 @@ mod tests {
 
         use cpclib::disc::amsdos::*;
         let amsdos = AmsdosManagerNonMut::new_from_disc(&dsk, cpclib::disc::edsk::Head::A);
-        let entries = dbg!(amsdos.catalog().to_amsdos_catalog());
+        let entries = dbg!(amsdos.catalog().unwrap().to_amsdos_catalog());
 
         assert_eq!(entries.len(), 1);
 
@@ -477,6 +477,7 @@ mod tests {
         let entries = dbg!(
             amsdos
                 .catalog()
+                .unwrap()
                 .to_amsdos_catalog()
                 .sorted_physically_and_alphabetically()
         );

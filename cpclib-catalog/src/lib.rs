@@ -638,7 +638,7 @@ fn load_catalog_bytes(catalog_fname: &str) -> Result<Vec<u8>, String> {
         let disc = open_disc(catalog_fname, true)
             .map_err(|e| format!("Unable to read the disc file: {:?}", e))?;
         let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        Ok(manager.catalog_slice())
+        manager.catalog_slice().map_err(|e| e.to_string())
     }
     else {
         let mut file = File::open(catalog_fname).map_err(|e| e.to_string())?;
@@ -657,7 +657,7 @@ fn load_catalog_entries(catalog_fname: &str) -> Result<AmsdosEntries, String> {
         let disc = open_disc(catalog_fname, true)
             .map_err(|e| format!("Unable to read the disc file: {:?}", e))?;
         let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        Ok(manager.catalog())
+        manager.catalog().map_err(|e| e.to_string())
     }
     else {
         let mut file = File::open(catalog_fname).map_err(|e| e.to_string())?;

@@ -140,26 +140,45 @@ impl DiscInformation {
 
     /// Build an eDSK from a buffer of bytes
     ///  TODO manage the case of standard dsk
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        assert_eq!(buffer.len(), 256);
-        assert_eq!(
-            String::from_utf8_lossy(&buffer[..34]).to_ascii_uppercase(),
-            "EXTENDED CPC DSK File\r\nDisk-Info\r\n".to_ascii_uppercase()
-        );
+    pub fn from_buffer(buffer: &[u8]) -> Result<Self, String> {
+        if buffer.len() != 256 {
+            return Err(format!(
+                "DiscInformation block must be exactly 256 bytes, got {}",
+                buffer.len()
+            ));
+        }
+        let signature = String::from_utf8_lossy(&buffer[..34]).to_ascii_uppercase();
+        if signature != "EXTENDED CPC DSK File\r\nDisk-Info\r\n".to_ascii_uppercase() {
+            return Err(format!(
+                "Not an Extended CPC DSK file (bad signature: {signature:?})"
+            ));
+        }
 
         let creator_name = String::from_utf8_lossy(&buffer[0x22..=0x2F]);
         let number_of_tracks = buffer[0x30];
         let number_of_heads = buffer[0x31];
-        let track_size_table = &buffer[0x34..(0x34 + number_of_tracks * number_of_heads) as usize];
+        // Widen to usize *before* multiplying: two attacker-controlled u8s
+        // multiplied as u8 can overflow/wrap.
+        let track_size_table_len = number_of_tracks as usize * number_of_heads as usize;
+        let track_size_table_end = 0x34 + track_size_table_len;
+        if track_size_table_end > buffer.len() {
+            return Err(format!(
+                "DiscInformation declares {number_of_tracks} tracks * {number_of_heads} heads \
+                 of track-size bytes, which does not fit in the 256-byte block"
+            ));
+        }
+        let track_size_table = &buffer[0x34..track_size_table_end];
 
-        assert!(number_of_heads == 1 || number_of_heads == 2);
+        if number_of_heads != 1 && number_of_heads != 2 {
+            return Err(format!("Unsupported number of heads: {number_of_heads}"));
+        }
 
-        Self {
+        Ok(Self {
             creator_name: creator_name.to_string(),
             number_of_tracks,
             number_of_heads,
             track_size_table: track_size_table.to_vec()
-        }
+        })
     }
 
     fn to_buffer(&self, buffer: &mut Vec<u8>) {
@@ -190,7 +209,10 @@ impl DiscInformation {
         assert_eq!(buffer.len(), 256);
 
         // DEBUG mode XXX To remove
-        let from_buffer = Self::from_buffer(buffer);
+        // This buffer was just built from `self` a few lines up, not from
+        // untrusted input - a failure here is a real bug in this function.
+        let from_buffer =
+            Self::from_buffer(buffer).expect("buffer just serialized from self must parse back");
         assert_eq!(self, &from_buffer);
     }
 
@@ -374,14 +396,26 @@ impl TrackInformation {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    pub fn from_buffer(buffer: &[u8]) -> Self {
+    pub fn from_buffer(buffer: &[u8]) -> Result<Self, String> {
+        if buffer.len() < 0xC {
+            return Err(format!(
+                "Track buffer is only {} bytes, too short to hold even the \"Track-Info\" magic",
+                buffer.len()
+            ));
+        }
         if String::from_utf8_lossy(&buffer[..0xC]).to_ascii_uppercase()
             != "Track-info\r\n".to_ascii_uppercase()
         {
-            panic!(
+            return Err(format!(
                 "Track buffer does not seem coherent\n{:?}...",
                 &buffer[..0xC]
-            );
+            ));
+        }
+        if buffer.len() < 0x18 {
+            return Err(format!(
+                "Track buffer is only {} bytes, too short to hold its fixed header",
+                buffer.len()
+            ));
         }
 
         let track_size = buffer.len() as u16;
@@ -391,11 +425,11 @@ impl TrackInformation {
         let number_of_sectors = buffer[0x15];
         let gap3_length = buffer[0x16];
         let filler_byte = buffer[0x17];
-        let data_rate: DataRate = buffer[0x12].into();
-        let recording_mode = buffer[0x13].into();
+        let data_rate: DataRate = buffer[0x12].try_into()?;
+        let recording_mode = buffer[0x13].try_into()?;
 
         let sector_information_list =
-            SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
+            SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors)?;
 
         let track_info = Self {
             track_number,
@@ -410,14 +444,17 @@ impl TrackInformation {
             track_size
         };
 
-        assert!(track_info.track_size != 0);
+        if track_info.track_size == 0 {
+            return Err("Track info declares a track size of 0".to_string());
+        }
 
-        assert_eq!(
-            track_info.real_track_size(),
-            track_info.compute_track_size() as u16,
-            "Wrong track_info {track_info:?}"
-        );
-        track_info
+        if track_info.real_track_size() != track_info.compute_track_size() as u16 {
+            return Err(format!(
+                "Track info's declared size does not match its sectors' computed size: \
+                 {track_info:?}"
+            ));
+        }
+        Ok(track_info)
     }
 
     /// http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format#TRACK_INFORMATION_BLOCK_2
@@ -549,14 +586,16 @@ pub enum DataRate {
     ExtendedDensity = 3
 }
 
-impl From<u8> for DataRate {
-    fn from(b: u8) -> Self {
+impl TryFrom<u8> for DataRate {
+    type Error = String;
+
+    fn try_from(b: u8) -> Result<Self, String> {
         match b {
-            0 => Self::Unknown,
-            1 => Self::SingleOrDoubleDensity,
-            2 => Self::HighDensity,
-            3 => Self::ExtendedDensity,
-            _ => unreachable!()
+            0 => Ok(Self::Unknown),
+            1 => Ok(Self::SingleOrDoubleDensity),
+            2 => Ok(Self::HighDensity),
+            3 => Ok(Self::ExtendedDensity),
+            _ => Err(format!("{b} is not a valid data rate byte"))
         }
     }
 }
@@ -584,13 +623,15 @@ pub enum RecordingMode {
 }
 
 #[allow(missing_docs)]
-impl From<u8> for RecordingMode {
-    fn from(b: u8) -> Self {
+impl TryFrom<u8> for RecordingMode {
+    type Error = String;
+
+    fn try_from(b: u8) -> Result<Self, String> {
         match b {
-            0 => Self::Unknown,
-            1 => Self::FM,
-            2 => Self::MFM,
-            _ => unreachable!()
+            0 => Ok(Self::Unknown),
+            1 => Ok(Self::FM),
+            2 => Ok(Self::MFM),
+            _ => Err(format!("{b} is not a valid recording mode byte"))
         }
     }
 }
@@ -645,8 +686,14 @@ impl SectorInformation {
         self.len() == 0
     }
 
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        Self {
+    pub fn from_buffer(buffer: &[u8]) -> Result<Self, String> {
+        if buffer.len() < 8 {
+            return Err(format!(
+                "Sector information entry is only {} bytes, need 8",
+                buffer.len()
+            ));
+        }
+        Ok(Self {
             track: buffer[0x00],
             head: buffer[0x01],
             sector_id: buffer[0x02],
@@ -654,7 +701,7 @@ impl SectorInformation {
             fdc_status_register_1: buffer[0x04],
             fdc_status_register_2: buffer[0x05],
             data_length: u16::from(buffer[0x06]) + (u16::from(buffer[0x07]) * 256)
-        }
+        })
     }
 
     /// 00     track (equivalent to C parameter in NEC765 commands)     1
@@ -706,15 +753,21 @@ impl SectorInformationList {
         self.sectors.push(sector);
     }
 
-    pub fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> Self {
+    pub fn from_buffer(buffer: &[u8], number_of_sectors: u8) -> Result<Self, String> {
         let mut list_info = Vec::new();
         let mut list_data = Vec::new();
         let mut consummed_bytes = 0;
 
         // Get the information
         for _sector_number in 0..number_of_sectors {
+            if consummed_bytes > buffer.len() {
+                return Err(format!(
+                    "Sector information list declares {number_of_sectors} sectors but the \
+                     buffer ran out after {consummed_bytes} bytes"
+                ));
+            }
             let current_buffer = &buffer[consummed_bytes..];
-            let sector = SectorInformation::from_buffer(current_buffer);
+            let sector = SectorInformation::from_buffer(current_buffer)?;
             consummed_bytes += 8;
             list_info.push(sector);
         }
@@ -723,11 +776,18 @@ impl SectorInformationList {
         consummed_bytes = 256 - 0x18; // Skip the unused bytes
         for sector in &list_info {
             let current_sector_size = sector.data_length as usize;
-            let current_buffer = &buffer[consummed_bytes..consummed_bytes + current_sector_size];
+            let end = consummed_bytes + current_sector_size;
+            if end > buffer.len() {
+                return Err(format!(
+                    "A sector declares {current_sector_size} bytes of data, which does not fit \
+                     in the remaining track buffer"
+                ));
+            }
+            let current_buffer = &buffer[consummed_bytes..end];
             let sector_bytes = current_buffer.to_vec();
             assert_eq!(sector_bytes.len(), current_sector_size);
             list_data.push(sector_bytes);
-            consummed_bytes += current_sector_size;
+            consummed_bytes = end;
         }
 
         // merge them
@@ -743,7 +803,7 @@ impl SectorInformationList {
             })
             .collect::<Vec<Sector>>();
 
-        Self { sectors }
+        Ok(Self { sectors })
     }
 
     pub fn sector(&self, sector_id: u8) -> Option<&Sector> {
@@ -885,7 +945,10 @@ pub struct TrackInformationList {
 
 #[allow(missing_docs)]
 impl TrackInformationList {
-    fn from_buffer_and_disc_information(buffer: &[u8], disc_info: &DiscInformation) -> Self {
+    fn from_buffer_and_disc_information(
+        buffer: &[u8],
+        disc_info: &DiscInformation
+    ) -> Result<Self, String> {
         let mut consummed_bytes: usize = 0;
         let mut list = Vec::new();
 
@@ -893,19 +956,26 @@ impl TrackInformationList {
             for head_nb in 0..disc_info.number_of_heads {
                 // Size of the track data + header
                 let current_track_size = disc_info.track_length(track_number, head_nb) as usize;
-                let track_buffer = &buffer[consummed_bytes..(consummed_bytes + current_track_size)];
+                let end = consummed_bytes + current_track_size;
+                if end > buffer.len() {
+                    return Err(format!(
+                        "Track {track_number}, head {head_nb} declares {current_track_size} \
+                         bytes, which does not fit in the remaining disc buffer"
+                    ));
+                }
+                let track_buffer = &buffer[consummed_bytes..end];
                 if current_track_size > 0 {
-                    list.push(TrackInformation::from_buffer(track_buffer));
+                    list.push(TrackInformation::from_buffer(track_buffer)?);
                 }
                 else {
                     eprintln!("Track {track_number} is unformatted");
                     list.push(TrackInformation::unformatted());
                 }
-                consummed_bytes += current_track_size;
+                consummed_bytes = end;
             }
         }
 
-        Self { list }
+        Ok(Self { list })
     }
 
     /// Write the track list in the given buffer
@@ -962,17 +1032,22 @@ impl Default for ExtendedDsk {
 
 #[allow(missing_docs)]
 impl ExtendedDsk {
-    pub fn from_buffer(buffer: &[u8]) -> Self {
-        assert!(buffer.len() >= 256);
-        let disc_info = DiscInformation::from_buffer(&buffer[..256]);
+    pub fn from_buffer(buffer: &[u8]) -> Result<Self, String> {
+        if buffer.len() < 256 {
+            return Err(format!(
+                "DSK file is only {} bytes, too short to hold even the disc information block",
+                buffer.len()
+            ));
+        }
+        let disc_info = DiscInformation::from_buffer(&buffer[..256])?;
 
         let track_list =
-            TrackInformationList::from_buffer_and_disc_information(&buffer[256..], &disc_info);
+            TrackInformationList::from_buffer_and_disc_information(&buffer[256..], &disc_info)?;
 
-        Self {
+        Ok(Self {
             disc_information_bloc: disc_info,
             track_list
-        }
+        })
     }
 
     /// Add the file in consecutive sectors
@@ -1121,7 +1196,7 @@ impl Disc for ExtendedDsk {
             buffer
         };
 
-        Ok(Self::from_buffer(&buffer))
+        Self::from_buffer(&buffer)
     }
 
     /// Save the dsk in a file one disc
@@ -1137,20 +1212,13 @@ impl Disc for ExtendedDsk {
     }
 
     /// Return the smallest sector id over all tracks for the given head (ignoring unformatted tracks)
-    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> Option<u8> {
         let head: u8 = side.into().into();
         self.tracks()
             .iter()
             .filter(|track| track.head_number == head)
             .filter_map(TrackInformation::min_sector)
             .min()
-            .unwrap_or_else(|| {
-                panic!(
-                    "DSK image has no formatted tracks on side {}. \
-                 Cannot determine minimum sector ID.",
-                    head
-                )
-            })
     }
 
     fn sector_read_bytes<S: Into<Head>>(
@@ -1175,23 +1243,16 @@ impl Disc for ExtendedDsk {
             format!(
                 "Head {head:?} track {track} sector 0x{sector_id:X} missing",
             )
-        }).unwrap()/*?*/;
+        })?;
         sector.set_values(bytes)?;
 
         Ok(())
     }
 
-    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> Option<u8> {
         let side_val: u8 = side.into().into();
         self.get_track_information(side_val, track)
             .and_then(|track_info| track_info.min_sector())
-            .unwrap_or_else(|| {
-                panic!(
-                    "DSK image has unformatted or missing track: side={}, track={}. \
-                 Cannot determine minimum sector ID.",
-                    side_val, track
-                )
-            })
     }
 
     // We assume we have the same number of tracks per Head.

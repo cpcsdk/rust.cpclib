@@ -472,7 +472,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let _dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);
 
         let amsdos = cpclib::disc::amsdos::AmsdosManagerNonMut::new_from_disc(&dsk, 0);
-        let catalog = amsdos.catalog();
+        let catalog = amsdos.catalog().unwrap();
         let nb_entries = catalog.used_entries().count();
         assert_eq!(0, nb_entries);
         // let dsk2 = cpclib::disc::edsk::ExtendedDsk::from_buffer(&buffer);

@@ -303,6 +303,7 @@ pub fn load_file<'a, 'b, F: Into<Fname<'a, 'b>>>(
         let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
         let file = manager
             .get_file(AmsdosFileName::try_from(amsdos_fname)?)
+            .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?
             .ok_or_else(|| {
                 AssemblerError::AssemblingError {
                     msg: format!("Unable to get {amsdos_fname}")

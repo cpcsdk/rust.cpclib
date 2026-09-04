@@ -86,8 +86,8 @@ impl Disc for AnyDisc {
         } {
             fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)>;
             fn save<P>(&self, path: P) -> Result<(), String> where P: AsRef<Utf8Path> ;
-            fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8;
-            fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8;
+            fn global_min_sector<S: Into<Head>>(&self, side: S) -> Option<u8>;
+            fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> Option<u8>;
             fn nb_tracks_per_head(&self) -> u8;
             fn sector_read_bytes<S: Into<Head>>(
                 &self,
@@ -257,12 +257,12 @@ pub fn dsk_manager_handle(
             o.emit_stderr("WIP - We assume the format of the Track 0 is similar to Amsdos one");
 
             let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
-            let bytes = manager.catalog().as_bytes();
+            let bytes = manager.catalog()?.as_bytes();
             let mut f = File::create(fname)?;
             f.write_all(&bytes)?;
         } else if sub.contains_id("LIST") {
             let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
-            let catalog = manager.catalog();
+            let catalog = manager.catalog()?;
             let entries = catalog.visible_entries().collect::<Vec<_>>();
             // TODO manage files instead of entries
             o.emit_stdout(&format!("Dsk {} -- {} files", dsk_fname, entries.len()));

@@ -19,7 +19,7 @@ fn test_cata_catart() {
     // Load catalog from DSK and extract BASIC program
     let dsk = AnyDisc::open("tests/discs/CATA/CATA.DSK").expect("Failed to read CATA.DSK file");
     let manager = AmsdosManagerNonMut::new_from_disc(&dsk, Head::A);
-    let binary_catalog = manager.catalog_slice();
+    let binary_catalog = manager.catalog_slice().expect("Failed to read catalog slice");
 
     eprintln!("Binary catalog size: {} bytes", binary_catalog.len());
 

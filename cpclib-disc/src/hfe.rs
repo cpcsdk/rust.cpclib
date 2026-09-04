@@ -107,57 +107,35 @@ impl Disc for Hfe {
         Ok(())
     }
 
-    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> Option<u8> {
         let _side = side.into();
         let _access = self.img.sector_access().unwrap();
-        let mut min_sector = u8::MAX;
-        for t in 0..(self.img.nb_tracks()) {
-            for s in 0..self.img.nb_sides() {
-                min_sector = min_sector.min(self.track_min_sector(s as u8, t as _));
-            }
-        }
-
-        if min_sector == u8::MAX {
-            panic!(
-                "HFE image has no formatted tracks. \
-                 Unable to determine minimum sector ID."
-            );
-        }
-
-        min_sector as _
+        (0..self.img.nb_tracks())
+            .flat_map(|t| (0..self.img.nb_sides()).map(move |s| (s, t)))
+            .filter_map(|(s, t)| self.track_min_sector(s as u8, t as _))
+            .min()
     }
 
-    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> Option<u8> {
         let s: i32 = side.into().into();
         let access = self.img.sector_access().unwrap();
         let sca =
             access.all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmMfm);
         let sca = match sca {
             Some(sca) => sca,
-            None => {
-                // Try FM encoding if MFM fails
-                access
-                    .all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmFm)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "HFE image has unformatted track: side={}, track={}. \
-                         The track contains no sectors in either MFM or FM encoding.",
-                            s, track
-                        )
-                    })
-            }
+            // Try FM encoding if MFM fails; if that also fails, this track
+            // is genuinely unformatted/missing - a legitimate outcome for a
+            // corrupted or partially-blank image, not an error.
+            None => access.all_track_sectors(
+                s.into(),
+                (track as i32).into(),
+                TrackEncoding::IsoibmFm
+            )?
         };
 
         (0..sca.nb_sectors())
             .map(|k| sca.sector_config(k).sector_id().get() as u8)
             .min()
-            .unwrap_or_else(|| {
-                panic!(
-                    "HFE track has no sector IDs: side={}, track={}. \
-                 Track exists but contains no valid sectors.",
-                    s, track
-                )
-            })
     }
 
     fn nb_tracks_per_head(&self) -> u8 {

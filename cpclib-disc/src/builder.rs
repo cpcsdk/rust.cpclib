@@ -1,5 +1,5 @@
 use crate::cfg::DiscConfig;
-use crate::edsk::{ExtendedDsk, Head};
+use crate::edsk::{DataRate, ExtendedDsk, Head, RecordingMode};
 
 /// Generate an edsk from the given configuration
 pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
@@ -51,8 +51,8 @@ pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
 
         track_info.track_number = track_idx;
         track_info.head_number = track_model.head.into();
-        track_info.data_rate = 1.into();
-        track_info.recording_mode = 2.into();
+        track_info.data_rate = DataRate::SingleOrDoubleDensity;
+        track_info.recording_mode = RecordingMode::MFM;
         track_info.sector_size = track_model.sector_size_dsk_format();
         track_info.number_of_sectors = track_model.sector_id.len() as _;
         track_info.gap3_length = track_model.gap3; // TODO ensure a 8buts value is in the cfg

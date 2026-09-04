@@ -27,7 +27,7 @@ fn test_crtc_catart() {
     // Load catalog from DSK and extract BASIC program
     let dsk = AnyDisc::open("tests/discs/crtc/CRTC.DSK").expect("Failed to read DSK file");
     let manager = AmsdosManagerNonMut::new_from_disc(&dsk, Head::A);
-    let binary_catalog = manager.catalog_slice();
+    let binary_catalog = manager.catalog_slice().expect("Failed to read catalog slice");
     let catalog_type = CatalogType::Cat;
 
     let catalog_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type)
@@ -494,7 +494,7 @@ fn test_crtc_two_paths_comparison() {
     // Load catalog from DSK
     let dsk = AnyDisc::open("tests/discs/crtc/CRTC.DSK").expect("Failed to read DSK file");
     let manager = AmsdosManagerNonMut::new_from_disc(&dsk, Head::A);
-    let binary_catalog = manager.catalog_slice();
+    let binary_catalog = manager.catalog_slice().expect("Failed to read catalog slice");
     let catalog_type = CatalogType::Cat;
 
     // PATH 1: catalog_to_basic_listing (used by test) → extract_basic_from_sequential_catart

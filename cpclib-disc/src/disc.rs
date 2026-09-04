@@ -67,8 +67,12 @@ pub trait Disc {
     fn save<P>(&self, path: P) -> Result<(), String>
     where P: AsRef<Utf8Path>;
 
-    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8;
-    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8;
+    /// `None` if the disc/side has no formatted track to read a minimum
+    /// sector id from - a legitimate outcome for e.g. a corrupted or
+    /// partially-blank image, not an error.
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> Option<u8>;
+    /// `None` if this track is unformatted or missing.
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> Option<u8>;
     fn nb_tracks_per_head(&self) -> u8;
 
     fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)>;
@@ -233,7 +237,7 @@ pub trait Disc {
         else {
             let manager = AmsdosManagerNonMut::new_from_disc(self, head);
 
-            Ok(manager.get_file(filename))
+            manager.get_file(filename)
         }
     }
 }
@@ -252,11 +256,11 @@ impl<T: Disc> Disc for Box<T> {
         self.deref().save(path)
     }
 
-    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> Option<u8> {
         self.deref().global_min_sector(side)
     }
 
-    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> Option<u8> {
         self.deref().track_min_sector(side, track)
     }
 

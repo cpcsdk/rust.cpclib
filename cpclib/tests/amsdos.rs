@@ -23,6 +23,7 @@ mod tests {
         let manager = AmsdosManagerNonMut::new_from_disc(&onefile, 0);
         let file = manager
             .get_file(AmsdosFileName::try_from("test.bas").unwrap())
+            .unwrap()
             .unwrap();
         assert!(dbg!(file.header().unwrap()).is_checksum_valid());
         assert!(file.is_basic());
@@ -52,10 +53,11 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(manager.catalog(), manager2.catalog(),);
+        assert_eq!(manager.catalog().unwrap(), manager2.catalog().unwrap(),);
 
         let file3 = manager
             .get_file(AmsdosFileName::try_from("test.bas").unwrap())
+            .unwrap()
             .unwrap();
         assert_eq!(file.header(), file3.header());
 
@@ -76,7 +78,7 @@ mod tests {
 
         let dsk: ExtendedDsk = DiscConfig::single_head_data_format().into();
         let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
-        let catalog = manager.catalog();
+        let catalog = manager.catalog().unwrap();
 
         println!("{:?}", catalog);
 
@@ -203,7 +205,7 @@ mod tests {
         let mut dsk: ExtendedDsk = DiscConfig::single_head_data_format().into();
         {
             let mut manager = AmsdosManagerMut::new_from_disc(&mut dsk, 0);
-            let catalog = manager.catalog();
+            let catalog = manager.catalog().unwrap();
 
             assert_eq!(catalog.used_entries().count(), 0);
 
@@ -276,7 +278,7 @@ mod tests {
         assert_eq!(entry.amsdos_filename().user(), 0);
 
         let manager = AmsdosManagerMut::new_from_disc(&mut dsk, 0);
-        let catalog = manager.catalog();
+        let catalog = manager.catalog().unwrap();
 
         println!("{:?}", catalog);
         assert_eq!(catalog.used_entries().count(), 1);
@@ -287,7 +289,7 @@ mod tests {
         );
 
         // TODO find a way to pass filename by reference
-        let file2 = manager.get_file(filename);
+        let file2 = manager.get_file(filename).unwrap();
         assert!(file2.is_some());
         let file2 = file2.unwrap();
         assert!(file2.header().unwrap().is_checksum_valid());
