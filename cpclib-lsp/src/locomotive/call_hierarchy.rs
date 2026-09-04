@@ -14,6 +14,12 @@ use super::BasicAnalyzer;
 use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::Document;
 
+/// `(line, column, length)` of one call-site token span.
+type CallSiteSpan = (u32, u32, u32);
+/// One `GOSUB` target line number, and every call-site span on the scanned
+/// line that jumps to it.
+type GosubTargetGroup = (u16, Vec<CallSiteSpan>);
+
 /// Builds the `CallHierarchyItem` for one BASIC line. `line_offset` is added
 /// to `bline.source_line` for the absolute document line (0 for standalone,
 /// the `LOCOMOTIVE` block's start line when embedded); `embedded_block_start`
@@ -90,8 +96,8 @@ fn span_range(line: u32, col: u32, len: u32) -> Range {
 /// `AFTER`, `EVERY` are their own separate keyword tokens that simply reset
 /// `after_gosub` to `false` (falling into the wildcard arm below), and the
 /// following `Gosub` token sets it back to `true` regardless.
-fn gosub_targets_in_line(bline: &LocatedBasicLine) -> Vec<(u16, Vec<(u32, u32, u32)>)> {
-    let mut groups: Vec<(u16, Vec<(u32, u32, u32)>)> = Vec::new();
+fn gosub_targets_in_line(bline: &LocatedBasicLine) -> Vec<GosubTargetGroup> {
+    let mut groups: Vec<GosubTargetGroup> = Vec::new();
     let mut after_gosub = false;
 
     for tok in &bline.tokens {
@@ -119,7 +125,7 @@ fn gosub_targets_in_line(bline: &LocatedBasicLine) -> Vec<(u16, Vec<(u32, u32, u
 fn gosub_callers_of(
     prog: &LocatedBasicProgram,
     line_number: u16
-) -> Vec<(&LocatedBasicLine, Vec<(u32, u32, u32)>)> {
+) -> Vec<(&LocatedBasicLine, Vec<CallSiteSpan>)> {
     prog.lines
         .iter()
         .filter_map(|bline| {

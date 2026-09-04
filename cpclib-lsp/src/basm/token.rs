@@ -31,8 +31,8 @@ pub(super) const MOD_READONLY: u32 = 1 << 1;
 /// silently ignore with no visible effect at all.
 pub(super) const MOD_INACTIVE: u32 = 1 << 2;
 
-/// One semantic token in absolute (not delta-encoded) document coordinates
-/// - the shared accumulation shape every source (the ASM tokenizer itself,
+/// One semantic token in absolute (not delta-encoded) document coordinates:
+/// the shared accumulation shape every source (the ASM tokenizer itself,
 /// LOCOMOTIVE-embedded BASIC, bndbuild-embedded rules) pushes into before
 /// the final sort + delta-encode pass in `semantic_tokens.rs`.
 pub(super) struct RawSemanticToken {

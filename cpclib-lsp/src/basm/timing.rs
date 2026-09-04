@@ -127,7 +127,7 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
         })
         .collect();
 
-    scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    scored.sort_unstable_by_key(|(score, _)| std::cmp::Reverse(*score));
     let top = scored.first().map(|(s, _)| *s).unwrap_or(-1);
 
     if top < 0 {

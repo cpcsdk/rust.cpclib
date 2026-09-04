@@ -477,19 +477,35 @@ impl AssemblyAnalyzer {
         }
         None
     }
+}
 
+/// Static shape of a `wrap_action` (header/footer wrapping is the only part
+/// that varies between call sites - the selection itself is passed separately).
+pub(super) struct WrapActionSpec<'a> {
+    pub header: &'a str,
+    pub footer: &'a str,
+    pub placeholder: &'a str,
+    pub title: &'a str,
+    pub kind: CodeActionKind
+}
+
+impl AssemblyAnalyzer {
     pub(super) fn wrap_action(
         &self,
         document: &Document,
         lines: &[&str],
         start_line: usize,
         end_line: usize,
-        header: &str,
-        footer: &str,
-        placeholder: &str,
-        title: &str,
-        kind: CodeActionKind
+        spec: WrapActionSpec<'_>
     ) -> CodeAction {
+        let WrapActionSpec {
+            header,
+            footer,
+            placeholder,
+            title,
+            kind
+        } = spec;
+
         // Detect minimum indentation of non-empty selected lines.
         let indent = lines[start_line..=end_line]
             .iter()
@@ -729,9 +745,12 @@ fn classify_no_op_or_improvable<T: ListingElement>(
 /// real assembler calls to expand a fake instruction - built from the
 /// token's own operands, not from assembled bytes. `None` if `token` isn't
 /// a fake instruction this function recognizes.
+/// One expanded real instruction: mnemonic plus its (up to two) operands.
+type RealInstructionExpansion = (Mnemonic, Option<DataAccess>, Option<DataAccess>);
+
 fn fake_instruction_real_expansion<T: ListingElement>(
     token: &T
-) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>> {
+) -> Option<Vec<RealInstructionExpansion>> {
     let mnemonic = *token.mnemonic()?;
     T::fake_to_listing_from_access(mnemonic, token.mnemonic_arg1(), token.mnemonic_arg2(), None)
 }

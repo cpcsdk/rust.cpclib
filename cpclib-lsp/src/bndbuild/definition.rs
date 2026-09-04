@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
+use fs_err::PathExt;
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
@@ -365,8 +366,8 @@ impl BuildFileAnalyzer {
 
         for (line_num, line) in text.lines().enumerate() {
             let trimmed = line.trim_start();
-            let content = if trimmed.starts_with("- ") {
-                trimmed[2..].trim_start()
+            let content = if let Some(stripped) = trimmed.strip_prefix("- ") {
+                stripped.trim_start()
             }
             else {
                 trimmed
@@ -615,11 +616,11 @@ pub(crate) fn build_include_graph(roots: &[PathBuf]) -> HashMap<PathBuf, Vec<Pat
                 .into_iter()
                 .map(|rel| {
                     let candidate = dir.join(&rel);
-                    candidate.canonicalize().unwrap_or(candidate)
+                    candidate.fs_err_canonicalize().unwrap_or(candidate)
                 })
                 .collect();
             if !edges.is_empty() {
-                let from = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                let from = path.fs_err_canonicalize().unwrap_or_else(|_| path.to_path_buf());
                 graph.insert(from, edges);
             }
         }
@@ -700,7 +701,7 @@ pub(crate) fn files_transitively_including(
     target: &Path
 ) -> Vec<PathBuf> {
     let target = target
-        .canonicalize()
+        .fs_err_canonicalize()
         .unwrap_or_else(|_| target.to_path_buf());
 
     let mut reverse: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
@@ -742,7 +743,7 @@ pub(crate) fn files_transitively_included_by(
     graph: &HashMap<PathBuf, Vec<PathBuf>>,
     from: &Path
 ) -> Vec<PathBuf> {
-    let from = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
+    let from = from.fs_err_canonicalize().unwrap_or_else(|_| from.to_path_buf());
 
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut queue: VecDeque<PathBuf> = VecDeque::new();

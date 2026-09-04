@@ -57,6 +57,18 @@ enum LabelEntry {
     Local(DocumentSymbol)
 }
 
+/// Per-token symbol facts extracted before building its `DocumentSymbol`:
+/// `(source_len, display_name, category, kind, detail, pos_override, is_local_label)`.
+type TokenSymbolFacts = (
+    usize,
+    String,
+    SymbolCategory,
+    SymbolKind,
+    Option<String>,
+    Option<(u32, u32)>,
+    bool
+);
+
 impl AssemblyAnalyzer {
     pub fn document_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
         let Ok(listing) = self.parse_document(document)
@@ -94,15 +106,8 @@ impl AssemblyAnalyzer {
             // (for the selection range) — display_name: what the outline shows
             // pos_override: set only when the definition's own position isn't
             // `token.span()` (see the RANGE/DEFSECTION arm below)
-            let (source_len, display_name, category, kind, detail, pos_override, is_local_label): (
-                usize,
-                String,
-                SymbolCategory,
-                SymbolKind,
-                Option<String>,
-                Option<(u32, u32)>,
-                bool
-            ) = if token.is_label() {
+            let (source_len, display_name, category, kind, detail, pos_override, is_local_label):
+                TokenSymbolFacts = if token.is_label() {
                 let raw = token.label_symbol();
                 let is_local = raw.starts_with('.');
                 let display = if is_local {

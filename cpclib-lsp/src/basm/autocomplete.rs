@@ -14,11 +14,11 @@ use super::AssemblyAnalyzer;
 use super::token::{DIRECTIVE_FILE_ARGS, SNASET_FLAGS, is_ident_byte};
 use crate::common::document::Document;
 
-/// Semantic completion context for Z80 assembly.
-///
-/// Determines whether the cursor is in "mnemonic/directive" position
-/// (first token on the statement) or in an "operand" position (after
-/// the mnemonic, for instruction argument N).
+// Semantic completion context for Z80 assembly.
+//
+// Determines whether the cursor is in "mnemonic/directive" position
+// (first token on the statement) or in an "operand" position (after
+// the mnemonic, for instruction argument N).
 
 // ─── Operand type flags ───────────────────────────────────────────────────────
 

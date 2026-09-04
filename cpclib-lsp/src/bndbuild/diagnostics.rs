@@ -180,8 +180,8 @@ impl BuildFileAnalyzer {
 
         for line in expanded_text.lines() {
             let trimmed = line.trim_start();
-            let content = if trimmed.starts_with("- ") {
-                trimmed[2..].trim_start()
+            let content = if let Some(stripped) = trimmed.strip_prefix("- ") {
+                stripped.trim_start()
             }
             else {
                 trimmed
@@ -212,8 +212,8 @@ impl BuildFileAnalyzer {
         // ── Check each dependency value (on the expanded text) ──────────────
         for (exp_line_idx, line) in expanded_text.lines().enumerate() {
             let trimmed = line.trim_start();
-            let content = if trimmed.starts_with("- ") {
-                trimmed[2..].trim_start()
+            let content = if let Some(stripped) = trimmed.strip_prefix("- ") {
+                stripped.trim_start()
             }
             else {
                 trimmed

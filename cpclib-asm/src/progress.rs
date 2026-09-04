@@ -344,9 +344,9 @@ impl Progress {
             self.pass = Some((0, 0, 0));
         }
 
-        self.pass
-            .as_mut()
-            .map(|pass: &mut (usize, usize, usize)| *pass = (pass.0 + 1, 0, 0));
+        if let Some(pass) = self.pass.as_mut() {
+            *pass = (pass.0 + 1, 0, 0);
+        }
     }
 
     #[cfg(feature = "indicatif")]

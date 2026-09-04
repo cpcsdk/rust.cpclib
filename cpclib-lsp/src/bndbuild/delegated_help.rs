@@ -103,14 +103,17 @@ fn fetch_and_parse_help(name: &str) -> Vec<(String, Option<String>)> {
     parse_help_options(&text)
 }
 
-static HELP_CACHE: LazyLock<Mutex<HashMap<String, Vec<(String, Option<String>)>>>> =
+/// `(flag, description)` pairs scraped from a delegated command's `--help`.
+type HelpOptions = Vec<(String, Option<String>)>;
+
+static HELP_CACHE: LazyLock<Mutex<HashMap<String, HelpOptions>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Returns the `(flag, description)` pairs scraped from `<name> --help`,
 /// memoized after the first call. Empty when the tool isn't a recognized
 /// delegated command, isn't installed locally, or its help text had no
 /// recognizable option lines.
-pub fn get_completions_for(name: &str) -> Vec<(String, Option<String>)> {
+pub fn get_completions_for(name: &str) -> HelpOptions {
     let mut cache = HELP_CACHE.lock().unwrap();
     if let Some(cached) = cache.get(name) {
         return cached.clone();

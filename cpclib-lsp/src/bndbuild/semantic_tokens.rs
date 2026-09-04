@@ -57,8 +57,8 @@ impl BuildFileAnalyzer {
                 let mut byte_pos = 0usize;
                 for c in line_str.chars() {
                     let clen = c.len_utf8();
-                    for b in byte_pos..byte_pos + clen {
-                        byte_to_utf16[b] = utf16;
+                    for slot in &mut byte_to_utf16[byte_pos..byte_pos + clen] {
+                        *slot = utf16;
                     }
                     byte_pos += clen;
                     utf16 += c.len_utf16() as u32;

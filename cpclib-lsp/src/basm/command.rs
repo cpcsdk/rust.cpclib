@@ -6,6 +6,7 @@ use tower_lsp::lsp_types::*;
 use super::AssemblyAnalyzer;
 use super::cycles::{self, SelectionCycleCount};
 use super::embedded_basic::extract_locomotive_blocks;
+use super::refactor::WrapActionSpec;
 use super::registers::AllRegisters;
 use crate::common::document::Document;
 
@@ -94,30 +95,22 @@ impl AssemblyAnalyzer {
         };
 
         // Wrap in MACRO / ENDM
-        actions.push(self.wrap_action(
-            document,
-            &all_lines,
-            start_line,
-            end_line,
-            "MACRO MY_MACRO",
-            "ENDM",
-            "MY_MACRO",
-            "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
-            CodeActionKind::REFACTOR_EXTRACT
-        ));
+        actions.push(self.wrap_action(document, &all_lines, start_line, end_line, WrapActionSpec {
+            header: "MACRO MY_MACRO",
+            footer: "ENDM",
+            placeholder: "MY_MACRO",
+            title: "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
+            kind: CodeActionKind::REFACTOR_EXTRACT
+        }));
 
         // Wrap in REPEAT / REND
-        actions.push(self.wrap_action(
-            document,
-            &all_lines,
-            start_line,
-            end_line,
-            "REPEAT 10",
-            "REND",
-            "10",
-            "Wrap selection in REPEAT…REND (replace 10 with count)",
-            CodeActionKind::REFACTOR_EXTRACT
-        ));
+        actions.push(self.wrap_action(document, &all_lines, start_line, end_line, WrapActionSpec {
+            header: "REPEAT 10",
+            footer: "REND",
+            placeholder: "10",
+            title: "Wrap selection in REPEAT…REND (replace 10 with count)",
+            kind: CodeActionKind::REFACTOR_EXTRACT
+        }));
 
         // Join selected lines into one (instructions separated by " : ")
         if end_line > start_line

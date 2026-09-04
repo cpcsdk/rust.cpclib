@@ -29,6 +29,13 @@ pub mod sourcemap;
 pub mod symbols;
 pub mod token;
 
+/// `expand_cache`'s value: `(document version, expanded text + source map)`.
+type ExpandCacheEntry = (i32, Arc<(String, sourcemap::SourceMap)>);
+
+/// `include_graph_cache`'s value: `(roots, fingerprint, graph)` - see the
+/// field's own doc comment.
+type IncludeGraphCache = (Vec<PathBuf>, u128, Arc<HashMap<PathBuf, Vec<PathBuf>>>);
+
 /// Analyzer for build files (YAML with Jinja templates).
 ///
 /// Feature implementations are spread across this module's files, one
@@ -42,7 +49,7 @@ pub mod token;
 /// the expanded text redid this from scratch, even multiple times within
 /// the same request (see `diagnostics::analyze`).
 pub struct BuildFileAnalyzer {
-    expand_cache: DashMap<Url, (i32, Arc<(String, sourcemap::SourceMap)>)>,
+    expand_cache: DashMap<Url, ExpandCacheEntry>,
     /// Loaded once at `initialize()` - see `basm::AssemblyAnalyzer::config`'s
     /// own doc comment for the reasoning behind this shape.
     config: RwLock<Arc<BndbuildConfig>>,
@@ -51,7 +58,7 @@ pub struct BuildFileAnalyzer {
     /// comment. `(roots, fingerprint, graph)`; a single slot rather than a
     /// map keyed by root list, since every caller passes the same
     /// `self.workspace_roots()`.
-    include_graph_cache: RwLock<Option<(Vec<PathBuf>, u128, Arc<HashMap<PathBuf, Vec<PathBuf>>>)>>
+    include_graph_cache: RwLock<Option<IncludeGraphCache>>
 }
 
 impl BuildFileAnalyzer {

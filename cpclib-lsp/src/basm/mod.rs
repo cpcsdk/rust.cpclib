@@ -55,6 +55,19 @@ pub mod token;
 
 pub(crate) use token::semantic_tokens_legend;
 
+/// `parse_cache`'s value: `(document version, parse result)`, both the `Ok`
+/// (clean parse) and `Err` (still-usable partial listing) cases cached - see
+/// `parse::parse_document`.
+type ParseCacheEntry = (i32, Result<Arc<LocatedListing>, Arc<LocatedListing>>);
+
+/// `env_cache`'s value: `((document version, workspace fingerprint), env,
+/// whether the assemble actually finished)` - see the field's own doc comment.
+type EnvCacheEntry = ((i32, u128), Arc<Env>, bool);
+
+/// `symbols_cache`'s value: `(document version, extracted (name, detail)
+/// pairs)` - see the field's own doc comment.
+type SymbolsCacheEntry = (i32, Arc<Vec<(String, String)>>);
+
 /// Analyzer for Z80 assembly files using basm syntax.
 ///
 /// Feature implementations are spread across this module's files, one
@@ -72,7 +85,7 @@ pub(crate) use token::semantic_tokens_legend;
 /// `Arc` - parsed once, shared by reference, never cloned - is exactly as
 /// safe as it is for BASIC's fully-owned `LocatedBasicProgram`.
 pub struct AssemblyAnalyzer {
-    parse_cache: DashMap<Url, (i32, Result<Arc<LocatedListing>, Arc<LocatedListing>>)>,
+    parse_cache: DashMap<Url, ParseCacheEntry>,
     /// Cache for `expand::dry_run_env`'s result (a *real, full multi-pass
     /// assemble* of the whole document) - only used by features that
     /// genuinely need one (cross-file macro/`FUNCTION`/`STRUCT` lookup,
@@ -91,7 +104,7 @@ pub struct AssemblyAnalyzer {
     /// this document's real assemble without touching its own version.
     /// Without it, diagnostics/semantic-tokens/macro-hover silently served
     /// stale results after editing an included file in another buffer.
-    env_cache: DashMap<Url, ((i32, u128), Arc<Env>, bool)>,
+    env_cache: DashMap<Url, EnvCacheEntry>,
     /// Cache for `expand::local_symbols_env`'s result (a lightweight,
     /// non-assembling local `EQU`/`SET` resolution) - what most hover
     /// value-substitution needs actually use, since `dry_run_env`'s real
@@ -150,7 +163,7 @@ pub struct AssemblyAnalyzer {
     /// while typing elsewhere - so this turns their full-listing walk from
     /// "redone on every completion keystroke" into "redone only when that
     /// other document itself actually changes".
-    symbols_cache: DashMap<Url, (i32, Arc<Vec<(String, String)>>)>,
+    symbols_cache: DashMap<Url, SymbolsCacheEntry>,
     /// Loaded once at `initialize()` (see `common::config`) - defaults to
     /// today's exact behavior until/unless a real `cpclib-lsp.toml` is
     /// found. `RwLock<Arc<_>>` rather than a plain field so callers can grab

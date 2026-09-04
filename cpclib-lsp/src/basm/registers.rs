@@ -168,8 +168,8 @@ enum Section {
 /// Parse the contiguous `;`-comment block directly above `label_line`
 /// (0-based), if any, into a `FunctionContract`. Returns `None` when
 /// there's no comment block, or it contains no `IN:`/`OUT:` section at all
-/// - most functions in most codebases won't be annotated, and this feature
-/// must degrade gracefully rather than require it.
+/// (most functions in most codebases won't be annotated, and this feature
+/// must degrade gracefully rather than require it).
 pub(super) fn parse_function_contract(text: &str, label_line: u32) -> Option<FunctionContract> {
     let lines: Vec<&str> = text.lines().collect();
     let mut comment_lines: Vec<&str> = Vec::new();
@@ -213,8 +213,11 @@ pub(super) fn parse_function_contract(text: &str, label_line: u32) -> Option<Fun
 /// remainder of the line after the `:`. Longer keywords (`input`/`output`)
 /// are checked before their prefixes (`in`/`out`) so `"Input: ..."` isn't
 /// misread as keyword `"in"` + remainder `"put: ..."`.
+/// A section keyword and the constructor for the `Section` it introduces.
+type SectionKeyword = (&'static str, fn() -> Section);
+
 fn match_section_keyword(content: &str) -> Option<(Section, &str)> {
-    const KEYWORDS: &[(&str, fn() -> Section)] = &[
+    const KEYWORDS: &[SectionKeyword] = &[
         ("input", || Section::In),
         ("in", || Section::In),
         ("output", || Section::Out),

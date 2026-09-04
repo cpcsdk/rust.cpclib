@@ -32,8 +32,8 @@ use crate::common::document::{Document, byte_offset_to_utf16_col};
 
 /// MACRO or FUNCTION - the only two kinds this refactor supports.
 /// REPEAT/ITERATE/FOR counters already got their own, much simpler,
-/// single-file quickfix (`refactor.rs::unused_repeat_counter_removal_action`)
-/// - they aren't called by name elsewhere, so there's no call site to
+/// single-file quickfix (`refactor.rs::unused_repeat_counter_removal_action`),
+/// since they aren't called by name elsewhere, so there's no call site to
 /// rewrite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RemoveParameterKind {
@@ -749,13 +749,13 @@ impl AssemblyAnalyzer {
         kind: RemoveParameterKind,
         owner_name: &str,
         param_index: usize
-    ) -> Result<RemoveParameterTarget, RemovalBlocker> {
+    ) -> Result<RemoveParameterTarget, Box<RemovalBlocker>> {
         let listing = self.parse_document(document).map_err(|_| {
-            RemovalBlocker {
+            Box::new(RemovalBlocker {
                 uri: Some(document.uri.clone()),
                 line: None,
                 reason: "this document no longer parses cleanly".to_string()
-            }
+            })
         })?;
 
         let expected_kind = match kind {
@@ -787,7 +787,7 @@ impl AssemblyAnalyzer {
                 }
             })
             .ok_or_else(|| {
-                RemovalBlocker {
+                Box::new(RemovalBlocker {
                     uri: Some(document.uri.clone()),
                     line: None,
                     reason: format!(
@@ -796,7 +796,7 @@ impl AssemblyAnalyzer {
                          offered",
                         param_index + 1
                     )
-                }
+                })
             })
     }
 

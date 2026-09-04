@@ -210,19 +210,6 @@ impl AssemblyAnalyzer {
         result
     }
 
-    /// Where this document's real addresses come from.
-    ///
-    /// `own_assemble_complete` is whether assembling the document by itself
-    /// finished - necessary but not sufficient, because a file that is only
-    /// ever `include`d assembles into a *different program* than the one it
-    /// really belongs to, quite possibly without erroring at all.
-    ///
-    /// Ordered so the cheap test comes first: an unsaved buffer disqualifies
-    /// the project route immediately (recorded addresses are keyed by byte
-    /// offsets in the file *as assembled*), which means the expensive work -
-    /// walking the workspace for the include graph, then assembling the entry
-    /// - only ever happens for a document that matches disk, i.e. just after a
-    /// save rather than on every keystroke.
     /// The project's include graph, rebuilt only when the project changed.
     fn project_graph_cached(&self, root: &std::path::Path) -> (u128, Arc<entry::ProjectGraph>) {
         self.projects.graph_for(root)
@@ -286,6 +273,19 @@ impl AssemblyAnalyzer {
         resolved
     }
 
+    /// Where this document's real addresses come from.
+    ///
+    /// `own_assemble_complete` is whether assembling the document by itself
+    /// finished - necessary but not sufficient, because a file that is only
+    /// ever `include`d assembles into a *different program* than the one it
+    /// really belongs to, quite possibly without erroring at all.
+    ///
+    /// Ordered so the cheap test comes first: an unsaved buffer disqualifies
+    /// the project route immediately (recorded addresses are keyed by byte
+    /// offsets in the file *as assembled*), which means the expensive work
+    /// (walking the workspace for the include graph, then assembling the
+    /// entry) only ever happens for a document that matches disk, i.e. just
+    /// after a save rather than on every keystroke.
     fn resolve_peephole_addresses(
         &self,
         document: &Document,

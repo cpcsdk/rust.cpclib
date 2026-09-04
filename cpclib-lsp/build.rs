@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::path::Path;
-use std::{env, fs};
+use std::env;
+
+use fs_err as fs;
 
 fn main() {
     println!("cargo:rerun-if-changed=data/timings.txt");
@@ -32,7 +34,7 @@ fn generate_instr_forms() {
     .unwrap();
     writeln!(
         out,
-        "pub static INSTR_FORMS: &[(&'static str, &'static [&'static str])] = &["
+        "pub static INSTR_FORMS: &[(&str, &[&str])] = &["
     )
     .unwrap();
 
@@ -295,6 +297,7 @@ fn generate_directive_docs() {
 /// bullet lists. Two bullet shapes are used there:
 ///   - `` - `NAME` - description `` (one name)
 ///   - `` - `A`, `B`, `C` (shared description) `` (several names)
+///
 /// Every backtick-quoted name on a bullet line gets its own entry, sharing
 /// that line's description.
 fn parse_snaset_flags(md: &str) -> Vec<(String, String)> {
@@ -302,8 +305,8 @@ fn parse_snaset_flags(md: &str) -> Vec<(String, String)> {
     let mut in_snaset = false;
 
     for line in md.lines() {
-        if line.starts_with("### ") {
-            in_snaset = line[4..].trim() == "SNASET";
+        if let Some(rest) = line.strip_prefix("### ") {
+            in_snaset = rest.trim() == "SNASET";
             continue;
         }
         if !in_snaset {
@@ -321,11 +324,7 @@ fn parse_snaset_flags(md: &str) -> Vec<(String, String)> {
         let mut names = Vec::new();
         let mut remaining = rest;
         let mut consumed = 0usize;
-        loop {
-            let Some(open) = remaining.find('`')
-            else {
-                break;
-            };
+        while let Some(open) = remaining.find('`') {
             let after_open = &remaining[open + 1..];
             let Some(close_rel) = after_open.find('`')
             else {
@@ -417,7 +416,7 @@ fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String, bool)> {
     };
 
     for line in md.lines() {
-        if line.starts_with("### ") {
+        if let Some(rest) = line.strip_prefix("### ") {
             flush(&mut names, &mut syn, &mut desc, &mut result);
             in_code = false;
             sec = Sec::None;
@@ -425,7 +424,7 @@ fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String, bool)> {
             // `PHASE, DEPHASE`), but a few use `/` instead (e.g.
             // `RANGE/DEFSECTION`) - split on either so every alias gets its
             // own entry and hovering any of them finds the shared doc.
-            names = line[4..]
+            names = rest
                 .split([',', '/'])
                 .map(|n| n.trim().to_string())
                 .filter(|n| !n.is_empty())
@@ -637,7 +636,7 @@ fn generate_timings() {
 /// Note:  the source table has `or r` and `xor r` bit-patterns swapped; the values
 ///        used here are the correct Z80 encodings from the assembler source.
 fn emit_injected_alu_variants(
-    out: &mut std::fs::File,
+    out: &mut fs::File,
     pseudocode: &mut std::collections::HashMap<String, String>
 ) {
     // (pattern, opcodes, flags_8char, nops, notes)
@@ -732,8 +731,8 @@ fn parse_nops(s: &str) -> (u8, Option<u8>) {
     }
     let nops: u8 = first.parse().unwrap_or(0);
     let rest = s[first.len()..].trim_start();
-    let alt_start = if rest.starts_with('/') {
-        rest[1..].trim_start()
+    let alt_start = if let Some(stripped) = rest.strip_prefix('/') {
+        stripped.trim_start()
     }
     else if rest.to_ascii_lowercase().starts_with("or ") {
         rest[3..].trim_start()

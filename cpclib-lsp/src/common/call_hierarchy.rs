@@ -3,8 +3,8 @@
 //! `callHierarchy/incomingCalls`/`callHierarchy/outgoingCalls` - those two
 //! only receive the `CallHierarchyItem` back, not the original request
 //! context, so this is how `backend.rs` and the domain analyzers learn what
-//! kind of "function" a given item actually is (a basm label, a BASIC line
-//! - standalone or embedded in a `LOCOMOTIVE` block, a bndbuild target, or
+//! kind of "function" a given item actually is (a basm label, a BASIC line,
+//! standalone or embedded in a `LOCOMOTIVE` block, a bndbuild target, or
 //! a Jinja macro) without re-parsing its `name`/`range`.
 
 use serde::{Deserialize, Serialize};

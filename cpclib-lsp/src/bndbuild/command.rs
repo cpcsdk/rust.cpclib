@@ -313,8 +313,8 @@ impl BuildFileAnalyzer {
     /// Run a single command (`task_index`, 0-based, in source order) from
     /// `rule`, bypassing the normal target-run path entirely: no dependency
     /// resolution, no up-to-date check, and no other task in the rule is
-    /// touched. Directly calls the one `Task`'s own public `Task::execute`
-    /// - the exact function a full dependency-aware run
+    /// touched. Directly calls the one `Task`'s own public `Task::execute`,
+    /// the exact function a full dependency-aware run
     /// (`run_rule`/`BndBuilder::execute`) eventually calls per task anyway,
     /// so `ignore_errors()` ("-command") semantics are honored identically.
     pub fn run_single_task(

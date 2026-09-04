@@ -71,6 +71,7 @@ rayon.workspace = true
 
 [build-dependencies]
 serde_json.workspace = true
+fs-err.workspace = true
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }

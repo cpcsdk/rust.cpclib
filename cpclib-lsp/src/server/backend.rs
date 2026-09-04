@@ -402,8 +402,8 @@ impl CpcLspBackend {
         load_document_from(&self.documents, uri)
     }
 
-    /// Shared by both cross-file fallbacks: look up `word` (case-sensitively
-    /// - basm labels are case-sensitive by default, see
+    /// Shared by both cross-file fallbacks: look up `word` (case-sensitively,
+    /// since basm labels are case-sensitive by default - see
     /// `AssemblyAnalyzer::find_definition_in`'s own doc comment) in the file
     /// at `path`, using the already-open in-memory document if there is one.
     fn find_definition_at_path(&self, path: &std::path::Path, word: &str) -> Option<Location> {
@@ -929,8 +929,8 @@ fn update_embedded_bndbuild_index(
 /// which is noisy in a workspace (and can be genuinely long for a
 /// deeply-nested project). Only the message *text* is touched here; a
 /// `Diagnostic`'s own `range` and the URI it's published under (what the
-/// editor actually uses to place the squiggle and jump to it) are untouched
-/// - this only affects what a human reads in the Problems panel/hover
+/// editor actually uses to place the squiggle and jump to it) are untouched;
+/// this only affects what a human reads in the Problems panel/hover
 /// tooltip. A no-op with no configured root, or when a message contains no
 /// root's path at all (e.g. an error inside an `inner://` firmware asset).
 fn relativize_diagnostic_messages(diagnostics: &mut [Diagnostic], workspace_roots: &[PathBuf]) {
@@ -2992,7 +2992,7 @@ impl LanguageServer for CpcLspBackend {
             ) {
                 Ok(t) => t,
                 Err(blocker) => {
-                    report_removal_blockers(&self.client, &owner_name, &[blocker]).await;
+                    report_removal_blockers(&self.client, &owner_name, &[*blocker]).await;
                     return Ok(None);
                 }
             };

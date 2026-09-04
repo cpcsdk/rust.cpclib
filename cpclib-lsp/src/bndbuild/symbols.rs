@@ -19,6 +19,16 @@ use super::BuildFileAnalyzer;
 use super::token::Collecting;
 use crate::common::document::Document;
 
+/// Mutable rule-accumulation state threaded through `process_key_value`,
+/// borrowed from the caller's locals rather than owned.
+struct RuleParseState<'a> {
+    rule_tgt: &'a mut Option<(String, u32, u32)>,
+    rule_help: &'a mut Option<String>,
+    collecting: &'a mut Collecting,
+    block_base: &'a mut Option<usize>,
+    block_buf: &'a mut String
+}
+
 impl BuildFileAnalyzer {
     /// Outline for the editor: every `{% set %}` variable and every
     /// rule/target, flat, in document order.
@@ -242,11 +252,13 @@ impl BuildFileAnalyzer {
                     rest_col as u32,
                     orig,
                     target_names,
-                    &mut rule_tgt,
-                    &mut rule_help,
-                    &mut collecting,
-                    &mut block_base,
-                    &mut block_buf
+                    &mut RuleParseState {
+                        rule_tgt: &mut rule_tgt,
+                        rule_help: &mut rule_help,
+                        collecting: &mut collecting,
+                        block_base: &mut block_base,
+                        block_buf: &mut block_buf
+                    }
                 );
             }
             else if in_rule {
@@ -256,11 +268,13 @@ impl BuildFileAnalyzer {
                     indent as u32,
                     orig,
                     target_names,
-                    &mut rule_tgt,
-                    &mut rule_help,
-                    &mut collecting,
-                    &mut block_base,
-                    &mut block_buf
+                    &mut RuleParseState {
+                        rule_tgt: &mut rule_tgt,
+                        rule_help: &mut rule_help,
+                        collecting: &mut collecting,
+                        block_base: &mut block_base,
+                        block_buf: &mut block_buf
+                    }
                 );
             }
         }
@@ -282,12 +296,14 @@ impl BuildFileAnalyzer {
         line_col: u32,
         orig: u32,
         target_names: &[&'static str],
-        rule_tgt: &mut Option<(String, u32, u32)>,
-        rule_help: &mut Option<String>,
-        collecting: &mut Collecting,
-        block_base: &mut Option<usize>,
-        block_buf: &mut String
+        state: &mut RuleParseState<'_>
     ) {
+        let rule_tgt = &mut *state.rule_tgt;
+        let rule_help = &mut *state.rule_help;
+        let collecting = &mut *state.collecting;
+        let block_base = &mut *state.block_base;
+        let block_buf = &mut *state.block_buf;
+
         let colon = match line.find(':') {
             Some(i) => i,
             None => return
