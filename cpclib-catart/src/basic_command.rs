@@ -248,9 +248,9 @@ impl From<Vec<BasicCommand>> for BasicCommandList {
     }
 }
 
-impl Into<Vec<BasicCommand>> for BasicCommandList {
-    fn into(self) -> Vec<BasicCommand> {
-        self.0
+impl From<BasicCommandList> for Vec<BasicCommand> {
+    fn from(val: BasicCommandList) -> Self {
+        val.0
     }
 }
 

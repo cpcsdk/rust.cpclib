@@ -133,11 +133,11 @@ impl OcpPalette {
 
         let mut excluded: [u8; 16] = Default::default();
         let mut projected: [u8; 16] = Default::default();
-        for x in 0..16 {
-            excluded[x] = data.next().unwrap();
+        for byte in &mut excluded {
+            *byte = data.next().unwrap();
         }
-        for x in 0..16 {
-            projected[x] = data.next().unwrap();
+        for byte in &mut projected {
+            *byte = data.next().unwrap();
         }
 
         debug_assert!(data.next().is_none());

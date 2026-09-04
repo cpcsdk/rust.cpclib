@@ -2191,7 +2191,7 @@ fn serve_web_emulator<E: EventObserver>(
     o: &E
 ) -> Result<(), String> {
     let snapshot = match conf.snapshot.as_ref() {
-        Some(path) => Some(std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?),
+        Some(path) => Some(fs_err::read(path).map_err(|e| format!("cannot read {path}: {e}"))?),
         None => None
     };
 

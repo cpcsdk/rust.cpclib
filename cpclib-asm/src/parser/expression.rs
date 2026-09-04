@@ -375,7 +375,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                     ))
                     .parse_next(input),
                     b'A'..=b'F' | b'a'..=b'f' => {
-                        if looks_like_unprefixed_hex_literal(input.as_bstr().as_ref()) {
+                        if looks_like_unprefixed_hex_literal(input.as_bstr()) {
                             positive_number.parse_next(input)
                         }
                         else {

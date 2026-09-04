@@ -72,7 +72,7 @@ impl AmspiritLiteVersion {
 
         #[cfg(target_os = "linux")]
         {
-            return "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage";
+            "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage"
         }
 
         #[cfg(target_os = "macos")]
@@ -90,7 +90,7 @@ impl AmspiritLiteVersion {
         // An AppImage is the executable; there is nothing to unpack.
         #[cfg(target_os = "linux")]
         {
-            return ArchiveFormat::Raw;
+            ArchiveFormat::Raw
         }
 
         // A `.dmg` is mounted rather than extracted, which the post-install

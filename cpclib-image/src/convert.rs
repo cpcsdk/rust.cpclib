@@ -1229,45 +1229,56 @@ pub struct ImageConverter<C: AmstradColor> {
     crop_if_too_large: bool
 }
 
+/// The palette/mode/transform/sizing parameters shared by every
+/// [`ImageConverter`] conversion entry point (`convert`, `convert_to_sprite`,
+/// `convert_impl`) - bundled to keep their argument count down. Each
+/// function destructures it back into local bindings of the same names
+/// immediately, so their bodies are otherwise unchanged by this grouping.
+#[derive(Clone)]
+pub struct ConvertParams<'o, C: AmstradColor> {
+    /// A palette can be specified
+    pub palette: LockablePalette<C>,
+    /// Screen mode
+    pub mode: Mode,
+    /// List of transformations
+    pub transformations: TransformationsList<C>,
+    /// Crop image if too large in comparison to result screen
+    pub crop_if_too_large: bool,
+    /// Pen to use for pixels that cannot be represented; `None` to reject them
+    pub missing_pen: Option<Pen>,
+    /// Observer notified of conversion progress/events
+    pub o: &'o dyn EventObserver
+}
+
 #[allow(missing_docs)]
 impl<C: AmstradColor> ImageConverter<C> {
     /// Create the object that will be used to make the conversion
     pub fn convert<P>(
         input_file: P,
-        palette: LockablePalette<C>,
-        mode: Mode,
-        transformations: TransformationsList<C>,
-        output: OutputFormat<C>,
-        crop_if_too_large: bool,
-        missing_pen: Option<Pen>,
-        o: &dyn EventObserver
+        params: ConvertParams<C>,
+        output: OutputFormat<C>
     ) -> anyhow::Result<Output<C>>
     where
         P: AsRef<Utf8Path>
     {
-        Self::convert_impl(
-            input_file.as_ref(),
-            palette,
-            mode,
-            transformations,
-            output,
-            crop_if_too_large,
-            missing_pen,
-            o
-        )
+        Self::convert_impl(input_file.as_ref(), params, output)
     }
 
     fn convert_to_sprite(
         input_file: &Utf8Path,
-        palette: LockablePalette<C>,
-        mode: Mode,
-        transformations: TransformationsList<C>,
-        encoding: SpriteEncoding,
-        crop_if_too_large: bool,
-        missing_pen: Option<Pen>,
-        o: &dyn EventObserver
+        params: ConvertParams<C>,
+        encoding: SpriteEncoding
     ) -> anyhow::Result<SpriteOutput<C>> {
-        println!("Converting to sprite with encoding and palette {:?} {}", encoding, &palette.to_ansi_string());
+        let ConvertParams {
+            palette,
+            mode,
+            transformations,
+            crop_if_too_large,
+            missing_pen,
+            o
+        } = params;
+
+        println!("Converting to sprite with encoding and palette {:?} {}", encoding, palette.to_ansi_string());
         match &encoding {
             SpriteEncoding::Linear => {
                 let mut converter = ImageConverter {
@@ -1294,13 +1305,15 @@ impl<C: AmstradColor> ImageConverter<C> {
                     mode
                 } = Self::convert_impl(
                     input_file,
-                    palette,
-                    mode,
-                    transformations,
-                    OutputFormat::Sprite(SpriteEncoding::GrayCoded),
-                    crop_if_too_large,
-                    missing_pen,
-                    o
+                    ConvertParams {
+                        palette,
+                        mode,
+                        transformations,
+                        crop_if_too_large,
+                        missing_pen,
+                        o
+                    },
+                    OutputFormat::Sprite(SpriteEncoding::GrayCoded)
                 )?
                 .sprite()
                 .unwrap();
@@ -1334,13 +1347,15 @@ impl<C: AmstradColor> ImageConverter<C> {
                 // get the linear version
                 let linear = Self::convert_impl(
                     input_file,
-                    palette,
-                    mode,
-                    transformations,
-                    OutputFormat::Sprite(SpriteEncoding::Linear),
-                    crop_if_too_large,
-                    missing_pen,
-                    o
+                    ConvertParams {
+                        palette,
+                        mode,
+                        transformations,
+                        crop_if_too_large,
+                        missing_pen,
+                        o
+                    },
+                    OutputFormat::Sprite(SpriteEncoding::Linear)
                 )?
                 .sprite()
                 .unwrap();
@@ -1377,14 +1392,18 @@ impl<C: AmstradColor> ImageConverter<C> {
 
     fn convert_impl(
         input_file: &Utf8Path,
-        palette: LockablePalette<C>,
-        mode: Mode,
-        transformations: TransformationsList<C>,
-        output: OutputFormat<C>,
-        crop_if_too_large: bool,
-        missing_pen: Option<Pen>,
-        o: &dyn EventObserver
+        params: ConvertParams<C>,
+        output: OutputFormat<C>
     ) -> anyhow::Result<Output<C>> {
+        let ConvertParams {
+            palette,
+            mode,
+            transformations,
+            crop_if_too_large,
+            missing_pen,
+            o
+        } = params;
+
         let mut converter = ImageConverter {
             palette: palette.clone(),
             mode,
@@ -1407,13 +1426,15 @@ impl<C: AmstradColor> ImageConverter<C> {
         else if let OutputFormat::Sprite(sprite_output_format) = &output {
             Self::convert_to_sprite(
                 input_file,
-                palette,
-                mode,
-                transformations,
-                *sprite_output_format,
-                crop_if_too_large,
-                missing_pen,
-                o
+                ConvertParams {
+                    palette,
+                    mode,
+                    transformations,
+                    crop_if_too_large,
+                    missing_pen,
+                    o
+                },
+                *sprite_output_format
             )
             .map(Output::<C>::Sprite)
         }
@@ -1427,13 +1448,15 @@ impl<C: AmstradColor> ImageConverter<C> {
                 transformations.clone().replace(*mask_ink, *replacement_ink);
             let sprite = Self::convert_to_sprite(
                 input_file,
-                palette,
-                mode,
-                sprite_transformations,
-                *sprite_format,
-                crop_if_too_large,
-                missing_pen,
-                o
+                ConvertParams {
+                    palette,
+                    mode,
+                    transformations: sprite_transformations,
+                    crop_if_too_large,
+                    missing_pen,
+                    o
+                },
+                *sprite_format
             )?;
 
             println!("Handling mask");
@@ -1446,13 +1469,15 @@ impl<C: AmstradColor> ImageConverter<C> {
             mask_palette[mode.max_colors() - 1] = <C as AmstradColor>::mask_background(); // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
-                LockablePalette::<C>::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */
-                mode,
-                mask_transformations,
-                *sprite_format,
-                crop_if_too_large,
-                missing_pen,
-                o
+                ConvertParams {
+                    palette: LockablePalette::<C>::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */
+                    mode,
+                    transformations: mask_transformations,
+                    crop_if_too_large,
+                    missing_pen,
+                    o
+                },
+                *sprite_format
             )?;
 
             // Just for debug stuff

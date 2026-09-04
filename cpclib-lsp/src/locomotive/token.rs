@@ -41,10 +41,10 @@ pub(super) fn skip_spaces_then_var(
 }
 
 /// Skip spaces starting at `from` and return the number text if a Number token follows.
-pub(super) fn skip_spaces_then_number<'a>(
-    toks: &'a [LocatedBasicToken],
+pub(super) fn skip_spaces_then_number(
+    toks: &[LocatedBasicToken],
     from: usize
-) -> Option<&'a str> {
+) -> Option<&str> {
     let mut i = from;
     while i < toks.len() {
         match &toks[i].kind {

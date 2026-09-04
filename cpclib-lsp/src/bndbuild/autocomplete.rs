@@ -246,7 +246,8 @@ impl BuildFileAnalyzer {
         let (value_text, consumed_chars) = if let Some(after_dash) = rest.strip_prefix("- ") {
             (after_dash, leading_ws + 2)
         }
-        else if let Some(colon_idx) = rest.find(':') {
+        else {
+            let colon_idx = rest.find(':')?;
             let key = rest[..colon_idx].trim();
             if !allowed_keys.contains(&key) {
                 return None;
@@ -265,9 +266,6 @@ impl BuildFileAnalyzer {
                 after_colon_trimmed,
                 leading_ws + key.chars().count() + 1 + ws_after_colon
             )
-        }
-        else {
-            return None;
         };
 
         let cursor_in_value = cursor_column.checked_sub(consumed_chars)?;
@@ -411,7 +409,7 @@ impl BuildFileAnalyzer {
             base_dir.join(dir_part)
         };
 
-        let Ok(entries) = std::fs::read_dir(&search_dir)
+        let Ok(entries) = fs_err::read_dir(&search_dir)
         else {
             return Vec::new();
         };

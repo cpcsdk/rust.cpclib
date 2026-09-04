@@ -168,11 +168,10 @@ fn variable_occurrence_spans(prog: &LocatedBasicProgram, var_key: &str) -> Vec<(
     let mut spans = Vec::new();
     for bline in &prog.lines {
         for t in &bline.tokens {
-            if let LocatedTokenKind::Variable(n) = &t.kind {
-                if n.to_uppercase() == var_key {
+            if let LocatedTokenKind::Variable(n) = &t.kind
+                && n.to_uppercase() == var_key {
                     spans.push((t.span.line, t.span.col, t.span.len));
                 }
-            }
         }
     }
     spans
@@ -349,13 +348,11 @@ fn first_assignment_line<'a>(
             match &toks[i].kind {
                 LocatedTokenKind::Keyword(BasicTokenNoPrefix::Let)
                 | LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
-                    if let Some(vt) = skip_spaces_then_var(toks, i + 1) {
-                        if let LocatedTokenKind::Variable(name) = &vt.kind {
-                            if name.to_uppercase() == var_key {
+                    if let Some(vt) = skip_spaces_then_var(toks, i + 1)
+                        && let LocatedTokenKind::Variable(name) = &vt.kind
+                            && name.to_uppercase() == var_key {
                                 return Some(bline);
                             }
-                        }
-                    }
                     i += 1;
                 },
                 LocatedTokenKind::Keyword(BasicTokenNoPrefix::Input)

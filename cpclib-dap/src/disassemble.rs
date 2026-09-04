@@ -67,11 +67,9 @@ pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
         if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
             &mut listing.listing_mut()[i]
-        {
-            if let Some(target) = resolve_jr_djnz_target(e, Some(this_address)) {
+            && let Some(target) = resolve_jr_djnz_target(e, Some(this_address)) {
                 *e = Expr::Value(target as i32);
             }
-        }
 
         let token = &listing.listing()[i];
         let Ok(length) = token.number_of_bytes()
@@ -205,11 +203,10 @@ pub fn overlay_data_rows(
             // matches what was assembled there. No image at all means no way
             // to detect staleness, so the source map's claim is still the
             // best available evidence and the overlay proceeds.
-            if let Some(assembled) = live_bytes(row_start, row_len as usize) {
-                if assembled != bytes {
+            if let Some(assembled) = live_bytes(row_start, row_len as usize)
+                && assembled != bytes {
                     return None;
                 }
-            }
 
             let text = render_data_bytes(&bytes);
             Some((

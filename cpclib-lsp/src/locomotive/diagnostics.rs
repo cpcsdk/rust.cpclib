@@ -59,8 +59,8 @@ impl BasicAnalyzer {
                         );
                     },
                     LocatedTokenKind::Number(n) if after_jump => {
-                        if let Ok(target) = n.parse::<u16>() {
-                            if warn_undefined_line && !defined.contains(&target) {
+                        if let Ok(target) = n.parse::<u16>()
+                            && warn_undefined_line && !defined.contains(&target) {
                                 diagnostics.push(Diagnostic {
                                     range: Range {
                                         start: Position {
@@ -78,7 +78,6 @@ impl BasicAnalyzer {
                                     ..Default::default()
                                 });
                             }
-                        }
                         // Keep after_jump: comma-separated targets for ON GOTO.
                     },
                     LocatedTokenKind::Other(',') => {}, // keep state for ON GOTO n,n,n
@@ -182,8 +181,8 @@ pub(super) fn collect_vars_after_input(
         } // skip comma
     }
     // Skip optional prompt string followed by `;` or `,`.
-    if i < toks.len() {
-        if let LocatedTokenKind::StringLit(_) = &toks[i].kind {
+    if i < toks.len()
+        && let LocatedTokenKind::StringLit(_) = &toks[i].kind {
             i += 1;
             // Skip the `;` or `,` separator.
             while i < toks.len()
@@ -197,6 +196,5 @@ pub(super) fn collect_vars_after_input(
                 i += 1;
             }
         }
-    }
     collect_comma_separated_vars(toks, i, seen);
 }

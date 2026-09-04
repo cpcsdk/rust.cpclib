@@ -27,6 +27,7 @@ cpclib-common.workspace = true
 cpclib-runner = { workspace = true, default-features = false }
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
 camino.workspace = true
+fs-err.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true

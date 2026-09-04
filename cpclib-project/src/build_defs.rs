@@ -74,7 +74,7 @@ pub fn definitions_for_entry(entry: &Path) -> BuildDefinitions {
     };
 
     for build_file in candidate_build_files(entry) {
-        let Ok(text) = std::fs::read_to_string(&build_file)
+        let Ok(text) = fs_err::read_to_string(&build_file)
         else {
             continue;
         };
@@ -121,14 +121,14 @@ fn definitions_in_rule_building(build_file: &Path, entry: &Path) -> Option<Vec<(
     let build_file_utf8 = camino::Utf8Path::from_path(build_file)?;
     let (_, builder) = cpclib_bndbuild::BndBuilder::from_path(build_file_utf8, true).ok()?;
     let base = build_file_utf8.parent()?;
-    let entry = std::fs::canonicalize(entry).ok()?;
+    let entry = fs_err::canonicalize(entry).ok()?;
 
     for rule in builder.rules() {
         let builds_entry = rule.dependencies().iter().any(|dep| {
             cpclib_bndbuild::expand_glob_in(dep.as_str(), base)
                 .iter()
                 .any(|expanded| {
-                    std::fs::canonicalize(base.as_std_path().join(expanded))
+                    fs_err::canonicalize(base.as_std_path().join(expanded))
                         .is_ok_and(|p| p == entry)
                 })
         });
@@ -196,13 +196,10 @@ fn unquote(value: &str) -> String {
 /// line - it is routinely written across several with `|` and indentation.
 fn command_for(text: &str, entry_name: &str) -> Option<String> {
     let lines: Vec<&str> = text.lines().collect();
-    let Some(start) = lines.iter().position(|line| {
+    let start = lines.iter().position(|line| {
         let lowered = line.to_lowercase();
         lowered.contains("basm") && line.contains(entry_name)
-    })
-    else {
-        return None;
-    };
+    })?;
 
     let mut command = String::new();
     for line in &lines[start..] {

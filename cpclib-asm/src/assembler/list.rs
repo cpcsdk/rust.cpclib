@@ -475,11 +475,11 @@ pub fn string_filter(
     match list {
         ExprResult::String(_s) => list_filter(env, list, predicate),
         _ => {
-            return Err(Box::new(AssemblerError::ExpressionError(
+            Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a string")
                 }))
-            )));
+            )))
         }
     }
 }
@@ -551,7 +551,7 @@ pub fn list_fold(
         ExprResult::List(l)=> {
             let mut acc = initial.clone();
             for item in l.iter() {
-                acc = env.eval_any_function(folder, &[&acc, item.as_ref()])?;
+                acc = env.eval_any_function(folder, &[&acc, item])?;
             }
             Ok(acc)
         },
@@ -574,11 +574,11 @@ pub fn string_map(
     match list {
         ExprResult::String(_s) => list_map(env, list, mapper),
         _ => {
-            return Err(Box::new(AssemblerError::ExpressionError(
+            Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a string")
                 }))
-            )));
+            )))
         }
     }
 }

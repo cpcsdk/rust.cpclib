@@ -24,6 +24,7 @@ pub use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal};
 
 /// What to check for, and which rules to check with.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct Options {
     /// Which built-in rule set to use as the base - see
     /// [`cpclib_asmoptim::OptimizationGoal`]. Ignored entirely when
@@ -50,17 +51,6 @@ pub struct Options {
     pub include_dirs: Vec<Utf8PathBuf>
 }
 
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            goal: OptimizationGoal::default(),
-            extra_rule_files: Vec::new(),
-            disabled_rules: Vec::new(),
-            no_builtin: false,
-            include_dirs: Vec::new()
-        }
-    }
-}
 
 /// Everything that can go wrong turning a real file into suggestions.
 #[derive(Debug, thiserror::Error)]

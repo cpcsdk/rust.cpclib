@@ -122,7 +122,7 @@ impl BuildFileAnalyzer {
         for key in cpclib_bndbuild::lsp::RULE_KEYS {
             if key.names.contains(&word) {
                 let canonical = key.names[0];
-                let aliases: Vec<_> = key.names[1..].iter().copied().collect();
+                let aliases: Vec<_> = key.names[1..].to_vec();
                 let mut md = format!("**{}**\n\n{}", canonical, key.description);
                 if !aliases.is_empty() {
                     md.push_str(&format!("\n\nAliases: `{}`", aliases.join("`, `")));

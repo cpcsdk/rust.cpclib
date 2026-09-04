@@ -46,7 +46,7 @@ pub(super) fn read_included_file(filename: &str, doc_uri: &Url) -> Option<String
         return read_inner_file(filename);
     }
     let path = super::definition::resolve_include_path(filename, doc_uri)?;
-    std::fs::read_to_string(path).ok()
+    fs_err::read_to_string(path).ok()
 }
 
 /// As [`read_included_file`], but the raw bytes — for `INCBIN` targets.
@@ -55,7 +55,7 @@ pub(super) fn read_included_file_bytes(filename: &str, doc_uri: &Url) -> Option<
         return read_inner_file_bytes(filename);
     }
     let path = super::definition::resolve_include_path(filename, doc_uri)?;
-    std::fs::read(path).ok()
+    fs_err::read(path).ok()
 }
 
 #[cfg(test)]

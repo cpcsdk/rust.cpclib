@@ -55,14 +55,13 @@ impl BasicAnalyzer {
         let next_num = (new_line_idx + 1..total_lines)
             .filter_map(|i| document.line(i))
             .find_map(|l| leading_number(&l));
-        if let Some(next_num) = next_num {
-            if candidate >= next_num {
+        if let Some(next_num) = next_num
+            && candidate >= next_num {
                 candidate = prev_num + (next_num - prev_num) / 2;
                 if candidate <= prev_num {
                     return None; // no room between the two lines
                 }
             }
-        }
 
         Some(vec![TextEdit {
             range: Range {

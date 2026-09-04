@@ -32,7 +32,7 @@ impl AssemblyAnalyzer {
         // Delegate to BASIC hover when the cursor is inside a LOCOMOTIVE block.
         if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
             let basic_line = position.line - block.basic_range.start as u32;
-            let line_trimmed = line.trim_end_matches(|c: char| c == '\n' || c == '\r');
+            let line_trimmed = line.trim_end_matches(['\n', '\r']);
             return crate::locomotive::hover::locomotive_basic_hover(
                 line_trimmed,
                 &basic_text,

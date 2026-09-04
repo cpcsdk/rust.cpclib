@@ -242,7 +242,7 @@ fn target_token_span(
             let value_full = rest.split('#').next().unwrap_or("");
             let leading_ws = (value_full.len() - value_full.trim_start().len()) as u32;
             let mut col = content_col + key.len() as u32 + 1 + leading_ws;
-            for tok in value_full.trim().split_whitespace() {
+            for tok in value_full.split_whitespace() {
                 if tok == token {
                     return Some((col, tok.len() as u32));
                 }
@@ -503,7 +503,7 @@ impl BuildFileAnalyzer {
         let raw_text = document.text();
         let raw_lines: Vec<&str> = raw_text.lines().collect();
 
-        let tgt_exp_line = Self::find_target_line(&expanded, target, &super::token::TGT_KEY_NAMES)?;
+        let tgt_exp_line = Self::find_target_line(expanded, target, &super::token::TGT_KEY_NAMES)?;
         // The `tgt:` line itself must have a real counterpart in *this*
         // document's own raw text - otherwise it was spliced in wholesale
         // from an `{% include %}`d file (content from an include has no
@@ -516,12 +516,12 @@ impl BuildFileAnalyzer {
         // in the file that actually defines it.
         source_map.to_original(tgt_exp_line)?;
         let (body_start, body_end) = rule_bounds(&lines, tgt_exp_line);
-        let range = translate_line_range(&source_map, &raw_lines, body_start, body_end)?;
+        let range = translate_line_range(source_map, &raw_lines, body_start, body_end)?;
         let (col, len) =
             target_token_span(&lines, tgt_exp_line, target, &super::token::TGT_KEY_NAMES)
                 .unwrap_or((0, 0));
         let selection_range =
-            translate_span(&source_map, &raw_lines, tgt_exp_line, col, len).unwrap_or(range);
+            translate_span(source_map, &raw_lines, tgt_exp_line, col, len).unwrap_or(range);
 
         Some(CallHierarchyItem {
             name: target.to_string(),
@@ -556,7 +556,7 @@ impl BuildFileAnalyzer {
         let raw_lines: Vec<&str> = raw_text.lines().collect();
 
         let Some(tgt_exp_line) =
-            Self::find_target_line(&expanded, target, &super::token::TGT_KEY_NAMES)
+            Self::find_target_line(expanded, target, &super::token::TGT_KEY_NAMES)
         else {
             return Vec::new();
         };
@@ -572,7 +572,7 @@ impl BuildFileAnalyzer {
         for (tok, exp_line, col, len) in
             rule_dependency_tokens(&lines, tgt_exp_line, &super::token::DEP_KEY_NAMES)
         {
-            let Some(range) = translate_span(&source_map, &raw_lines, exp_line, col, len)
+            let Some(range) = translate_span(source_map, &raw_lines, exp_line, col, len)
             else {
                 continue;
             };
@@ -600,7 +600,7 @@ impl BuildFileAnalyzer {
 
         let mut groups: Vec<(String, Vec<Range>)> = Vec::new();
         for (owner_tgt, owner_line) in
-            all_target_definitions(&expanded, &super::token::TGT_KEY_NAMES)
+            all_target_definitions(expanded, &super::token::TGT_KEY_NAMES)
         {
             // Same rationale as `call_hierarchy_item_for_target`: only
             // attribute an incoming call to a rule this document actually
@@ -612,7 +612,7 @@ impl BuildFileAnalyzer {
                 rule_dependency_tokens(&lines, owner_line, &super::token::DEP_KEY_NAMES)
                     .into_iter()
                     .filter(|(t, ..)| t == target)
-                    .filter_map(|(_, l, c, len)| translate_span(&source_map, &raw_lines, l, c, len))
+                    .filter_map(|(_, l, c, len)| translate_span(source_map, &raw_lines, l, c, len))
                     .collect();
             if matching.is_empty() {
                 continue;

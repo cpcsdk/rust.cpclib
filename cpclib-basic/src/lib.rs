@@ -327,8 +327,7 @@ impl BasicProgram {
             for token in &mut line.tokens {
                 if let BasicToken::Constant(BasicTokenNoPrefix::LineMemoryAddressPointer, value) =
                     token
-                {
-                    if let Some(target_line) = value
+                    && let Some(target_line) = value
                         .as_integer()
                         .and_then(|addr| address_to_line.get(&addr))
                     {
@@ -340,7 +339,6 @@ impl BasicProgram {
                             )
                         );
                     }
-                }
             }
         }
     }
@@ -512,13 +510,11 @@ fn patch_sigil_less_variable_kinds(
     default_kind: &[BasicTokenNoPrefix; 26]
 ) {
     for token in tokens {
-        if let BasicToken::Variable(kind, name, _offset) = token {
-            if *kind == BasicTokenNoPrefix::VariableDefinition3 {
-                if let Some(idx) = letter_index(name) {
+        if let BasicToken::Variable(kind, name, _offset) = token
+            && *kind == BasicTokenNoPrefix::VariableDefinition3
+                && let Some(idx) = letter_index(name) {
                     *kind = default_kind[idx];
                 }
-            }
-        }
     }
 }
 
@@ -559,11 +555,10 @@ fn declared_letters(tail: &[BasicToken]) -> Vec<char> {
         if *tok == BasicTokenNoPrefix::StatementSeparator {
             break;
         }
-        if let Some(c) = tok.char() {
-            if c.is_ascii_alphabetic() || c == '-' {
+        if let Some(c) = tok.char()
+            && (c.is_ascii_alphabetic() || c == '-') {
                 chars.push(c.to_ascii_uppercase());
             }
-        }
     }
 
     let mut letters = Vec::new();

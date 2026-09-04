@@ -11,6 +11,11 @@ use crate::{
     TestKindElement
 };
 
+/// One `(mnemonic, arg1, arg2)` real instruction a fake/multi-register
+/// statement expands to - see [`ListingElement::multi_push_pop_to_listing`]
+/// and [`ListingElement::fake_to_listing_from_access`].
+pub type ExpandedInstruction = (Mnemonic, Option<DataAccess>, Option<DataAccess>);
+
 //
 /// The ListingElement trait contains the public method any member of a listing should contain
 /// ATM there is nothing really usefull
@@ -213,9 +218,7 @@ where Self: Debug + Sized + Sync
     /// register liveness, cycle counting - has to see the individual pushes.
     /// One that treats this statement as opaque, or worse as inert because it
     /// carries no mnemonic, will not notice it reads those registers at all.
-    fn multi_push_pop_to_listing(
-        &self
-    ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>;
+    fn multi_push_pop_to_listing(&self) -> Option<Vec<ExpandedInstruction>>;
 
     #[inline]
     fn fake_to_listing_from_access<DA: DataAccessElem>(
@@ -223,7 +226,7 @@ where Self: Debug + Sized + Sync
         arg1: Option<&DA>,
         arg2: Option<&DA>,
         arg3: Option<Register8>
-    ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>> {
+    ) -> Option<Vec<ExpandedInstruction>> {
         if arg3.is_some() {
             return None;
         }

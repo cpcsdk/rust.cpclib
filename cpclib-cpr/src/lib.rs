@@ -190,7 +190,7 @@ impl Cpr {
 
     pub fn from_buffer(mut file_content: Vec<u8>) -> Result<Self, String> {
         let tag: RiffCode = file_content.drain(0..4).as_slice().into();
-        if tag != [b'R', b'I', b'F', b'F'].into() {
+        if tag != "RIFF".into() {
             return Err(format!("{tag:?} found instead of RIFF"));
         }
 
@@ -206,7 +206,7 @@ impl Cpr {
 
         let tag: RiffCode = file_content.drain(0..4).as_slice().into();
 
-        if tag != [b'A', b'M', b'S', b'!'].into() {
+        if tag != "AMS!".into() {
             return Err(format!("{tag} found instead of AMS!"));
         }
 

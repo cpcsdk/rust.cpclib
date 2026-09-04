@@ -1657,7 +1657,7 @@ fn on_disk_filename_completions(
         base_dir.join(dir_part)
     };
 
-    let Ok(entries) = std::fs::read_dir(&search_dir)
+    let Ok(entries) = fs_err::read_dir(&search_dir)
     else {
         return Vec::new();
     };

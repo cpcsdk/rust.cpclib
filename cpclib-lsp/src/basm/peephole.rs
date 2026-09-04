@@ -306,7 +306,7 @@ impl AssemblyAnalyzer {
         // Either way the document's *own* assemble still describes the buffer
         // faithfully, which is what the LSP has always used.
         let buffer = document.text();
-        let matches_disk = std::fs::read_to_string(&path).is_ok_and(|disk| disk == buffer);
+        let matches_disk = fs_err::read_to_string(&path).is_ok_and(|disk| disk == buffer);
         if !matches_disk {
             return if own_assemble_complete() {
                 AddressSource::OwnAssemble
@@ -343,7 +343,7 @@ impl AssemblyAnalyzer {
                 else {
                     return AddressSource::None;
                 };
-                match std::fs::canonicalize(&path) {
+                match fs_err::canonicalize(&path) {
                     Ok(document) => {
                         AddressSource::Project(entry::ProjectAddresses { env, document })
                     },

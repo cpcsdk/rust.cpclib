@@ -17,15 +17,15 @@ impl BasicAnalyzer {
     pub fn hover(&self, document: &Document, position: Position) -> Option<Hover> {
         let source_line = document.line(position.line as usize)?;
         let col = document.byte_column(position);
-        let line = source_line.trim_end_matches(|c| c == '\n' || c == '\r');
+        let line = source_line.trim_end_matches(['\n', '\r']);
 
         let prog = self.parse_cached(document).ok();
         let tok = prog.as_ref().and_then(|p| token_at_position(p, position));
 
         // Try keyword hover first (alphabetic words), enriched with the
         // token's own encoded byte(s) when the document parses cleanly.
-        if let Some(word_upper) = alpha_word_at(line, col).map(|w| w.to_uppercase()) {
-            if let Some(&(_, doc)) = KEYWORD_DOCS
+        if let Some(word_upper) = alpha_word_at(line, col).map(|w| w.to_uppercase())
+            && let Some(&(_, doc)) = KEYWORD_DOCS
                 .iter()
                 .find(|(kw, _)| kw.to_uppercase() == word_upper)
             {
@@ -58,7 +58,6 @@ impl BasicAnalyzer {
                 }
                 return Some(make_hover(md));
             }
-        }
 
         // Number hover: find a Number token at the cursor and show base conversions.
         let tok = tok?;
@@ -171,8 +170,8 @@ pub(crate) fn locomotive_basic_hover(
 
     // 1. Keyword hover, enriched with the token's own encoded byte(s) when
     // the block parses cleanly.
-    if let Some(word_upper) = alpha_word_at(line_text, col_usize).map(|w| w.to_uppercase()) {
-        if let Some(&(_, doc)) = KEYWORD_DOCS
+    if let Some(word_upper) = alpha_word_at(line_text, col_usize).map(|w| w.to_uppercase())
+        && let Some(&(_, doc)) = KEYWORD_DOCS
             .iter()
             .find(|(kw, _)| kw.to_uppercase() == word_upper)
         {
@@ -186,12 +185,11 @@ pub(crate) fn locomotive_basic_hover(
             }
             return Some(make_hover(md));
         }
-    }
 
     // 2. Number hover (token already resolved above)
     if let Some(tok) = tok {
-        if let LocatedTokenKind::Number(num_text) = &tok.kind {
-            if let Some(value) = parse_basic_integer(num_text) {
+        if let LocatedTokenKind::Number(num_text) = &tok.kind
+            && let Some(value) = parse_basic_integer(num_text) {
                 let mut md = crate::common::render::format_number_hover(num_text, value);
                 if firmware_docs_enabled
                     && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
@@ -200,7 +198,6 @@ pub(crate) fn locomotive_basic_hover(
                 }
                 return Some(make_hover(md));
             }
-        }
 
         // 3. Space, statement separator, operator, or any other raw
         // passthrough character → show its own byte(s) directly.

@@ -233,7 +233,7 @@ impl SourceMap {
                 let name = file.to_string_lossy().to_string();
                 crate::root::resolve_include_path(&name, entry)
                     .or_else(|| entry.parent().map(|dir| dir.join(&file)))
-                    .and_then(|candidate| std::fs::canonicalize(&candidate).ok())
+                    .and_then(|candidate| fs_err::canonicalize(&candidate).ok())
                     .unwrap_or(file)
             })
             .collect();
@@ -348,12 +348,12 @@ impl SourceMap {
     fn file_id(&self, file: &Path) -> Option<u16> {
         // Compare canonically where we can: the assembler records the path it
         // was given, the editor sends whatever the user opened.
-        let wanted = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+        let wanted = fs_err::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
         self.files
             .iter()
             .position(|known| {
                 let known_canonical =
-                    std::fs::canonicalize(known).unwrap_or_else(|_| known.clone());
+                    fs_err::canonicalize(known).unwrap_or_else(|_| known.clone());
                 known_canonical == wanted || known == file
             })
             .map(|i| i as u16)

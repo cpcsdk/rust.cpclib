@@ -198,7 +198,7 @@ async fn main() {
             );
             std::process::exit(1);
         }
-        if let Err(e) = std::fs::write(&path, EXAMPLE_CONFIG_TOML) {
+        if let Err(e) = fs_err::write(&path, EXAMPLE_CONFIG_TOML) {
             eprintln!("failed to write {}: {e}", path.display());
             std::process::exit(1);
         }
@@ -207,7 +207,7 @@ async fn main() {
     }
     if let Some(dir) = cli.update_config {
         let path = dir.join(CONFIG_FILE_NAME);
-        let existing = match std::fs::read_to_string(&path) {
+        let existing = match fs_err::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!(
@@ -228,7 +228,7 @@ async fn main() {
             println!("{} is already up to date, no fields added", path.display());
             return;
         }
-        if let Err(e) = std::fs::write(&path, merged) {
+        if let Err(e) = fs_err::write(&path, merged) {
             eprintln!("failed to write {}: {e}", path.display());
             std::process::exit(1);
         }

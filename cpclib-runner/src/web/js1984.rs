@@ -72,7 +72,7 @@ pub fn install() -> Result<Utf8PathBuf, String> {
         return Ok(root);
     }
 
-    std::fs::create_dir_all(&root).map_err(|e| format!("cannot create {root}: {e}"))?;
+    fs_err::create_dir_all(&root).map_err(|e| format!("cannot create {root}: {e}"))?;
 
     for name in DIST_FILES {
         let url = file_url(name);
@@ -81,14 +81,14 @@ pub fn install() -> Result<Utf8PathBuf, String> {
         let mut bytes = Vec::new();
         std::io::Read::read_to_end(&mut reader, &mut bytes)
             .map_err(|e| format!("cannot read {url}: {e}"))?;
-        std::fs::write(root.join(name), &bytes).map_err(|e| format!("cannot write {name}: {e}"))?;
+        fs_err::write(root.join(name), &bytes).map_err(|e| format!("cannot write {name}: {e}"))?;
     }
 
     apply_bridge_patch(&root).map_err(|e| {
         // Leave nothing half-patched behind: a partially installed emulator
         // loads and then quietly does nothing, which is far harder to diagnose
         // than a missing one.
-        let _ = std::fs::remove_dir_all(&root);
+        let _ = fs_err::remove_dir_all(&root);
         e.to_string()
     })?;
 

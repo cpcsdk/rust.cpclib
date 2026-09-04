@@ -226,7 +226,7 @@ impl BuildFileAnalyzer {
             }
 
             // ── Normal line processing ───────────────────────────────────────
-            if trimmed.starts_with("- ") {
+            if let Some(after_dash) = trimmed.strip_prefix("- ") {
                 if in_rule {
                     finalize_block!();
                     flush_rule!();
@@ -235,7 +235,6 @@ impl BuildFileAnalyzer {
                 rule_start = orig;
                 rule_end = orig;
 
-                let after_dash = &trimmed[2..];
                 let rest = after_dash.trim_start();
                 let rest_col = indent + 2 + (after_dash.len() - rest.len());
                 self.process_key_value(

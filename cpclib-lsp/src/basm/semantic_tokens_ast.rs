@@ -286,7 +286,7 @@ fn opcode_tokens(token: &LocatedToken) -> Tokens<'_> {
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
         .map(|c| c.len_utf8())
         .sum();
-    let mnemonic = (mnemonic_len > 0).then(|| {
+    let mnemonic = (mnemonic_len > 0).then_some({
         RawSemanticToken {
             line,
             col: col0,

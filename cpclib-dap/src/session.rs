@@ -3461,7 +3461,7 @@ impl<P: DapPeer> Session<P> {
             match self.last_registers.get(upper) {
                 Some(&value) if following => (MemoryAnchor::Register(upper.clone()), value),
                 Some(&value) => (MemoryAnchor::Fixed(value), value),
-                None if arguments.first().is_none() => {
+                None if arguments.is_empty() => {
                     return Ok(vec![protocol::failure(
                         request,
                         "-mv with no address shows memory from PC, but the program has not \
@@ -4414,7 +4414,7 @@ impl<P: DapPeer> Session<P> {
         });
 
         let seq = self.next_seq();
-        match path.as_deref().map(std::fs::read_to_string) {
+        match path.as_deref().map(fs_err::read_to_string) {
             Some(Ok(content)) => {
                 Ok(vec![protocol::response(
                     request,
@@ -4731,7 +4731,7 @@ impl<P: DapPeer> Session<P> {
     /// change under us without the session being restarted.
     fn source_line(&mut self, file: &Path, line: u32) -> Option<String> {
         if !self.source_cache.contains_key(file) {
-            let lines = std::fs::read_to_string(file)
+            let lines = fs_err::read_to_string(file)
                 .ok()?
                 .lines()
                 .map(str::to_owned)
@@ -6183,7 +6183,7 @@ fn edit_distance(left: &str, right: &str, limit: usize) -> Option<usize> {
 /// look like an edit - and not a cryptographic hash, because the question is
 /// "did this change since a minute ago", not "did someone forge it".
 fn fingerprint_of(file: &Path) -> Option<u64> {
-    let bytes = std::fs::read(file).ok()?;
+    let bytes = fs_err::read(file).ok()?;
     let mut hash: u64 = 0xCBF2_9CE4_8422_2325;
     for byte in &bytes {
         hash ^= *byte as u64;
@@ -6201,7 +6201,7 @@ fn same_file(left: &Path, right: &Path) -> bool {
     if left == right {
         return true;
     }
-    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+    match (fs_err::canonicalize(left), fs_err::canonicalize(right)) {
         (Ok(left), Ok(right)) => left == right,
         _ => false
     }

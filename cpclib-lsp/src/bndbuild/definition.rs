@@ -603,7 +603,7 @@ pub(crate) fn build_include_graph(roots: &[PathBuf]) -> HashMap<PathBuf, Vec<Pat
             if !is_bndbuild_candidate(path) {
                 continue;
             }
-            let Ok(text) = std::fs::read_to_string(path)
+            let Ok(text) = fs_err::read_to_string(path)
             else {
                 continue;
             };

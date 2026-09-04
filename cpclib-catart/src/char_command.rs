@@ -169,9 +169,9 @@ impl From<Vec<CharCommand>> for CharCommandList {
     }
 }
 
-impl Into<Vec<CharCommand>> for CharCommandList {
-    fn into(self) -> Vec<CharCommand> {
-        self.0
+impl From<CharCommandList> for Vec<CharCommand> {
+    fn from(val: CharCommandList) -> Self {
+        val.0
     }
 }
 
@@ -367,7 +367,7 @@ impl CharCommand {
                     format!("PRINT CHR$({})", c)
                 }
             },
-            CharCommand::String(s) => format!("PRINT \"{}\"", String::from_utf8_lossy(&s))
+            CharCommand::String(s) => format!("PRINT \"{}\"", String::from_utf8_lossy(s))
         }
     }
 
@@ -479,7 +479,7 @@ impl CharCommand {
             ESC => Ok(CharCommand::Esc),
             RS => Ok(CharCommand::Home),
 
-            0x20..=0x7F | 0x80..=0xFF => Ok(CharCommand::Char(c)),
+            0x20..=0xFF => Ok(CharCommand::Char(c)),
             _ => Err(NB_PARAMS_FOR_CODE[c as usize] as usize)
         }
     }

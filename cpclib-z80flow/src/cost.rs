@@ -657,5 +657,5 @@ pub fn opcode_duration<D: DataAccessElem>(
         return None
     }
 };
-    Some(duration as u32)
+    Some(duration)
 }

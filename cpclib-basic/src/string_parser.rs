@@ -18,6 +18,17 @@ type BasicOneTokenResult<'src> = ModalResult<BasicToken, ContextError<StrContext
 type BasicLineResult<'src> = ModalResult<BasicLine, ContextError<StrContext>>;
 type BasicNameResult<'src> = ModalResult<String, ContextError<StrContext>>;
 
+/// A `,` plus the tokens for the value/parameter right after it - one entry
+/// of a comma-separated continuation list (DATA values, DEF FN parameters).
+type CommaSeparatedItem = (Vec<BasicToken>, Vec<BasicToken>);
+/// An optional comma-separated list: the first item's tokens, plus zero or
+/// more [`CommaSeparatedItem`] continuations. `None` when the list itself is
+/// absent (e.g. an empty DEF FN parameter list).
+type OptCommaSeparatedList = Option<(Vec<BasicToken>, Vec<CommaSeparatedItem>)>;
+/// `('(', space, opt(parameter list), space, ')')` as parsed for a `DEF FN`
+/// parameter list.
+type OptParenthesizedParams = Option<(char, Vec<BasicToken>, OptCommaSeparatedList, Vec<BasicToken>, char)>;
+
 /// Builds the single token a variable reference actually is on the wire -
 /// never the character-by-character `SimpleToken`s a plain identifier would
 /// otherwise fall through to. See `BasicToken::Variable`'s doc comment for
@@ -69,7 +80,7 @@ fn append_optional(res: &mut Vec<BasicToken>, opt: Option<Vec<BasicToken>>) {
     }
 }
 
-/// Phase 3 helpers: Common parsing patterns
+// Phase 3 helpers: Common parsing patterns
 
 /// Helper function for the common peek pattern checking for space/tab/colon/newline/eof
 #[inline]
@@ -196,7 +207,7 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
     tokens.append(&mut spaces);
 
     // I have seen code starting by ":"
-    if let Some(_) = opt(':').parse_next(input)? {
+    if opt(':').parse_next(input)?.is_some() {
         tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
     }
 
@@ -245,10 +256,11 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
             },
             Err(_) => {
                 // Even if instruction parsing failed, check for inline comment
-                if let Some(_) = opt::<_, _, ContextError, _>('\'')
+                if opt::<_, _, ContextError, _>('\'')
                     .parse_next(input)
                     .ok()
                     .flatten()
+                    .is_some()
                 {
                     let comment_text = take_while(0.., |ch| ch != '\n').parse_next(input)?;
                     // REM comments are unclosed (run to end of line)
@@ -676,7 +688,7 @@ pub fn parse_string_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensR
     let mut tokens = vec![variable_token(name, Some('$'))];
 
     // Optional array indices: (expr[,expr,...])
-    if let Some(_) = opt('(').parse_next(input)? {
+    if opt('(').parse_next(input)?.is_some() {
         tokens.push(BasicToken::SimpleToken(
             BasicTokenNoPrefix::CharOpenParenthesis
         ));
@@ -711,7 +723,7 @@ pub fn parse_integer_variable<'src>(input: &mut &'src str) -> BasicSeveralTokens
     let mut tokens = vec![variable_token(name, Some('%'))];
 
     // Optional array indices: (expr[,expr,...])
-    if let Some(_) = opt('(').parse_next(input)? {
+    if opt('(').parse_next(input)?.is_some() {
         tokens.push(BasicToken::SimpleToken(
             BasicTokenNoPrefix::CharOpenParenthesis
         ));
@@ -749,7 +761,7 @@ pub fn parse_float_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensRe
     let mut tokens = vec![variable_token(name, None)];
 
     // Optional array indices: (expr[,expr,...])
-    if let Some(_) = opt('(').parse_next(input)? {
+    if opt('(').parse_next(input)?.is_some() {
         tokens.push(BasicToken::SimpleToken(
             BasicTokenNoPrefix::CharOpenParenthesis
         ));
@@ -1086,7 +1098,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     Ok(res)
 }
 
-/// TODO add the missing chars
+// TODO add the missing chars
 // pub fn parse_char<'src>(input:&mut &'src str) -> BasicOneTokenResult<'src>{
 // map(
 // alt((
@@ -1632,27 +1644,22 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
             }
             else {
                 // Parse multiple instructions in ELSE clause
-                loop {
-                    match parse_instruction(input) {
-                        Ok(mut else_instr) => {
-                            res.append(&mut else_instr);
+                while let Ok(mut else_instr) = parse_instruction(input) {
+                    res.append(&mut else_instr);
 
-                            // Check for colon separator
-                            let sep_checkpoint = input.checkpoint();
-                            let mut space_before = parse_basic_space0.parse_next(input)?;
-                            if opt(':').parse_next(input)?.is_some() {
-                                res.append(&mut space_before);
-                                res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
-                                let mut space_after = parse_basic_space0.parse_next(input)?;
-                                res.append(&mut space_after);
-                                // Continue to next statement
-                            }
-                            else {
-                                input.reset(&sep_checkpoint);
-                                break;
-                            }
-                        },
-                        Err(_) => break
+                    // Check for colon separator
+                    let sep_checkpoint = input.checkpoint();
+                    let mut space_before = parse_basic_space0.parse_next(input)?;
+                    if opt(':').parse_next(input)?.is_some() {
+                        res.append(&mut space_before);
+                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
+                        let mut space_after = parse_basic_space0.parse_next(input)?;
+                        res.append(&mut space_after);
+                        // Continue to next statement
+                    }
+                    else {
+                        input.reset(&sep_checkpoint);
+                        break;
                     }
                 }
             }
@@ -2010,7 +2017,7 @@ pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     let space = parse_basic_space0.parse_next(input)?;
 
     // Parse comma-separated data values (strings or numbers)
-    let opt_values: Option<(Vec<BasicToken>, Vec<(Vec<BasicToken>, Vec<BasicToken>)>)> = opt((
+    let opt_values: OptCommaSeparatedList = opt((
         alt((
             parse_quoted_string(false),
             parse_numeric_expression(NumericExpressionConstraint::None)
@@ -2812,13 +2819,7 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     let fn_name = take_while(1.., ('a'..='z', 'A'..='Z', '0'..='9')).parse_next(input)?;
 
     // Optional parameter list in parentheses
-    let opt_params: Option<(
-        char,
-        Vec<BasicToken>,
-        Option<(Vec<BasicToken>, Vec<(Vec<BasicToken>, Vec<BasicToken>)>)>,
-        Vec<BasicToken>,
-        char
-    )> = opt((
+    let opt_params: OptParenthesizedParams = opt((
         '(',
         parse_basic_space0,
         opt((
@@ -5196,7 +5197,7 @@ fn parse_niladic_prefixed<'code>(
                 '_'
             ))))
         )
-            .map(|_| vec![BasicToken::PrefixedToken(code.clone())])
+            .map(|_| vec![BasicToken::PrefixedToken(code)])
             .parse_next(input)
     }
 }
@@ -5442,17 +5443,17 @@ pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
 }
 
 /// Like `parse_decimal_value_16bits`, but a small non-negative literal uses
-/// the compact `ConstantNumber0`..`10`/`ValueIntegerDecimal8bits` encodings
-/// - confirmed against a real CPC's own re-tokenisation of pendulum.bas:
-/// `0`/`1` become the single-byte ConstantNumber0/1 (no value bytes at all
-/// - see `BasicTokenNoPrefix::is_small_constant`), `100`/`250` become
+/// the compact `ConstantNumber0`..`10`/`ValueIntegerDecimal8bits` encodings,
+/// confirmed against a real CPC's own re-tokenisation of pendulum.bas:
+/// `0`/`1` become the single-byte ConstantNumber0/1 (no value bytes at all,
+/// see `BasicTokenNoPrefix::is_small_constant`), `100`/`250` become
 /// `ValueIntegerDecimal8bits` (one value byte, not two). Only reachable via
-/// `NumericExpressionConstraint::AssignmentValue` - see its doc comment
-/// for why this can't simply replace `parse_decimal_value_16bits`
-/// everywhere. Left unscoped for negative values - there is no confirmed
-/// evidence yet for how the ROM encodes those (in practice the leading `-`
-/// is stripped by `parse_unary_operator` before this ever runs, so `neg`
-/// is always `None` on this call path regardless).
+/// `NumericExpressionConstraint::AssignmentValue`, see its doc comment for
+/// why this can't simply replace `parse_decimal_value_16bits` everywhere.
+/// Left unscoped for negative values: there is no confirmed evidence yet
+/// for how the ROM encodes those (in practice the leading `-` is stripped
+/// by `parse_unary_operator` before this ever runs, so `neg` is always
+/// `None` on this call path regardless).
 pub fn parse_decimal_value_16bits_compact<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     (
         opt('-'),

@@ -132,7 +132,7 @@ pub fn run_document_in_emulator(
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "program".to_string());
     let snapshot = std::env::temp_dir().join(format!("cpclib-run-{stem}.sna"));
-    if let Err(problem) = std::fs::write(&snapshot, &built.snapshot) {
+    if let Err(problem) = fs_err::write(&snapshot, &built.snapshot) {
         return failure(format!("cannot write {}: {problem}", snapshot.display()));
     }
 

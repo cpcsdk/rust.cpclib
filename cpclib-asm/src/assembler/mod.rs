@@ -7,7 +7,7 @@
 /// a source is only ever compared against itself.
 fn canonical_source_path(name: &str) -> Option<std::path::PathBuf> {
     let path = std::path::Path::new(name);
-    Some(std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
+    Some(fs_err::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
 }
 
 use crate::disass::disassemble;

@@ -21,6 +21,7 @@ cpclib-tokens.workspace = true
 # disagree about what a rule means.
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
 camino.workspace = true
+fs-err.workspace = true
 minijinja.workspace = true
 enumflags2.workspace = true
 dashmap.workspace = true

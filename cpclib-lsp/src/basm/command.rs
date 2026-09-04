@@ -30,8 +30,8 @@ impl AssemblyAnalyzer {
                 .filter_map(|i| all_lines.get(i).copied())
                 .collect::<Vec<_>>()
                 .join("\n");
-            if let Ok(new_basic) = cpclib_basic::renum::renum_text(&basic_text, 10, 10) {
-                if new_basic != basic_text {
+            if let Ok(new_basic) = cpclib_basic::renum::renum_text(&basic_text, 10, 10)
+                && new_basic != basic_text {
                     let new_text = if new_basic.ends_with('\n') {
                         new_basic
                     }
@@ -55,7 +55,6 @@ impl AssemblyAnalyzer {
                         ..Default::default()
                     });
                 }
-            }
         }
 
         // Offer removal of an unused REPEAT loop counter, or an unused
@@ -121,11 +120,10 @@ impl AssemblyAnalyzer {
         ));
 
         // Join selected lines into one (instructions separated by " : ")
-        if end_line > start_line {
-            if let Some(a) = self.join_lines_action(document, &all_lines, start_line, end_line) {
+        if end_line > start_line
+            && let Some(a) = self.join_lines_action(document, &all_lines, start_line, end_line) {
                 actions.push(a);
             }
-        }
 
         // Split each line at " : " into individual lines
         if let Some(a) = self.split_lines_action(document, &all_lines, start_line, end_line) {

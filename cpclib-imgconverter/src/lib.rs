@@ -899,19 +899,19 @@ where
     let output_format = get_output_format(matches).map_err(anyhow::Error::msg)?;
     let conversion = ImageConverter::convert(
         input_file,
-        palette,
-        output_mode.into(),
-        transformations,
-        output_format,
-        crop_if_too_large,
-        missing_pen,
-        o
+        ConvertParams {
+            palette,
+            mode: output_mode.into(),
+            transformations,
+            crop_if_too_large,
+            missing_pen,
+            o
+        },
+        output_format
     )?;
 
-    if sub_sprite.is_some() {
+    if let Some(sub_sprite) = sub_sprite {
         // TODO share code with the tile branch
-
-        let sub_sprite = sub_sprite.unwrap();
 
         // handle the sprite stuff
         match &conversion {
@@ -927,19 +927,16 @@ where
                         .expect("Unable to create the sprite file");
                 }
 
-                sub_sprite
-                    .get_one::<String>("CONFIGURATION")
-                    .map(|conf_fname: &String| {
-                        let mut file = File::create(conf_fname)
-                            .expect("Unable to create the configuration file");
-                        let fname = Utf8Path::new(conf_fname)
-                            .file_stem()
-                            .unwrap()
-                            .replace(".", "_");
-                        writeln!(&mut file, "{}_WIDTH equ {}", fname, sprite.bytes_width())
-                            .unwrap();
-                        writeln!(&mut file, "{}_HEIGHT equ {}", fname, sprite.height()).unwrap();
-                    });
+                if let Some(conf_fname) = sub_sprite.get_one::<String>("CONFIGURATION") {
+                    let mut file = File::create(conf_fname)
+                        .expect("Unable to create the configuration file");
+                    let fname = Utf8Path::new(conf_fname)
+                        .file_stem()
+                        .unwrap()
+                        .replace(".", "_");
+                    writeln!(&mut file, "{}_WIDTH equ {}", fname, sprite.bytes_width()).unwrap();
+                    writeln!(&mut file, "{}_HEIGHT equ {}", fname, sprite.height()).unwrap();
+                }
             },
             _ => unreachable!("{:?} not handled", conversion)
         }

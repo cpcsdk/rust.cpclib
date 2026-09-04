@@ -64,9 +64,9 @@ pub fn project_root(file: &Path) -> Option<PathBuf> {
         if is_project_root(&dir) {
             return Some(dir);
         }
-        match dir.parent() {
-            Some(parent) => dir = parent.to_path_buf(),
-            None => return None
+        {
+            let parent = dir.parent()?;
+            dir = parent.to_path_buf()
         }
     }
 }

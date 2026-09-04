@@ -925,7 +925,7 @@ fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
     // `.exists()` check meant a relative path always failed to become a
     // URL and returned `None` for the whole function immediately - never
     // even trying the fallback strategies below.
-    if let Ok(canonical) = std::fs::canonicalize(path_str)
+    if let Ok(canonical) = fs_err::canonicalize(path_str)
         && let Ok(url) = Url::from_file_path(&canonical)
     {
         return Some(url);

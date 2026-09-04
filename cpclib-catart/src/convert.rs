@@ -4,7 +4,7 @@ use cpclib_basic::{BasicLine, BasicProgram};
 use crate::basic_command::{BasicCommand, BasicCommandList, PrintArgument, PrintTerminator};
 use crate::error::CatArtError;
 
-fn consume_integer_argument<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) -> Result<u8, CatArtError> {
+fn consume_integer_argument(iter: &mut Vec<(u16, &BasicToken)>) -> Result<u8, CatArtError> {
     let mut pair = None;
 
     // consume space
@@ -40,10 +40,10 @@ fn consume_integer_argument<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) -> Result
                 }
             },
             _ => {
-                return Err(CatArtError::IncompatibleBasicCommand(
+                Err(CatArtError::IncompatibleBasicCommand(
                     line,
                     "Expected integer argument".to_string()
-                ));
+                ))
             }
         }
     }
@@ -55,7 +55,7 @@ fn consume_integer_argument<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) -> Result
 }
 
 /// Consume a comma (with optional spaces before and after)
-fn consume_comma<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) -> Result<(), CatArtError> {
+fn consume_comma(iter: &mut Vec<(u16, &BasicToken)>) -> Result<(), CatArtError> {
     // consume optional spaces before comma
     loop {
         let res = iter
@@ -89,8 +89,8 @@ fn consume_comma<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) -> Result<(), CatArt
 
 /// Consume INK arguments: pen (0-15), ink1 (0-31), and optional ink2 (0-31)
 /// If ink2 is not provided, it defaults to ink1
-fn consume_ink_arguments<'b>(
-    iter: &mut Vec<(u16, &'b BasicToken)>
+fn consume_ink_arguments(
+    iter: &mut Vec<(u16, &BasicToken)>
 ) -> Result<(u8, u8, Option<u8>), CatArtError> {
     let pen = consume_integer_argument(iter)?;
     consume_comma(iter)?;
@@ -117,8 +117,8 @@ fn consume_ink_arguments<'b>(
 }
 
 /// Consume LOCATE arguments: column and row
-fn consume_locate_arguments<'b>(
-    iter: &mut Vec<(u16, &'b BasicToken)>
+fn consume_locate_arguments(
+    iter: &mut Vec<(u16, &BasicToken)>
 ) -> Result<(u8, u8), CatArtError> {
     let col = consume_integer_argument(iter)?;
     consume_comma(iter)?;
@@ -127,8 +127,8 @@ fn consume_locate_arguments<'b>(
 }
 
 /// Consume WINDOW arguments: left, right, top, bottom
-fn consume_window_arguments<'b>(
-    iter: &mut Vec<(u16, &'b BasicToken)>
+fn consume_window_arguments(
+    iter: &mut Vec<(u16, &BasicToken)>
 ) -> Result<(u8, u8, u8, u8), CatArtError> {
     let left = consume_integer_argument(iter)?;
     consume_comma(iter)?;
@@ -141,8 +141,8 @@ fn consume_window_arguments<'b>(
 }
 
 /// Consume SYMBOL arguments: character code followed by 8 row bytes
-fn consume_symbol_arguments<'b>(
-    iter: &mut Vec<(u16, &'b BasicToken)>
+fn consume_symbol_arguments(
+    iter: &mut Vec<(u16, &BasicToken)>
 ) -> Result<(u8, u8, u8, u8, u8, u8, u8, u8, u8), CatArtError> {
     let char_code = consume_integer_argument(iter)?;
     consume_comma(iter)?;
@@ -165,7 +165,7 @@ fn consume_symbol_arguments<'b>(
 }
 
 /// Consume optional spaces
-fn consume_spaces<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) {
+fn consume_spaces(iter: &mut Vec<(u16, &BasicToken)>) {
     while let Some((_, token)) = iter.last() {
         match token {
             BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace) => {
@@ -178,8 +178,8 @@ fn consume_spaces<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) {
 
 /// Consume all PRINT items and track whether there's a trailing semicolon
 /// Returns (collected bytes, has_trailing_semicolon)
-fn consume_print_statement<'b>(
-    iter: &mut Vec<(u16, &'b BasicToken)>
+fn consume_print_statement(
+    iter: &mut Vec<(u16, &BasicToken)>
 ) -> Result<(PrintArgument, PrintTerminator), CatArtError> {
     let mut args = Vec::new();
     let mut has_trailing_semicolon = false;
@@ -300,11 +300,10 @@ pub fn basic_to_commands<'b>(basic: &'b BasicProgram) -> Result<BasicCommandList
     let mut line_token_pairs: Vec<(u16, &'b BasicToken)> = basic
         .lines()
         .iter()
-        .map(|line: &BasicLine| {
+        .flat_map(|line: &BasicLine| {
             let nb = line.line_number();
             line.tokens().iter().map(move |t| (nb, t))
         })
-        .flatten()
         .rev()
         .collect::<Vec<_>>();
 

@@ -62,7 +62,7 @@ impl From<InkComponentQuantity> for AsicColorComponent {
 /// Written by hand rather than with `bitfield!`: three nibbles at fixed offsets
 /// is less code this way than the macro's conversion syntax, and it keeps the
 /// packing visible right next to the layout it documents.
-#[derive(Clone, Copy, Eq,  Ord, Default)]
+#[derive(Clone, Copy, Eq, Default)]
 pub struct AsicColor(u16);
 
 impl PartialEq for AsicColor {
@@ -73,7 +73,13 @@ impl PartialEq for AsicColor {
 
 impl PartialOrd for AsicColor {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        AmstradColor::color(self).0.partial_cmp(&AmstradColor::color(other).0)
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AsicColor {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        AmstradColor::color(self).0.cmp(&AmstradColor::color(other).0)
     }
 }
 

@@ -135,7 +135,6 @@ pub fn convert_song_to_akg<E: BndBuilderObserver + 'static>(
             song_path.as_str(),
             output_path.as_str()
         ]
-        .into_iter()
     )
     .map_err(|e| format!("Could not build SongToAkg arguments: {e}"))?;
 
@@ -162,7 +161,7 @@ pub fn convert_song_to_aky_source<E: BndBuilderObserver + 'static>(
     output_path: &Utf8Path,
     observer: &Arc<E>
 ) -> Result<(), String> {
-    let args = shlex::try_join([song_path.as_str(), output_path.as_str()].into_iter())
+    let args = shlex::try_join([song_path.as_str(), output_path.as_str()])
         .map_err(|e| format!("Could not build SongToAky arguments: {e}"))?;
 
     let task: Task = InnerTask::with_songconverter(

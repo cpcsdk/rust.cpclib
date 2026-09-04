@@ -85,9 +85,9 @@ fn project_root(document: &Path) -> Option<PathBuf> {
         if crate::root::is_project_root(&dir) {
             return Some(dir);
         }
-        match dir.parent() {
-            Some(parent) => dir = parent.to_path_buf(),
-            None => return None
+        {
+            let parent = dir.parent()?;
+            dir = parent.to_path_buf()
         }
     }
 }
@@ -184,8 +184,8 @@ pub fn scan_workspace(root: &Path) -> Workspace {
         fingerprint = fingerprint.max(newest_mtime(&entry));
 
         if is_source
-            && let Ok(path) = std::fs::canonicalize(entry.path())
-            && let Ok(text) = std::fs::read_to_string(&path)
+            && let Ok(path) = fs_err::canonicalize(entry.path())
+            && let Ok(text) = fs_err::read_to_string(&path)
         {
             sources.push((path, text));
         }
@@ -268,7 +268,7 @@ pub fn graph_of(workspace: &Workspace) -> ProjectGraph {
         let targets = extract_include_filenames(text)
             .iter()
             .filter_map(|name| resolve_include_path(name, path))
-            .filter_map(|p| std::fs::canonicalize(p).ok())
+            .filter_map(|p| fs_err::canonicalize(p).ok())
             .collect();
         includes.insert(path.clone(), targets);
     }
@@ -297,14 +297,14 @@ pub fn entry_in_graph(
     root: &Path,
     graph: &ProjectGraph
 ) -> Entry {
-    let Ok(document) = std::fs::canonicalize(document)
+    let Ok(document) = fs_err::canonicalize(document)
     else {
         return Entry::Unknown;
     };
 
     if let Some(configured) = configured {
         let path = root.join(configured);
-        return match std::fs::canonicalize(&path) {
+        return match fs_err::canonicalize(&path) {
             Ok(path) if path == document => Entry::Standalone,
             Ok(path) => Entry::Project(path),
             // A configured entry that does not exist is a mistake worth not
@@ -557,7 +557,7 @@ pub fn assemble_entry(
     case_sensitive: bool,
     disabled: enumflags2::BitFlags<cpclib_asm::WarningCategory>
 ) -> Option<cpclib_asm::assembler::Env> {
-    let entry_text = std::fs::read_to_string(entry).ok()?;
+    let entry_text = fs_err::read_to_string(entry).ok()?;
 
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);

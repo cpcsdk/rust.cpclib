@@ -43,7 +43,7 @@ impl BuildFileAnalyzer {
 
         let mut actions = Vec::new();
         for dependency in dependencies_in(&lines[start..=end]) {
-            if targets.iter().any(|t| *t == dependency) {
+            if targets.contains(&dependency) {
                 continue;
             }
             if directory

@@ -137,7 +137,7 @@ pub fn apply_bridge_patch(root: &Utf8Path) -> Result<(), PatchError> {
         }
     }
 
-    std::fs::write(root.join(BRIDGE_FILENAME), BRIDGE_SCRIPT)
+    fs_err::write(root.join(BRIDGE_FILENAME), BRIDGE_SCRIPT)
         .map_err(|e| PatchError::Io(e.to_string()))?;
 
     // index.html: load the bridge last.
@@ -199,11 +199,11 @@ pub fn apply_bridge_patch(root: &Utf8Path) -> Result<(), PatchError> {
 }
 
 fn read(path: &Utf8Path) -> Result<String, PatchError> {
-    std::fs::read_to_string(path).map_err(|e| PatchError::Io(format!("{path}: {e}")))
+    fs_err::read_to_string(path).map_err(|e| PatchError::Io(format!("{path}: {e}")))
 }
 
 fn write(path: &Utf8Path, text: &str) -> Result<(), PatchError> {
-    std::fs::write(path, text).map_err(|e| PatchError::Io(format!("{path}: {e}")))
+    fs_err::write(path, text).map_err(|e| PatchError::Io(format!("{path}: {e}")))
 }
 
 /// The MIME type to serve a file with.

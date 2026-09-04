@@ -634,7 +634,7 @@ impl HardCodedFunction {
         expected_nb_args.validate(nb_args, self.name())?;
 
         match self {
-            HardCodedFunction::Clamp => Ok(maths::clamp(params[0].as_ref(), &params[1].as_ref(), &params[2].as_ref())?),
+            HardCodedFunction::Clamp => Ok(maths::clamp(params[0].as_ref(), params[1].as_ref(), params[2].as_ref())?),
             HardCodedFunction::BinaryFunction(bf) => {
                 match bf {
                     BinaryFunction::Pow => Ok(maths::pow(params[0].as_ref(), params[1].as_ref())?),
@@ -811,6 +811,11 @@ impl HardCodedFunction {
             HardCodedFunction::MatrixHeight => matrix_height(params[0].as_ref()),
             HardCodedFunction::Load => {
                 let fname = params[0].as_ref().string()?;
+                // `env` is `&mut Env` here; `Fname` only has a `From` impl for
+                // `(&str, &Env)`, so this `.as_ref()` is the mut->shared
+                // downgrade the `Into<Fname>` bound actually needs - not a
+                // no-op, despite clippy's heuristic (it misses that case).
+                #[allow(clippy::useless_asref)]
                 let (data, _) = file::load_file((fname, env.as_ref()), env.options().parse_options())?;
                 let data = Vec::from(data);
                 Ok(ExprResult::from(data.as_slice()))

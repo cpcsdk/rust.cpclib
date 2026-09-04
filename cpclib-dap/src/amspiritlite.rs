@@ -142,7 +142,7 @@ pub fn call_for(request: &Value) -> Option<Call> {
             let data = arguments
                 .and_then(|a| a.get("data"))
                 .and_then(Value::as_str)
-                .map(|encoded| hex_from_base64(encoded))
+                .map(hex_from_base64)
                 .unwrap_or_default();
             Call::post("/api/ram").body(json!({ "addr": address, "data": data }).to_string())
         },
@@ -758,7 +758,7 @@ where
     // The snapshot has to land on disc: this emulator takes a file, unlike the
     // wasm one which is served the bytes over loopback.
     let path = std::env::temp_dir().join(format!("cpclib-dap-{}.sna", std::process::id()));
-    std::fs::write(&path, snapshot).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    fs_err::write(&path, snapshot).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
 
     // The port has to be one nothing else is holding, and the configured one
     // frequently is not.

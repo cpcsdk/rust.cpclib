@@ -55,7 +55,7 @@ pub fn debug_arguments(arguments: &str) -> Option<String> {
     cleaned.push(DEBUG_EMULATOR.to_string());
     cleaned.push(subcommand);
 
-    Some(shlex::try_join(cleaned.iter().map(String::as_str)).ok()?)
+    shlex::try_join(cleaned.iter().map(String::as_str)).ok()
 }
 
 /// The snapshot a rewritten command will boot, if it names one.

@@ -22,7 +22,7 @@ impl<C: AmstradColor + Clone> Clone for Palette<C> {
     fn clone(&self) -> Self {
         let mut map: HashMap<Pen, C> = HashMap::new();
         for (pen, color) in &self.values {
-            map.insert(*pen, color.clone());
+            map.insert(*pen, *color);
         }
 
         Self { values: map }
@@ -104,13 +104,11 @@ impl From<Palette<Ink>> for Palette<AsicColor> {
 // }
 // }
 
-impl<C: AmstradColor> Palette<C> {
+impl<C: AmstradColor, T> FromIterator<T> for Palette<C>
+where C: From<T>
+{
     /// Create a palette from an iterator of items that can convert to Ink
-    pub fn from_iter<S, T>(items: S) -> Self
-    where
-        S: IntoIterator<Item = T>,
-        C: From<T>
-    {
+    fn from_iter<S: IntoIterator<Item = T>>(items: S) -> Self {
         let mut p = Self::empty();
         let items = items.into_iter();
 
@@ -124,9 +122,11 @@ impl<C: AmstradColor> Palette<C> {
 
 impl<C: AmstradColor> From<Vec<C>> for Palette<C> {
     fn from(items: Vec<C>) -> Self {
-        // Turbofished on purpose: `AmstradColor` requires `From<Rgb<u8>>`, so
-        // `from_iter`'s `T` is ambiguous between `C` and `Rgb<u8>` here.
-        Self::from_iter::<Vec<C>, C>(items)
+        // `AmstradColor` requires `From<Rgb<u8>>`, so `Palette<C>` has two
+        // `FromIterator` impls that could apply here (`T = C` and
+        // `T = Rgb<u8>`); disambiguate to the one matching `items`' own
+        // element type.
+        <Self as FromIterator<C>>::from_iter(items)
     }
 }
 
@@ -187,7 +187,7 @@ impl<C: AmstradColor + Serialize> Serialize for Palette<C> {
 impl<'de, C: AmstradColor + Deserialize<'de>> Deserialize<'de> for Palette<C> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let inks: Vec<C> = Vec::<C>::deserialize(deserializer)?;
-        let palette: Self = Self::from_iter::<Vec<C>, C>(inks);
+        let palette: Self = <Self as FromIterator<C>>::from_iter(inks);
         Ok(palette)
     }
 }

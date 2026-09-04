@@ -961,7 +961,7 @@ fn load_document_from(documents: &DashMap<Url, Document>, uri: &Url) -> Option<D
         return Some(entry.value().clone());
     }
     let path = uri.to_file_path().ok()?;
-    let text = std::fs::read_to_string(&path).ok()?;
+    let text = fs_err::read_to_string(&path).ok()?;
     Some(Document::new(uri.clone(), text, disk_file_version(&path)))
 }
 
@@ -1091,7 +1091,7 @@ fn non_empty_workspace_edit(
 /// not an accurate absolute time. Falls back to 0 (the previous fixed
 /// behavior) if the mtime can't be read.
 pub(crate) fn disk_file_version(path: &std::path::Path) -> i32 {
-    std::fs::metadata(path)
+    fs_err::metadata(path)
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -1615,11 +1615,9 @@ impl LanguageServer for CpcLspBackend {
                 if let Some(edit) = self
                     .build_analyzer
                     .rename(entry.value(), position, &new_name)
-                {
-                    if let Some(local_changes) = edit.changes {
+                    && let Some(local_changes) = edit.changes {
                         changes.extend(local_changes);
                     }
-                }
                 drop(entry);
                 if !changes.is_empty() {
                     self.rename_jinja_variable_across_workspace(
@@ -2733,7 +2731,7 @@ impl LanguageServer for CpcLspBackend {
                         sid_wait_line_count,
                         &observer
                     )?;
-                    std::fs::copy(&dsk_path, &dest_path)
+                    fs_err::copy(&dsk_path, &dest_path)
                         .map_err(|e| format!("Could not write {dest_path}: {e}"))?;
                     Ok::<(), String>(())
                 })

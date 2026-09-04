@@ -81,8 +81,10 @@ use crate::char_command::CharCommand;
  
 /// Locale/Language for character font
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Locale {
     /// English (UK) font
+    #[default]
     English,
     /// French font
     French,
@@ -94,11 +96,6 @@ pub enum Locale {
     Danish
 }
 
-impl Default for Locale {
-    fn default() -> Self {
-        Locale::English
-    }
-}
 
 impl Locale {
     /// Get the font data for this locale
@@ -355,13 +352,13 @@ impl BasicMemoryScreen {
         let bloc_y = char_y - 1;
 
         // we treat column per colummn (so 1 byte)
-        for bloc_x_delta in 0 as u16..char_width_in_bytes as u16 {
+        for bloc_x_delta in 0_u16..char_width_in_bytes as u16 {
             let bloc_addr = self.address_for_byte_bloc(bloc_x_delta + bloc_x, bloc_y) as usize;
             for line_idx in 0..8 {
                 // Convert bitmap line to pens
                 let char_pens = &char_pens[line_idx];
 
-                let byte_addr = (bloc_addr + 0x800 * line_idx) as usize;
+                let byte_addr = bloc_addr + 0x800 * line_idx;
                 assert!(
                     byte_addr < CPC_SCREEN_MEMORY_SIZE,
                     "Calculated byte address out of bounds"
@@ -498,13 +495,13 @@ impl BasicMemoryScreen {
             let height = color_matrix.height() as usize;
             for line_idx in (0..height).rev() {
                 let line = color_matrix.get_line(line_idx).to_vec();
-                color_matrix.add_line((line_idx + 1) as usize, &line);
+                color_matrix.add_line(line_idx + 1, &line);
             }
             // Then duplicate columns
             let width = color_matrix.width() as usize;
             for col_idx in (0..width).rev() {
                 let column = color_matrix.get_column(col_idx).to_vec();
-                color_matrix.add_column((col_idx + 1) as usize, &column);
+                color_matrix.add_column(col_idx + 1, &column);
             }
         }
 
@@ -517,7 +514,7 @@ impl BasicMemoryScreen {
                 // Get the line data
                 let line = color_matrix.get_line(line_idx).to_vec();
                 // Insert a duplicate right after the current line
-                color_matrix.add_line((line_idx + 1) as usize, &line);
+                color_matrix.add_line(line_idx + 1, &line);
             }
         }
 
@@ -530,7 +527,7 @@ impl BasicMemoryScreen {
                 // Get the column data
                 let column = color_matrix.get_column(col_idx).to_vec();
                 // Insert a duplicate right after the current column
-                color_matrix.add_column((col_idx + 1) as usize, &column);
+                color_matrix.add_column(col_idx + 1, &column);
             }
         }
 
@@ -610,8 +607,8 @@ impl BasicMemoryScreen {
         );
 
         let delta = bloc_y * 80 + bloc_x;
-        let address = (self.r12r13() * 2 + delta) & 0x7FF;
-        address
+        
+        (self.r12r13() * 2 + delta) & 0x7FF
     }
 
     /// Clear a specific character line with paper color
@@ -931,11 +928,10 @@ impl Interpreter {
                 let next_y = y + 1;
                 let idx_y = (y - top) as usize;
                 let idx_x = (x - left) as usize;
-                if next_y <= bottom {
-                    if let Some(src) = self.screen.cell(x, next_y) {
+                if next_y <= bottom
+                    && let Some(src) = self.screen.cell(x, next_y) {
                         next_row_cells[idx_y][idx_x] = src.clone();
                     }
-                }
             }
         }
         for y in top..=bottom {
@@ -986,11 +982,10 @@ impl Interpreter {
                 let prev_y = if y > top { y - 1 } else { top };
                 let idx_y = (y - top) as usize;
                 let idx_x = (x - left) as usize;
-                if prev_y >= top {
-                    if let Some(src) = self.screen.cell(x, prev_y) {
+                if prev_y >= top
+                    && let Some(src) = self.screen.cell(x, prev_y) {
                         prev_row_cells[idx_y][idx_x] = src.clone();
                     }
-                }
             }
         }
         for y in (top..=bottom).rev() {
@@ -1425,7 +1420,7 @@ pub fn display_screen_diff(
     }
 
     // Screen rows
-    for (_row_idx, (row1, row2)) in screen1.buffer.iter().zip(screen2.buffer.iter()).enumerate() {
+    for (row1, row2) in screen1.buffer.iter().zip(screen2.buffer.iter()) {
         // Left border for screen1
         for _ in 0..border {
             output.push_str(&format!("{}", " ".on_color(border_color1)));

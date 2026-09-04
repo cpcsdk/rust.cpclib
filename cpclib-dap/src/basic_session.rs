@@ -1717,7 +1717,7 @@ impl<P: DapPeer> BasicSession<P> {
             // Matches this emulator's own web UI (`basicRefresh`'s "Free
             // RAM" field): the gap from the array zone's end to the fixed
             // start of the BASIC system workspace.
-            let free = if end < 0xae14 { 0xae14 - end } else { 0 };
+            let free = 0xae14_u64.saturating_sub(end);
             entries.push(Self::workspace_entry("Free RAM", format!("{free} B")));
         }
         if let Some(version) = field("basic_ver") {
@@ -3124,11 +3124,10 @@ fn line_index_from_source(source: &str) -> Vec<(u16, usize)> {
     for (line_idx, text) in source.lines().enumerate() {
         let trimmed = text.trim_start();
         let digits: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
-        if let Ok(number) = digits.parse::<u16>() {
-            if !digits.is_empty() {
+        if let Ok(number) = digits.parse::<u16>()
+            && !digits.is_empty() {
                 index.push((number, line_idx));
             }
-        }
     }
     index
 }

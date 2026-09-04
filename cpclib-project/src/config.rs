@@ -498,7 +498,7 @@ pub fn load_config(workspace_root: Option<&Path>) -> LoadedConfig {
             error: None
         };
     };
-    let content = match std::fs::read_to_string(&path) {
+    let content = match fs_err::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {
             return LoadedConfig {

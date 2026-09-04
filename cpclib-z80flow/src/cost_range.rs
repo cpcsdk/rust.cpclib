@@ -347,7 +347,7 @@ fn cost_range_inner<T: ListingElement>(
                     tokens,
                     block.start..block.end + 1,
                     cost,
-                    &labels,
+                    labels,
                     calls,
                     &mut instruction_count,
                     &mut unrecognized_count
@@ -363,7 +363,7 @@ fn cost_range_inner<T: ListingElement>(
                     tokens,
                     block.start..block.end + 1,
                     cost,
-                    &labels,
+                    labels,
                     calls,
                     &mut instruction_count,
                     &mut unrecognized_count
@@ -403,7 +403,7 @@ fn cost_range_inner<T: ListingElement>(
                     tokens,
                     block.start..block.end,
                     cost,
-                    &labels,
+                    labels,
                     calls,
                     &mut instruction_count,
                     &mut unrecognized_count

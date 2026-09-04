@@ -59,6 +59,12 @@ pub enum Commands {
     }
 }
 
+/// Run the `encode`/`decode` subcommand selected by `cli`.
+///
+/// # Errors
+/// Returns `Err` if the input file cannot be read, its content cannot be
+/// parsed as a Locomotive BASIC program (encode) or Amsdos-header/tokenised
+/// BASIC binary (decode), or the output file cannot be written.
 pub fn handle_locomotive_arguments(cli: Cli) -> Result<(), String>{
     match cli.command {
         Commands::Encode {

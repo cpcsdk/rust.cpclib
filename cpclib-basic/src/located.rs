@@ -885,7 +885,7 @@ static KEYWORD_TABLE: std::sync::LazyLock<Vec<KwEntry>> = std::sync::LazyLock::n
     ];
 
     // Longest match: sort by descending length, deduplicate by text.
-    v.sort_by(|a, b| b.text.len().cmp(&a.text.len()));
+    v.sort_by_key(|a| std::cmp::Reverse(a.text.len()));
     let mut seen = std::collections::HashSet::new();
     v.retain(|e| seen.insert(e.text));
     v
@@ -1157,9 +1157,9 @@ fn lex_body(body: &str, source_line: u32, col_offset: u32) -> Vec<LocatedBasicTo
         input = before;
 
         // Whitespace.
-        if let Ok(_) =
-            take_while::<_, Input<'_>, ContextError>(1.., |c: char| c == ' ' || c == '\t')
-                .parse_next(&mut input)
+        if take_while::<_, Input<'_>, ContextError>(1.., |c: char| c == ' ' || c == '\t')
+            .parse_next(&mut input)
+            .is_ok()
         {
             push!(before, LocatedTokenKind::Space);
             continue;

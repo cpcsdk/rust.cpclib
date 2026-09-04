@@ -38,7 +38,7 @@ impl BuildFileAnalyzer {
             match self.expand_cached(document) {
                 Ok(result) => {
                     let expanded = &result.0;
-                    if let Err(e) = serde_yaml::from_str::<serde_yaml::Value>(&expanded) {
+                    if let Err(e) = serde_yaml::from_str::<serde_yaml::Value>(expanded) {
                         diagnostics.push(Diagnostic {
                             range: Range {
                                 start: Position {
@@ -97,7 +97,7 @@ impl BuildFileAnalyzer {
                     // otherwise unchanged from before - still 1-based-ish,
                     // still a fixed 10-char-wide guess for the end, since
                     // `serde_yaml` only reports a point, not a range.)
-                    let error_line = text.lines().nth(line_idx as usize).unwrap_or("");
+                    let error_line = text.lines().nth(line_idx).unwrap_or("");
                     let start_utf16 =
                         crate::common::document::char_count_to_utf16_col(error_line, column);
                     let end_utf16 =
@@ -377,7 +377,7 @@ impl BuildFileAnalyzer {
         else {
             return Vec::new();
         };
-        let canonical_source = std::fs::canonicalize(source_path)
+        let canonical_source = fs_err::canonicalize(source_path)
             .unwrap_or_else(|_| std::path::PathBuf::from(source_path.as_std_path()));
         let source_basename = source_path.file_name().unwrap_or("");
 
@@ -435,7 +435,7 @@ impl BuildFileAnalyzer {
                 for tok in value.split_whitespace() {
                     for expanded in expand_dep_token(tok, Some(&base_dir)) {
                         let resolved = base_dir.join(&expanded);
-                        let canonical_resolved = std::fs::canonicalize(&resolved)
+                        let canonical_resolved = fs_err::canonicalize(&resolved)
                             .unwrap_or_else(|_| std::path::PathBuf::from(resolved.as_std_path()));
                         if canonical_resolved == canonical_source {
                             out.push(rule_name.clone());

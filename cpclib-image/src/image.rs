@@ -299,8 +299,8 @@ impl<C:AmstradColor> ColorMatrix<C> {
     /// from the very first fixture this feature was built against), or
     /// 0xC420 genuinely held live (non-screen) data that only *looked*
     /// like garbling by coincidence. Re-confirming against a live emulator
-    /// - this crate's own tests cannot, `hello`/`blight` are static
-    /// fixtures - is the way to actually settle it if it resurfaces.
+    /// (this crate's own tests cannot, `hello`/`blight` are static
+    /// fixtures) is the way to actually settle it if it resurfaces.
     /// `data` is still addressed modulo its own length as a safety bound,
     /// but every real caller passes the full 64K address space
     /// (`data[0]` = real address 0x0000), not just one bank.
@@ -378,7 +378,7 @@ impl<C:AmstradColor> ColorMatrix<C> {
         line_bytes
             .iter()
             .flat_map(|b| pixels::byte_to_pens(*b, mode))
-            .map(|pen| palette.get(&pen).clone())
+            .map(|pen| *palette.get(&pen))
             .collect()
     }
 

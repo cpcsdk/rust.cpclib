@@ -1006,7 +1006,7 @@ impl ListingOutput {
                     let page = match self.current_physical_address {
                         PhysicalAddress::Memory(adr) => adr.page(),
                         PhysicalAddress::Bank(adr) => adr.bank() as u8,
-                        PhysicalAddress::Cpr(adr) => adr.bloc() as u8
+                        PhysicalAddress::Cpr(adr) => adr.bloc()
                     };
 
                     // One row per *instruction*, not per line: `ld a,l : inc a`

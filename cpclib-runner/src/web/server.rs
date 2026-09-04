@@ -337,7 +337,7 @@ const BARE_SCREEN_STYLE: &str = "<style id=\"cpclib-bare\">\n\
 
 fn serve_debug_page(stream: &mut TcpStream, site: &Site) -> std::io::Result<()> {
     let index = site.root.join("index.html");
-    let Ok(html) = std::fs::read_to_string(&index)
+    let Ok(html) = fs_err::read_to_string(&index)
     else {
         return respond(stream, 404, "text/plain", b"index.html is missing");
     };
@@ -375,7 +375,7 @@ fn serve_file(stream: &mut TcpStream, site: &Site, path: &str) -> std::io::Resul
     }
 
     let file = site.root.join(relative);
-    match std::fs::read(&file) {
+    match fs_err::read(&file) {
         Ok(bytes) => respond(stream, 200, mime_for(&file), &bytes),
         Err(_) => respond(stream, 404, "text/plain", b"not found")
     }

@@ -116,9 +116,7 @@ impl SuspiciousSmcLabel {
 /// everything else a byte. `ld a, 0` -> 1, `ld hl, 0` -> 2, `ld (0x1234), a`
 /// -> 2.
 fn literal_operand_width(token: &LocatedToken) -> Option<u8> {
-    if token.mnemonic().is_none() {
-        return None;
-    }
+    token.mnemonic()?;
 
     let operands = [token.mnemonic_arg1(), token.mnemonic_arg2()];
     let carries_literal = operands.iter().flatten().any(|op| {

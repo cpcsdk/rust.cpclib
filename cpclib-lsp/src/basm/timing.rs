@@ -269,8 +269,8 @@ pub fn format_hover(
     let mut md = format!("**{}**", instr);
 
     // Try to assemble and show the actual bytes produced
-    if let Ok(bytes) = cpclib_asm::assemble(instr) {
-        if !bytes.is_empty() {
+    if let Ok(bytes) = cpclib_asm::assemble(instr)
+        && !bytes.is_empty() {
             let hex: String = bytes
                 .iter()
                 .map(|b| format!("{:02X}", b))
@@ -278,7 +278,6 @@ pub fn format_hover(
                 .join(" ");
             md.push_str(&format!(" → `{}`", hex));
         }
-    }
     md.push_str("\n\n");
 
     for entry in entries {

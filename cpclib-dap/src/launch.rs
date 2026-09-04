@@ -34,7 +34,7 @@ pub struct Launched {
 /// nothing to run. The source map comes from the same pass, so the addresses in
 /// it are by construction the addresses in the snapshot.
 pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, String> {
-    let text = std::fs::read_to_string(entry).map_err(|e| format!("{}: {e}", entry.display()))?;
+    let text = fs_err::read_to_string(entry).map_err(|e| format!("{}: {e}", entry.display()))?;
 
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);
@@ -95,8 +95,8 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
         .map_err(|_| "the temporary directory is not utf-8".to_string())?;
     env.save_sna(&utf8)
         .map_err(|e| format!("cannot write the snapshot: {e}"))?;
-    let snapshot = std::fs::read(&temporary).map_err(|e| format!("cannot read it back: {e}"))?;
-    let _ = std::fs::remove_file(&temporary);
+    let snapshot = fs_err::read(&temporary).map_err(|e| format!("cannot read it back: {e}"))?;
+    let _ = fs_err::remove_file(&temporary);
 
     // The labels come from the same assemble as the addresses; taking them
     // from anywhere else would risk describing a different build.
@@ -178,7 +178,7 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
 /// terminology even though nothing here comes from a project build.
 fn program_cache_paths(entry: &Path) -> (PathBuf, PathBuf) {
     use std::hash::{Hash, Hasher};
-    let canonical = std::fs::canonicalize(entry).unwrap_or_else(|_| entry.to_path_buf());
+    let canonical = fs_err::canonicalize(entry).unwrap_or_else(|_| entry.to_path_buf());
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     canonical.hash(&mut hasher);
     let key = hasher.finish();
@@ -208,8 +208,8 @@ fn write_program_cache(
         .with_program(breakpoints.to_vec(), image, entry_point)
         .with_address_symbols(address_symbols.iter().cloned().collect());
     if let Ok(json) = serde_json::to_string(&file) {
-        let _ = std::fs::write(&map_path, json);
-        let _ = std::fs::write(&snapshot_path, snapshot);
+        let _ = fs_err::write(&map_path, json);
+        let _ = fs_err::write(&snapshot_path, snapshot);
     }
 }
 
@@ -229,7 +229,7 @@ pub fn cached_program_for_debug(
     why: &mut Vec<String>
 ) -> Option<Launched> {
     let (map_path, snapshot_path) = program_cache_paths(entry);
-    let text = std::fs::read_to_string(&map_path).ok()?;
+    let text = fs_err::read_to_string(&map_path).ok()?;
     let file = SourceMapFile::from_json(&text)?;
 
     let build = cpclib_project::build_defs::definitions_for_entry(entry);
@@ -247,8 +247,8 @@ pub fn cached_program_for_debug(
         return None;
     }
 
-    let written = std::fs::metadata(&map_path).ok()?.modified().ok()?;
-    let entry_is_older = std::fs::metadata(entry)
+    let written = fs_err::metadata(&map_path).ok()?.modified().ok()?;
+    let entry_is_older = fs_err::metadata(entry)
         .ok()?
         .modified()
         .ok()
@@ -261,7 +261,7 @@ pub fn cached_program_for_debug(
         return None;
     }
     for name in &file.map.files {
-        let Some(source) = std::fs::metadata(name).ok().and_then(|m| m.modified().ok())
+        let Some(source) = fs_err::metadata(name).ok().and_then(|m| m.modified().ok())
         else {
             return None;
         };
@@ -273,7 +273,7 @@ pub fn cached_program_for_debug(
         }
     }
 
-    let snapshot = std::fs::read(&snapshot_path).ok()?;
+    let snapshot = fs_err::read(&snapshot_path).ok()?;
 
     Some(Launched {
         breakpoints: file.breakpoints.clone(),
@@ -319,7 +319,7 @@ pub fn cached_for_debug(
         .source_map
         .clone()
         .unwrap_or_else(|| entry.with_extension("map"));
-    let text = match std::fs::read_to_string(&path) {
+    let text = match fs_err::read_to_string(&path) {
         Ok(text) => text,
         Err(problem) => {
             why.push(format!(
@@ -360,8 +360,8 @@ pub fn cached_for_debug(
     }
 
     // Older than any source it describes means the sources moved on.
-    let written = std::fs::metadata(&path).ok()?.modified().ok()?;
-    let entry_is_older = std::fs::metadata(entry)
+    let written = fs_err::metadata(&path).ok()?.modified().ok()?;
+    let entry_is_older = fs_err::metadata(entry)
         .ok()?
         .modified()
         .ok()
@@ -375,7 +375,7 @@ pub fn cached_for_debug(
         return None;
     }
     for name in &file.map.files {
-        let Some(source) = std::fs::metadata(name).ok().and_then(|m| m.modified().ok())
+        let Some(source) = fs_err::metadata(name).ok().and_then(|m| m.modified().ok())
         else {
             why.push(format!(
                 "{name} is named by the source map but cannot be read."
@@ -476,7 +476,7 @@ fn builder_for(
             .map_err(|e| format!("cannot read {build_file}: {e}"));
     }
 
-    let text = std::fs::read_to_string(build_file)
+    let text = fs_err::read_to_string(build_file)
         .map_err(|e| format!("cannot read {build_file}: {e}"))?;
     let blocks = cpclib_project::embedded_build::blocks_in_source(&text);
     if blocks.is_empty() {
@@ -655,7 +655,7 @@ pub fn debuggable_rules(build_file: &Path) -> Vec<String> {
     // `builder_for` needs a target to pick between several embedded blocks;
     // here every block counts, so each is asked in turn.
     if is_embedded_host(build_file) {
-        let Ok(text) = std::fs::read_to_string(build_file)
+        let Ok(text) = fs_err::read_to_string(build_file)
         else {
             return Vec::new();
         };

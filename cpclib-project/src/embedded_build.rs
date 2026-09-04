@@ -119,7 +119,7 @@ fn finish_block(
 }
 
 fn is_marker(stripped: &str) -> bool {
-    stripped.trim_end().split_whitespace().next() == Some(MARKER)
+    stripped.split_whitespace().next() == Some(MARKER)
 }
 
 /// Strips a leading `;` comment prefix and at most one following space.

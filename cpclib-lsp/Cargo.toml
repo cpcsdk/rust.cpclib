@@ -30,6 +30,7 @@ cpclib-dap.workspace = true
 cpclib-tokens.workspace = true
 cpclib-z80emu.workspace = true
 camino.workspace = true
+fs-err.workspace = true
 minijinja.workspace = true
 either.workspace = true
 

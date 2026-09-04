@@ -476,7 +476,7 @@ impl AssemblyAnalyzer {
         }
 
         let Ok(call_listing) = cpclib_asm::parser::obtained::LocatedListing::new_complete_source(
-            &format!("DEFB {call_text}"),
+            format!("DEFB {call_text}"),
             cpclib_asm::parser::context::ParserContextBuilder::default().set_quiet(true)
         )
         else {

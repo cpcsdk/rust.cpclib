@@ -31,7 +31,7 @@ pub fn build_environment(file_dir: Option<&std::path::Path>) -> Environment<'sta
         let dir = dir.to_path_buf();
         env.set_loader(move |name| {
             let path = dir.join(name);
-            match std::fs::read_to_string(&path) {
+            match fs_err::read_to_string(&path) {
                 Ok(s) => Ok(Some(s)),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(e) => {

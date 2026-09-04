@@ -566,7 +566,7 @@ fn start_session(
             },
         };
         let launched = launch::build_rule_for_debug(&build_file, rule)?;
-        let snapshot = std::fs::read(&launched.snapshot).map_err(|e| {
+        let snapshot = fs_err::read(&launched.snapshot).map_err(|e| {
             format!(
                 "{} was not produced by '{rule}': {e}",
                 launched.snapshot.display()
@@ -648,7 +648,7 @@ fn start_session(
         // "read the snapshot a build produced" step exactly, just skipping
         // the build.
         let entry = PathBuf::from(arguments.get("program").and_then(Value::as_str).unwrap());
-        let snapshot = std::fs::read(&entry)
+        let snapshot = fs_err::read(&entry)
             .map_err(|e| format!("{} could not be read: {e}", entry.display()))?;
         let map = cpclib_project::srcmap::SourceMap::from_raw(
             &cpclib_asm::assembler::listing_output::RawSourceMap::default()
@@ -842,12 +842,10 @@ fn start_session(
         ));
     }
     if wants_lite {
-        notices.push(format!(
-            "Debugging through AMSpiriT Lite, in its own window. Its web page is \
+        notices.push("Debugging through AMSpiriT Lite, in its own window. Its web page is \
              deliberately not opened here: that page drives the emulator too, and \
              would resume it behind this session. It knows its own banking, so \
-             addresses in paged code resolve exactly rather than by comparing bytes."
-        ));
+             addresses in paged code resolve exactly rather than by comparing bytes.".to_string());
     }
 
     // The emulator refuses everything until attached, so ask immediately; the
@@ -1080,7 +1078,7 @@ fn start_basic_session(
         .and_then(Value::as_str)
         .ok_or("the launch configuration named no \"program\"")?;
     let source_path = PathBuf::from(program);
-    let source_text = std::fs::read_to_string(&source_path)
+    let source_text = fs_err::read_to_string(&source_path)
         .map_err(|e| format!("{}: {e}", source_path.display()))?;
     let parsed = cpclib_basic::BasicProgram::parse(&source_text)
         .map_err(|e| format!("{}: {e}", source_path.display()))?;
@@ -1160,7 +1158,7 @@ fn source_map_for_project(
     // belong to" here: the file in hand is the build file, which is not in the
     // include graph at all. What is wanted is the program the project builds -
     // the file that declares the `RUN`.
-    let path = match (!config.entry.is_empty()).then(|| config.entry.as_str()) {
+    let path = match (!config.entry.is_empty()).then_some(config.entry.as_str()) {
         Some(configured) => root.join(configured),
         None => {
             match graph.sole_run_root() {

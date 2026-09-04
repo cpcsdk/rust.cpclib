@@ -111,7 +111,7 @@ pub fn format_labeled_bytes(groups: &[(&str, &[u8])]) -> String {
 /// stay consistent — e.g. a negative literal renders as `&FF`/`&FFFF`
 /// (two's complement), not a full 16-digit 64-bit value.
 pub fn format_hex_cpc(value: i64) -> String {
-    let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
+    let bits: u32 = if (0..=0xFF).contains(&value) { 8 } else { 16 };
     let digits = (bits / 4) as usize;
     let mask = (1u64 << bits) - 1;
     format!("&{:0digits$X}", value as u64 & mask, digits = digits)
@@ -119,7 +119,7 @@ pub fn format_hex_cpc(value: i64) -> String {
 
 /// Format an i64 as binary with `_` every 4 bits, sized to 8 or 16 bits.
 pub fn format_binary_cpc(value: i64) -> String {
-    let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
+    let bits: u32 = if (0..=0xFF).contains(&value) { 8 } else { 16 };
     let mut s = String::with_capacity(bits as usize + bits as usize / 4);
     for i in (0..bits).rev() {
         if i < bits - 1 && i % 4 == 3 {
