@@ -41,7 +41,6 @@ members = [
   "cpclib-snacli",
   "cpclib-sprite-compiler", 
   "cpclib-tokens",
-  "cpclib-visual-basm",
   "cpclib-visual-bndbuild",
   "cpclib-wasm", 
   "cpclib-xfer",
