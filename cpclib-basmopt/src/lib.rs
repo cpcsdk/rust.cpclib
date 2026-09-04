@@ -66,7 +66,10 @@ pub enum BasmOptError {
     // (a field literally named `source` gets that treatment implicitly,
     // hence `cause` here).
     #[error("{path}: {cause}")]
-    Parse { path: Utf8PathBuf, cause: AssemblerError },
+    Parse {
+        path: Utf8PathBuf,
+        cause: Box<AssemblerError>
+    },
     #[error("{path}: {source}")]
     Rules {
         path: Utf8PathBuf,
@@ -178,7 +181,7 @@ pub fn analyze_file(path: &Utf8Path, options: &Options) -> Result<AnalyzeOutcome
     let listing = parse_z80_with_context_builder(&source, builder).map_err(|cause| {
         BasmOptError::Parse {
             path: path.to_owned(),
-            cause
+            cause: Box::new(cause)
         }
     })?;
 

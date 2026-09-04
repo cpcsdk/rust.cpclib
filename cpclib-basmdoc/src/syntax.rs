@@ -176,7 +176,7 @@ pub(crate) fn link_symbols_in_source(source: &str, symbols: &[(String, String)])
     }
 
     // Sort by length (longest first) to avoid partial matches
-    symbol_regexes.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+    symbol_regexes.sort_by_key(|a| std::cmp::Reverse(a.1.len()));
 
     // Then add symbol links - process text segments only
     let mut result = String::new();

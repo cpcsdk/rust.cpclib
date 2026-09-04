@@ -127,8 +127,8 @@ fn encode_ascii85(data: &[u8]) -> String {
 
         // Output the appropriate number of characters
         let output_count = if count == 4 { 5 } else { count + 1 };
-        for k in 0..output_count {
-            result.push((digits[k] + 33) as char);
+        for digit in &digits[0..output_count] {
+            result.push((digit + 33) as char);
         }
 
         i += count;

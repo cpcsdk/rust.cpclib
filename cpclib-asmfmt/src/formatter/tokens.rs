@@ -134,7 +134,7 @@ impl<'src> Formatter<'src> {
         let original_had_colon = src_line
             .trim_start()
             .strip_prefix(name)
-            .map_or(false, |rest| rest.trim_start().starts_with(':'));
+            .is_some_and(|rest| rest.trim_start().starts_with(':'));
         let emit_colon = match self.label_definition_postfix_with_column {
             LabelPostfix::WithColumn => true,
             LabelPostfix::NoColumn => false,
@@ -441,7 +441,7 @@ impl<'src> Formatter<'src> {
             .position(|l| !l.trim().is_empty())
             .unwrap_or(lines.len());
         lines.drain(..first_content);
-        if lines.last().map_or(false, |l| l.trim().is_empty()) {
+        if lines.last().is_some_and(|l| l.trim().is_empty()) {
             lines.pop();
         }
         for line in lines {

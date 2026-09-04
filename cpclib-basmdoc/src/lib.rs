@@ -625,7 +625,7 @@ impl DocumentationPage {
             .map(|item| item.item_short_summary())
             .collect();
         // Sort by length (longest first) to avoid partial matches in regex
-        symbol_names.sort_by(|a: &String, b: &String| b.len().cmp(&a.len()));
+        symbol_names.sort_by_key(|a: &String| std::cmp::Reverse(a.len()));
 
         // Get all symbols for linking
         let all_symbols = self.all_symbols();

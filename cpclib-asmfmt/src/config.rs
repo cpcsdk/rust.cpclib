@@ -26,7 +26,7 @@ pub fn find_config_file() -> Option<PathBuf> {
 }
 
 pub fn load_config_from(path: &Path) -> Result<AsmFormatOptions, String> {
-    let content = std::fs::read_to_string(path)
+    let content = fs_err::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     toml::from_str(&content).map_err(|e| format!("invalid config in {}: {e}", path.display()))
 }

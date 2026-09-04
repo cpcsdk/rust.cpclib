@@ -77,7 +77,7 @@ pub fn format_listing(
     fmt.output
 }
 
-pub fn format(asm: &str, opt: &AsmFormatOptions) -> Result<String, AssemblerError> {
+pub fn format(asm: &str, opt: &AsmFormatOptions) -> Result<String, Box<AssemblerError>> {
     let listing = parse_z80_str(asm)?;
     Ok(format_listing(&listing, asm, 1, opt))
 }

@@ -86,7 +86,7 @@ impl<'src> Formatter<'src> {
             && digits
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_ascii_alphabetic())
+                .is_some_and(|c| c.is_ascii_alphabetic())
         {
             format!("0{digits}")
         }
