@@ -158,7 +158,7 @@ impl ParserOptions {
 pub struct ParserContextBuilder {
     options: ParserOptions,
     current_filename: Option<Utf8PathBuf>,
-    context_name: Option<String>,
+    context_name: Option<Box<str>>,
     state: ParsingState,
     expansion_columns: Option<ExpansionColumnMap>
 }
@@ -200,7 +200,7 @@ impl ParserContextBuilder {
         self
     }
 
-    pub fn set_context_name<S: Into<String>>(mut self, name: S) -> ParserContextBuilder {
+    pub fn set_context_name<S: Into<Box<str>>>(mut self, name: S) -> ParserContextBuilder {
         self.context_name = Some(name.into());
         self
     }
@@ -562,7 +562,7 @@ pub struct ParserContext {
     /// Filename that is currently parsed
     pub current_filename: Option<Utf8PathBuf>,
     /// Current context (mainly when playing with macros)
-    pub context_name: Option<String>,
+    pub context_name: Option<Box<str>>,
     pub options: ParserOptions,
     /// Full source code of the parsing state
     pub source: &'static BStr,
@@ -675,7 +675,7 @@ impl ParserContext {
 
     #[inline]
     pub fn set_context_name(&mut self, name: &str) {
-        self.context_name = Some(name.to_owned());
+        self.context_name = Some(name.into());
     }
 
     #[inline]
