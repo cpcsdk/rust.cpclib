@@ -163,8 +163,8 @@ impl peer::DapPeer for Backend {
 /// for who sent it.
 ///
 /// Configured in the same file as everything else deliberately: a debug session
-/// is started from several places - a CodeLens, the palette, F5, a `launch.json`
-/// - and a setting that has to be repeated in each of them is a setting nobody
+/// is started from several places (a CodeLens, the palette, F5, a `launch.json`)
+/// and a setting that has to be repeated in each of them is a setting nobody
 /// turns on when they need it.
 struct Transcript(Option<std::sync::Mutex<std::fs::File>>);
 
@@ -283,8 +283,8 @@ impl Transcript {
 /// by `run_stdio` - which one is active for the life of the process is
 /// decided once, by `launch`, from whether `"program"` names a `.bas` file.
 enum ActiveSession {
-    Z80(session::Session<Backend>),
-    Basic(basic_session::BasicSession<Backend>)
+    Z80(Box<session::Session<Backend>>),
+    Basic(Box<basic_session::BasicSession<Backend>>)
 }
 
 impl ActiveSession {
@@ -397,10 +397,11 @@ pub fn run_stdio() -> std::io::Result<()> {
                         .unwrap_or(false);
                     let outcome = if is_basic {
                         start_basic_session(&message)
-                            .map(|(s, url, notices)| (ActiveSession::Basic(s), url, notices))
+                            .map(|(s, url, notices)| (ActiveSession::Basic(Box::new(s)), url, notices))
                     }
                     else {
-                        start_session(&message).map(|(s, url, notices)| (ActiveSession::Z80(s), url, notices))
+                        start_session(&message)
+                            .map(|(s, url, notices)| (ActiveSession::Z80(Box::new(s)), url, notices))
                     };
                     if client_accepts_progress {
                         seq += 1;

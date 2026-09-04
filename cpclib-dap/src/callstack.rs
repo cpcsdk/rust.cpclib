@@ -88,13 +88,6 @@ pub fn is_call_opcode(opcode: u8) -> bool {
 
 /// Walk the stack, newest frame first.
 ///
-/// * `sp` - the stack pointer at the stop.
-/// * `stack` - the bytes from `sp` upwards, as read in one go.
-/// * `read` - the byte at an address in the program image. Returning `None`
-///   (firmware, unmapped) means "cannot tell", and a candidate that cannot be
-///   checked is not claimed as a frame.
-/// Walk the stack, newest frame first.
-///
 /// `read` is given a page and an address. A single-bank program passes a
 /// closure that ignores the page; a banked one tries each page it emitted into,
 /// and the page that turns out to hold a `CALL` is recorded on the frame.

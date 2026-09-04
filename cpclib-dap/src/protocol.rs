@@ -22,11 +22,7 @@ pub fn encode(message: &Value) -> String {
 /// several may arrive at once.
 pub fn decode(buffer: &mut Vec<u8>) -> Vec<Value> {
     let mut out = Vec::new();
-    loop {
-        let Some(header_end) = find(buffer, b"\r\n\r\n")
-        else {
-            break;
-        };
+    while let Some(header_end) = find(buffer, b"\r\n\r\n") {
         let header = String::from_utf8_lossy(&buffer[..header_end]).to_string();
         let Some(length) = content_length(&header)
         else {

@@ -261,10 +261,7 @@ pub fn cached_program_for_debug(
         return None;
     }
     for name in &file.map.files {
-        let Some(source) = fs_err::metadata(name).ok().and_then(|m| m.modified().ok())
-        else {
-            return None;
-        };
+        let source = fs_err::metadata(name).ok().and_then(|m| m.modified().ok())?;
         if source > written {
             why.push(format!(
                 "{name} changed since the last debug launch, so it is assembled again."

@@ -875,6 +875,10 @@ impl ScreenEncoding {
 /// draws between columns - reported live as visually inconsistent. All
 /// spacing, in both directions alike, is the panel's own doing now,
 /// entirely client-side, on a plain, ungapped render.
+// Same "shared to avoid duplicating a rendering pipeline between the two
+// session types" tradeoff as `screen_view_event_and_receipt` above, which
+// calls this - see its own #[allow] for the reasoning.
+#[allow(clippy::too_many_arguments)]
 pub fn render_screen_view(
     address: usize,
     width: usize,

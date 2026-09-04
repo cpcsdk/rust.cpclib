@@ -866,7 +866,7 @@ where
 ///
 /// Confirmed live (2026-08-27, via `POST /api/media`): mounting is recognised
 /// immediately, with no reset needed, and never auto-runs anything by itself
-/// - a soft reset with the disk mounted still lands at a bare `Ready`. This
+/// (a soft reset with the disk mounted still lands at a bare `Ready`). This
 /// function reaches the same destination by a different, cheaper route: the
 /// emulator's own `[FILE]` positional argument is medium-agnostic (confirmed
 /// via `--help`, and already relied on for `.sna` in `launch` above) - the
@@ -1650,7 +1650,7 @@ pub(crate) fn returns_to_the_next_instruction(bytes: &[u8]) -> bool {
         // `otir`, `otdr`. `PC` sits still while they work, so a plain step
         // makes no visible progress - stepping *over* one is the only way to
         // get past it without holding the key down.
-        [0xED, second, ..] if matches!(second, 0xB0..=0xB3 | 0xB8..=0xBB) => true,
+        [0xED, 0xB0..=0xB3 | 0xB8..=0xBB, ..] => true,
         // `djnz`, which is a loop written as one instruction: stepping over it
         // is the only way to say "run the loop out" without setting a
         // breakpoint by hand on the line below it.

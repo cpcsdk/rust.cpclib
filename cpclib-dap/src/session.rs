@@ -325,8 +325,8 @@ struct PendingScreenView {
     mode_override: Option<u8>,
     /// `-sv`'s optional 5th argument: how many real lines make up one
     /// character row, for the `Screen` encoding's own address interleaving
-    /// - see `crate::inspect::resolve_char_row_height`'s own doc comment
-    /// for why this is a real override, not only a display value. `None`
+    /// (see `crate::inspect::resolve_char_row_height`'s own doc comment
+    /// for why this is a real override, not only a display value). `None`
     /// (the plain command's own default) uses the live CRTC's `R9 + 1`.
     row_height_override: Option<usize>,
     /// The window's own per-pen overrides, never sent anywhere near the
@@ -591,8 +591,8 @@ pub struct Session<P: DapPeer> {
     /// Array watches that have been read, so expanding one in the Watch panel
     /// needs no second round trip. Indexed by `variablesReference -
     /// WATCH_ARRAY_REFERENCE_BASE`; never shrinks, same as `synthetic_frames`
-    /// - a session-lifetime cache of a handful of small entries, not worth
-    /// recycling.
+    /// (a session-lifetime cache of a handful of small entries, not worth
+    /// recycling).
     watch_arrays: Vec<WatchArray>,
     /// Memory views waiting on the same.
     pending_memory_views: Vec<PendingMemoryView>,
@@ -2754,6 +2754,10 @@ impl<P: DapPeer> Session<P> {
     /// shared by both `-sv` paths, see `screen_view_command`'s own doc
     /// comment. The actual rendering is `crate::inspect::render_screen_view`,
     /// shared with `BasicSession`'s own identically-named method too.
+    // Thin wrapper around `screen_view_event_and_receipt`, which already
+    // carries the same #[allow] and its reasoning - this just forwards its
+    // own equally-flat parameter set one call further.
+    #[allow(clippy::too_many_arguments)]
     fn screen_view_answer(
         &mut self,
         request: Option<&Value>,
@@ -4693,7 +4697,7 @@ impl<P: DapPeer> Session<P> {
     /// line occupies; the assembler prices each instruction in it.
     ///
     /// Falls back to the instruction at `address` alone when no line claims it
-    /// - generated code, or a jump into the firmware - where one instruction
+    /// (generated code, or a jump into the firmware) where one instruction
     /// is the only honest unit left.
     fn line_cost(&self, address: u16) -> Option<usize> {
         let page = self.pc_page.unwrap_or(0);
@@ -4860,7 +4864,7 @@ impl<P: DapPeer> Session<P> {
                 (matches, *page)
             })
             .collect();
-        scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+        scored.sort_unstable_by_key(|a| std::cmp::Reverse(a.0));
 
         match scored.as_slice() {
             [] => None,

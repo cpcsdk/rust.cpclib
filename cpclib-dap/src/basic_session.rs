@@ -453,8 +453,8 @@ pub struct BasicSession<P: DapPeer> {
     source_text: String,
     /// BASIC line number -> 0-based index into the source file's own
     /// lines, computed once at launch by parsing the source text directly
-    /// - exact, unlike the reference extension's own regex-based
-    /// line-number-prefix heuristic.
+    /// (exact, unlike the reference extension's own regex-based
+    /// line-number-prefix heuristic).
     line_index: Vec<(u16, usize)>,
     /// Where the tokenised program starts in RAM. Known outright, not read
     /// back from the emulator: the launch flow chose this address itself
@@ -1355,6 +1355,10 @@ impl<P: DapPeer> BasicSession<P> {
     /// Turns a known screen address, mode and palette plus a raw memory
     /// window into the `cpclib/screenView` event and its console receipt -
     /// see the Z80 session's own identically-named method.
+    // Thin wrapper around `screen_view_event_and_receipt`, which already
+    // carries the same #[allow] and its reasoning - this just forwards its
+    // own equally-flat parameter set one call further.
+    #[allow(clippy::too_many_arguments)]
     fn screen_view_answer(
         &mut self,
         request: &Value,
