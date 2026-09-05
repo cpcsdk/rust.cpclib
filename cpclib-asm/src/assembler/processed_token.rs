@@ -1074,7 +1074,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             // from the raw call-site argument text or the post-splice code.
             if let Some(r#macro) = &r#macro {
                 let source = r#macro.source();
-                let def_location = source.map(|s| s.to_string().into_boxed_str());
+                let def_location = source.map(|s| s.to_boxed_str());
 
                 match r#macro.flavor() {
                     AssemblerFlavor::Basm => {
@@ -1142,7 +1142,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     .as_ref()
                     .expect("BUG: r#struct should be Some when r#macro is None");
                 let source = r#struct.source();
-                let def_location = source.map(|s| s.to_string().into_boxed_str());
+                let def_location = source.map(|s| s.to_boxed_str());
 
                 // A struct's expansion is written from scratch - `DB`/`DW`
                 // lines built from its fields - rather than substituted into

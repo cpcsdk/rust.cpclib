@@ -1015,7 +1015,43 @@ impl Expr {
     pub fn do_apply_macro_labels_modification(s: &mut Box<str>, seed: usize) {
         assert!(!s.is_empty());
         if s.starts_with('@') {
-            let mut new: Box<str> = format!("__macro__{seed}__{s}").into();
+            // Sized and allocated exactly up front rather than
+            // `format!(...).into()`: format!'s own capacity heuristic
+            // targets avoiding reallocation *while writing*, not landing on
+            // the final length, so it routinely leaves spare capacity that
+            // `.into_boxed_str()` would otherwise have to
+            // reallocate-and-copy away. Writing through a cursor straight
+            // into an exactly-sized byte buffer skips String entirely.
+            fn digits(mut n: usize) -> usize {
+                if n == 0 {
+                    return 1;
+                }
+                let mut count = 0;
+                while n > 0 {
+                    count += 1;
+                    n /= 10;
+                }
+                count
+            }
+
+            const PREFIX: &str = "__macro__";
+            const SEP: &str = "__";
+            let exact_len = PREFIX.len() + digits(seed) + SEP.len() + s.len();
+            let mut bytes = vec![0u8; exact_len];
+            {
+                let mut cursor = std::io::Cursor::new(&mut bytes[..]);
+                let _ = std::io::Write::write_fmt(
+                    &mut cursor,
+                    format_args!("{PREFIX}{seed}{SEP}{s}")
+                );
+            }
+            // SAFETY: every byte just written is ASCII (the two literal
+            // prefixes, ASCII digits from Display for usize, and s's own
+            // bytes copied verbatim), and exact_len was computed to match
+            // precisely what gets written, so `bytes` is fully
+            // initialized, valid UTF-8, with no leftover bytes.
+            let mut new: Box<str> =
+                unsafe { std::str::from_boxed_utf8_unchecked(bytes.into_boxed_slice()) };
             std::mem::swap(&mut new, s);
         }
     }
