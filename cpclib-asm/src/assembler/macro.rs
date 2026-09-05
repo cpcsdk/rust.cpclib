@@ -1,3 +1,4 @@
+use std::io::Write as _;
 use std::ops::Deref;
 
 use aho_corasick::{AhoCorasick, MatchKind};
@@ -14,6 +15,44 @@ use crate::preamble::{Z80ParserError, Z80Span};
 /// Per-argument expansion of a macro call, resolved lazily - see
 /// `MacroWithArgs::resolve_referenced_args`.
 type ExpandedMacroArgs<'s> = Vec<Option<beef::lean::Cow<'s, str>>>;
+
+/// Allocates `len` bytes directly as a `Box<[MaybeUninit<u8>]>`, hands
+/// `fill` a byte-oriented cursor over that raw buffer to write through,
+/// then casts the result straight to `Box<str>` once every byte has been
+/// written - no `Vec`/`String` involved, and (unlike `vec![0u8; len]`) no
+/// upfront zeroing either, since every byte is about to be overwritten.
+///
+/// `fill` must write to the cursor exactly `len` bytes of valid UTF-8 -
+/// enforced by an `assert_eq!` on the cursor's final position before the
+/// buffer is trusted to be fully initialized.
+fn build_boxed_str(len: usize, fill: impl FnOnce(&mut std::io::Cursor<&mut [u8]>)) -> Box<str> {
+    let mut boxed: Box<[std::mem::MaybeUninit<u8>]> = Box::new_uninit_slice(len);
+
+    // SAFETY: reinterpreting `&mut [MaybeUninit<u8>]` as `&mut [u8]` is
+    // sound for *writing* even before every byte is initialized - `u8` has
+    // no validity invariants beyond being any bit pattern, so nothing here
+    // ever reads a byte before `fill` writes it.
+    let ptr = boxed.as_mut_ptr().cast::<u8>();
+    let byte_slice: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
+    let mut cursor = std::io::Cursor::new(byte_slice);
+    fill(&mut cursor);
+    assert_eq!(
+        cursor.position() as usize,
+        len,
+        "build_boxed_str: fill wrote fewer bytes than the buffer it was given - the \
+         buffer would be left partially uninitialized, which is unsound to read back"
+    );
+
+    // SAFETY: every one of the `len` bytes was just written above, checked
+    // by the assert.
+    let bytes: Box<[u8]> = unsafe { boxed.assume_init() };
+    // SAFETY: the only caller (finish_expand_for_basm) only ever writes
+    // valid UTF-8 through the cursor (the macro body's own text, an
+    // already-resolved/expanded argument, or the call's argument count
+    // formatted as ASCII digits), and the assert above already confirmed
+    // there is no leftover uninitialized tail.
+    unsafe { std::str::from_boxed_utf8_unchecked(bytes) }
+}
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -274,23 +313,21 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         let listing = self.r#macro.code();
         let arg_count = self.args.len().to_string();
 
-        // `capacity` is exact (computed by `resolve_referenced_args` from
-        // the very same segments/expanded_args walked below), so this
-        // writes straight into a single buffer allocated at its final
-        // size, through a cursor, instead of building a growable `String`
-        // and converting afterward - a `String` here would carry no
-        // advance knowledge of the total length, so std's push-growth
-        // strategy would leave it with spare capacity that a later
-        // `.into_boxed_str()` would have to reallocate-and-copy away.
-        let mut bytes = vec![0u8; capacity];
         let mut columns = ExpansionColumnMap::default();
         // Where the body has got to. A substitution's placeholder starts here,
         // and only the next literal says where it ended - which is all the map
         // needs, since it asks for the start of a piece and never its length.
         let mut source = 0usize;
-        {
-            use std::io::Write;
-            let mut cursor = std::io::Cursor::new(&mut bytes[..]);
+
+        // `capacity` is exact (computed by `resolve_referenced_args` from
+        // the very same segments/expanded_args walked below), so this
+        // writes straight into a `Box<str>` allocated at its final size via
+        // a cursor, instead of building a growable `String` and converting
+        // afterward - a `String` here would carry no advance knowledge of
+        // the total length, so std's push-growth strategy would leave it
+        // with spare capacity that a later `.into_boxed_str()` would have
+        // to reallocate-and-copy away.
+        let output = build_boxed_str(capacity, |cursor| {
             const MSG: &str = "capacity was computed exactly by resolve_referenced_args";
 
             for segment in self.r#macro.segments().iter() {
@@ -330,15 +367,8 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             // the placeholder stopped, so the end of both texts is recorded as a
             // piece of its own.
             columns.push_piece(cursor.position() as usize, listing.len(), true);
+        });
 
-            debug_assert_eq!(cursor.position() as usize, capacity, "Capacity estimation mismatch");
-        }
-
-        // SAFETY: every byte written above came from an existing &str (the
-        // macro body's own text, an already-resolved/expanded argument, or
-        // the call's argument count formatted as ASCII digits), so `bytes`
-        // is fully initialized valid UTF-8 with no leftover bytes.
-        let output = unsafe { std::str::from_boxed_utf8_unchecked(bytes.into_boxed_slice()) };
         Ok((output, columns))
     }
 

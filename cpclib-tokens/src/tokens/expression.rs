@@ -1021,7 +1021,8 @@ impl Expr {
             // the final length, so it routinely leaves spare capacity that
             // `.into_boxed_str()` would otherwise have to
             // reallocate-and-copy away. Writing through a cursor straight
-            // into an exactly-sized byte buffer skips String entirely.
+            // into a `Box<str>` allocated at its exact size skips both
+            // `String` and `Vec` entirely.
             fn digits(mut n: usize) -> usize {
                 if n == 0 {
                     return 1;
@@ -1037,21 +1038,9 @@ impl Expr {
             const PREFIX: &str = "__macro__";
             const SEP: &str = "__";
             let exact_len = PREFIX.len() + digits(seed) + SEP.len() + s.len();
-            let mut bytes = vec![0u8; exact_len];
-            {
-                let mut cursor = std::io::Cursor::new(&mut bytes[..]);
-                let _ = std::io::Write::write_fmt(
-                    &mut cursor,
-                    format_args!("{PREFIX}{seed}{SEP}{s}")
-                );
-            }
-            // SAFETY: every byte just written is ASCII (the two literal
-            // prefixes, ASCII digits from Display for usize, and s's own
-            // bytes copied verbatim), and exact_len was computed to match
-            // precisely what gets written, so `bytes` is fully
-            // initialized, valid UTF-8, with no leftover bytes.
-            let mut new: Box<str> =
-                unsafe { std::str::from_boxed_utf8_unchecked(bytes.into_boxed_slice()) };
+            let mut new = crate::boxed_str_builder::build_boxed_str(exact_len, |cursor| {
+                let _ = std::io::Write::write_fmt(cursor, format_args!("{PREFIX}{seed}{SEP}{s}"));
+            });
             std::mem::swap(&mut new, s);
         }
     }

@@ -129,9 +129,8 @@ impl SourceLocation {
     /// have to reallocate-and-copy away. Since this is built once per
     /// macro/struct call (`MacroExpansionKey::def_location`) and kept as
     /// `Box<str>` for the rest of its life, this computes the exact byte
-    /// length up front, allocates exactly that many bytes once, and writes
-    /// through a cursor directly into that buffer - no `String`, no resize,
-    /// ever.
+    /// length up front and writes straight into a `Box<str>` allocated at
+    /// that size - no `String`, no `Vec`, no resize, ever.
     pub fn to_boxed_str(&self) -> Box<str> {
         fn digits(mut n: usize) -> usize {
             if n == 0 {
@@ -146,20 +145,12 @@ impl SourceLocation {
         }
 
         let exact_len = self.fname.len() + 1 + digits(self.line) + 1 + digits(self.column);
-        let mut bytes = vec![0u8; exact_len];
-        {
-            let mut cursor = std::io::Cursor::new(&mut bytes[..]);
+        crate::boxed_str_builder::build_boxed_str(exact_len, |cursor| {
             let _ = std::io::Write::write_fmt(
-                &mut cursor,
+                cursor,
                 format_args!("{}:{}:{}", self.fname, self.line, self.column)
             );
-        }
-        // SAFETY: every byte just written is ASCII (fname's own bytes
-        // copied verbatim, ':' literals, ASCII digits from Display for
-        // usize), and exact_len was computed to match precisely what gets
-        // written, so `bytes` is fully initialized, valid UTF-8, with no
-        // leftover bytes.
-        unsafe { std::str::from_boxed_utf8_unchecked(bytes.into_boxed_slice()) }
+        })
     }
 }
 

@@ -1,3 +1,4 @@
+mod boxed_str_builder;
 pub mod builder;
 pub mod macro_segment;
 pub mod opcode_table;
