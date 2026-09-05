@@ -17,8 +17,11 @@ type ExpandedMacroArgs<'s> = Vec<Option<beef::lean::Cow<'s, str>>>;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
-    /// Returns a string version of the element after expansion
-    fn expand(&self, env: &mut Env) -> Result<String, Box<AssemblerError>>;
+    /// Returns the element's expansion. `Box<str>`, not `String`: the
+    /// expansion is produced once and handed straight to the parser (or
+    /// cached as `MacroExpansionKey::resolved_args`) - nothing ever grows
+    /// it further.
+    fn expand(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>>;
 
     /// The same expansion, with a way back to the columns of the text it was
     /// made from - see [`ExpansionColumnMap`].
@@ -30,7 +33,7 @@ pub trait Expandable {
     fn expand_with_columns(
         &self,
         env: &mut Env
-    ) -> Result<(String, Option<ExpansionColumnMap>), Box<AssemblerError>> {
+    ) -> Result<(Box<str>, Option<ExpansionColumnMap>), Box<AssemblerError>> {
         Ok((self.expand(env)?, None))
     }
 }
@@ -167,7 +170,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     fn expand_for_basm(
         &self,
         env: &mut Env
-    ) -> Result<(String, ExpansionColumnMap), Box<AssemblerError>> {
+    ) -> Result<(Box<str>, ExpansionColumnMap), Box<AssemblerError>> {
         let (expanded_args, capacity) = self.resolve_referenced_args(env)?;
         self.finish_expand_for_basm(expanded_args, capacity)
     }
@@ -267,53 +270,75 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         &self,
         expanded_args: ExpandedMacroArgs<'_>,
         capacity: usize
-    ) -> Result<(String, ExpansionColumnMap), Box<AssemblerError>> {
+    ) -> Result<(Box<str>, ExpansionColumnMap), Box<AssemblerError>> {
         let listing = self.r#macro.code();
         let arg_count = self.args.len().to_string();
 
-        let mut output = String::with_capacity(capacity);
+        // `capacity` is exact (computed by `resolve_referenced_args` from
+        // the very same segments/expanded_args walked below), so this
+        // writes straight into a single buffer allocated at its final
+        // size, through a cursor, instead of building a growable `String`
+        // and converting afterward - a `String` here would carry no
+        // advance knowledge of the total length, so std's push-growth
+        // strategy would leave it with spare capacity that a later
+        // `.into_boxed_str()` would have to reallocate-and-copy away.
+        let mut bytes = vec![0u8; capacity];
         let mut columns = ExpansionColumnMap::default();
         // Where the body has got to. A substitution's placeholder starts here,
         // and only the next literal says where it ended - which is all the map
         // needs, since it asks for the start of a piece and never its length.
         let mut source = 0usize;
-        for segment in self.r#macro.segments().iter() {
-            match *segment {
-                MacroSegment::Lit { start, end } => {
-                    columns.push_piece(output.len(), start, true);
-                    output.push_str(&listing[start..end]);
-                    source = end;
-                },
-                MacroSegment::ArgCount => {
-                    columns.push_piece(output.len(), source, false);
-                    output.push_str(&arg_count);
-                },
-                MacroSegment::ArgOr { index, start, end } => {
-                    columns.push_piece(output.len(), source, false);
-                    match expanded_args.get(index).and_then(|slot| slot.as_ref()) {
-                        Some(value) => output.push_str(value),
-                        // Emitted verbatim, never re-expanded: a default is
-                        // written by whoever wrote the macro, in the macro's
-                        // own body, so there is nothing caller-specific in it
-                        // to substitute.
-                        None => output.push_str(&listing[start..end])
+        {
+            use std::io::Write;
+            let mut cursor = std::io::Cursor::new(&mut bytes[..]);
+            const MSG: &str = "capacity was computed exactly by resolve_referenced_args";
+
+            for segment in self.r#macro.segments().iter() {
+                match *segment {
+                    MacroSegment::Lit { start, end } => {
+                        columns.push_piece(cursor.position() as usize, start, true);
+                        cursor.write_all(listing[start..end].as_bytes()).expect(MSG);
+                        source = end;
+                    },
+                    MacroSegment::ArgCount => {
+                        columns.push_piece(cursor.position() as usize, source, false);
+                        cursor.write_all(arg_count.as_bytes()).expect(MSG);
+                    },
+                    MacroSegment::ArgOr { index, start, end } => {
+                        columns.push_piece(cursor.position() as usize, source, false);
+                        match expanded_args.get(index).and_then(|slot| slot.as_ref()) {
+                            Some(value) => cursor.write_all(value.as_bytes()).expect(MSG),
+                            // Emitted verbatim, never re-expanded: a default is
+                            // written by whoever wrote the macro, in the macro's
+                            // own body, so there is nothing caller-specific in it
+                            // to substitute.
+                            None => cursor.write_all(listing[start..end].as_bytes()).expect(MSG)
+                        }
+                    },
+                    MacroSegment::Arg { index } => {
+                        columns.push_piece(cursor.position() as usize, source, false);
+                        // All in-range arguments were expanded in the first pass
+                        // (guaranteed Some) - an out-of-range index already
+                        // returned an error there, so this loop never reaches it.
+                        cursor
+                            .write_all(expanded_args[index].as_ref().unwrap().as_bytes())
+                            .expect(MSG);
                     }
-                },
-                MacroSegment::Arg { index } => {
-                    columns.push_piece(output.len(), source, false);
-                    // All in-range arguments were expanded in the first pass
-                    // (guaranteed Some) - an out-of-range index already
-                    // returned an error there, so this loop never reaches it.
-                    output.push_str(expanded_args[index].as_ref().unwrap());
                 }
             }
-        }
-        // A body ending on a substitution has no literal after it to say where
-        // the placeholder stopped, so the end of both texts is recorded as a
-        // piece of its own.
-        columns.push_piece(output.len(), listing.len(), true);
+            // A body ending on a substitution has no literal after it to say where
+            // the placeholder stopped, so the end of both texts is recorded as a
+            // piece of its own.
+            columns.push_piece(cursor.position() as usize, listing.len(), true);
 
-        debug_assert_eq!(output.len(), capacity, "Capacity estimation mismatch");
+            debug_assert_eq!(cursor.position() as usize, capacity, "Capacity estimation mismatch");
+        }
+
+        // SAFETY: every byte written above came from an existing &str (the
+        // macro body's own text, an already-resolved/expanded argument, or
+        // the call's argument count formatted as ASCII digits), so `bytes`
+        // is fully initialized valid UTF-8 with no leftover bytes.
+        let output = unsafe { std::str::from_boxed_utf8_unchecked(bytes.into_boxed_slice()) };
         Ok((output, columns))
     }
 
@@ -338,7 +363,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     }
 
     #[inline]
-    fn expand_for_orgams(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
+    fn expand_for_orgams(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>> {
         let oks = self.resolve_all_args_for_orgams(env)?;
         self.finish_expand_for_orgams(oks)
     }
@@ -395,7 +420,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     pub(crate) fn finish_expand_for_orgams(
         &self,
         oks: Vec<beef::lean::Cow<'_, str>>
-    ) -> Result<String, Box<AssemblerError>> {
+    ) -> Result<Box<str>, Box<AssemblerError>> {
         let listing = self.r#macro.code();
         let capacity: usize = self.args.len();
         let mut patterns = Vec::with_capacity(capacity);
@@ -424,16 +449,21 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             .kind(None)
             .build(&patterns)
             .unwrap();
+        // AhoCorasick::replace_all controls its own buffer growth and hands
+        // back an owned String with no way to intercept its allocation, so
+        // (unlike expand_for_basm's exact-capacity cursor above) there is
+        // no avoiding a String here - just converting it once at the
+        // boundary, same as the caller would otherwise have to.
         let result = ac.replace_all(listing, &replacements);
 
-        Ok(result)
+        Ok(result.into_boxed_str())
     }
 }
 
 impl<'a, P: MacroParamElement> Expandable for MacroWithArgs<'a, P> {
     /// Develop the macro with the given arguments
     #[inline]
-    fn expand(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
+    fn expand(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>> {
         Ok(self.expand_with_columns(env)?.0)
 
         // make all replacements in one row :( sadly it is too slow :(
@@ -471,7 +501,7 @@ impl<'a, P: MacroParamElement> Expandable for MacroWithArgs<'a, P> {
     fn expand_with_columns(
         &self,
         env: &mut Env
-    ) -> Result<(String, Option<ExpansionColumnMap>), Box<AssemblerError>> {
+    ) -> Result<(Box<str>, Option<ExpansionColumnMap>), Box<AssemblerError>> {
         if self.flavor() == AssemblerFlavor::Basm {
             let (code, columns) = self.expand_for_basm(env)?;
             Ok((code, Some(columns)))
@@ -529,7 +559,7 @@ impl<'a, P: MacroParamElement> Expandable for StructWithArgs<'a, P> {
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix
-    fn expand(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
+    fn expand(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>> {
         //        dbg!("{:?} != {:?}", self.args, self.r#struct().content());
 
         let prefix = ""; // TODO acquire this prefix
@@ -706,6 +736,9 @@ impl<'a, P: MacroParamElement> Expandable for StructWithArgs<'a, P> {
         if last != 'n' {
             developped.push('\n');
         }
-        Ok(developped)
+        // Built from heterogeneous per-field pieces joined together (unlike
+        // expand_for_basm's single exact-capacity pass above), so this is a
+        // plain boundary conversion rather than a from-scratch cursor build.
+        Ok(developped.into_boxed_str())
     }
 }

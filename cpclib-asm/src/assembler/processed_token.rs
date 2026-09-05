@@ -1037,7 +1037,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             // possible. Shared by every "cache miss" branch below.
             let parse_expansion = |source: Option<&SourceLocation>,
                                     is_macro: bool,
-                                    code: String,
+                                    code: Box<str>,
                                     columns: Option<ExpansionColumnMap>|
              -> Result<LocatedListing, Box<AssemblerError>> {
                 match self.token.possible_span() {
@@ -1062,7 +1062,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     },
                     _ => {
                         use crate::parse_z80_str;
-                        Ok(parse_z80_str(&code)?)
+                        Ok(parse_z80_str(code.as_ref())?)
                     }
                 }
             };
@@ -1156,7 +1156,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     kind: MacroOrStruct::Struct,
                     name: SmolStr::from(name),
                     def_location,
-                    resolved_args: vec![Some(code.clone().into_boxed_str())]
+                    resolved_args: vec![Some(code.clone())]
                 };
 
                 let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();

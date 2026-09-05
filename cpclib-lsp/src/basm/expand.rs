@@ -414,7 +414,7 @@ impl AssemblyAnalyzer {
                 .and_then(|m| m.expand(&mut env))
             {
                 Ok(expanded) => {
-                    let expanded = expand_nested_calls(expanded, &mut env);
+                    let expanded = expand_nested_calls(expanded.into(), &mut env);
                     Some(format!(
                         "{header} expands to:\n\n```z80\n{}\n```",
                         expanded.trim_end()
@@ -436,7 +436,7 @@ impl AssemblyAnalyzer {
                     .and_then(|s| s.expand(&mut env))
                 {
                     Ok(expanded) => {
-                        let expanded = expand_nested_calls(expanded, &mut env);
+                        let expanded = expand_nested_calls(expanded.into(), &mut env);
                         Some(format!(
                             "{header} expands to:\n\n```z80\n{}\n```",
                             expanded.trim_end()
