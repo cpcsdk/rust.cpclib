@@ -29,6 +29,7 @@ pub mod launch;
 pub mod peer;
 pub mod protocol;
 pub mod session;
+pub mod sugarbox;
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -99,16 +100,20 @@ impl peer::DapPeer for ServedPeer {
 
 /// Which emulator a session is talking to.
 ///
-/// Two backends, chosen by the launch configuration: the wasm emulator served
-/// in an editor tab, and AMSpiriT Lite in its own window. They differ in almost
-/// everything except that both end up behind [`peer::DapPeer`] - which is the
-/// point of that trait, and why the session above knows about neither.
+/// Three backends, chosen by the launch configuration: the wasm emulator
+/// served in an editor tab, AMSpiriT Lite in its own window, and SugarboxV2
+/// in its own window. They differ in almost everything except that all three
+/// end up behind [`peer::DapPeer`] - which is the point of that trait, and
+/// why the session above knows about none of them.
 enum Backend {
     /// 1984js, reached through the loopback server: frames out over SSE, in
     /// over POST.
     Served(ServedPeer),
     /// AMSpiriT Lite, reached over its HTTP debug API.
-    AmspiritLite(amspiritlite::AmspiritLitePeer)
+    AmspiritLite(amspiritlite::AmspiritLitePeer),
+    /// SugarboxV2, reached over its own newline-delimited-JSON TCP debug
+    /// server.
+    SugarBox(sugarbox::SugarBoxPeer)
 }
 
 impl peer::DapPeer for Backend {
@@ -116,14 +121,16 @@ impl peer::DapPeer for Backend {
         transcript().record("-> emulator", &message);
         match self {
             Self::Served(peer) => peer.send(message),
-            Self::AmspiritLite(peer) => peer.send(message)
+            Self::AmspiritLite(peer) => peer.send(message),
+            Self::SugarBox(peer) => peer.send(message)
         }
     }
 
     fn drain(&mut self) -> Vec<Value> {
         match self {
             Self::Served(peer) => peer.drain(),
-            Self::AmspiritLite(peer) => peer.drain()
+            Self::AmspiritLite(peer) => peer.drain(),
+            Self::SugarBox(peer) => peer.drain()
         }
     }
 
@@ -136,24 +143,62 @@ impl peer::DapPeer for Backend {
     fn note_line_at_pc(&mut self, line: peer::LineAtPc) {
         match self {
             Self::Served(peer) => peer.note_line_at_pc(line),
-            Self::AmspiritLite(peer) => peer.note_line_at_pc(line)
+            Self::AmspiritLite(peer) => peer.note_line_at_pc(line),
+            Self::SugarBox(peer) => peer.note_line_at_pc(line)
         }
     }
 
     fn quirks(&self) -> peer::Quirks {
         match self {
             Self::Served(peer) => peer.quirks(),
-            Self::AmspiritLite(peer) => peer.quirks()
+            Self::AmspiritLite(peer) => peer.quirks(),
+            Self::SugarBox(peer) => peer.quirks()
         }
     }
 
     fn supports(&self, command: &str) -> bool {
         match self {
             Self::Served(peer) => peer.supports(command),
-            Self::AmspiritLite(peer) => peer.supports(command)
+            Self::AmspiritLite(peer) => peer.supports(command),
+            Self::SugarBox(peer) => peer.supports(command)
         }
     }
 }
+
+impl Backend {
+    /// Which emulator this session ended up talking to - the same names
+    /// `resolve_emulator_choice`/`connect_backend` accept, so a client can
+    /// match this against what it asked for. Computed from the backend
+    /// itself rather than threaded through from `connect_backend`'s own
+    /// `chosen_emulator`, so `start_session`/`start_basic_session`'s return
+    /// shape does not need to grow a field only this needs.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Served(_) => "1984js",
+            Self::AmspiritLite(_) => "amspiritlite",
+            Self::SugarBox(_) => "sugarbox"
+        }
+    }
+}
+
+/// The `cpclib/...` custom requests a panel might want to gate its own
+/// visibility on - queried once per launch (`cpclib/emulatorReady`'s own
+/// `supports` field) rather than the client guessing from the emulator's
+/// name, since two versions of the same backend could answer differently in
+/// the future. Kept as one list so every such command has exactly one place
+/// that decides whether it's worth telling the client about.
+const ADVERTISED_CAPABILITIES: &[&str] = &[
+    "cpclib/psg",
+    "cpclib/ppi",
+    "cpclib/fdc",
+    "cpclib/tape",
+    "cpclib/tapeSignal",
+    "cpclib/asic",
+    "cpclib/trackRaw",
+    "cpclib/sendKey",
+    "insertDisk",
+    "insertTape"
+];
 
 /// A transcript of the whole conversation, when one was asked for.
 ///
@@ -439,19 +484,54 @@ pub fn run_stdio() -> std::io::Result<()> {
                                 )?;
                             }
 
-                            // An empty URL means there is nothing for the
-                            // editor to show: the emulator has its own window.
-                            if !url.is_empty() {
-                                seq += 1;
-                                emit(
-                                    &protocol::event(
-                                        "cpclib/emulatorReady",
-                                        json!({ "url": url }),
-                                        seq
-                                    ),
-                                    &mut output
-                                )?;
-                            }
+                            // Said once, at the start: the debug console's
+                            // `-mv`/`-dv`/`-sv`/`-timer`/`-chips` command
+                            // language (memory/disassembly/screen views,
+                            // NOP-counted timers, chip state) has no other
+                            // way to be discovered - nothing in the launch
+                            // flow ever mentioned it existed before this,
+                            // and someone who never stumbled on it in
+                            // documentation would have no way to find it
+                            // from inside a running session.
+                            seq += 1;
+                            emit(
+                                &protocol::event(
+                                    "output",
+                                    json!({
+                                        "category": "console",
+                                        "output": "Type -help in this console for memory/\
+                                                   disassembly/screen/timer/chip-state view \
+                                                   commands.\n"
+                                    }),
+                                    seq
+                                ),
+                                &mut output
+                            )?;
+
+                            // Always sent, even when there is nothing for the
+                            // editor to show (`url` empty - the emulator has
+                            // its own window): a client-side panel still
+                            // needs `emulator`/`supports` to know what it can
+                            // ask this session for. This used to be gated on
+                            // `!url.is_empty()`, which meant AmspiritLite and
+                            // SugarBox sessions never received it at all.
+                            use peer::DapPeer;
+                            let peer = session.as_mut().unwrap().peer_mut();
+                            let supports: Vec<Value> = ADVERTISED_CAPABILITIES
+                                .iter()
+                                .filter(|command| peer.supports(command))
+                                .map(|command| json!(*command))
+                                .collect();
+                            let emulator = peer.name();
+                            seq += 1;
+                            emit(
+                                &protocol::event(
+                                    "cpclib/emulatorReady",
+                                    json!({ "url": url, "emulator": emulator, "supports": supports }),
+                                    seq
+                                ),
+                                &mut output
+                            )?;
                             seq += 1;
                             emit(&protocol::event("initialized", json!({}), seq), &mut output)?;
                         },
@@ -535,10 +615,19 @@ fn start_session(
     // benefit over warming this smaller, self-contained step instead.
     let (early_chosen_emulator, _) = resolve_emulator_choice(&arguments);
     let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite");
+    let wants_sugarbox_early = early_chosen_emulator.eq_ignore_ascii_case("sugarbox");
     let install_check = std::thread::spawn(move || {
         if wants_lite_early {
             use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
             let configuration = Emulator::AmspiritLite(AmspiritLiteVersion::default())
+                .configuration::<cpclib_common::event::DiscardObserver>();
+            if !configuration.is_cached() {
+                let _ = configuration.install(&cpclib_common::event::DiscardObserver);
+            }
+        }
+        else if wants_sugarbox_early {
+            use cpclib_runner::runner::emulator::{Emulator, SugarBoxV2Version};
+            let configuration = Emulator::SugarBoxV2(SugarBoxV2Version::default())
                 .configuration::<cpclib_common::event::DiscardObserver>();
             if !configuration.is_cached() {
                 let _ = configuration.install(&cpclib_common::event::DiscardObserver);
@@ -830,17 +919,24 @@ fn start_session(
         }
     }
 
-    // Only one emulator can be debugged today; a configuration naming another
-    // gets that emulator, and is told so rather than left wondering why the
-    // setting did nothing.
+    // Only these emulators can be debugged today; a configuration naming
+    // another gets that emulator, and is told so rather than left wondering
+    // why the setting did nothing.
     if !chosen_emulator.eq_ignore_ascii_case("1984js")
         && !chosen_emulator.eq_ignore_ascii_case("amspiritlite")
+        && !chosen_emulator.eq_ignore_ascii_case("sugarbox")
     {
         notices.push(format!(
             "\"{chosen_emulator}\" cannot be debugged; this session uses 1984js. \
-             Debuggable emulators: 1984js, amspiritlite - set one in the launch \
+             Debuggable emulators: 1984js, amspiritlite, sugarbox - set one in the launch \
              configuration, or as `emulator` under `[dap]` in cpclib-lsp.toml."
         ));
+    }
+    let wants_sugarbox = chosen_emulator.eq_ignore_ascii_case("sugarbox");
+    if wants_sugarbox {
+        notices.push(
+            "Debugging through SugarboxV2, in its own window.".to_string()
+        );
     }
     if wants_lite {
         notices.push("Debugging through AMSpiriT Lite, in its own window. Its web page is \
@@ -944,6 +1040,7 @@ fn connect_backend(
 
     let (chosen_emulator, dap_config) = resolve_emulator_choice(arguments);
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
+    let wants_sugarbox = chosen_emulator.eq_ignore_ascii_case("sugarbox");
 
     let (backend, url) = if wants_lite {
         // An instance already serving, named by the configuration or found at
@@ -1034,12 +1131,52 @@ fn connect_backend(
         // to show in an editor tab.
         (Backend::AmspiritLite(peer), String::new())
     }
+    else if wants_sugarbox {
+        // No `endpoint`/attach-to-a-running-instance path yet - unlike
+        // AMSpiriT Lite's web server, SugarboxV2's own debug server
+        // auto-halts (`Break()`) the moment *any* client connects, so
+        // sharing one already-running instance across several
+        // sessions/tools the way an AMSpiriT Lite `endpoint` can is not the
+        // same kind of harmless attach: the very first thing this session
+        // would do to somebody else's already-running emulator is freeze
+        // it. Always started fresh, same as AMSpiriT Lite's own
+        // no-`endpoint` branch.
+        if is_basic {
+            return Err(
+                "BASIC debugging is only supported with the \"amspiritlite\" emulator today - \
+                 set it in the launch configuration, or as `emulator` under `[dap]` in \
+                 cpclib-lsp.toml."
+                    .to_string()
+            );
+        }
+        let port = arguments
+            .get("port")
+            .and_then(Value::as_u64)
+            .and_then(|port| u16::try_from(port).ok())
+            .unwrap_or(dap_config.port);
+
+        let (endpoint, peer) = if let Some(disk) = disk_path {
+            sugarbox::launch_with_disk(disk, port, &cpclib_common::event::DiscardObserver)?
+        }
+        else {
+            sugarbox::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?
+        };
+        if !endpoint.ends_with(&format!(":{port}")) {
+            early_notices.push(format!(
+                "port {port} was already answering - an emulator left behind by an earlier \
+                 session, most likely - so this one serves on {endpoint} instead. The older \
+                 window is not the one being debugged; close it."
+            ));
+        }
+
+        (Backend::SugarBox(peer), String::new())
+    }
     else {
         if disk_path.is_some() {
             return Err(
-                "running a .dsk directly is only supported with the \"amspiritlite\" \
-                 emulator today - set it in the launch configuration, or as `emulator` \
-                 under `[dap]` in cpclib-lsp.toml."
+                "running a .dsk directly is only supported with the \"amspiritlite\" or \
+                 \"sugarbox\" emulator today - set one in the launch configuration, or as \
+                 `emulator` under `[dap]` in cpclib-lsp.toml."
                     .to_string()
             );
         }
@@ -1257,6 +1394,38 @@ mod tests {
             error.to_lowercase().contains("amspiritlite"),
             "{error}"
         );
+    }
+
+    /// `cpclib/emulatorReady`'s own `supports` list
+    /// (`ADVERTISED_CAPABILITIES`) - the foundation every hardware-inspection
+    /// panel in the roadmap gates its own visibility on. 1984js (the default
+    /// here, no `emulator` override) has no per-chip endpoint at all, so it
+    /// must advertise none of them - a client trusting an empty list to mean
+    /// "hide every panel" is the whole point of sending this rather than
+    /// guessing from the emulator's name.
+    #[test]
+    fn the_default_backend_advertises_no_hardware_capabilities_and_names_itself() {
+        use peer::DapPeer;
+
+        let request = json!({
+            "seq": 1,
+            "type": "request",
+            "command": "launch",
+            "arguments": {
+                "program": "tests/graphics/hello/snapshot.sna",
+                "stopOnEntry": false
+            }
+        });
+        let (session, _url, _notices) = start_session(&request)
+            .expect("a raw .sna launch must succeed - run from the crate root");
+
+        assert_eq!(session.peer().name(), "1984js");
+        for command in ADVERTISED_CAPABILITIES {
+            assert!(
+                !session.peer().supports(command),
+                "1984js's default DapPeer::supports must not claim {command}"
+            );
+        }
     }
 }
 

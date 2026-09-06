@@ -1,0 +1,4433 @@
+warning: unused config key `build.x86_64-unknown-linux-gnu` in `/home/romain/Perso/CPC/rust.cpcdemotools/.cargo/config.toml`
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-bndbuild/Cargo.toml
+workspace: /home/romain/Perso/CPC/rust.cpcdemotools/Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-cslcli/Cargo.toml
+workspace: /home/romain/Perso/CPC/rust.cpcdemotools/Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-bndbuild-tauri/src-tauri/Cargo.toml
+workspace: /home/romain/Perso/CPC/rust.cpcdemotools/Cargo.toml
+warning: use of deprecated method `minus::Pager::set_exit_strategy`: Add a callback for [`PostPagerExit`](crate::hooks::Hook::PostPagerExit) hook. See [`hooks`](crate::hooks) for more info.
+  --> cpclib-sna/src/cli.rs:95:24
+   |
+95 |                 output.set_exit_strategy(ExitStrategy::PagerQuit).unwrap();
+   |                        ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: `cpclib-sna` (lib) generated 1 warning
+   Compiling hxcfe-sys v0.3.2
+   Compiling hxcfe v0.3.2
+   Compiling cpclib-disc v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-disc)
+   Compiling cpclib-files v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-files)
+   Compiling cpclib-basic v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-basic)
+warning: function `build_tokens` is never used
+  --> cpclib-basic/src/string_parser.rs:35:4
+   |
+35 | fn build_tokens(parts: Vec<&mut Vec<BasicToken>>) -> Vec<BasicToken> {
+   |    ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `build_tokens_with_base` is never used
+  --> cpclib-basic/src/string_parser.rs:45:4
+   |
+45 | fn build_tokens_with_base(base: BasicToken, parts: Vec<&mut Vec<BasicTok...
+   |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `append_optional_pair` is never used
+  --> cpclib-basic/src/string_parser.rs:63:4
+   |
+63 | fn append_optional_pair(
+   |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: `cpclib-basic` (lib) generated 3 warnings
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//RangeCoder.h:19,
+warning: cpclib-crunchers@0.11.0:                  from extra/Shrinkler4.6NoParityContext//Pack.h:11,
+warning: cpclib-crunchers@0.11.0:                  from extra/Shrinkler4.6NoParityContext//HunkFile.h:27,
+warning: cpclib-crunchers@0.11.0:                  from extra/Shrinkler4.6NoParityContext//basm_bridge.cpp:12:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Coder.h: In member function 'void Coder::setNumberContexts(int, int, int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Coder.h:59:62: warning: comparison of integer expressions of different signedness: 'std::vector<short unsigned int>::size_type' {aka 'long unsigned int'} and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    59 |                                                 if (c.size() > max_number) goto next_context;
+warning: cpclib-crunchers@0.11.0:       |                                                     ~~~~~~~~~^~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Coder.h: In member function 'int Coder::encodeNumber(int, int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Coder.h:90:36: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<short unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    90 |                         if (number < cache_for_context.size()) {
+warning: cpclib-crunchers@0.11.0:       |                             ~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h: In member function 'void RangeCoder::addBit()':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h:52:40: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    52 |                         while (longpos >= out.size()) {
+warning: cpclib-crunchers@0.11.0:       |                                ~~~~~~~~^~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//Coder.h:11:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h: In member function 'virtual int RangeCoder::code(int, int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h:69:38: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<short unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    69 |                 assert(context_index < contexts.size());
+warning: cpclib-crunchers@0.11.0:       |                        ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//assert.h:35:23: note: in definition of macro 'assert'
+warning: cpclib-crunchers@0.11.0:    35 | #define assert(__e) ((__e) ? (void)0 : _assert_func (__FILE__, __LINE__, #__e))
+warning: cpclib-crunchers@0.11.0:       |                       ^~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h: In member function 'void RangeCoder::finish()':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h:113:34: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   113 |                 while (final_min < intervalmin || final_min + final_size >= intervalmax) {
+warning: cpclib-crunchers@0.11.0:       |                        ~~~~~~~~~~^~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeCoder.h:122:44: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   122 |                 while ((dest_bit - 1) >> 5 >= out.size()) {
+warning: cpclib-crunchers@0.11.0:       |                        ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//Pack.h:12:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//MatchFinder.h: In member function 'bool MatchFinder::nextMatch(int*, int*)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//MatchFinder.h:166:57: warning: comparison of integer expressions of different signedness: 'std::priority_queue<int, std::vector<int>, std::greater<int> >::size_type' {aka 'long unsigned int'} and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   166 |                                 if (match_buffer.size() < max_same_length) {
+warning: cpclib-crunchers@0.11.0:       |                                     ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//Pack.h:13:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//CountingCoder.h: In constructor 'CountingCoder::CountingCoder(CountingCoder*, CountingCoder*)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//CountingCoder.h:33:36: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<ContextCounts>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    33 |                 for (int i = 0 ; i < old_counts->context_counts.size() ; i++) {
+warning: cpclib-crunchers@0.11.0:       |                                  ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//Pack.h:14:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//SizeMeasuringCoder.h: In constructor 'SizeMeasuringCoder::SizeMeasuringCoder(CountingCoder*)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//SizeMeasuringCoder.h:44:36: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<ContextCounts>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    44 |                 for (int i = 0 ; i < counting_coder->context_counts.size() ; i++) {
+warning: cpclib-crunchers@0.11.0:       |                                  ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Pack.h: In member function 'virtual void NoProgress::begin(int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Pack.h:67:32: warning: unused parameter 'size' [-Wunused-parameter]
+warning: cpclib-crunchers@0.11.0:    67 |         virtual void begin(int size) {
+warning: cpclib-crunchers@0.11.0:       |                            ~~~~^~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Pack.h: In member function 'virtual void NoProgress::update(int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Pack.h:71:33: warning: unused parameter 'pos' [-Wunused-parameter]
+warning: cpclib-crunchers@0.11.0:    71 |         virtual void update(int pos) {
+warning: cpclib-crunchers@0.11.0:       |                             ~~~~^~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//HunkFile.h:28:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeDecoder.h: In member function 'int RangeDecoder::getBit()':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeDecoder.h:47:33: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    47 |                 if (bit_index++ >= data.size() * 32) {
+warning: cpclib-crunchers@0.11.0:       |                     ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeDecoder.h: In member function 'virtual int RangeDecoder::decode(int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//RangeDecoder.h:66:38: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<short unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    66 |                 assert(context_index < contexts.size());
+warning: cpclib-crunchers@0.11.0:       |                        ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//assert.h:35:23: note: in definition of macro 'assert'
+warning: cpclib-crunchers@0.11.0:    35 | #define assert(__e) ((__e) ? (void)0 : _assert_func (__FILE__, __LINE__, #__e))
+warning: cpclib-crunchers@0.11.0:       |                       ^~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'virtual void LZVerifier::read(int)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:140:23: warning: unused parameter 'index' [-Wunused-parameter]
+warning: cpclib-crunchers@0.11.0:   140 |         void read(int index) {
+warning: cpclib-crunchers@0.11.0:       |                   ~~~~^~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'std::vector<unsigned int> HunkFile::compress_hunks(PackParams*, bool, bool, RefEdgeFactory*, bool)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:207:74: warning: comparison of integer expressions of different signedness: 'unsigned int' and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   207 |                                                         if (data[spos++] == rh) {
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:218:62: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   218 |                                         for (int ri = 0 ; ri < offsets.size() ; ri++) {
+warning: cpclib-crunchers@0.11.0:       |                                                           ~~~^~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:156:66: warning: unused parameter 'overlap' [-Wunused-parameter]
+warning: cpclib-crunchers@0.11.0:   156 |         vector<unsigned> compress_hunks(PackParams *params, bool overlap, bool mini, RefEdgeFactory *edge_factory, bool show_progress) {
+warning: cpclib-crunchers@0.11.0:       |                                                             ~~~~~^~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'std::vector<std::pair<int, int> > HunkFile::verify(std::vector<unsigned int>&, bool, bool)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:276:64: warning: comparison of integer expressions of different signedness: 'int' and 'long unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   276 |                         if (!error && !mini && verifier.size() != hunks[h].memsize * sizeof(Longword)) {
+warning: cpclib-crunchers@0.11.0:       |                                                ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:241:75: warning: unused parameter 'overlap' [-Wunused-parameter]
+warning: cpclib-crunchers@0.11.0:   241 |         vector<pair<int,int> > verify(vector<unsigned>& pack_buffer, bool overlap, bool mini) {
+warning: cpclib-crunchers@0.11.0:       |                                                                      ~~~~~^~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'bool HunkFile::analyze()':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:368:57: warning: comparison of integer expressions of different signedness: 'unsigned int' and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   368 |                 if (data[index++] != 0 || data[index++] != numhunks-1) {
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:479:107: warning: comparison of integer expressions of different signedness: 'unsigned int' and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   479 |                                                         if (n < 0 || index+n+2 >= length || data[index++] >= numhunks) {
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:485:83: warning: comparison of integer expressions of different signedness: 'unsigned int' and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   485 |                                                                 if (data[index++] > hunks[h].memsize*4-4) {
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'HunkFile* HunkFile::merge_hunks(const std::vector<std::pair<unsigned int, std::vector<int> > >&)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:622:48: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   622 |                         for (int shi = 0 ; shi < hunklist[dh].second.size() ; shi++) {
+warning: cpclib-crunchers@0.11.0:       |                                            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:647:48: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   647 |                         for (int shi = 0 ; shi < hunklist[dh].second.size() ; shi++) {
+warning: cpclib-crunchers@0.11.0:       |                                            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:668:38: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<HunkInfo>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   668 |                 for (int dh = 0 ; dh < ef->hunks.size() ; dh++) {
+warning: cpclib-crunchers@0.11.0:       |                                   ~~~^~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:681:48: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   681 |                         for (int shi = 0 ; shi < hunklist[dh].second.size() ; shi++) {
+warning: cpclib-crunchers@0.11.0:       |                                            ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:702:48: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<HunkInfo>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   702 |                         for (int drh = 0 ; drh < ef->hunks.size() ; drh++) {
+warning: cpclib-crunchers@0.11.0:       |                                            ~~~~^~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'bool HunkFile::valid_mini()':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:774:36: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<HunkInfo>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   774 |                 for (int h = 1 ; h < hunks.size() ; h++) {
+warning: cpclib-crunchers@0.11.0:       |                                  ~~^~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h: In member function 'HunkFile* HunkFile::crunch(PackParams*, bool, bool, std::string*, unsigned int, RefEdgeFactory*, bool)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:874:39: warning: 'void* memset(void*, int, size_t)' clearing an object of non-trivial type '__gnu_cxx::__alloc_traits<std::allocator<Longword>, Longword>::value_type' {aka 'class Longword'}; use assignment or value-initialization instead [-Wclass-memaccess]
+warning: cpclib-crunchers@0.11.0:   874 |                                 memset(&ef->data[dpos], 0, header1_size);
+warning: cpclib-crunchers@0.11.0:       |                                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//HunkFile.h:25:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//AmigaWords.h:44:7: note: '__gnu_cxx::__alloc_traits<std::allocator<Longword>, Longword>::value_type' {aka 'class Longword'} declared here
+warning: cpclib-crunchers@0.11.0:    44 | class Longword {
+warning: cpclib-crunchers@0.11.0:       |       ^~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//HunkFile.h:923:39: warning: 'void* memset(void*, int, size_t)' clearing an object of non-trivial type '__gnu_cxx::__alloc_traits<std::allocator<Longword>, Longword>::value_type' {aka 'class Longword'}; use assignment or value-initialization instead [-Wclass-memaccess]
+warning: cpclib-crunchers@0.11.0:   923 |                                 memset(&ef->data[dpos], 0, rounded_text_size);
+warning: cpclib-crunchers@0.11.0:       |                                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//AmigaWords.h:44:7: note: '__gnu_cxx::__alloc_traits<std::allocator<Longword>, Longword>::value_type' {aka 'class Longword'} declared here
+warning: cpclib-crunchers@0.11.0:    44 | class Longword {
+warning: cpclib-crunchers@0.11.0:       |       ^~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//basm_bridge.cpp:13:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//DataFile.h: In member function 'int DataFile::verify(std::vector<unsigned int>&)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//DataFile.h:68:47: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<unsigned char>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    68 |                 if (!error && verifier.size() != data.size()) {
+warning: cpclib-crunchers@0.11.0:       |                               ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//DataFile.h: In member function 'DataFile* DataFile::crunch(PackParams*, RefEdgeFactory*, bool)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//DataFile.h:147:36: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<unsigned int>::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   147 |                 for (int i = 0 ; i < pack_buffer.size() ; i++) {
+warning: cpclib-crunchers@0.11.0:       |                                  ~~^~~~~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//basm_bridge.cpp: In function 'rust::cxxbridge1::Vec<unsigned char> compress_for_basm(rust::cxxbridge1::Slice<const unsigned char>, int, bool)':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//basm_bridge.cpp:41:14: warning: unused variable 'show_progress' [-Wunused-variable]
+warning: cpclib-crunchers@0.11.0:    41 |         bool show_progress = true; // TODO set to false ASAP
+warning: cpclib-crunchers@0.11.0:       |              ^~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//LZParser.h:50,
+warning: cpclib-crunchers@0.11.0:                  from extra/Shrinkler4.6NoParityContext//Pack.h:16:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h: In instantiation of 'bool Heap<T>::contains(T) [with T = RefEdge*]':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//LZParser.h:228:29:   required from here
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h:83:39: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<RefEdge*, std::allocator<RefEdge*> >::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    83 |                 return t->_heap_index < elements.size() && elements[t->_heap_index] == t;
+warning: cpclib-crunchers@0.11.0:       |                        ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h: In instantiation of 'void Heap<T>::down(int) [with T = RefEdge*]':
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h:59:3:   required from 'T Heap<T>::remove_index(int) [with T = RefEdge*]'
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h:74:4:   required from 'void Heap<T>::remove(T) [with T = RefEdge*]'
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//LZParser.h:232:20:   required from here
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h:43:30: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<RefEdge*, std::allocator<RefEdge*> >::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    43 |                 while (i*2+1 < elements.size()) {
+warning: cpclib-crunchers@0.11.0:       |                        ~~~~~~^~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//Heap.h:46:38: warning: comparison of integer expressions of different signedness: 'int' and 'std::vector<RefEdge*, std::allocator<RefEdge*> >::size_type' {aka 'long unsigned int'} [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    46 |                         int ci = ci2 < elements.size() && compare(elements[ci1], elements[ci2]) ? ci2 : ci1;
+warning: cpclib-crunchers@0.11.0:       |                                  ~~~~^~~~~~~~~~~~~~~~~
+warning: cpclib-crunchers@0.11.0: In file included from extra/Shrinkler4.6NoParityContext//LZParser.h:51:
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//CuckooHash.h: In instantiation of 'CuckooHash<V>::CuckooHash(const CuckooHash<V>&) [with V = RefEdge*]':
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_construct.h:119:7:   required from 'void std::_Construct(_Tp*, _Args&& ...) [with _Tp = CuckooHash<RefEdge*>; _Args = {const CuckooHash<RefEdge*>&}]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_uninitialized.h:120:21:   required from '_ForwardIterator std::__do_uninit_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const CuckooHash<RefEdge*>*; _ForwardIterator = CuckooHash<RefEdge*>*]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_uninitialized.h:137:32:   required from 'static _ForwardIterator std::__uninitialized_copy<_TrivialValueTypes>::__uninit_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const CuckooHash<RefEdge*>*; _ForwardIterator = CuckooHash<RefEdge*>*; bool _TrivialValueTypes = false]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_uninitialized.h:185:15:   required from '_ForwardIterator std::uninitialized_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const CuckooHash<RefEdge*>*; _ForwardIterator = CuckooHash<RefEdge*>*]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_uninitialized.h:373:37:   required from '_ForwardIterator std::__uninitialized_copy_a(_InputIterator, _InputIterator, _ForwardIterator, allocator<_Tp>&) [with _InputIterator = const CuckooHash<RefEdge*>*; _ForwardIterator = CuckooHash<RefEdge*>*; _Tp = CuckooHash<RefEdge*>]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_uninitialized.h:399:2:   required from '_ForwardIterator std::__uninitialized_move_if_noexcept_a(_InputIterator, _InputIterator, _ForwardIterator, _Allocator&) [with _InputIterator = CuckooHash<RefEdge*>*; _ForwardIterator = CuckooHash<RefEdge*>*; _Allocator = allocator<CuckooHash<RefEdge*> >]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/vector.tcc:687:48:   required from 'void std::vector<_Tp, _Alloc>::_M_default_append(size_type) [with _Tp = CuckooHash<RefEdge*>; _Alloc = std::allocator<CuckooHash<RefEdge*> >; size_type = long unsigned int]'
+warning: cpclib-crunchers@0.11.0: /usr/include/c++/13/bits/stl_vector.h:1016:4:   required from 'void std::vector<_Tp, _Alloc>::resize(size_type) [with _Tp = CuckooHash<RefEdge*>; _Alloc = std::allocator<CuckooHash<RefEdge*> >; size_type = long unsigned int]'
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//LZParser.h:301:22:   required from here
+warning: cpclib-crunchers@0.11.0: extra/Shrinkler4.6NoParityContext//CuckooHash.h:144:38: warning: unused parameter 'source' [-Wunused-parameter]
+warning: cpclib-crunchers@0.11.0:   144 |         CuckooHash(const CuckooHash& source) {
+warning: cpclib-crunchers@0.11.0:       |                    ~~~~~~~~~~~~~~~~~~^~~~~~
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/expand_block_v2.c: In function 'lzsa_decompressor_expand_block_v2':
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/expand_block_v2.c:118:18: warning: 'nibbles' may be used uninitialized [-Wmaybe-uninitialized]
+warning: cpclib-crunchers@0.11.0:   118 |    unsigned char nibbles;
+warning: cpclib-crunchers@0.11.0:       |                  ^~~~~~~
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/matchfinder.c: In function 'lzsa_build_suffix_array':
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/matchfinder.c:98:19: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:    98 |          if (nLen > LCP_MAX)
+warning: cpclib-crunchers@0.11.0:       |                   ^
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/matchfinder.c:112:19: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   112 |          if (nLen > LCP_AND_TAG_MAX)
+warning: cpclib-crunchers@0.11.0:       |                   ^
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_block_v2.c: In function 'lzsa_insert_forward_match_v2':
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_block_v2.c:238:52: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   238 |                                     if (nMaxRepLen > LCP_MAX)
+warning: cpclib-crunchers@0.11.0:       |                                                    ^
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_block_v2.c: In function 'lzsa_optimize_forward_v2':
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_block_v2.c:425:31: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   425 |          if (nMaxRepLenForPos > LCP_MAX)
+warning: cpclib-crunchers@0.11.0:       |                               ^
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_block_v2.c:692:24: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   692 |          if (nMatchLen >= LCP_MAX && ((m + 1) >= NMATCHES_PER_INDEX_V2 || (match[m + 1].length & 0x7fff) < LCP_MAX))
+warning: cpclib-crunchers@0.11.0:       |                        ^~
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_streaming.c: In function 'lzsa_compress_stream':
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_streaming.c:179:69: warning: comparison of integer expressions of different signedness: 'size_t' {aka 'long unsigned int'} and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   179 |          if (pOutStream->write(pOutStream, cFrameData, nHeaderSize) != nHeaderSize)
+warning: cpclib-crunchers@0.11.0:       |                                                                     ^~
+warning: cpclib-crunchers@0.11.0: extra/lzsa/lzsa-master/src/shrink_streaming.c:284:66: warning: comparison of integer expressions of different signedness: 'size_t' {aka 'long unsigned int'} and 'int' [-Wsign-compare]
+warning: cpclib-crunchers@0.11.0:   284 |       if (pOutStream->write(pOutStream, cFrameData, nFooterSize) != nFooterSize)
+warning: cpclib-crunchers@0.11.0:       |                                                                  ^~
+   Compiling cpclib-asm v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-asm)
+warning: unexpected `cfg` condition name: `test_to_clean`
+    --> cpclib-asm/src/assembler/mod.rs:7513:7
+     |
+7513 | #[cfg(test_to_clean)]
+     |       ^^^^^^^^^^^^^
+     |
+     = help: expected names are: `docsrs`, `feature`, and `test` and 33 more
+     = help: consider using a Cargo feature instead
+     = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+              [lints.rust]
+              unexpected_cfgs = { level = "warn", check-cfg = ['cfg(test_to_clean)'] }
+     = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(test_to_clean)");` to the top of the `build.rs`
+     = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+     = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `chardetng`
+   --> cpclib-asm/src/assembler/file.rs:406:11
+    |
+406 | #[cfg(all(feature = "chardetng", not(target_arch = "wasm32")))]
+    |           ^^^^^^^^^^-----------
+    |                     |
+    |                     help: there is a expected value with a similar name: `"chardet"`
+    |
+    = note: expected values for `feature` are: `apultra`, `bzpack`, `chardet`, `colored_errors`, `default`, `exomizer`, `hfe`, `indicatif`, `lz4`, `lz48`, `lz49`, `lzsa`, `pucrunch`, `rayon`, `shrinkler`, `upkr`, `zx0`, and `zx7`
+    = help: consider adding `chardetng` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `chardetng`
+   --> cpclib-asm/src/assembler/file.rs:418:15
+    |
+418 | #[cfg(any(not(feature = "chardetng"), target_arch = "wasm32"))]
+    |               ^^^^^^^^^^-----------
+    |                         |
+    |                         help: there is a expected value with a similar name: `"chardet"`
+    |
+    = note: expected values for `feature` are: `apultra`, `bzpack`, `chardet`, `colored_errors`, `default`, `exomizer`, `hfe`, `indicatif`, `lz4`, `lz48`, `lz49`, `lzsa`, `pucrunch`, `rayon`, `shrinkler`, `upkr`, `zx0`, and `zx7`
+    = help: consider adding `chardetng` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: a method with this name may be added to the standard library in the future
+    --> cpclib-asm/src/parser/obtained.rs:1359:49
+     |
+1359 |             either::Right((_inner, msg)) => msg.as_str(),
+     |                                                 ^^^^^^
+     |
+     = help: call with fully qualified syntax `source::SourceString::as_str(...)` to keep using the current method
+     = warning: once this associated item is added to the standard library, the ambiguity may cause an error or change in behavior!
+     = note: for more information, see issue #48919 <https://github.com/rust-lang/rust/issues/48919>
+     = note: `#[warn(unstable_name_collisions)]` (part of `#[warn(future_incompatible)]`) on by default
+help: add `#![feature(str_as_str)]` to the crate attributes to enable `core::str::<impl str>::as_str`
+    -->  cpclib-asm/src/lib.rs:4:1
+     |
+   4 + #![feature(str_as_str)]
+     |
+
+warning: a method with this name may be added to the standard library in the future
+    --> cpclib-asm/src/parser/obtained.rs:1979:75
+     |
+1979 | ...r(_token, message) => message.as_str(),
+     |                                  ^^^^^^
+     |
+     = help: call with fully qualified syntax `source::SourceString::as_str(...)` to keep using the current method
+     = warning: once this associated item is added to the standard library, the ambiguity may cause an error or change in behavior!
+     = note: for more information, see issue #48919 <https://github.com/rust-lang/rust/issues/48919>
+help: add `#![feature(str_as_str)]` to the crate attributes to enable `core::str::<impl str>::as_str`
+    -->  cpclib-asm/src/lib.rs:4:1
+     |
+   4 + #![feature(str_as_str)]
+     |
+
+warning: unreachable expression
+  --> cpclib-asm/src/assembler/function.rs:81:9
+   |
+81 | /         Self {
+82 | |             name: self.name.clone(),
+83 | |             args: self.args.clone(),
+84 | |             #[allow(unused)]
+85 | |             inner: todo!()
+   | |                    ------- any code following this expression is unreachable
+86 | |         }
+   | |_________^ unreachable expression
+   |
+   = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unreachable pattern
+   --> cpclib-asm/src/implementation/expression.rs:216:25
+    |
+216 |                         _ => unreachable!()
+    |                         ^ no value can reach this
+...
+355 |         resolve_impl!(self, env)
+    |         ------------------------ in this macro invocation
+    |
+note: multiple earlier patterns match some of the same values
+   --> cpclib-asm/src/implementation/expression.rs:216:25
+    |
+199 |                         Some(_e) => Err(AssemblerError::WrongSymbolType {
+    |                         -------- matches some of the same values
+...
+203 |                         None => Err(if $env.pass().is_first_pass() {
+    |                         ---- matches some of the same values
+...
+216 |                         _ => unreachable!()
+    |                         ^ collectively making this unreachable
+...
+355 |         resolve_impl!(self, env)
+    |         ------------------------ in this macro invocation
+    = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+    = note: this warning originates in the macro `resolve_impl` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unreachable pattern
+   --> cpclib-asm/src/implementation/tokens.rs:683:21
+    |
+683 |                     _ => {
+    |                     ^ no value can reach this
+    |
+note: multiple earlier patterns match some of the same values
+   --> cpclib-asm/src/implementation/tokens.rs:683:21
+    |
+225 |                     &Mnemonic::Add => {
+    |                     -------------- matches some of the same values
+...
+240 |                     &Mnemonic::Adc => {
+    |                     -------------- matches some of the same values
+...
+256 |                     &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => {
+    |                     ----------------------------------------------- matches some of the same values
+...
+267 |                     Mnemonic::Call => {
+    |                     -------------- matches some of the same values
+...
+683 |                     _ => {
+    |                     ^ ...and 34 other patterns collectively make this unreachable
+
+warning: unreachable pattern
+   --> cpclib-asm/src/implementation/expression.rs:216:25
+    |
+216 |                         _ => unreachable!()
+    |                         ^ no value can reach this
+    |
+   ::: cpclib-asm/src/parser/obtained.rs:472:19
+    |
+472 | ...   let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span...
+    |                 ------------------------ in this macro invocation
+    |
+note: multiple earlier patterns match some of the same values
+   --> cpclib-asm/src/implementation/expression.rs:216:25
+    |
+199 |                         Some(_e) => Err(AssemblerError::WrongSymbolType {
+    |                         -------- matches some of the same values
+...
+203 |                         None => Err(if $env.pass().is_first_pass() {
+    |                         ---- matches some of the same values
+...
+216 |                         _ => unreachable!()
+    |                         ^ collectively making this unreachable
+    |
+   ::: cpclib-asm/src/parser/obtained.rs:472:19
+    |
+472 | ...   let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span...
+    |                 ------------------------ in this macro invocation
+    = note: this warning originates in the macro `resolve_impl` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unreachable pattern
+    --> cpclib-asm/src/assembler/mod.rs:1432:17
+     |
+1432 |                 _ => unimplemented!()
+     |                 ^ no value can reach this
+     |
+note: multiple earlier patterns match some of the same values
+    --> cpclib-asm/src/assembler/mod.rs:1432:17
+     |
+1415 |                 (_, Ok(_)) => {
+     |                 ---------- matches some of the same values
+...
+1418 |                 (Some(existing), Err(new_err)) => {
+     |                 ------------------------------ matches some of the same values
+...
+1429 |                 (None, Err(l_errors)) => {
+     |                 --------------------- matches some of the same values
+...
+1432 |                 _ => unimplemented!()
+     |                 ^ collectively making this unreachable
+     = note: the full name for the type has been written to '/home/romain/Perso/CPC/rust.cpcdemotools/target/debug/deps/cpclib_asm-4f9a50a46a55672f.long-type-7690095707843400405.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+warning: unreachable pattern
+    --> cpclib-asm/src/assembler/mod.rs:1499:17
+     |
+1499 |                 _ => unreachable!()
+     |                 ^ no value can reach this
+     |
+note: multiple earlier patterns match some of the same values
+    --> cpclib-asm/src/assembler/mod.rs:1499:17
+     |
+1482 |                 (_, Ok(_)) => {
+     |                 ---------- matches some of the same values
+...
+1485 |                 (Some(existing), Err(new_err)) => {
+     |                 ------------------------------ matches some of the same values
+...
+1496 |                 (None, Err(l_errors)) => {
+     |                 --------------------- matches some of the same values
+...
+1499 |                 _ => unreachable!()
+     |                 ^ collectively making this unreachable
+     = note: the full name for the type has been written to '/home/romain/Perso/CPC/rust.cpcdemotools/target/debug/deps/cpclib_asm-4f9a50a46a55672f.long-type-7690095707843400405.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+warning: fields `cost_taken` and `cost_not_taken` are never read
+  --> cpclib-asm/src/cfg.rs:72:9
+   |
+69 |     Branch {
+   |     ------ fields in this variant
+...
+72 |         cost_taken: u32,
+   |         ^^^^^^^^^^
+73 |         cost_not_taken: u32
+   |         ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `ERR_BASIC_ERROR_IN_BLOCK` is never used
+  --> cpclib-asm/src/parser/directives.rs:82:7
+   |
+82 | const ERR_BASIC_ERROR_IN_BLOCK: &str = "BASIC: error in block";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `visit_token` is never used
+    --> cpclib-asm/src/assembler/mod.rs:5617:4
+     |
+5617 | fn visit_token(token: &Token, env: &mut Env) -> Result<(), Box<Assembl...
+     |    ^^^^^^^^^^^
+
+warning: function `format_address` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:312:15
+    |
+312 | pub(crate) fn format_address(format: &ListingOutputFormat, value: u32, ...
+    |               ^^^^^^^^^^^^^^
+
+warning: function `hex_byte` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:324:15
+    |
+324 | pub(crate) fn hex_byte(format: &ListingOutputFormat, b: u8) -> String {
+    |               ^^^^^^^^
+
+warning: function `format_bytes_raw` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:332:15
+    |
+332 | pub(crate) fn format_bytes_raw(format: &ListingOutputFormat, bytes: &[u...
+    |               ^^^^^^^^^^^^^^^^
+
+warning: function `format_bytes_raw_for` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:336:15
+    |
+336 | pub(crate) fn format_bytes_raw_for(format: &ListingOutputFormat, bytes:...
+    |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `format_bytes` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:340:15
+    |
+340 | pub(crate) fn format_bytes(
+    |               ^^^^^^^^^^^^
+
+warning: function `format_bytes_for` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:348:15
+    |
+348 | pub(crate) fn format_bytes_for(
+    |               ^^^^^^^^^^^^^^^^
+
+warning: function `render_source_column_for` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:356:15
+    |
+356 | pub(crate) fn render_source_column_for(line: Option<&str>) -> String {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `format_line_with_template` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:364:15
+    |
+364 | pub(crate) fn format_line_with_template(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `format_deferred_line_with_template` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:412:15
+    |
+412 | pub(crate) fn format_deferred_line_with_template(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `logical_width` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:432:15
+    |
+432 | pub(crate) fn logical_width(format: &ListingOutputFormat) -> usize {
+    |               ^^^^^^^^^^^^^
+
+warning: function `physical_width` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:436:15
+    |
+436 | pub(crate) fn physical_width(format: &ListingOutputFormat) -> usize {
+    |               ^^^^^^^^^^^^^^
+
+warning: function `physical_field_width_for` is never used
+   --> cpclib-asm/src/assembler/listing_output/format.rs:440:15
+    |
+440 | pub(crate) fn physical_field_width_for(format: &ListingOutputFormat) ->...
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `row_id`, `definition_target`, `highlighted_symbols`, `collapsible`, and `collapsed_block` are never read
+  --> cpclib-asm/src/assembler/listing_output/render/shared.rs:8:16
+   |
+ 7 | pub(crate) struct ListingLineRender<'a> {
+   |                   ----------------- fields in this struct
+ 8 |     pub(crate) row_id: usize,
+   |                ^^^^^^
+...
+21 |     pub(crate) definition_target: Option<usize>,
+   |                ^^^^^^^^^^^^^^^^^
+22 |     pub(crate) highlighted_symbols: &'a [String],
+   |                ^^^^^^^^^^^^^^^^^^^
+23 |     pub(crate) collapsible: bool,
+   |                ^^^^^^^^^^^
+24 |     pub(crate) collapsed_block: bool
+   |                ^^^^^^^^^^^^^^^
+
+warning: field `token_kind` is never read
+  --> cpclib-asm/src/assembler/listing_output/render/shared.rs:32:16
+   |
+27 | pub(crate) struct ListingTokenRender<'a> {
+   |                   ------------------ field in this struct
+...
+32 |     pub(crate) token_kind: &'a TokenKind
+   |                ^^^^^^^^^^
+
+warning: fields `row_id`, `definition_target`, `highlighted_symbols`, `collapsible`, and `collapsed_block` are never read
+  --> cpclib-asm/src/assembler/listing_output/render/shared.rs:36:16
+   |
+35 | pub(crate) struct ListingDeferredRender<'a> {
+   |                   --------------------- fields in this struct
+36 |     pub(crate) row_id: usize,
+   |                ^^^^^^
+...
+43 |     pub(crate) definition_target: Option<usize>,
+   |                ^^^^^^^^^^^^^^^^^
+44 |     pub(crate) highlighted_symbols: &'a [String],
+   |                ^^^^^^^^^^^^^^^^^^^
+45 |     pub(crate) collapsible: bool,
+   |                ^^^^^^^^^^^
+46 |     pub(crate) collapsed_block: bool
+   |                ^^^^^^^^^^^^^^^
+
+warning: fields `active_block` and `blocks` are never read
+  --> cpclib-asm/src/assembler/listing_output/render/shared.rs:83:16
+   |
+81 | pub(crate) struct HtmlListingRenderer {
+   |                   ------------------- fields in this struct
+82 |     pub(crate) next_row_id: usize,
+83 |     pub(crate) active_block: Option<HtmlBlock>,
+   |                ^^^^^^^^^^^^
+84 |     pub(crate) blocks: Vec<HtmlBlock>,
+   |                ^^^^^^
+
+warning: function `render_html_bytes` is never used
+  --> cpclib-asm/src/assembler/listing_output/render/shared.rs:91:15
+   |
+91 | pub(crate) fn render_html_bytes(format: &ListingOutputFormat, bytes: &[u...
+   |               ^^^^^^^^^^^^^^^^^
+
+warning: function `render_html_tokenized_text` is never used
+   --> cpclib-asm/src/assembler/listing_output/render/shared.rs:134:15
+    |
+134 | pub(crate) fn render_html_tokenized_text(text: &str, class_name: &str) ...
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `block_end_marker` is never used
+   --> cpclib-asm/src/assembler/listing_output/render/html.rs:660:8
+    |
+ 14 | impl HtmlListingRenderer {
+    | ------------------------ associated function in this implementation
+...
+660 |     fn block_end_marker(kind: &HtmlBlockKind) -> &'static str {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: constant `SNASET_WRONG_LABEL` is never used
+   --> cpclib-asm/src/error.rs:545:18
+    |
+545 | pub(crate) const SNASET_WRONG_LABEL: &str = "SNASET: error in the optio...
+    |                  ^^^^^^^^^^^^^^^^^^
+
+warning: `cpclib-asm` (lib) generated 34 warnings
+warning: `cpclib-basic` (lib) generated 3 warnings (3 duplicates)
+   Compiling cpclib-xfer v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-xfer)
+warning: unreachable pattern
+    --> cpclib-asm/src/assembler/mod.rs:1432:17
+     |
+1432 |                 _ => unimplemented!()
+     |                 ^ no value can reach this
+     |
+note: multiple earlier patterns match some of the same values
+    --> cpclib-asm/src/assembler/mod.rs:1432:17
+     |
+1415 |                 (_, Ok(_)) => {
+     |                 ---------- matches some of the same values
+...
+1418 |                 (Some(existing), Err(new_err)) => {
+     |                 ------------------------------ matches some of the same values
+...
+1429 |                 (None, Err(l_errors)) => {
+     |                 --------------------- matches some of the same values
+...
+1432 |                 _ => unimplemented!()
+     |                 ^ collectively making this unreachable
+     = note: the full name for the type has been written to '/home/romain/Perso/CPC/rust.cpcdemotools/target/debug/deps/cpclib_asm-5705618f6bb15a46.long-type-17715057413448859544.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+warning: unreachable pattern
+    --> cpclib-asm/src/assembler/mod.rs:1499:17
+     |
+1499 |                 _ => unreachable!()
+     |                 ^ no value can reach this
+     |
+note: multiple earlier patterns match some of the same values
+    --> cpclib-asm/src/assembler/mod.rs:1499:17
+     |
+1482 |                 (_, Ok(_)) => {
+     |                 ---------- matches some of the same values
+...
+1485 |                 (Some(existing), Err(new_err)) => {
+     |                 ------------------------------ matches some of the same values
+...
+1496 |                 (None, Err(l_errors)) => {
+     |                 --------------------- matches some of the same values
+...
+1499 |                 _ => unreachable!()
+     |                 ^ collectively making this unreachable
+     = note: the full name for the type has been written to '/home/romain/Perso/CPC/rust.cpcdemotools/target/debug/deps/cpclib_asm-5705618f6bb15a46.long-type-17715057413448859544.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+warning: constant `REFRESH_RATE` is never used
+  --> cpclib-asm/src/progress.rs:13:7
+   |
+13 | const REFRESH_RATE: Duration = Duration::from_millis(250);
+   |       ^^^^^^^^^^^^
+
+warning: constant `PROGRESS_STYLE` is never used
+  --> cpclib-asm/src/progress.rs:14:7
+   |
+14 | const PROGRESS_STYLE: &str = "{prefix:.bold.dim>8}  [{bar}] {pos:>3}/{le...
+   |       ^^^^^^^^^^^^^^
+
+warning: constant `PASS_STYLE` is never used
+  --> cpclib-asm/src/progress.rs:15:7
+   |
+15 | const PASS_STYLE: &str = "{prefix:.bold.dim>8}  [{bar}] ";
+   |       ^^^^^^^^^^
+
+warning: fields `prefix` and `index` are never read
+  --> cpclib-asm/src/progress.rs:57:5
+   |
+53 | struct CountedProgress {
+   |        --------------- fields in this struct
+...
+57 |     prefix: &'static str,
+   |     ^^^^^^
+58 |     index: usize,
+   |     ^^^^^
+
+warning: `cpclib-asm` (lib) generated 38 warnings (32 duplicates)
+warning: function `two_params` is never used
+   --> cpclib-macros/src/tokens.rs:156:4
+    |
+156 | fn two_params<T1, T2>(name: &str, t1: &T1, t2: &T2, tokens: &mut TokenS...
+    |    ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cpclib-macros` (lib) generated 1 warning
+   Compiling cpclib-sprite-compiler v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-sprite-compiler)
+warning: unreachable statement
+   --> cpclib-sprite-compiler/src/lib.rs:644:5
+    |
+640 | /     todo!(
+641 | |         "XXX Nothing is finished here. Cannot be used without fixes. ...
+642 | |     );
+    | |_____- any code following this expression is unreachable
+643 |
+644 | /     let comp = Compiler::builder()
+645 | |             .header_comment("Linear sprite display routine. HL contai...
+646 | |             .header_label(label)
+647 | |             .bc26(Bc26::new_universal_16k(r1))
+648 | |             .action(RoutineAction::SaveBackgroundAndDrawPixelMaskedSp...
+649 | |             .build();
+    | |_____________________^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `label`
+   --> cpclib-sprite-compiler/src/lib.rs:632:5
+    |
+632 |     label: &str,
+    |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_label`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `r1`
+   --> cpclib-sprite-compiler/src/lib.rs:635:5
+    |
+635 |     r1: u8
+    |     ^^ help: if this is intentional, prefix it with an underscore: `_r1`
+
+warning: unused variable: `spr`
+   --> cpclib-sprite-compiler/src/lib.rs:637:9
+    |
+637 |     let spr = _spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_spr`
+
+warning: unused variable: `msk`
+   --> cpclib-sprite-compiler/src/lib.rs:638:9
+    |
+638 |     let msk = _msk.with_encoding(SpriteEncoding::LeftToRightToLeft);
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_msk`
+
+warning: `cpclib-sprite-compiler` (lib) generated 5 warnings (run `cargo fix --lib -p cpclib-sprite-compiler` to apply 4 suggestions)
+   Compiling cpclib-z80emu v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-z80emu)
+   Compiling cpclib-basm v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-basm)
+   Compiling cpclib v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib)
+   Compiling cpclib-catart v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-catart)
+warning: unused import: `paste::paste`
+  --> cpclib-catart/src/basic_chars.rs:10:5
+   |
+10 | use paste::paste;
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `builder`
+ --> cpclib-catart/src/entry.rs:5:20
+  |
+5 | use bon::{Builder, builder};
+  |                    ^^^^^^^
+
+warning: unused import: `cpclib_common::clap::Command`
+ --> cpclib-catart/src/entry.rs:7:5
+  |
+7 | use cpclib_common::clap::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `cpclib_image::image::Mode`
+  --> cpclib-catart/src/entry.rs:10:5
+   |
+10 | use cpclib_image::image::Mode;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `owo_colors::colors::css::ForestGreen`
+  --> cpclib-catart/src/entry.rs:12:5
+   |
+12 | use owo_colors::colors::css::ForestGreen;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `DC1`, `DLE`, `SO`, and `SUB`
+  --> cpclib-catart/src/entry.rs:14:40
+   |
+14 | ...:{ACK, BS, CAN, DC1, DLE, EOT, ETB, NAK, SI, SO, SUB, US};
+   |                    ^^^  ^^^                     ^^  ^^^
+
+warning: unused imports: `Locale` and `entry`
+  --> cpclib-catart/src/entry.rs:16:13
+   |
+16 | use crate::{Locale, entry, interpret};
+   |             ^^^^^^  ^^^^^
+
+warning: use of deprecated associated function `std::array::IntoIter::<T, N>::new`: use `IntoIterator::into_iter` instead
+  --> cpclib-catart/src/entry.rs:95:31
+   |
+95 |         std::array::IntoIter::new(self.entries)
+   |                               ^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: unused import: `owo_colors::OwoColorize`
+  --> cpclib-catart/src/entry.rs:11:5
+   |
+11 | use owo_colors::OwoColorize;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> cpclib-catart/src/basic_command.rs:388:21
+    |
+388 |                 let mut cmds = CharCommand::from_string(&data.bytes())?;
+    |                     ----^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `show_headers`
+   --> cpclib-catart/src/entry.rs:139:56
+    |
+139 | ...quential_catart(&self, show_headers: bool) -> BasicProgram {
+    |                           ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_show_headers`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `is_enable`
+   --> cpclib-catart/src/entry.rs:175:21
+    |
+175 |                 let is_enable = matches!(c, CharCommand::EnableVdu);
+    |                     ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_is_enable`
+
+warning: unused variable: `col`
+   --> cpclib-catart/src/entry.rs:727:18
+    |
+727 |             for (col, entry) in row_entries.flatten().enumerate() {
+    |                  ^^^ help: if this is intentional, prefix it with an underscore: `_col`
+
+warning: unused variable: `e`
+    --> cpclib-catart/src/entry.rs:1276:23
+     |
+1276 |             .map_err(|e| std::fmt::Error {})?;
+     |                       ^ help: if this is intentional, prefix it with an underscore: `_e`
+
+warning: unused variable: `start_mode`
+    --> cpclib-catart/src/entry.rs:1703:9
+     |
+1703 |         start_mode: ScreenMode
+     |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_start_mode`
+
+warning: unused variable: `new_idx`
+    --> cpclib-catart/src/entry.rs:1813:20
+     |
+1813 |             .map(|(new_idx, entry)| entry.f1)
+     |                    ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_new_idx`
+
+warning: method `bytes_per_char` is never used
+   --> cpclib-catart/src/interpret.rs:202:8
+    |
+180 | impl BasicMemoryScreen {
+    | ---------------------- method in this implementation
+...
+202 |     fn bytes_per_char(&self) -> usize {
+    |        ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `locale` is never read
+   --> cpclib-catart/src/interpret.rs:671:5
+    |
+660 | pub struct Interpreter {
+    |            ----------- field in this struct
+...
+671 |     locale: Locale
+    |     ^^^^^^
+
+warning: missing documentation for a module
+  --> cpclib-catart/src/lib.rs:11:1
+   |
+11 | pub mod char_command;
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> cpclib-catart/src/lib.rs:6:9
+   |
+ 6 | #![warn(missing_docs)]
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> cpclib-catart/src/lib.rs:14:1
+   |
+14 | pub mod entry;
+   | ^^^^^^^^^^^^^
+
+warning: constant `__CHAR_PARAMS_0x00__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+76 | define_basic_char!(0x00, NUL, "No effect. Ignored.");
+   | ---------------------------------------------------- in this macro invocation
+   |
+   = note: `#[warn(non_upper_case_globals)]` (part of `#[warn(nonstandard_style)]`) on by default
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X00: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x01__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+77 | / define_basic_char!(
+78 | |     0x01,
+79 | |     SOH = 1,
+80 | |     "Print a specific character symbol (parameter: 0-255). This allows...
+81 | | );
+   | |_- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X01: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x02__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:47:19
+   |
+47 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+82 | define_basic_char!(0x02, STX, CURSOR_0, "Turn off text cursor.");
+   | ---------------------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+47 +             const __CHAR_PARAMS_0X02: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x03__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:47:19
+   |
+47 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+83 | define_basic_char!(0x03, ETX, CURSOR_1, "Turn on text cursor.");
+   | --------------------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+47 +             const __CHAR_PARAMS_0X03: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x04__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:47:19
+   |
+47 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+84 | define_basic_char!(0x04, EOT = 1, MODE, "Set screen mode (parameter: 0-2).");
+   | ---------------------------------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+47 +             const __CHAR_PARAMS_0X04: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x05__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+85 | / define_basic_char!(
+86 | |     0x05,
+87 | |     ENQ = 1,
+88 | |     "Send the parameter character to the graphics cursor"
+89 | | );
+   | |_- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X05: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x06__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+90 | define_basic_char!(0x06, ACK, "Enable text screen.");
+   | ---------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X06: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x07__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+91 | define_basic_char!(0x07, BEL, "Beep.");
+   | -------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X07: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x08__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+92 | define_basic_char!(0x08, BS, "BackSpace / Cursor Left.");
+   | -------------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X08: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x09__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+93 | define_basic_char!(0x09, TAB, "Cursor Right / Tab.");
+   | ---------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X09: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x0A__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+94 | define_basic_char!(0x0A, LF, "Line Feed / Cursor Down.");
+   | -------------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X0_A: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x0B__` should have an upper case name
+  --> cpclib-catart/src/basic_chars.rs:69:19
+   |
+69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+95 | define_basic_char!(0x0B, VT, "Vertical Tab / Cursor Up.");
+   | --------------------------------------------------------- in this macro invocation
+   |
+   = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+   |
+69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+69 +             const __CHAR_PARAMS_0X0_B: u8 = $nb;
+   |
+
+warning: constant `__CHAR_PARAMS_0x0C__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 96 | / define_basic_char!(
+ 97 | |     0x0C,
+ 98 | |     FF,
+ 99 | |     CLS,
+100 | |     "Clear text window and move cursor to top left corner."
+101 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X0_C: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x0D__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+102 | / define_basic_char!(
+103 | |     0x0D,
+104 | |     CR,
+105 | |     "Carriage Return. Left edge of window on current line"
+106 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X0_D: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x0E__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+107 | define_basic_char!(0x0E, SO = 1, PAPER, "Set Paper Ink (parameter: 0-15).");
+    | --------------------------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X0_E: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x0F__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+108 | define_basic_char!(0x0F, SI = 1, PEN, "Set Pen Ink (parameter: 0-15).");
+    | ----------------------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X0_F: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x10__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+109 | define_basic_char!(0x10, DLE, "Delete character under cursor.");
+    | --------------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X10: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x11__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+110 | define_basic_char!(0x11, DC1, "Clear to start of line.");
+    | -------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X11: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x12__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+111 | define_basic_char!(0x12, DC2, "Clear to end of line.");
+    | ------------------------------------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X12: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x13__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+112 | define_basic_char!(0x13, DC3, "Clear to start of screen.");
+    | ---------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X13: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x14__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+113 | define_basic_char!(0x14, DC4, "Clear to end of screen.");
+    | -------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X14: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x15__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+114 | define_basic_char!(0x15, NAK, "Disable text screen.");
+    | ----------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X15: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x16__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+115 | define_basic_char!(0x16, SYN = 1, "Set transparency 0 disable 1 enable");
+    | ------------------------------------------------------------------------ in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X16: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x17__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+116 | / define_basic_char!(
+117 | |     0x17,
+118 | |     ETB = 1,
+119 | |     "Set graphics ink mode. 0 normal, 1 XOR, 2 AND, 3 OR"
+120 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X17: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x18__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+121 | define_basic_char!(0x18, CAN, "Exchange Pen and Paper inks (Reverse).");
+    | ----------------------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X18: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x19__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+122 | / define_basic_char!(
+123 | |     0x19,
+124 | |     EM = 9,
+125 | |     SYMBOL,
+126 | |     "Set the matrix for user definable character (9 parameters)."
+127 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X19: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x1A__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+128 | / define_basic_char!(
+129 | |     0x1A,
+130 | |     SUB = 4,
+131 | |     WINDOW,
+132 | |     "Set Window (parameters: left, right, top, bottom edges)."
+133 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X1_A: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x1B__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+134 | define_basic_char!(0x1B, ESC, "No effecT. Ignored");
+    | --------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X1_B: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x1C__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+135 | / define_basic_char!(
+136 | |     0x1C,
+137 | |     FS = 3,
+138 | |     INK,
+139 | |     "Set Ink to a pair of colors (3 parameters)."
+140 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X1_C: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x1D__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+141 | / define_basic_char!(
+142 | |     0x1D,
+143 | |     GS = 2,
+144 | |     BORDER,
+145 | |     "Set Border to a pair of colors (2 parameters)."
+146 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X1_D: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x1E__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:69:19
+    |
+ 69 |             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+147 | define_basic_char!(0x1E, RS, "Move cursor to top left corner.");
+    | --------------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 69 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 69 +             const __CHAR_PARAMS_0X1_E: u8 = $nb;
+    |
+
+warning: constant `__CHAR_PARAMS_0x1F__` should have an upper case name
+   --> cpclib-catart/src/basic_chars.rs:47:19
+    |
+ 47 |               const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+148 | / define_basic_char!(
+149 | |     0x1F,
+150 | |     US = 2,
+151 | |     LOCATE,
+152 | |     "Move cursor to position (parameters: column, line)."
+153 | | );
+    | |_- in this macro invocation
+    |
+    = note: this warning originates in the macro `define_basic_char` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: convert the identifier to upper case
+    |
+ 47 -             const [<__CHAR_PARAMS_ $hex_value __> ]: u8 = $nb;
+ 47 +             const __CHAR_PARAMS_0X1_F: u8 = $nb;
+    |
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/basic_command.rs:313:5
+    |
+313 |     pub fn move_cursor_down() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/basic_command.rs:339:5
+    |
+339 |     pub fn to_char_commands(&self) -> Result<CharCommandList, String> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-catart/src/char_command.rs:73:5
+   |
+73 |     pub fn iter(&self) -> std::slice::Iter<'_, CharCommand> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> cpclib-catart/src/char_command.rs:77:5
+   |
+77 |     pub fn from_bytes(data: &[u8]) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:132:5
+    |
+132 |     pub fn to_command_string(&self) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:136:5
+    |
+136 |     pub fn to_basic_string(&self) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:144:5
+    |
+144 |     pub fn bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/char_command.rs:214:5
+    |
+214 |     Esc,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/char_command.rs:255:5
+    |
+255 |     String(Vec<u8>) // list of ascii chars
+    |     ^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:313:5
+    |
+313 |     pub fn to_command_string(&self) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:366:5
+    |
+366 |     pub fn len(&self) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:371:5
+    |
+371 |     pub fn first_byte(&self) -> u8 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:376:5
+    |
+376 |     pub fn second_byte(&self) -> u8 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:381:5
+    |
+381 |     pub fn third_byte(&self) -> u8 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:386:5
+    |
+386 |     pub fn normalize(self) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:515:5
+    |
+515 |     pub fn is_mode(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:519:5
+    |
+519 |     pub fn is_pen(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:523:5
+    |
+523 |     pub fn is_paper(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:527:5
+    |
+527 |     pub fn is_ink(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:531:5
+    |
+531 |     pub fn is_border(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:535:5
+    |
+535 |     pub fn is_locate(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:539:5
+    |
+539 |     pub fn is_print_symbol(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:543:5
+    |
+543 |     pub fn to_basic_command(&self) -> Option<BasicCommand> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/char_command.rs:659:5
+    |
+659 |     pub fn to_basic_string(&self) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> cpclib-catart/src/entry.rs:87:5
+   |
+87 |     pub entries: [PrintableEntry; 64]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:139:5
+    |
+139 |     pub fn extract_basic_from_sequential_catart(&self, show_headers: bool) -> BasicProgram {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:237:5
+    |
+237 |     pub fn empty() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:243:5
+    |
+243 |     pub fn new(entries: [PrintableEntry; 64]) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:247:5
+    |
+247 |     pub fn is_empty(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:251:5
+    |
+251 |     pub fn len(&self) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:255:5
+    |
+255 |     pub fn add(&mut self, entry: PrintableEntry) -> Result<(), String> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:266:5
+    |
+266 |     pub fn entries(&self) -> impl Iterator<Item = &PrintableEntry> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:287:5
+    |
+287 |     pub entries: Vec<UnifiedPrintableEntry>
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:308:5
+    |
+308 |     pub fn new(entries: [UnifiedPrintableEntry; 64]) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:315:5
+    |
+315 |     pub fn empty() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:321:5
+    |
+321 |     pub fn push(&mut self, entry: UnifiedPrintableEntry) -> Result<(), String> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:335:5
+    |
+335 |     pub fn size_kb(&self) -> u16 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:339:5
+    |
+339 |     pub fn remaining_size_kb(&self) -> u16 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-catart/src/entry.rs:372:1
+    |
+372 | pub struct UnifiedPrintableEntry {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:373:5
+    |
+373 |     pub user: u8, // Currently ignored. TODO handle user
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:374:5
+    |
+374 |     pub fname: PrintableEntryFileName,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:375:5
+    |
+375 |     pub size_kb: u16
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:428:5
+    |
+428 |     pub fn empty() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:436:5
+    |
+436 |     pub fn fname(&self) -> &PrintableEntryFileName {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:441:5
+    |
+441 |     pub fn all_generated_bytes(&self) -> [u8; 17] {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:453:5
+    |
+453 |     pub fn commands(&self) -> CharCommandList {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:462:5
+    |
+462 |     pub fn size_kb(&self) -> u16 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-catart/src/entry.rs:470:1
+    |
+470 | pub struct PrintableEntry {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:471:5
+    |
+471 |     pub user: u8, // 0 to be printed
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:472:5
+    |
+472 |     pub fname: PrintableEntryFileName,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:473:5
+    |
+473 |     pub pieces: [u8; 4],
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:474:5
+    |
+474 |     pub sectors: [u8; 16]
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:491:5
+    |
+491 |     pub fn empty() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:532:5
+    |
+532 |     pub fn is_empty(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:536:5
+    |
+536 |     pub fn size_kb(&self) -> u16 {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-catart/src/entry.rs:543:1
+    |
+543 | pub struct PrintableEntryFileName {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:544:5
+    |
+544 |     pub f1: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:545:5
+    |
+545 |     pub f2: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:546:5
+    |
+546 |     pub f3: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:547:5
+    |
+547 |     pub f4: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:548:5
+    |
+548 |     pub f5: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:549:5
+    |
+549 |     pub f6: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:550:5
+    |
+550 |     pub f7: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:551:5
+    |
+551 |     pub f8: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:552:5
+    |
+552 |     pub e1: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:553:5
+    |
+553 |     pub e2: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/entry.rs:554:5
+    |
+554 |     pub e3: u8
+    |     ^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-catart/src/entry.rs:558:1
+    |
+558 | pub enum ScreenMode {
+    | ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/entry.rs:559:5
+    |
+559 |     Mode0,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/entry.rs:560:5
+    |
+560 |     Mode1,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/entry.rs:561:5
+    |
+561 |     Mode2
+    |     ^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-catart/src/entry.rs:565:1
+    |
+565 | pub enum DotHiding {
+    | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/entry.rs:567:5
+    |
+567 |     AsModeParameter,
+    |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/entry.rs:569:5
+    |
+569 |     Erased,
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/entry.rs:571:5
+    |
+571 |     KeptAsArgument
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:575:5
+    |
+575 |     pub fn constraint_helper(&self) -> [usize; 2] {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:667:5
+    |
+667 |     pub fn get(&self, row: usize, col: usize) -> Option<&Cow<'cat, UnifiedPrintableEntry>> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:702:5
+    |
+702 |     pub fn commands(&self) -> CharCommandList {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/entry.rs:706:5
+    |
+706 |     pub fn commands_with_params(&self, show_headers: bool) -> CharCommandList {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:757:5
+    |
+757 |     pub fn new<S: AsRef<str>>(fname: S) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/entry.rs:831:5
+    |
+831 | /     pub fn unsorted_heterogeneous_first(
+832 | |         dot_hiding: DotHiding,
+833 | |         mode: u8,
+834 | |         cmd1: u8,
+...   |
+840 | |         cmd7: u8
+841 | |     ) -> Self {
+    | |_____________^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1044:5
+     |
+1044 |     pub fn is_hidden(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1048:5
+     |
+1048 |     pub fn is_system(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1052:5
+     |
+1052 |     pub fn is_read_only(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> cpclib-catart/src/entry.rs:1058:5
+     |
+1058 |     pub fn empty() -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1074:5
+     |
+1074 |     pub fn is_empty(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1078:5
+     |
+1078 |     pub fn filename(&self) -> &[u8] {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1082:5
+     |
+1082 |     pub fn extension(&self) -> &[u8] {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1098:5
+     |
+1098 |     pub fn display_name(&self) -> String {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+    --> cpclib-catart/src/entry.rs:1142:1
+     |
+1142 | pub enum CatArtMode {
+     | ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+    --> cpclib-catart/src/entry.rs:1150:1
+     |
+1150 | pub enum CatalogType {
+     | ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1151:5
+     |
+1151 |     Cat,
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1152:5
+     |
+1152 |     Dir
+     |     ^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1156:5
+     |
+1156 |     pub fn visible_entries(&self) -> impl Iterator<Item = &UnifiedPrintableEntry> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1160:5
+     |
+1160 |     pub fn visible_sorted_entries(&self, order: CatalogType) -> Vec<&UnifiedPrintableEntry> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1178:5
+     |
+1178 | /     pub fn visible_entries_by_mode_and_order(
+1179 | |         &self,
+1180 | |         mode: ScreenMode,
+1181 | |         order: CatalogType
+1182 | |     ) -> EntriesGrid {
+     | |____________________^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> cpclib-catart/src/entry.rs:1179:9
+     |
+1179 |         &self,
+     |         ^^^^^ the lifetime is elided here
+...
+1182 |     ) -> EntriesGrid {
+     |          ^^^^^^^^^^^ the same lifetime is hidden here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+     = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+     |
+1182 |     ) -> EntriesGrid<'_> {
+     |                     ++++
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1220:5
+     |
+1220 | /     pub fn commands_by_mode_and_order(
+1221 | |         &self,
+1222 | |         mode: ScreenMode,
+1223 | |         order: CatalogType
+1224 | |     ) -> CharCommandList {
+     | |________________________^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1228:5
+     |
+1228 | /     pub fn commands_by_mode_and_order_with_params(
+1229 | |         &self,
+1230 | |         mode: ScreenMode,
+1231 | |         order: CatalogType,
+1232 | |         show_headers: bool
+1233 | |     ) -> CharCommandList {
+     | |________________________^
+
+warning: missing documentation for an enum
+    --> cpclib-catart/src/entry.rs:1284:1
+     |
+1284 | pub enum EntryConstraintItem {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1285:5
+     |
+1285 |     Mode,   // Mode command is expected
+     |     ^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1286:5
+     |
+1286 |     Locate, // Locate command is expected
+     |     ^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1287:5
+     |
+1287 |     Pen,    // Pen command is expected
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1288:5
+     |
+1288 |     Any(usize)
+     |     ^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1292:5
+     |
+1292 |     pub fn respect(&self, cmd: &CharCommand) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1301:5
+     |
+1301 |     pub fn consume(self, cmd: &CharCommand) -> Option<EntryConstraintItem> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1344:5
+     |
+1344 |     pub fn skip_first_byte(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> cpclib-catart/src/entry.rs:1352:1
+     |
+1352 | pub struct EntryConstraint {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1365:5
+     |
+1365 |     pub fn real_size(&self) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1369:5
+     |
+1369 |     pub fn encoded_size(&self) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1373:5
+     |
+1373 |     pub fn iter(&self) -> impl Iterator<Item = &EntryConstraintItem> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1410:5
+     |
+1410 |     pub fn consume_with_nops(mut self) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1427:5
+     |
+1427 |     SequentialFirstWithMode(DotHiding),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1429:5
+     |
+1429 |     SequentialFirstWithoutMode(DotHiding),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1431:5
+     |
+1431 |     SequentialBasic(DotHiding),
+     |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1433:5
+     |
+1433 |     UnsortedHomogeneous(DotHiding),
+     |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1435:5
+     |
+1435 |     UnsortedHeterogeneousFirst(DotHiding),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1437:5
+     |
+1437 |     UnsortedHeterogeneousBaseColor(DotHiding),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-catart/src/entry.rs:1439:5
+     |
+1439 |     UnsortedHeterogeneousAdditionalColor(DotHiding)
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1443:5
+     |
+1443 |     pub fn requires_mode_as_first_command(&self) -> bool {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1506:5
+     |
+1506 |     pub fn build_entry(&self, cmds: &[CharCommand], index: Option<u8>) -> PrintableEntryFileName {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1610:5
+     |
+1610 |     pub fn constraint(&self) -> EntryConstraint {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> cpclib-catart/src/entry.rs:1683:5
+     |
+1683 |     pub fn new() -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/entry.rs:1794:5
+     |
+1794 | /     pub fn index_entries(
+1795 | |         &self,
+1796 | |         entries: Vec<PrintableEntryFileName>,
+1797 | |         start_mode: ScreenMode
+1798 | |     ) -> UnifiedCatalog {
+     | |_______________________^
+
+warning: missing documentation for a struct
+ --> cpclib-catart/src/interpret.rs:5:1
+  |
+5 | pub struct Cursor {
+  | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> cpclib-catart/src/interpret.rs:6:5
+  |
+6 |     pub x: u16,
+  |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> cpclib-catart/src/interpret.rs:7:5
+  |
+7 |     pub y: u16,
+  |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> cpclib-catart/src/interpret.rs:8:5
+  |
+8 |     pub visible: bool
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> cpclib-catart/src/interpret.rs:12:5
+   |
+12 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-catart/src/interpret.rs:20:5
+   |
+20 |     pub fn locate(&mut self, x: u16, y: u16, mode: &Mode) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-catart/src/interpret.rs:26:5
+   |
+26 |     pub fn inc_x(&mut self, mode: &Mode) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-catart/src/interpret.rs:35:5
+   |
+35 |     pub fn dec_x(&mut self, mode: &Mode) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-catart/src/interpret.rs:46:5
+   |
+46 |     pub fn inc_y(&mut self, mode: &Mode) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-catart/src/interpret.rs:54:5
+   |
+54 |     pub fn dec_y(&mut self, _mode: &Mode) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-catart/src/interpret.rs:112:1
+    |
+112 | pub enum Mode {
+    | ^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/interpret.rs:113:5
+    |
+113 |     Mode0,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/interpret.rs:114:5
+    |
+114 |     Mode1,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-catart/src/interpret.rs:115:5
+    |
+115 |     Mode2
+    |     ^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:128:5
+    |
+128 |     pub fn buffer(&self) -> Vec<Vec<u8>> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:142:5
+    |
+142 |     pub fn max_pens(&self) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:221:5
+    |
+221 |     pub fn reset_mode(&mut self, mode: cpclib_image::image::Mode, pen: Pen, paper: Pen) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:227:5
+    |
+227 |     pub fn cls(&mut self, _pen: Pen, paper: Pen) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:442:5
+    |
+442 |     pub fn to_color_matrix(&self) -> Option<cpclib_image::image::ColorMatrix> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-catart/src/interpret.rs:601:1
+    |
+601 | pub struct ScreenCell {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/interpret.rs:602:5
+    |
+602 |     pub ch: u8,
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/interpret.rs:603:5
+    |
+603 |     pub pen: Pen,
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-catart/src/interpret.rs:604:5
+    |
+604 |     pub paper: Pen
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/interpret.rs:608:5
+    |
+608 |     pub fn make(ch: u8, pen: Pen, paper: Pen) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-catart/src/interpret.rs:614:1
+    |
+614 | pub struct Screen {
+    | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:620:5
+    |
+620 |     pub fn reset_mode(&mut self, mode: Mode, pen: Pen, paper: Pen) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:625:5
+    |
+625 |     pub fn cls(&mut self, pen: Pen, paper: Pen) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:629:5
+    |
+629 |     pub fn resolution(&self) -> (u16, u16) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:638:5
+    |
+638 |     pub fn cell_mut(&mut self, x: u16, y: u16) -> Option<&mut ScreenCell> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:648:5
+    |
+648 |     pub fn cell(&self, x: u16, y: u16) -> Option<&ScreenCell> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/interpret.rs:691:5
+    |
+691 |     pub fn new_6128() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:751:5
+    |
+751 |     pub fn inc_cursor_x(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:764:5
+    |
+764 |     pub fn dec_cursor_x(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:780:5
+    |
+780 |     pub fn inc_cursor_y(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:793:5
+    |
+793 |     pub fn dec_cursor_y(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:803:5
+    |
+803 |     pub fn locate_cursor(&mut self, x: u16, y: u16) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:812:5
+    |
+812 |     pub fn move_cursor_to_left(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:841:5
+    |
+841 |     pub fn scroll_screen_up(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:906:5
+    |
+906 |     pub fn scroll_screen_down(&mut self) {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:947:5
+    |
+947 | /     pub fn interpret<'a, I>(&mut self, commands: I, print_ready: bool...
+948 | |     where I: IntoIterator<Item = &'a CharCommand> {
+    | |_________________________________________________^
+
+warning: missing documentation for a method
+   --> cpclib-catart/src/interpret.rs:995:5
+    |
+995 |     pub fn mode(&self) -> Mode {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-catart/src/interpret.rs:1000:5
+     |
+1000 |     pub fn interpret_command(&mut self, command: &CharCommand) -> Result<(), String> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-catart/src/interpret.rs:674:1
+    |
+674 | #[bon::bon]
+    | ^^^^^^^^^^^
+
+warning: `cpclib-catart` (lib) generated 219 warnings (run `cargo fix --lib -p cpclib-catart` to apply 47 suggestions)
+   Compiling cpclib-asmfmt v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-asmfmt)
+   Compiling cpclib-runner v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-runner)
+warning: variant `V_2_0` should have an upper camel case name
+  --> cpclib-runner/src/runner/hspcompiler.rs:13:5
+   |
+13 |     V_2_0 // V2_2_5
+   |     ^^^^^ help: convert the identifier to upper camel case: `V2_0`
+   |
+   = note: `#[warn(non_camel_case_types)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: type `RobotImpl<AceUsedEmulator>` is more private than the item `Robot::Ace::0`
+    --> cpclib-runner/src/emucontrol.rs:1191:9
+     |
+1191 |     Ace(RobotImpl<AceUsedEmulator>),
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Ace::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<AceUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `AceUsedEmulator` is more private than the item `Robot::Ace::0`
+    --> cpclib-runner/src/emucontrol.rs:1191:9
+     |
+1191 |     Ace(RobotImpl<AceUsedEmulator>),
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Ace::0` is reachable at visibility `pub`
+     |
+note: but type `AceUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1105:1
+     |
+1105 | struct AceUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<CpcecUsedEmulator>` is more private than the item `Robot::Cpcec::0`
+    --> cpclib-runner/src/emucontrol.rs:1192:11
+     |
+1192 |     Cpcec(RobotImpl<CpcecUsedEmulator>),
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Cpcec::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<CpcecUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `CpcecUsedEmulator` is more private than the item `Robot::Cpcec::0`
+    --> cpclib-runner/src/emucontrol.rs:1192:11
+     |
+1192 |     Cpcec(RobotImpl<CpcecUsedEmulator>),
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Cpcec::0` is reachable at visibility `pub`
+     |
+note: but type `CpcecUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1106:1
+     |
+1106 | struct CpcecUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<WinapeUsedEmulator>` is more private than the item `Robot::Winape::0`
+    --> cpclib-runner/src/emucontrol.rs:1193:12
+     |
+1193 |     Winape(RobotImpl<WinapeUsedEmulator>),
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Winape::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<WinapeUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `WinapeUsedEmulator` is more private than the item `Robot::Winape::0`
+    --> cpclib-runner/src/emucontrol.rs:1193:12
+     |
+1193 |     Winape(RobotImpl<WinapeUsedEmulator>),
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Winape::0` is reachable at visibility `pub`
+     |
+note: but type `WinapeUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1107:1
+     |
+1107 | struct WinapeUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<AmspiritUsedEmulator>` is more private than the item `Robot::Amspirit::0`
+    --> cpclib-runner/src/emucontrol.rs:1194:14
+     |
+1194 |     Amspirit(RobotImpl<AmspiritUsedEmulator>),
+     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Amspirit::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<AmspiritUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `AmspiritUsedEmulator` is more private than the item `Robot::Amspirit::0`
+    --> cpclib-runner/src/emucontrol.rs:1194:14
+     |
+1194 |     Amspirit(RobotImpl<AmspiritUsedEmulator>),
+     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Amspirit::0` is reachable at visibility `pub`
+     |
+note: but type `AmspiritUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1108:1
+     |
+1108 | struct AmspiritUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<SugarBoxV2UsedEmulator>` is more private than the item `Robot::SugarboxV2::0`
+    --> cpclib-runner/src/emucontrol.rs:1195:16
+     |
+1195 |     SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::SugarboxV2::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<SugarBoxV2UsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `SugarBoxV2UsedEmulator` is more private than the item `Robot::SugarboxV2::0`
+    --> cpclib-runner/src/emucontrol.rs:1195:16
+     |
+1195 |     SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
+     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::SugarboxV2::0` is reachable at visibility `pub`
+     |
+note: but type `SugarBoxV2UsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1109:1
+     |
+1109 | struct SugarBoxV2UsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<CpcEmuPowerUsedEmulator>` is more private than the item `Robot::CpcEmuPower::0`
+    --> cpclib-runner/src/emucontrol.rs:1196:17
+     |
+1196 |     CpcEmuPower(RobotImpl<CpcEmuPowerUsedEmulator>),
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::CpcEmuPower::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<CpcEmuPowerUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `CpcEmuPowerUsedEmulator` is more private than the item `Robot::CpcEmuPower::0`
+    --> cpclib-runner/src/emucontrol.rs:1196:17
+     |
+1196 |     CpcEmuPower(RobotImpl<CpcEmuPowerUsedEmulator>),
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::CpcEmuPower::0` is reachable at visibility `pub`
+     |
+note: but type `CpcEmuPowerUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1110:1
+     |
+1110 | struct CpcEmuPowerUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<CpcEmuUsedEmulator>` is more private than the item `Robot::CpcEmu::0`
+    --> cpclib-runner/src/emucontrol.rs:1197:12
+     |
+1197 |     CpcEmu(RobotImpl<CpcEmuUsedEmulator>),
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::CpcEmu::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<CpcEmuUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `CpcEmuUsedEmulator` is more private than the item `Robot::CpcEmu::0`
+    --> cpclib-runner/src/emucontrol.rs:1197:12
+     |
+1197 |     CpcEmu(RobotImpl<CpcEmuUsedEmulator>),
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::CpcEmu::0` is reachable at visibility `pub`
+     |
+note: but type `CpcEmuUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1111:1
+     |
+1111 | struct CpcEmuUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<RetroVmUsedEmulator>` is more private than the item `Robot::RetroVm::0`
+    --> cpclib-runner/src/emucontrol.rs:1198:13
+     |
+1198 |     RetroVm(RobotImpl<RetroVmUsedEmulator>),
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::RetroVm::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<RetroVmUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RetroVmUsedEmulator` is more private than the item `Robot::RetroVm::0`
+    --> cpclib-runner/src/emucontrol.rs:1198:13
+     |
+1198 |     RetroVm(RobotImpl<RetroVmUsedEmulator>),
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::RetroVm::0` is reachable at visibility `pub`
+     |
+note: but type `RetroVmUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1112:1
+     |
+1112 | struct RetroVmUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<CapriceForeverUsedEmulator>` is more private than the item `Robot::CapriceForever::0`
+    --> cpclib-runner/src/emucontrol.rs:1199:20
+     |
+1199 |     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>),
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::CapriceForever::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<CapriceForeverUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `CapriceForeverUsedEmulator` is more private than the item `Robot::CapriceForever::0`
+    --> cpclib-runner/src/emucontrol.rs:1199:20
+     |
+1199 |     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>),
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::CapriceForever::0` is reachable at visibility `pub`
+     |
+note: but type `CapriceForeverUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1114:1
+     |
+1114 | struct CapriceForeverUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<CadenceUsedEmulator>` is more private than the item `Robot::Cadence::0`
+    --> cpclib-runner/src/emucontrol.rs:1200:13
+     |
+1200 |     Cadence(RobotImpl<CadenceUsedEmulator>),
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Cadence::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<CadenceUsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `CadenceUsedEmulator` is more private than the item `Robot::Cadence::0`
+    --> cpclib-runner/src/emucontrol.rs:1200:13
+     |
+1200 |     Cadence(RobotImpl<CadenceUsedEmulator>),
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Cadence::0` is reachable at visibility `pub`
+     |
+note: but type `CadenceUsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1115:1
+     |
+1115 | struct CadenceUsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `RobotImpl<Emulator1984UsedEmulator>` is more private than the item `Robot::Emulator1984::0`
+    --> cpclib-runner/src/emucontrol.rs:1201:18
+     |
+1201 |     Emulator1984(RobotImpl<Emulator1984UsedEmulator>)
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Emulator1984::0` is reachable at visibility `pub`
+     |
+note: but type `RobotImpl<Emulator1984UsedEmulator>` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1169:1
+     |
+1169 | struct RobotImpl<E: UsedEmulator> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Emulator1984UsedEmulator` is more private than the item `Robot::Emulator1984::0`
+    --> cpclib-runner/src/emucontrol.rs:1201:18
+     |
+1201 |     Emulator1984(RobotImpl<Emulator1984UsedEmulator>)
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ field `Robot::Emulator1984::0` is reachable at visibility `pub`
+     |
+note: but type `Emulator1984UsedEmulator` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:1116:1
+     |
+1116 | struct Emulator1984UsedEmulator {}
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `WindowEventsManager` is more private than the item `Robot::new`
+    --> cpclib-runner/src/emucontrol.rs:1420:5
+     |
+1420 | /     pub fn new(
+1421 | |         emu: &Emulator,
+1422 | |         window: Option<EmuWindow>,
+1423 | |         eventsManager: WindowEventsManager
+1424 | |     ) -> Self {
+     | |_____________^ associated function `Robot::new` is reachable at visibility `pub`
+     |
+note: but type `WindowEventsManager` is only usable at visibility `pub(self)`
+    --> cpclib-runner/src/emucontrol.rs:153:1
+     |
+ 153 | enum WindowEventsManager {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `shift_char` is never used
+   --> cpclib-runner/src/emucontrol.rs:322:12
+    |
+298 | impl WindowEventsManager {
+    | ------------------------ method in this implementation
+...
+322 |     pub fn shift_char<K: Into<HostKey>>(&mut self, c: K) {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `transparent` is never read
+   --> cpclib-runner/src/runner/runner.rs:128:5
+    |
+126 | pub struct ExternRunner<E: EventObserver> {
+    |            ------------ field in this struct
+127 |     in_dir: RunInDir,
+128 |     transparent: bool,
+    |     ^^^^^^^^^^^
+
+warning: variable `eventsManager` should have a snake case name
+    --> cpclib-runner/src/emucontrol.rs:1423:9
+     |
+1423 |         eventsManager: WindowEventsManager
+     |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `events_manager`
+     |
+     = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: `cpclib-runner` (lib) generated 27 warnings
+   Compiling cpclib-catalog v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-catalog)
+   Compiling cpclib-basmdoc v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-basmdoc)
+warning: unreachable statement
+   --> cpclib-basmdoc/src/lib.rs:248:29
+    |
+239 | /                             unreachable!(
+240 | |                                 "No explicit source item found for file: {}. This is an impossibl...
+241 | |                                 fname
+242 | |                             );
+    | |_____________________________- any code following this expression is unreachable
+...
+248 |                               let mut code = fs_err::read_to_string(&fname).unwrap_or_default();
+    |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unreachable statement
+   --> cpclib-basmdoc/src/lib.rs:292:29
+    |
+285 | /                             unreachable!(
+286 | |                                 "No explicit source item found for merged file: {}. This is an ...
+287 | |                                 mf.source_file
+288 | |                             );
+    | |_____________________________- any code following this expression is unreachable
+...
+292 | /                             let mut code =
+293 | |                                 fs_err::read_to_string(&mf.source_file).unwrap_or_default();
+    | |____________________________________________________________________________________________^ unreachable statement
+
+warning: associated function `normalize_path` is never used
+    --> cpclib-basmdoc/src/lib.rs:1002:8
+     |
+ 360 | impl DocumentationPage {
+     | ---------------------- associated function in this implementation
+...
+1002 |     fn normalize_path(path: &str) -> String {
+     |        ^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `replace_symbol_in_text` is never used
+   --> cpclib-basmdoc/src/syntax.rs:247:15
+    |
+247 | pub(crate) fn replace_symbol_in_text(text: &str, symbol: &str, key: &st...
+    |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `cpclib-basmdoc` (lib) generated 4 warnings
+   Compiling cpclib-bdasm v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-bdasm)
+warning: unused import: `CommandFactory`
+ --> cpclib-bdasm/src/lib.rs:5:12
+  |
+5 | use clap::{CommandFactory, Parser};
+  |            ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `length` is never read
+   --> cpclib-bdasm/src/lib.rs:157:5
+    |
+155 | struct BdAsmEnv {
+    |        -------- field in this struct
+156 |     origin: Option<u16>,
+157 |     length: Option<u16>,
+    |     ^^^^^^
+    |
+    = note: `BdAsmEnv` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `DisassemblyStats` is never constructed
+  --> cpclib-bdasm/src/analysis.rs:14:12
+   |
+14 | pub struct DisassemblyStats {
+   |            ^^^^^^^^^^^^^^^^
+
+warning: function `generate_xref` is never used
+   --> cpclib-bdasm/src/analysis.rs:290:8
+    |
+290 | pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
+    |        ^^^^^^^^^^^^^
+
+warning: function `calculate_stats` is never used
+   --> cpclib-bdasm/src/analysis.rs:325:8
+    |
+325 | pub fn calculate_stats(
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `detect_cpc_strings` is never used
+ --> cpclib-bdasm/src/cpc_strings.rs:7:8
+  |
+7 | pub fn detect_cpc_strings(bytes: &[u8], min_length: usize) -> Vec<(usize,...
+  |        ^^^^^^^^^^^^^^^^^^
+
+warning: `cpclib-bdasm` (lib) generated 6 warnings (run `cargo fix --lib -p cpclib-bdasm` to apply 1 suggestion)
+   Compiling cpclib-imgconverter v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-imgconverter)
+warning: unused doc comment
+   --> cpclib-imgconverter/src/lib.rs:846:9
+    |
+846 |           /// TODO manage the presence/absence of file in the dsk, the choice of filename and so on
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+847 | /         if sub_dsk.is_some() || sub_exec.is_some() {
+848 | |             let code = match &conversion {
+849 | |                 Output::CPCMemoryStandard(memory, pal) => {
+850 | |                     standard_linked_code(output_mode, pal, memory)
+...   |
+912 | |         }
+    | |_________- rustdoc does not generate documentation for expressions
+    |
+    = help: use `//` for a plain comment
+    = note: `#[warn(unused_doc_comments)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `lz4_compress` is never used
+   --> cpclib-imgconverter/src/lib.rs:366:4
+    |
+366 | fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
+    |    ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `overscan_display_code` is never used
+   --> cpclib-imgconverter/src/lib.rs:526:4
+    |
+526 | fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) ->...
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: `cpclib-imgconverter` (lib) generated 3 warnings
+   Compiling cpclib-xfertool v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-xfertool)
+   Compiling cpclib-crunch v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-crunch)
+warning: unused import: `CommandFactory`
+ --> cpclib-cslcli/src/lib.rs:2:12
+  |
+2 | use clap::{CommandFactory, Parser};
+  |            ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cpclib-cslcli` (lib) generated 1 warning (run `cargo fix --lib -p cpclib-cslcli` to apply 1 suggestion)
+   Compiling cpclib-locomotive v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-locomotive)
+   Compiling hxcfe_cli v0.3.2
+   Compiling cpclib-bndbuild v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-bndbuild)
+warning: unused import: `cpclib_common::itertools::Itertools`
+ --> cpclib-bndbuild/src/task.rs:9:5
+  |
+9 | use cpclib_common::itertools::Itertools;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `skipped` is never read
+   --> cpclib-bndbuild/src/builder.rs:530:27
+    |
+530 |         let mut skipped = false;
+    |                           ^^^^^ this value is reassigned later and never used
+...
+544 |             skipped = done;
+    |             -------------- `skipped` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary `unsafe` block
+   --> cpclib-bndbuild/src/task.rs:144:9
+    |
+144 | ...   unsafe { COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxe...
+    |       ^^^^^^ unnecessary `unsafe` block
+    |
+    = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cpclib-bndbuild` (lib) generated 3 warnings
+warning: unreachable pattern
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:48:25
+   |
+46 | ...   MARKER_ASSIGN | MARKER_BYTE | MARKER_COMMENT | MARKER_ESCAPE | MAR...
+   |                       ----------- matches all the relevant values
+47 | ...   | MARKER_LABEL_ADDR | MARKER_LOCAL_LABEL | MARKER_MACRO_DEF | MARK...
+48 | ...   | MARKER_WORD | MARKER_BYTE | 0x52 | 0x58 | 0x5B => true,
+   |                       ^^^^^^^^^^^ no value can reach this
+   |
+   = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+warning: unreachable pattern
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:2139:9
+     |
+2101 | ...   EXP_OP_PAREN_OPEN => {
+     |       ----------------- matches all the relevant values
+...
+2139 | ...   EXP_OP_PAREN_OPEN => Ok(ExpressionMember::Operator(Operator::Par...
+     |       ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:2140:9
+     |
+2094 | ...   EXP_OP_PAREN_CLOSE => {
+     |       ------------------ matches all the relevant values
+...
+2140 | ...   EXP_OP_PAREN_CLOSE => Ok(ExpressionMember::Operator(Operator::Pa...
+     |       ^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:2151:9
+     |
+2143 |         EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
+     |         --------- matches all the relevant values
+...
+2151 |         EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
+     |         ^^^^^^^^^ no value can reach this
+
+warning: constant `EXP_NONE` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:206:7
+    |
+206 | const EXP_NONE: u8 = b'?'; // no data (.byte ou .word seul)
+    |       ^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `CMD_BRK_SET` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:247:7
+    |
+247 | const CMD_BRK_SET: u8 = 17;
+    |       ^^^^^^^^^^^
+
+warning: constant `CMD_BANK` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:249:7
+    |
+249 | const CMD_BANK: u8 = 19;
+    |       ^^^^^^^^
+
+warning: constant `CMD_LOAD` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:252:7
+    |
+252 | const CMD_LOAD: u8 = 22;
+    |       ^^^^^^^^
+
+warning: constant `CMD_STR` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:254:7
+    |
+254 | const CMD_STR: u8 = 24;
+    |       ^^^^^^^
+
+warning: constant `CMD_SAVE` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:255:7
+    |
+255 | const CMD_SAVE: u8 = 25;
+    |       ^^^^^^^^
+
+warning: constant `CMD_SAVEA` is never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:256:7
+    |
+256 | const CMD_SAVEA: u8 = 26;
+    |       ^^^^^^^^^
+
+warning: associated items `empty` and `add` are never used
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:611:8
+    |
+602 | impl StringTable {
+    | ---------------- associated items in this implementation
+...
+611 |     fn empty() -> Self {
+    |        ^^^^^
+...
+625 |     fn add(&mut self, s: Vec<u8>) -> usize {
+    |        ^^^
+
+warning: method `is_empty` is never used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1589:8
+     |
+1472 | impl<'f, 'g> DisplayState<'f, 'g> {
+     | --------------------------------- method in this implementation
+...
+1589 |     fn is_empty(&self) -> bool {
+     |        ^^^^^^^^
+
+warning: function `parse_items_untils_lbls` is never used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1819:4
+     |
+1819 | fn parse_items_untils_lbls(input: &mut Input) -> OrgamsParseResult<Vec...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_import` is never used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1934:4
+     |
+1934 | fn parse_import(input: &mut Input) -> OrgamsParseResult<SizedString> {
+     |    ^^^^^^^^^^^^
+
+warning: function `parse_item_with_endline` is never used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1939:4
+     |
+1939 | fn parse_item_with_endline(input: &mut Input) -> OrgamsParseResult<Ite...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_label_ref_item` is never used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:2261:4
+     |
+2261 | fn parse_label_ref_item(input: &mut Input) -> OrgamsParseResult<Item> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `prefix_to_table` is never used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:2700:4
+     |
+2700 | fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
+     |    ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> cpclib-orgams-ascii/src/lib.rs:9:1
+  |
+9 | pub mod convert;
+  | ^^^^^^^^^^^^^^^
+  |
+note: the lint level is defined here
+ --> cpclib-orgams-ascii/src/lib.rs:6:9
+  |
+6 | #![warn(missing_docs)]
+  |         ^^^^^^^^^^^^
+
+warning: missing documentation for a type alias
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:22:1
+   |
+22 | pub type Input<'a> = LocatingSlice<&'a [u8]>;
+   | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a type alias
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:23:1
+   |
+23 | pub type OrgamsParseResult<T> = ModalResult<T>;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:54:1
+   |
+54 | pub enum InstructionPrefix {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:55:5
+   |
+55 |     None,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:56:5
+   |
+56 |     DD,
+   |     ^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:57:5
+   |
+57 |     FD,
+   |     ^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:58:5
+   |
+58 |     DDCB,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:59:5
+   |
+59 |     FDCB,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:60:5
+   |
+60 |     DF,
+   |     ^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:61:5
+   |
+61 |     FF,
+   |     ^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:62:5
+   |
+62 |     DFCB,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:63:5
+   |
+63 |     FFCB,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:64:5
+   |
+64 |     CB,
+   |     ^^
+
+warning: missing documentation for a variant
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:65:5
+   |
+65 |     ED
+   |     ^^
+
+warning: missing documentation for an associated function
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:69:5
+   |
+69 |     pub fn from_byte(b: u8) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:81:5
+   |
+81 |     pub fn from_bytes(first: u8, second: u8) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> cpclib-orgams-ascii/src/binary_decoder.rs:96:5
+   |
+96 |     pub fn bytes(&self) -> &[u8] {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:112:5
+    |
+112 |     pub fn is_prefix(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:116:5
+    |
+116 |     pub const fn is_valid_prefix(b: u8) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:123:5
+    |
+123 |     pub const fn disassembler_table(&self) -> &'static [&'static str; 256] {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:135:5
+    |
+135 |     pub const fn requires_extra_expression(&self, opcode: u8) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:145:5
+    |
+145 |     pub const fn is_orgams_ix_iy_indirect(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:272:5
+    |
+272 |     pub chunks: Vec<Chunk>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:273:5
+    |
+273 |     pub labels: StringTable
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:277:1
+    |
+277 | pub struct Line {
+    | ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:278:5
+    |
+278 |     pub items: Vec<Item>
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:290:5
+    |
+290 |     pub fn bytes(&self, labels: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:297:5
+    |
+297 |     pub fn iter(&self) -> impl Iterator<Item = &Item> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:303:1
+    |
+303 | pub struct Chunk {
+    | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:304:5
+    |
+304 |     pub lines: Vec<Line>
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:329:5
+    |
+329 |     pub fn items(&self) -> impl Iterator<Item = &Item> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:335:5
+    |
+335 |     pub fn items(&self) -> impl Iterator<Item = &Item> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:339:5
+    |
+339 |     pub fn bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:357:5
+    |
+357 |     pub fn header_bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:366:5
+    |
+366 |     pub fn labels_bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:377:5
+    |
+377 |     pub fn checksum_bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:398:5
+    |
+398 |     LocalLabel(LabelRef),
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:406:1
+    |
+406 | pub struct Indent(pub u8);
+    | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:409:1
+    |
+409 | pub struct Comment(pub SizedString);
+    | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:427:5
+    |
+427 |     pub fn new(bytes: &[u8]) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:435:5
+    |
+435 |     pub fn bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:453:1
+    |
+453 | pub struct OrgamsEncodedString(Vec<u8>);
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:471:5
+    |
+471 |     pub fn as_bytes(&self) -> &[u8] {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:477:1
+    |
+477 | pub struct SizedString(OrgamsEncodedString);
+    | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:499:5
+    |
+499 |     pub fn bytes(&self) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:508:5
+    |
+508 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:536:5
+    |
+536 |     pub fn display<'i>(&'i self, labels: &StringTable) -> Cow<'i, str> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:566:5
+    |
+566 |     Short(u8),
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:567:5
+    |
+567 |     Long(u8, u8)
+    |     ^^^^
+
+warning: comparison is useless due to type limits
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:577:51
+    |
+577 | ...   debug_assert!(long >= LONG_LABEL_START && long <= 0xFF); // XXX I...
+    |                                                 ^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_comparisons)]` on by default
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:581:5
+    |
+581 |     pub fn get<'t>(&self, table: &'t StringTable) -> &'t OrgamsEncodedString {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:585:5
+    |
+585 |     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:592:5
+    |
+592 |     pub fn display(&self, table: &StringTable) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:598:1
+    |
+598 | pub struct StringTable {
+    | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:603:5
+    |
+603 |     pub fn len(&self) -> usize {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:607:5
+    |
+607 |     pub fn iter(&self) -> impl Iterator<Item = &Bit7OnString> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:617:5
+    |
+617 |     pub fn from_vec_bit7on_texts(strings: Vec<Bit7OnString>) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:650:5
+    |
+650 |     MultiTerm(Vec<ExpressionMember>),
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:651:5
+    |
+651 |     SingleTerm(ExpressionMember)
+    |     ^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:673:1
+    |
+673 | pub enum SizedExpression {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:674:5
+    |
+674 |     Empty,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:675:5
+    |
+675 |     Sized(Expression)
+    |     ^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:679:1
+    |
+679 | pub enum ExpressionMember {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:680:5
+    |
+680 |     ShortDecimal(u8), // number between 0-31
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:681:5
+    |
+681 |     Value(Value),     // decimal/hexadecimal/binary 8/16/custom
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:682:5
+    |
+682 |     Operator(Operator),
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:683:5
+    |
+683 |     LabelRef(LabelRef),                // Label reference 0x60-0xFF
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:684:5
+    |
+684 |     LocalLabelRef(LabelRef),           // Local label reference startin...
+    |     ^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:685:5
+    |
+685 |     Space,                             // 0x20
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:686:5
+    |
+686 |     Dollar,                            // 0x24 ($)
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:687:5
+    |
+687 |     DoubleDollar,                      // 0x44 ($$)
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:688:5
+    |
+688 |     UnaryMinus(Box<ExpressionMember>), // '#'
+    |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:689:5
+    |
+689 |     String(SizedString),
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:690:5
+    |
+690 |     ParenthesizedExpression(Vec<ExpressionMember>),
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:691:5
+    |
+691 |     Iter(u8) // 'I', 'J', 'K'
+    |     ^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:695:1
+    |
+695 | pub enum Operator {
+    | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:696:5
+    |
+696 |     Or,
+    |     ^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:697:5
+    |
+697 |     Xor,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:699:5
+    |
+699 |     LessThan,
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:700:5
+    |
+700 |     GreaterThan,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:701:5
+    |
+701 |     Equal,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:703:5
+    |
+703 |     LessEqual,    // 'L'
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:704:5
+    |
+704 |     GreaterEqual, // 'M'
+    |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:705:5
+    |
+705 |     NotEqual,     //
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:707:5
+    |
+707 |     And,
+    |     ^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:708:5
+    |
+708 |     Plus,       // 0x2b
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:709:5
+    |
+709 |     Minus,      // 0x2d
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:710:5
+    |
+710 |     Multiply,   // 0x2a
+    |     ^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:711:5
+    |
+711 |     Divide,     // 0x2f
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:712:5
+    |
+712 |     Modulo,     // 0x25
+    |     ^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:713:5
+    |
+713 |     ParenOpen,  // 0x28
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:714:5
+    |
+714 |     ParenClose  // 0x29
+    |     ^^^^^^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:718:1
+    |
+718 | pub enum ValueBasis {
+    | ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:719:5
+    |
+719 |     Decimal,
+    |     ^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:720:5
+    |
+720 |     Hexadecimal,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:721:5
+    |
+721 |     Binary
+    |     ^^^^^^
+
+warning: missing documentation for an enum
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:725:1
+    |
+725 | pub enum ValueContent {
+    | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:726:5
+    |
+726 |     EightBits(u8),
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:727:5
+    |
+727 |     SixteenBits(u16),
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:728:5
+    |
+728 |     Custom(Vec<u8>)
+    |     ^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:732:1
+    |
+732 | pub struct Value {
+    | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:733:5
+    |
+733 |     pub basis: ValueBasis,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:734:5
+    |
+734 |     pub content: ValueContent
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:738:5
+    |
+738 |     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:765:5
+    |
+765 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:830:5
+    |
+830 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:851:5
+    |
+851 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:865:5
+    |
+865 |     pub fn is_empty(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:869:5
+    |
+869 |     pub fn expr(&self) -> Option<&Expression> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:876:5
+    |
+876 |     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:885:1
+    |
+885 | pub struct Assign {
+    | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:886:5
+    |
+886 |     pub label: LabelRef,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:887:5
+    |
+887 |     pub expression: SizedExpression
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:891:5
+    |
+891 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:908:5
+    |
+908 |     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:924:5
+    |
+924 |     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:959:5
+    |
+959 |     pub fn as_str(&self) -> &'static str {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> cpclib-orgams-ascii/src/binary_decoder.rs:982:5
+    |
+982 |     pub fn display(&self) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1004:5
+     |
+1004 |     pub fn display(&self, table: &StringTable) -> String {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1014:1
+     |
+1014 | pub struct MacroDef {
+     | ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1017:5
+     |
+1017 |     pub name: LabelRef,
+     |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1018:5
+     |
+1018 |     pub params: Vec<LabelRef>
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1022:5
+     |
+1022 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1056:5
+     |
+1056 |     pub fn display(&self, table: &StringTable) -> String {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1077:5
+     |
+1077 |     Brk,
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1078:5
+     |
+1078 |     Byte(Vec<Expression>),
+     |     ^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1079:5
+     |
+1079 |     Else,
+     |     ^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1080:5
+     |
+1080 |     End,
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1081:5
+     |
+1081 |     EndBis,
+     |     ^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1082:5
+     |
+1082 |     EndMacro,
+     |     ^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1083:5
+     |
+1083 |     Ent(SizedExpression),
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1084:5
+     |
+1084 |     Fill(SizedExpression, SizedExpression),
+     |     ^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1085:5
+     |
+1085 |     If(SizedExpression),
+     |     ^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1086:5
+     |
+1086 |     Import(SizedString),
+     |     ^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1087:5
+     |
+1087 |     Instruction(Instruction),
+     |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1088:5
+     |
+1088 |     MacroUse(Expression, Vec<Expression>),
+     |     ^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1089:5
+     |
+1089 |     Org(SizedExpression),
+     |     ^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1090:5
+     |
+1090 |     Org2(SizedExpression, SizedExpression),
+     |     ^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1091:5
+     |
+1091 |     RawString(OrgamsEncodedString),
+     |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1092:5
+     |
+1092 |     Skip(SizedExpression),
+     |     ^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1093:5
+     |
+1093 |     RepeatInstruction(Box<SizedExpression>, Box<Item>),
+     |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1094:5
+     |
+1094 |     Restore,
+     |     ^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1095:5
+     |
+1095 |     StartRepeatBloc(SizedExpression),
+     |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1096:5
+     |
+1096 |     StopRepeatBloc,
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1097:5
+     |
+1097 |     StorePcInstr, // hidden instruction
+     |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1098:5
+     |
+1098 |     StorePcLine,  // hidden instruction
+     |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1099:5
+     |
+1099 |     Word(Vec<Expression>)
+     |     ^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1125:5
+     |
+1125 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1252:5
+     |
+1252 |     pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1327:1
+     |
+1327 | pub struct Instruction {
+     | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1329:5
+     |
+1329 |     pub prefix: InstructionPrefix,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1331:5
+     |
+1331 |     pub opcode: u8,
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1333:5
+     |
+1333 |     pub coded_operands: Vec<SizedExpression>
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1337:5
+     |
+1337 |     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1361:5
+     |
+1361 |     pub fn display(&self, table: &StringTable) -> String {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1436:1
+     |
+1436 | pub enum LineState {
+     | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1437:5
+     |
+1437 |     Empty,
+     |     ^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1438:5
+     |
+1438 |     AfterLabel,
+     |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1439:5
+     |
+1439 |     AfterAssign,
+     |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1440:5
+     |
+1440 |     AfterStatement(bool), // true if instruction
+     |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1441:5
+     |
+1441 |     AfterRepeatBloc
+     |     ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1444:1
+     |
+1444 | pub struct DisplayState<'f, 'g> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1453:5
+     |
+1453 |     pub fn new(f: Option<&'f mut std::fmt::Formatter<'g>>) -> Self {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1463:5
+     |
+1463 |     pub fn last_line(&self) -> Option<&str> {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1467:5
+     |
+1467 |     pub fn line_number(&self) -> usize {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1593:5
+     |
+1593 | /     pub fn render_items<'i>(
+1594 | |         &mut self,
+1595 | |         items: impl IntoIterator<Item = &'i Item>,
+1596 | |         labels: &StringTable
+1597 | |     ) -> std::fmt::Result {
+     | |_________________________^
+
+warning: missing documentation for a method
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1604:5
+     |
+1604 |     pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> std::fmt::Result {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused `Result` that must be used
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1652:13
+     |
+1652 |             self.emit_line();
+     |             ^^^^^^^^^^^^^^^^
+     |
+     = note: this `Result` may be an `Err` variant, which should be handled
+     = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+     |
+1652 |             let _ = self.emit_line();
+     |             +++++++
+
+warning: missing documentation for a function
+    --> cpclib-orgams-ascii/src/binary_decoder.rs:1673:1
+     |
+1673 | / pub fn parse_orgams_file(
+1674 | |     debug: bool,
+1675 | |     groundtruth_iter: &mut Option<std::slice::Iter<String>>
+1676 | | ) -> impl FnMut(&mut Input) -> OrgamsParseResult<Program> {
+     | |_________________________________________________________^
+
+warning: `cpclib-orgams-ascii` (lib) generated 188 warnings
+   Compiling cpclib-borgams v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-borgams)
+   Compiling cpclib-lsp v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-lsp)
+warning: unused import: `split_head`
+  --> cpclib-lsp/src/basm/cycles.rs:31:35
+   |
+31 | use super::timing::{find_timings, split_head};
+   |                                   ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `tokens_in_lines`
+  --> cpclib-lsp/src/basm/cycles.rs:32:20
+   |
+32 | use super::token::{tokens_in_lines, tokens_in_range};
+   |                    ^^^^^^^^^^^^^^^
+
+warning: unused import: `tokens_in_lines`
+  --> cpclib-lsp/src/basm/stabilize.rs:56:37
+   |
+56 | use super::token::{token_lsp_range, tokens_in_lines, tokens_in_range};
+   |                                     ^^^^^^^^^^^^^^^
+
+warning: unused import: `tower_lsp::lsp_types::*`
+  --> cpclib-lsp/src/bndbuild/macro_expand.rs:16:5
+   |
+16 | use tower_lsp::lsp_types::*;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: value assigned to `rule_help` is never read
+   --> cpclib-lsp/src/bndbuild/symbols.rs:152:17
+    |
+152 |                 rule_help = None;
+    |                 ^^^^^^^^^
+...
+231 |             flush_rule!();
+    |             ------------- in this macro invocation
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+    = note: this warning originates in the macro `flush_rule` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: value assigned to `collecting` is never read
+   --> cpclib-lsp/src/bndbuild/symbols.rs:93:21
+    |
+ 93 |                     collecting = Collecting::Nothing;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+229 |         finalize_block!();
+    |         ----------------- in this macro invocation
+    |
+    = help: maybe it is overwritten before being read?
+    = note: this warning originates in the macro `finalize_block` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: value assigned to `block_base` is never read
+   --> cpclib-lsp/src/bndbuild/symbols.rs:94:21
+    |
+ 94 |                     block_base = None;
+    |                     ^^^^^^^^^^^^^^^^^
+...
+229 |         finalize_block!();
+    |         ----------------- in this macro invocation
+    |
+    = help: maybe it is overwritten before being read?
+    = note: this warning originates in the macro `finalize_block` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: method `completion` is never used
+   --> cpclib-lsp/src/basm/autocomplete.rs:903:12
+    |
+901 | impl AssemblyAnalyzer {
+    | --------------------- method in this implementation
+902 |     /// Backwards-compatible entry point: completion using only the cur...
+903 |     pub fn completion(&self, document: &Document, position: Position) -...
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `find_references` is never used
+   --> cpclib-lsp/src/basm/definition.rs:399:12
+    |
+ 13 | impl AssemblyAnalyzer {
+    | --------------------- method in this implementation
+...
+399 |     pub fn find_references(&self, document: &Document, position: Positi...
+    |            ^^^^^^^^^^^^^^^
+
+warning: field `owner` is never read
+   --> cpclib-lsp/src/basm/definition.rs:756:9
+    |
+755 |     Local {
+    |     ----- field in this variant
+756 |         owner: String,
+    |         ^^^^^
+    |
+    = note: `RenameTarget` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `function_name` is never read
+   --> cpclib-lsp/src/basm/definition.rs:762:9
+    |
+761 |     FunctionLocal {
+    |     ------------- field in this variant
+762 |         function_name: String,
+    |         ^^^^^^^^^^^^^
+    |
+    = note: `RenameTarget` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `keyword` is never read
+   --> cpclib-lsp/src/basm/definition.rs:767:9
+    |
+766 |     LoopLocal {
+    |     --------- field in this variant
+767 |         keyword: String,
+    |         ^^^^^^^
+    |
+    = note: `RenameTarget` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `macro_name` is never read
+   --> cpclib-lsp/src/basm/definition.rs:772:9
+    |
+771 |     MacroLocal {
+    |     ---------- field in this variant
+772 |         macro_name: String,
+    |         ^^^^^^^^^^
+    |
+    = note: `RenameTarget` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `marker_line` is never read
+  --> cpclib-lsp/src/basm/embedded_bndbuild.rs:39:16
+   |
+37 | pub(crate) struct EmbeddedBndbuildBlock {
+   |                   --------------------- field in this struct
+38 |     /// 0-based line of the `#!bndbuild` marker comment itself.
+39 |     pub(crate) marker_line: usize,
+   |                ^^^^^^^^^^^
+
+warning: field `outputs` is never read
+   --> cpclib-lsp/src/basm/registers.rs:158:9
+    |
+156 | pub(super) struct FunctionContract {
+    |                   ---------------- field in this struct
+157 |     pub inputs: Vec<(String, String)>,
+158 |     pub outputs: Vec<(String, String)>
+    |         ^^^^^^^
+
+warning: enum `LineSegment` is never used
+   --> cpclib-lsp/src/basm/timing.rs:171:17
+    |
+171 | pub(super) enum LineSegment {
+    |                 ^^^^^^^^^^^
+
+warning: function `classify_line` is never used
+   --> cpclib-lsp/src/basm/timing.rs:200:15
+    |
+200 | pub(super) fn classify_line(line: &str) -> Vec<LineSegment> {
+    |               ^^^^^^^^^^^^^
+
+warning: function `skip_label_prefixes` is never used
+   --> cpclib-lsp/src/basm/timing.rs:233:4
+    |
+233 | fn skip_label_prefixes(s: &str, mut pos: usize) -> usize {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `classify_content` is never used
+   --> cpclib-lsp/src/basm/timing.rs:256:4
+    |
+256 | fn classify_content(content: &str) -> LineSegment {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `tokens_in_lines` is never used
+   --> cpclib-lsp/src/basm/token.rs:301:15
+    |
+301 | pub(super) fn tokens_in_lines<'a, T>(
+    |               ^^^^^^^^^^^^^^^
+
+warning: constant `TT_VARIABLE` is never used
+  --> cpclib-lsp/src/bndbuild/token.rs:12:18
+   |
+12 | pub(super) const TT_VARIABLE: u32 = 4;
+   |                  ^^^^^^^^^^^
+
+warning: constant `TT_NUMBER` is never used
+  --> cpclib-lsp/src/bndbuild/token.rs:13:18
+   |
+13 | pub(super) const TT_NUMBER: u32 = 5;
+   |                  ^^^^^^^^^
+
+warning: method `position_from_offset` is never used
+   --> cpclib-lsp/src/common/document.rs:256:12
+    |
+147 | impl Document {
+    | ------------- method in this implementation
+...
+256 |     pub fn position_from_offset(&self, offset: usize) -> Position {
+    |            ^^^^^^^^^^^^^^^^^^^^
+
+warning: `cpclib-lsp` (lib) generated 23 warnings (run `cargo fix --lib -p cpclib-lsp` to apply 4 suggestions)
+   Compiling cpclib-visual-bndbuild v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-visual-bndbuild)
+   Compiling cpclib-integration-tests v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-integration-tests)
+   Compiling cpclib-emucontrol v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-emucontrol)
+   Compiling cpclib-wasm v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-wasm)
+warning: unused variable: `catch`
+   --> cpclib-wasm/src/asm.rs:101:16
+    |
+101 | #[wasm_bindgen(catch)]
+    |                ^^^^^ help: if this is intentional, prefix it with an underscore: `_catch`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `catch`
+   --> cpclib-wasm/src/asm.rs:137:16
+    |
+137 | #[wasm_bindgen(catch)]
+    |                ^^^^^ help: if this is intentional, prefix it with an underscore: `_catch`
+
+warning: unused variable: `catch`
+  --> cpclib-wasm/src/basic.rs:36:20
+   |
+36 |     #[wasm_bindgen(catch)]
+   |                    ^^^^^ help: if this is intentional, prefix it with an underscore: `_catch`
+
+warning: unused variable: `catch`
+  --> cpclib-wasm/src/basic.rs:42:16
+   |
+42 | #[wasm_bindgen(catch)]
+   |                ^^^^^ help: if this is intentional, prefix it with an underscore: `_catch`
+
+warning: unused variable: `catch`
+  --> cpclib-wasm/src/basic.rs:52:16
+   |
+52 | #[wasm_bindgen(catch)]
+   |                ^^^^^ help: if this is intentional, prefix it with an underscore: `_catch`
+
+warning: function `set_panic_hook` is never used
+ --> cpclib-wasm/src/utils.rs:1:8
+  |
+1 | pub fn set_panic_hook() {
+  |        ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cpclib-wasm` (lib) generated 6 warnings (run `cargo fix --lib -p cpclib-wasm` to apply 5 suggestions)
+   Compiling cpclib-bndbuild-tauri v0.11.0 (/home/romain/Perso/CPC/rust.cpcdemotools/cpclib-bndbuild-tauri/src-tauri)
+error[E0061]: this function takes 2 arguments but 1 argument was supplied
+   --> cpclib-bndbuild-tauri/src-tauri/src/lib.rs:577:32
+    |
+577 | ...result = cpclib_bndbuild::BndBuilder::from_path(&fname);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-------- argument #2 of type `bool` is missing
+    |
+note: associated function defined here
+   --> cpclib-bndbuild/src/builder.rs:121:12
+    |
+121 |     pub fn from_path<P: AsRef<Utf8Path>>(
+    |            ^^^^^^^^^
+help: provide the argument
+    |
+577 |         let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname, /* bool */);
+    |                                                                             ++++++++++++
+
+For more information about this error, try `rustc --explain E0061`.
+error: could not compile `cpclib-bndbuild-tauri` (lib) due to 1 previous error

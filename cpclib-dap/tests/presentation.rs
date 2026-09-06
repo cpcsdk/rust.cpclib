@@ -1544,6 +1544,53 @@ fn crtcview_asks_a_peer_with_its_own_crtc_endpoint_directly() {
     );
 }
 
+/// Regression test for a real bug: SugarboxV2's real `getCrtcState` answer
+/// (captured live, 2026-09-06, from an actual running v2.1.1 instance with
+/// `--debug --debug_server`, not from `EMULATOR_INTERFACE.md`'s docs, which
+/// turned out to be wrong here) calls the register array `registers` and the
+/// selected-register index `addrReg` - `crtc_registers_from_json`/
+/// `crtc_pane` only recognised AmspiritLite's own `regs`/`selected_reg`
+/// before this was fixed, so `crtc_registers_from_json` returned `None` and
+/// `crtc_view_command`'s direct-endpoint branch silently dropped the
+/// pending request: typing `-crtcview` against a SugarBox session did
+/// nothing at all, forever - no panel, no error, no timeout.
+#[test]
+fn crtcview_decodes_a_real_sugarbox_getcrtcstate_answer() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/crtc"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-crtcview", "context": "repl"}
+        }))
+        .unwrap();
+    let asked = session.peer().last("cpclib/crtc").unwrap().clone();
+
+    // Captured live from `getCrtcState` against a real SugarBox v2.1.1,
+    // verbatim.
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/crtc",
+        "body": {
+            "addrReg": 12, "beamX": 0, "beamY": 0, "crtcType": 4, "hPulse": 0,
+            "hSyncActive": false, "hcc": 0, "isPlus": true, "ma": 0,
+            "masks": [255,255,255,255,127,31,127,127,3,255,127,31,63,255,63,255,63,255],
+            "r52": 0,
+            "registers": [63,40,46,142,38,0,25,30,0,7,0,0,32,0,0,0,0,0],
+            "statusReg": 0, "vSyncActive": false, "vcc": 0, "vertAdj": 0,
+            "vertPulse": 0, "vlc": 0
+        }
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/crtcView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    assert_eq!(registers.len(), 18, "{registers:?}");
+    assert_eq!(registers[12]["value"], json!(32), "R12");
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
 /// `-crtcview` flags a known-bad register combination, with every register
 /// the rule involves - not just one - so the panel can highlight all of them.
 #[test]
@@ -1624,6 +1671,473 @@ fn crtcview_is_quiet_about_a_well_formed_configuration() {
     }));
 
     assert_eq!(out[0]["body"]["warnings"], json!([]));
+}
+
+/// A peer with its own PSG endpoint (AmspiritLite, SugarBox) is asked there
+/// directly, not through `cpclib/machineState` - mirrors
+/// `crtcview_asks_a_peer_with_its_own_crtc_endpoint_directly`.
+#[test]
+fn psgview_asks_a_peer_with_its_own_psg_endpoint_directly() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/psg"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-psgview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/psg");
+    assert!(asked.is_some(), "{:?}", session.peer().commands());
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"cpclib/machineState".to_string()),
+        "never sent to a peer that does not implement it: {:?}",
+        session.peer().commands()
+    );
+}
+
+/// A peer with no PSG endpoint (1984js) falls back to a full snapshot, the
+/// same route `-crtcview`/`-chips` already use - the panel shows exactly the
+/// registers a snapshot carries, no invented Hz/envelope decoding on top of
+/// an unconfirmed field layout (see the roadmap's own note on this).
+#[test]
+fn psgview_falls_back_to_a_full_snapshot_when_the_peer_has_no_psg_endpoint() {
+    use cpclib_sna::{Snapshot, SnapshotVersion};
+
+    let mut sna = Snapshot::default();
+    sna.set_value(cpclib_sna::SnapshotFlag::PSG_REG(Some(0)), 0xAB)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PSG_REG(Some(15)), 0xCD)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PSG_SEL, 7).unwrap();
+
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-psgview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/machineState").unwrap().clone();
+    let mut buffer = Vec::new();
+    sna.write_all(&mut buffer, SnapshotVersion::V3).unwrap();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/machineState",
+        "body": {"snapshot": base64(&buffer)}
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/psgView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("R0")["value"], json!("0xAB (171)"));
+    assert_eq!(named("R15")["value"], json!("0xCD (205)"));
+    assert_eq!(named("selected")["value"], json!("0x07 (7)"));
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// SugarboxV2's real `getPsgState` answer (captured live, 2026-09-06, from
+/// an actual running v2.1.1 instance - `EMULATOR_INTERFACE.md` documents a
+/// `{selectedRegister, registers}` shape that does not match what the
+/// emulator actually sends) is decoded into named per-channel/noise/
+/// envelope/register variables, not dumped as an unrecognised flat pane.
+#[test]
+fn psgview_decodes_a_real_sugarbox_getpsgstate_answer() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/psg"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-psgview", "context": "repl"}
+        }))
+        .unwrap();
+    let asked = session.peer().last("cpclib/psg").unwrap().clone();
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/psg",
+        "body": {
+            "chanAFreq": 1, "chanAVol": 0, "chanBFreq": 1, "chanBVol": 0,
+            "chanCFreq": 1, "chanCVol": 0, "envFreq": 1, "envShape": 0,
+            "mixer": 255, "noiseFreq": 1, "portA": 0, "portB": 255,
+            "registers": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        }
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/psgView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("Channel A")["value"], json!("0x01 (1)"));
+    assert_eq!(named("Channel A volume")["value"], json!("0x00 (0)"));
+    assert_eq!(named("Mixer")["value"], json!("0xFF (255)"));
+    assert_eq!(named("Envelope shape")["value"], json!("0x00 (0)"));
+    assert!(
+        registers.iter().any(|v| v["name"] == json!("R0")),
+        "raw registers should still be shown: {registers:?}"
+    );
+    // The raw `portA`/`portB` fields are not decoded above, but must not be
+    // silently dropped either - the generic fallback still shows them.
+    assert!(
+        registers.iter().any(|v| v["name"] == json!("portB")),
+        "{registers:?}"
+    );
+}
+
+/// AmspiritLite's real `/api/psg` answer (captured live, 2026-09-06, from
+/// an actual running instance) uses a completely different field-naming
+/// convention from SugarBox's - both must decode into the same shape of
+/// output, since the panel is one implementation for both backends.
+#[test]
+fn psgview_decodes_a_real_amspiritlite_psg_answer() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/psg"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-psgview", "context": "repl"}
+        }))
+        .unwrap();
+    let asked = session.peer().last("cpclib/psg").unwrap().clone();
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/psg",
+        "body": {
+            "period_a": 0, "vol_a": 0, "period_b": 0, "vol_b": 0,
+            "period_c": 0, "vol_c": 0, "mixer": 63, "noise": 0,
+            "env_period": 0, "env_shape": 0
+        }
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/psgView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("Channel A")["value"], json!("0x00 (0)"));
+    assert_eq!(named("Channel A volume")["value"], json!("0x00 (0)"));
+    assert_eq!(named("Mixer")["value"], json!("0x3F (63)"));
+    assert_eq!(named("Envelope shape")["value"], json!("0x00 (0)"));
+    assert!(
+        !registers.iter().any(|v| v["name"].as_str().unwrap_or_default().starts_with('R')),
+        "AmspiritLite sends no raw register array - none should be invented: {registers:?}"
+    );
+}
+
+/// A peer with its own FDC endpoint is asked there directly - mirrors
+/// `psgview_asks_a_peer_with_its_own_psg_endpoint_directly`, confirming the
+/// generalised `simple_chip_view_command` dispatches on the right reference
+/// for FDC too, not just PSG.
+#[test]
+fn fdcview_asks_a_peer_with_its_own_fdc_endpoint_directly() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/fdc"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-fdcview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/fdc");
+    assert!(asked.is_some(), "{:?}", session.peer().commands());
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"cpclib/machineState".to_string()),
+        "never sent to a peer that does not implement it: {:?}",
+        session.peer().commands()
+    );
+}
+
+/// A peer with no FDC endpoint (1984js) falls back to a full snapshot, which
+/// only ever carries the drive's motor and track - the honest, conservative
+/// v1 this roadmap item scoped down to once AmspiritLite's/SugarBox's real
+/// FDC JSON shapes turned out to be unconfirmed.
+#[test]
+fn fdcview_falls_back_to_a_full_snapshot_when_the_peer_has_no_fdc_endpoint() {
+    use cpclib_sna::{Snapshot, SnapshotVersion};
+
+    let mut sna = Snapshot::default();
+    sna.set_value(cpclib_sna::SnapshotFlag::FDD_MOTOR, 1)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::FDD_TRACK, 40)
+        .unwrap();
+
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-fdcview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/machineState").unwrap().clone();
+    let mut buffer = Vec::new();
+    sna.write_all(&mut buffer, SnapshotVersion::V3).unwrap();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/machineState",
+        "body": {"snapshot": base64(&buffer)}
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/fdcView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("motor")["value"], json!("0x01 (1)"));
+    assert_eq!(named("track")["value"], json!("0x28 (40)"));
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// SugarboxV2's real `getFdcState` answer, captured live 2026-09-06 with an
+/// actual `.dsk` inserted in drive A of a running v2.1.1 instance -
+/// `EMULATOR_INTERFACE.md` documents a `track`/`side`/`sector`/`realSize`/
+/// `idamOffset`/`damOffset` sector shape; the real answer uses `c`/`h`/`r`/
+/// `n` (real FDC ID-field terminology) with no offsets at this level. The
+/// dedicated FDC view forwards `drives` verbatim (`simple_chip_view_answer`'s
+/// own doc comment) rather than flattening it, so the client can render a
+/// real per-track sector table.
+#[test]
+fn fdcview_forwards_a_real_sugarbox_sector_table_verbatim() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/fdc"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-fdcview", "context": "repl"}
+        }))
+        .unwrap();
+    let asked = session.peer().last("cpclib/fdc").unwrap().clone();
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/fdc",
+        "body": {
+            "currentDrive": 0,
+            "drives": [
+                {
+                    "gap3": 78, "nbSides": 1, "nbTracks": 40,
+                    "path": "/tmp/test.dsk", "present": true, "sector": 0,
+                    "sectors": [
+                        {
+                            "c": 0, "dataCrc": false, "deleted": false, "h": 0,
+                            "hdrCrc": false, "n": 2, "r": 193, "size": 512,
+                            "st1": 0, "st2": 0
+                        }
+                    ],
+                    "side": 0, "track": 0, "trackSize": 4864,
+                    "writeProtected": false
+                },
+                {
+                    "gap3": 0, "nbSides": 0, "nbTracks": 0, "path": "",
+                    "present": false, "sector": 0, "sectors": [], "side": 0,
+                    "track": 0, "trackSize": 0, "writeProtected": false
+                }
+            ],
+            "mainStatus": 0, "motorOn": false, "status0": 0, "status1": 0,
+            "status2": 0, "status3": 24
+        }
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/fdcView"));
+    let drives = out[0]["body"]["drives"].as_array().unwrap();
+    assert_eq!(drives.len(), 2);
+    assert_eq!(drives[0]["present"], json!(true));
+    let sectors = drives[0]["sectors"].as_array().unwrap();
+    assert_eq!(sectors.len(), 1);
+    assert_eq!(sectors[0]["r"], json!(193), "real C/H/R/N naming, not track/side/sector");
+    assert_eq!(sectors[0]["size"], json!(512));
+    assert_eq!(drives[1]["present"], json!(false));
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// SugarboxV2's real `getPpiState` answer (captured live, 2026-09-06, from
+/// an actual running v2.1.1 instance): `{controlWord, portA, portB, portC}`,
+/// close to but not identical to `EMULATOR_INTERFACE.md`'s documented shape
+/// (`control`, not `controlWord`) - normalised to the same `A`/`B`/`C`/
+/// `control` names the snapshot path already uses.
+#[test]
+fn ppiview_decodes_a_real_sugarbox_getppistate_answer() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/ppi"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-ppiview", "context": "repl"}
+        }))
+        .unwrap();
+    let asked = session.peer().last("cpclib/ppi").unwrap().clone();
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/ppi",
+        "body": {"controlWord": 18, "portA": 0, "portB": 30, "portC": 0}
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/ppiView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("A")["value"], json!("0x00 (0)"));
+    assert_eq!(named("B")["value"], json!("0x1E (30)"));
+    assert_eq!(named("C")["value"], json!("0x00 (0)"));
+    assert_eq!(named("control")["value"], json!("0x12 (18)"));
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// A peer with no PPI endpoint (1984js, and AmspiritLite too - confirmed
+/// live: `/api/ppi` is HTTP 404) falls back to a full snapshot, which
+/// carries only the raw port bytes - same route every simple chip view uses.
+#[test]
+fn ppiview_falls_back_to_a_full_snapshot_when_the_peer_has_no_ppi_endpoint() {
+    use cpclib_sna::{Snapshot, SnapshotVersion};
+
+    let mut sna = Snapshot::default();
+    sna.set_value(cpclib_sna::SnapshotFlag::PPI_A, 0x11).unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PPI_B, 0x22).unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PPI_C, 0x33).unwrap();
+
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-ppiview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/machineState").unwrap().clone();
+    let mut buffer = Vec::new();
+    sna.write_all(&mut buffer, SnapshotVersion::V3).unwrap();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/machineState",
+        "body": {"snapshot": base64(&buffer)}
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/ppiView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("A")["value"], json!("0x11 (17)"));
+    assert_eq!(named("B")["value"], json!("0x22 (34)"));
+    assert_eq!(named("C")["value"], json!("0x33 (51)"));
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// SugarboxV2's real `getTapeState` answer (captured live, 2026-09-06, from
+/// an actual running v2.1.1 instance): quite different from
+/// `EMULATOR_INTERFACE.md`'s documented `present`/`playing`/`position`/
+/// `length` shape (`inserted` not `present`, `play`/`record` not `playing`,
+/// `tapePos` not `position`, several fields the doc omits entirely).
+#[test]
+fn tapeview_decodes_a_real_sugarbox_gettapestate_answer() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/tape"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-tapeview", "context": "repl"}
+        }))
+        .unwrap();
+    let asked = session.peer().last("cpclib/tape").unwrap().clone();
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/tape",
+        "body": {
+            "blocks": [], "counter": 0, "currentBlock": 0, "currentBlockType": 0,
+            "inserted": false, "length": 0, "motor": false, "nbInversions": 0,
+            "path": "", "play": false, "record": false, "tapePos": 0
+        }
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/tapeView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    let named = |name: &str| {
+        registers
+            .iter()
+            .find(|v| v["name"] == json!(name))
+            .unwrap_or_else(|| panic!("no {name} in {registers:?}"))
+    };
+    assert_eq!(named("inserted")["value"], json!("false"));
+    assert_eq!(named("motor")["value"], json!("false"));
+    assert_eq!(named("blocks")["value"], json!("0x00 (0)"));
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// A peer with no tape endpoint (1984js, and AmspiritLite too - confirmed
+/// live: `/api/tape` is HTTP 404) is answered immediately with a clear
+/// failure, not sent through a `cpclib/machineState` round trip that could
+/// never have anything useful to say about a tape transport.
+#[test]
+fn tapeview_fails_immediately_with_no_machinestate_round_trip_when_unsupported() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-tapeview", "context": "repl"}
+        }))
+        .unwrap();
+
+    assert_eq!(out[0]["success"], json!(false));
+    assert!(
+        out[0]["message"].as_str().unwrap_or_default().contains("tape"),
+        "{:?}",
+        out[0]
+    );
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"cpclib/machineState".to_string()),
+        "must not pay for a fetch that can never help: {:?}",
+        session.peer().commands()
+    );
 }
 
 /// The disc scope carries what the snapshot has, and says plainly what it has

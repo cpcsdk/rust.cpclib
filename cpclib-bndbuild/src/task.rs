@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, LazyLock};
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap::ArgMatches;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
@@ -100,7 +100,28 @@ pub enum InnerTask {
     YmCruncher(YmCruncher, StandardTaskArguments),
     AsmFmt(StandardTaskArguments),
     BasmOpt(StandardTaskArguments),
-    Vlink(StandardTaskArguments)
+    Vlink(StandardTaskArguments),
+    /// A shell-style `|` pipeline and/or `<`/`>`/`>>` redirection around one
+    /// or more stages. A single redirected task with no `|` is represented
+    /// as a degenerate one-stage `Pipe` - see `crate::shell_pipe`.
+    Pipe(PipeTaskArguments)
+}
+
+/// One `|`-separated pipeline (one stage, if there is no `|` - just a
+/// redirected task) plus the `<`/`>`/`>>` redirection around its first/last
+/// stage. See `crate::shell_pipe` for the parser that produces this and the
+/// executor that runs it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PipeTaskArguments {
+    pub stages: Vec<InnerTask>,
+    pub stdin: Option<Utf8PathBuf>,
+    /// The target path and whether to append (`true`) or truncate (`false`).
+    pub stdout: Option<(Utf8PathBuf, bool)>,
+    pub ignore_error: bool,
+    /// The original, unparsed line - used for `Display` instead of
+    /// reconstructing it from the stages, since that reconstruction could
+    /// never be guaranteed to round-trip quoting exactly.
+    pub raw: String
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -277,6 +298,10 @@ pub const VLINK_CMDS: &[&str] = &["vlink"];
 
 impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Self::Pipe(p) = self {
+            return write!(f, "{}{}", if p.ignore_error { "-" } else { "" }, p.raw);
+        }
+
         let (cmd, s) = match self {
             Self::Assembler(a, s) => (a.get_command(), s),
             #[cfg(feature = "tape")]
@@ -315,7 +340,8 @@ impl Display for InnerTask {
             Self::Vlink(s) => (VLINK_CMDS[0], s),
             Self::AsmFmt(s) => (ASMFMT_CMDS[0], s),
             Self::BasmOpt(s) => (BASMOPT_CMDS[0], s),
-            Self::Xfer(s) => (XFER_CMDS[0], s)
+            Self::Xfer(s) => (XFER_CMDS[0], s),
+            Self::Pipe(_) => unreachable!("handled and returned above")
         };
 
         write!(
@@ -387,21 +413,95 @@ impl<'de> Deserialize<'de> for InnerTask {
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where E: serde::de::Error {
-                let (code, next) = v.split_once(" ").unwrap_or((v, ""));
-                let (code, ignore) = if let Some(stripped) = code.strip_prefix("-") {
-                    (stripped, true)
-                }
-                else {
-                    (code, false)
+                // Peel off the line-level ignore-error marker first - this
+                // must keep meaning "ignore this whole line's failure",
+                // whether or not the line turns out to contain `|`/`<`/`>`.
+                let (line_ignore, body) = match v.strip_prefix('-') {
+                    Some(rest) => (true, rest),
+                    None => (false, v)
                 };
-                let std = StandardTaskArguments {
-                    args: next.to_owned(),
-                    ignore_error: ignore
-                };
-                match InnerTask::from_command_and_arguments(code, std) {
-                    Ok(t) => Ok(t),
-                    Err(e) => Err(E::custom(e))
+
+                let segments = crate::shell_pipe::split_top_level_pipes(body);
+                let n = segments.len();
+
+                let mut parsed_segments = Vec::with_capacity(n);
+                for seg in &segments {
+                    parsed_segments.push(
+                        crate::shell_pipe::strip_redirections(seg).map_err(E::custom)?
+                    );
                 }
+                let has_redirection = parsed_segments
+                    .iter()
+                    .any(|(_, stdin, stdout)| stdin.is_some() || stdout.is_some());
+
+                if n == 1 && !has_redirection {
+                    // Complete no-op fast path: identical to the original,
+                    // pre-redirection/piping parser.
+                    let (code, next) = body.split_once(' ').unwrap_or((body, ""));
+                    let std = StandardTaskArguments {
+                        args: next.to_owned(),
+                        ignore_error: line_ignore
+                    };
+                    return match InnerTask::from_command_and_arguments(code, std) {
+                        Ok(t) => Ok(t),
+                        Err(e) => Err(E::custom(e))
+                    };
+                }
+
+                let mut stages = Vec::with_capacity(n);
+                let mut pipe_stdin = None;
+                let mut pipe_stdout = None;
+                for (i, (stage_body, stdin, stdout)) in parsed_segments.into_iter().enumerate() {
+                    if i != 0 && stdin.is_some() {
+                        return Err(E::custom(format!(
+                            "stdin redirection (`<`) is only meaningful on the first stage \
+                             of a pipeline: {v}"
+                        )));
+                    }
+                    if i != n - 1 && stdout.is_some() {
+                        return Err(E::custom(format!(
+                            "stdout redirection (`>`/`>>`) is only meaningful on the last \
+                             stage of a pipeline: {v}"
+                        )));
+                    }
+                    if i == 0 {
+                        pipe_stdin = stdin;
+                    }
+                    if i == n - 1 {
+                        pipe_stdout = stdout.map(|r| {
+                            match r {
+                                crate::shell_pipe::RedirSpec::StdoutTruncate(p) => (p, false),
+                                crate::shell_pipe::RedirSpec::StdoutAppend(p) => (p, true),
+                                crate::shell_pipe::RedirSpec::Stdin(_) => {
+                                    unreachable!(
+                                        "strip_redirections never returns Stdin as a stdout spec"
+                                    )
+                                }
+                            }
+                        });
+                    }
+
+                    let trimmed = stage_body.trim();
+                    if trimmed.is_empty() {
+                        return Err(E::custom(format!("empty pipeline stage in: {v}")));
+                    }
+                    let (code, args) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
+                    let std = StandardTaskArguments {
+                        args: args.to_owned(),
+                        ignore_error: false
+                    };
+                    let stage = InnerTask::from_command_and_arguments(code, std)
+                        .map_err(E::custom)?;
+                    stages.push(stage);
+                }
+
+                Ok(InnerTask::Pipe(PipeTaskArguments {
+                    stages,
+                    stdin: pipe_stdin,
+                    stdout: pipe_stdout,
+                    ignore_error: line_ignore,
+                    raw: v.to_owned()
+                }))
             }
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -904,6 +1004,12 @@ impl InnerTask {
         first_dep: Option<&Utf8Path>,
         first_tgt: Option<&Utf8Path>
     ) -> Result<(), String> {
+        if let InnerTask::Pipe(p) = self {
+            for stage in &mut p.stages {
+                stage.replace_automatic_variables(first_dep, first_tgt)?;
+            }
+            return Ok(());
+        }
         self.standard_task_arguments_mut()
             .replace_automatic_variables(first_dep, first_tgt)
     }
@@ -955,7 +1061,11 @@ impl InnerTask {
             | InnerTask::Vlink(t) => t,
 
             #[cfg(feature = "tape")]
-            InnerTask::Cdt(_, t) => t
+            InnerTask::Cdt(_, t) => t,
+
+            InnerTask::Pipe(_) => {
+                unreachable!("Pipe has no single StandardTaskArguments - callers must check for it first")
+            }
         }
     }
 
@@ -999,20 +1109,35 @@ impl InnerTask {
             | InnerTask::Csl(t) => t,
 
             #[cfg(feature = "tape")]
-            InnerTask::Cdt(_, t) => t
+            InnerTask::Cdt(_, t) => t,
+
+            InnerTask::Pipe(_) => {
+                unreachable!("Pipe has no single StandardTaskArguments - callers must check for it first")
+            }
         }
     }
 
     pub fn args(&self) -> &str {
-        &self.standard_task_arguments().args
+        match self {
+            InnerTask::Pipe(p) => &p.raw,
+            _ => &self.standard_task_arguments().args
+        }
     }
 
     pub fn ignore_errors(&self) -> bool {
-        self.standard_task_arguments().ignore_error
+        match self {
+            InnerTask::Pipe(p) => p.ignore_error,
+            _ => self.standard_task_arguments().ignore_error
+        }
     }
 
     pub fn set_ignore_errors(mut self, ignore: bool) -> Self {
-        self.standard_task_arguments_mut().ignore_error = ignore;
+        if let InnerTask::Pipe(p) = &mut self {
+            p.ignore_error = ignore;
+        }
+        else {
+            self.standard_task_arguments_mut().ignore_error = ignore;
+        }
         self
     }
 
@@ -1056,7 +1181,8 @@ impl InnerTask {
             InnerTask::Cpr(_) => false,
             InnerTask::AsmFmt(_) => false,
             InnerTask::BasmOpt(_) => false,
-            InnerTask::Csl(_) => false
+            InnerTask::Csl(_) => false,
+            InnerTask::Pipe(p) => p.stages.iter().all(|s| s.is_phony())
         }
     }
 
@@ -1112,7 +1238,13 @@ impl InnerTask {
             InnerTask::AsmFmt(_) => TaskKind::Embedded,
             InnerTask::BasmOpt(_) => TaskKind::Embedded,
             InnerTask::Echo(_) => TaskKind::Embedded,
-            InnerTask::Extern(_) => TaskKind::Delegated
+            InnerTask::Extern(_) => TaskKind::Delegated,
+
+            // bndbuild's own pipeline orchestration runs in-process; the
+            // individual stages may themselves be Delegated/Emulated, but
+            // nothing outside `task.rs` branches on `.kind()` today, so this
+            // is low-risk.
+            InnerTask::Pipe(_) => TaskKind::Embedded
         }
     }
 

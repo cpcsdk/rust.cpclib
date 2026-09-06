@@ -1,0 +1,47 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "CSL",
+    "scopeName": "source.csl",
+    "patterns": [
+        { "include": "#comment" },
+        { "include": "#keyword" },
+        { "include": "#string" },
+        { "include": "#number" }
+    ],
+    "repository": {
+        "comment": {
+            "name": "comment.line.semicolon.csl",
+            "match": ";.*$"
+        },
+        "keyword": {
+            "name": "keyword.control.instruction.csl",
+            "match": "(?i)\\b(csl_version|reset|crtc_select|gate_array|cpc_model|memory_exp|rom_dir|rom_config|disk_insert|disk_dir|tape_insert|tape_dir|tape_rewind|tape_play|tape_stop|snapshot_load|snapshot_dir|snapshot_name|snapshot_version|snapshot|key_delay|key_from_file|key_output|keyboard_write|wait_driveonoff|wait_vsyncoffon|wait_ssm0000|wait|screenshot_name|screenshot_dir|screenshot|csl_load|cls_load)\\b"
+        },
+        "string": {
+            "comment": "Single-quoted paths and key_output text - CSL never uses double quotes.",
+            "name": "string.quoted.single.csl",
+            "begin": "'",
+            "end": "'",
+            "patterns": [
+                {
+                    "comment": "A special-key escape inside key_output content, e.g. \\(RET), \\(FN1), \\({).",
+                    "name": "constant.character.escape.csl",
+                    "match": "\\\\\\([A-Za-z0-9{}\\\\']+\\)"
+                }
+            ]
+        },
+        "number": {
+            "patterns": [
+                {
+                    "comment": "A csl_version number, e.g. 1.1 - matched before the plain-integer rule below.",
+                    "name": "constant.numeric.csl",
+                    "match": "\\b[0-9]+\\.[0-9]+\\b"
+                },
+                {
+                    "name": "constant.numeric.csl",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        }
+    }
+}

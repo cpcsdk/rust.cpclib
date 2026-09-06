@@ -5,6 +5,27 @@
   "version": "0.0.1",
   "publisher": "krusty-benediction",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cpcsdk/rust.cpclib.git",
+    "directory": "cpclib-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/cpcsdk/rust.cpclib/issues"
+  },
+  "homepage": "https://cpcsdk.github.io/rust.cpclib/",
+  "keywords": [
+    "amstrad",
+    "cpc",
+    "z80",
+    "assembly",
+    "assembler",
+    "basm",
+    "bndbuild",
+    "locomotive basic",
+    "demoscene",
+    "retro"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -77,6 +98,31 @@
           "Z80 Disassembly"
         ],
         "configuration": "./language-configuration-asm.json"
+      },
+      {
+        "id": "csl",
+        "aliases": [
+          "CSL",
+          "CPC Script Language"
+        ],
+        "extensions": [
+          ".csl",
+          ".CSL"
+        ],
+        "configuration": "./language-configuration-csl.json"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "cpclib.hexView",
+        "displayName": "CPC Hex View",
+        "selector": [
+          { "filenamePattern": "*.sna" },
+          { "filenamePattern": "*.SNA" },
+          { "filenamePattern": "*.cpr" },
+          { "filenamePattern": "*.CPR" }
+        ],
+        "priority": "option"
       }
     ],
     "grammars": [
@@ -98,6 +144,11 @@
         "language": "z80-disassembly",
         "scopeName": "source.z80-disasm",
         "path": "./syntaxes/z80-disasm.tmLanguage.json"
+      },
+      {
+        "language": "csl",
+        "scopeName": "source.csl",
+        "path": "./syntaxes/csl.tmLanguage.json"
       }
     ],
     "semanticTokenScopes": [
@@ -195,6 +246,160 @@
         "command": "cpclib.buildMusicDsk",
         "title": "Build DSK with music",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runCslFile",
+        "title": "Run CSL script in emulator",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runCslWithEmulator",
+        "title": "Run CSL script with...",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runCslWith.ace",
+        "title": "ACE-DL (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.ace.needsInstall",
+        "title": "ACE-DL (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.amspirit",
+        "title": "AMSpiriT (native CSL support)",
+        "category": "CPClib",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "cpclib.runCslWith.amspirit.needsInstall",
+        "title": "AMSpiriT (native CSL support, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "cpclib.runCslWith.amspiritlite",
+        "title": "AMSpiriT Lite (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.amspiritlite.needsInstall",
+        "title": "AMSpiriT Lite (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.winape",
+        "title": "WinAPE (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.winape.needsInstall",
+        "title": "WinAPE (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcec",
+        "title": "CPCEC (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcec.needsInstall",
+        "title": "CPCEC (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.sugarbox",
+        "title": "SugarBox v2 (native CSL support)",
+        "category": "CPClib",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "cpclib.runCslWith.sugarbox.needsInstall",
+        "title": "SugarBox v2 (native CSL support, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcemupower",
+        "title": "CPCEmuPower (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcemupower.needsInstall",
+        "title": "CPCEmuPower (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcemu",
+        "title": "CPCEmu (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcemu.needsInstall",
+        "title": "CPCEmu (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.caprice",
+        "title": "CaPriCe Forever (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.caprice.needsInstall",
+        "title": "CaPriCe Forever (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cadence",
+        "title": "Cadence (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cadence.needsInstall",
+        "title": "Cadence (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.emulator1984",
+        "title": "1984 (native) (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.emulator1984.needsInstall",
+        "title": "1984 (native) (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.rvm",
+        "title": "Retro Virtual Machine (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.rvm.needsInstall",
+        "title": "Retro Virtual Machine (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
       },
       {
         "command": "cpclib.editConfig",
@@ -550,6 +755,10 @@
       {
         "id": "cpclib.runWithEmulatorMenu",
         "label": "CPClib: Run with..."
+      },
+      {
+        "id": "cpclib.runCslWithEmulatorMenu",
+        "label": "CPClib: Run CSL with... ($(zap) native, $(warning) via interpreter)"
       }
     ],
     "menus": {
@@ -676,6 +885,16 @@
         {
           "command": "cpclib.buildMusicDsk",
           "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz)$/i",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.runCslFile",
+          "when": "resourceExtname =~ /^\\.csl$/i",
+          "group": "cpclib"
+        },
+        {
+          "submenu": "cpclib.runCslWithEmulatorMenu",
+          "when": "resourceExtname =~ /^\\.csl$/i",
           "group": "cpclib"
         }
       ],
@@ -833,6 +1052,129 @@
           "group": "1_installed"
         }
       ],
+      "cpclib.runCslWithEmulatorMenu": [
+        {
+          "command": "cpclib.runCslWith.ace",
+          "when": "cpclib.emu.ace.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.ace.needsInstall",
+          "when": "!cpclib.emu.ace.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.amspirit",
+          "when": "cpclib.emu.amspirit.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.amspirit.needsInstall",
+          "when": "!cpclib.emu.amspirit.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.amspiritlite",
+          "when": "cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.amspiritlite.needsInstall",
+          "when": "!cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.winape",
+          "when": "cpclib.emu.winape.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.winape.needsInstall",
+          "when": "!cpclib.emu.winape.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcec",
+          "when": "cpclib.emu.cpcec.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcec.needsInstall",
+          "when": "!cpclib.emu.cpcec.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.sugarbox",
+          "when": "cpclib.emu.sugarbox.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.sugarbox.needsInstall",
+          "when": "!cpclib.emu.sugarbox.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemupower",
+          "when": "cpclib.emu.cpcemupower.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemupower.needsInstall",
+          "when": "!cpclib.emu.cpcemupower.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemu",
+          "when": "cpclib.emu.cpcemu.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemu.needsInstall",
+          "when": "!cpclib.emu.cpcemu.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.caprice",
+          "when": "cpclib.emu.caprice.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.caprice.needsInstall",
+          "when": "!cpclib.emu.caprice.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cadence",
+          "when": "cpclib.emu.cadence.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cadence.needsInstall",
+          "when": "!cpclib.emu.cadence.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.emulator1984",
+          "when": "cpclib.emu.emulator1984.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.emulator1984.needsInstall",
+          "when": "!cpclib.emu.emulator1984.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.rvm",
+          "when": "cpclib.emu.rvm.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.rvm.needsInstall",
+          "when": "!cpclib.emu.rvm.installed",
+          "group": "1_installed"
+        }
+      ]
+,
       "commandPalette": [
         {
           "command": "cpclib.disassemblyConfigPicker.live",
@@ -972,6 +1314,102 @@
         },
         {
           "command": "cpclib.runWith.rvm.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.ace",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.ace.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.amspirit",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.amspirit.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.amspiritlite",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.amspiritlite.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.winape",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.winape.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcec",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcec.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.sugarbox",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.sugarbox.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemupower",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemupower.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemu",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcemu.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.caprice",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.caprice.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cadence",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cadence.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.emulator1984",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.emulator1984.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.rvm",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.rvm.needsInstall",
           "when": "false"
         },
         {

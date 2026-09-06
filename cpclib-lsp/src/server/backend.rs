@@ -13,6 +13,7 @@ use crate::bndbuild::BuildFileAnalyzer;
 use crate::bndbuild::call_hierarchy::CallHierarchyCandidate;
 use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::{Document, DocumentType};
+use crate::csl::CslAnalyzer;
 use crate::locomotive::BasicAnalyzer;
 
 /// How long `did_change` waits for edits to stop arriving before actually
@@ -28,6 +29,7 @@ pub struct CpcLspBackend {
     asm_analyzer: Arc<AssemblyAnalyzer>,
     build_analyzer: Arc<BuildFileAnalyzer>,
     basic_analyzer: Arc<BasicAnalyzer>,
+    csl_analyzer: Arc<CslAnalyzer>,
     /// The latest version `did_change` has requested analysis for, per URI -
     /// lets a debounced re-analysis task scheduled by an *older* edit detect
     /// "a newer edit has since arrived, I'm stale" and no-op instead of
@@ -81,6 +83,7 @@ impl CpcLspBackend {
             asm_analyzer: Arc::new(AssemblyAnalyzer::new()),
             build_analyzer: Arc::new(BuildFileAnalyzer::new()),
             basic_analyzer: Arc::new(BasicAnalyzer::new()),
+            csl_analyzer: Arc::new(CslAnalyzer::new()),
             pending_versions: Arc::new(DashMap::new()),
             workspace_roots: RwLock::new(Vec::new()),
             build_error_diagnostics: Arc::new(DashMap::new()),
@@ -134,6 +137,7 @@ impl CpcLspBackend {
             &self.asm_analyzer,
             &self.build_analyzer,
             &self.basic_analyzer,
+            &self.csl_analyzer,
             document,
             &self.workspace_roots(),
             &self.build_error_diagnostics,
@@ -175,6 +179,7 @@ impl CpcLspBackend {
         let asm_analyzer = Arc::clone(&self.asm_analyzer);
         let build_analyzer = Arc::clone(&self.build_analyzer);
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let csl_analyzer = Arc::clone(&self.csl_analyzer);
         let workspace_roots = self.workspace_roots();
         let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
         let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
@@ -228,6 +233,7 @@ impl CpcLspBackend {
                     &asm_analyzer,
                     &build_analyzer,
                     &basic_analyzer,
+                    &csl_analyzer,
                     &document,
                     &workspace_roots,
                     &build_error_diagnostics,
@@ -831,10 +837,18 @@ impl CpcLspBackend {
 /// `tokio::spawn` task, which only holds the individually `Arc`-cloned
 /// analyzers/maps (and an owned `workspace_roots` snapshot taken before
 /// spawning), not a full `&CpcLspBackend`.
+///
+/// One parameter per supported language, by design - the alternative
+/// (bundling them into a struct just for this function) would touch every
+/// one of its ~11 call sites for no real gain, and this count grows by
+/// exactly one whenever a new language is added here, same as it just did
+/// for CSL.
+#[allow(clippy::too_many_arguments)]
 fn compute_diagnostics(
     asm_analyzer: &AssemblyAnalyzer,
     build_analyzer: &BuildFileAnalyzer,
     basic_analyzer: &BasicAnalyzer,
+    csl_analyzer: &CslAnalyzer,
     document: &Document,
     workspace_roots: &[PathBuf],
     build_error_diagnostics: &DashMap<Url, Vec<Diagnostic>>,
@@ -842,8 +856,9 @@ fn compute_diagnostics(
 ) -> Vec<Diagnostic> {
     let mut diagnostics = match document.doc_type {
         // Only the Assembly path has an expensive, skippable-when-inactive
-        // real assemble - `build_analyzer`/`basic_analyzer`'s own `analyze`
-        // are cheap regardless, so they don't need an `is_active` variant.
+        // real assemble - `build_analyzer`/`basic_analyzer`/`csl_analyzer`'s
+        // own `analyze` are cheap regardless, so they don't need an
+        // `is_active` variant.
         DocumentType::Assembly => asm_analyzer.analyze_for_activity(document, is_active),
         DocumentType::BuildFile => build_analyzer.analyze(document),
         DocumentType::Basic => basic_analyzer.analyze(document),
@@ -852,6 +867,7 @@ fn compute_diagnostics(
             d.extend(basic_analyzer.catart_diagnostics(document));
             d
         },
+        DocumentType::Csl => csl_analyzer.analyze(document),
         DocumentType::Unknown => Vec::new()
     };
 
@@ -861,13 +877,17 @@ fn compute_diagnostics(
     // every language's own diagnostics code stays unaware of the escalation
     // policy. Not the same mechanism as `basm --Werror` (a hard build
     // failure) - this only changes how the editor displays the diagnostic.
+    //
+    // CSL has no `warnings_as_errors` setting: `cpclib_csl::CslError` only
+    // ever produces ERROR-severity diagnostics (a parse failure), so there
+    // is nothing to escalate.
     let warnings_as_errors = match document.doc_type {
         DocumentType::Assembly => asm_analyzer.config().warnings_as_errors,
         DocumentType::BuildFile => build_analyzer.config().warnings_as_errors,
         DocumentType::Basic | DocumentType::CatartBasic => {
             basic_analyzer.config().warnings_as_errors
         },
-        DocumentType::Unknown => false
+        DocumentType::Csl | DocumentType::Unknown => false
     };
     if warnings_as_errors {
         for d in &mut diagnostics {
@@ -1015,7 +1035,10 @@ fn dispatch_by_doc_type<T>(
         DocumentType::Assembly => on_assembly(document),
         DocumentType::BuildFile => on_build_file(document),
         DocumentType::Basic | DocumentType::CatartBasic => on_basic(document),
-        DocumentType::Unknown => unknown_default
+        // CSL has no hover/definition/rename support in this first cut -
+        // only diagnostics and the "▶ Run in emulator" CodeLens (handled
+        // separately, not through this generic dispatcher).
+        DocumentType::Csl | DocumentType::Unknown => unknown_default
     }
 }
 
@@ -1117,10 +1140,12 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.runRule",
     "cpclib.runTask",
     "cpclib.runBasic",
+    "cpclib.runCsl",
     "cpclib.runAssembly",
     "cpclib.resolveEntry",
     "cpclib.cycleCountForSelection",
     "cpclib.registersAtPosition",
+    "cpclib.fileRegions",
     "cpclib.removeUnusedParameter",
     crate::basm::peephole::FIX_ALL_COMMAND,
     crate::basm::peephole::ANALYZE_COMMAND,
@@ -1179,6 +1204,7 @@ impl LanguageServer for CpcLspBackend {
         self.basic_analyzer.set_config(loaded_config.config.basic);
         self.build_analyzer
             .set_config(loaded_config.config.bndbuild);
+        self.csl_analyzer.set_config(loaded_config.config.csl);
 
         *self
             .workspace_roots
@@ -1348,6 +1374,7 @@ impl LanguageServer for CpcLspBackend {
         self.basic_analyzer.evict(&params.text_document.uri);
         self.asm_analyzer.evict(&params.text_document.uri);
         self.build_analyzer.evict(&params.text_document.uri);
+        self.csl_analyzer.evict(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -1399,35 +1426,62 @@ impl LanguageServer for CpcLspBackend {
 
         tracing::debug!("Completion request at {}:{}", uri, position.line);
 
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
 
-            let completions = match document.doc_type {
-                DocumentType::Assembly => {
-                    // Labels from the other open assembly files are offered too.
-                    let others: Vec<Document> = self
-                        .documents
-                        .iter()
-                        .filter(|e| *e.key() != uri && e.value().doc_type == DocumentType::Assembly)
-                        .map(|e| e.value().clone())
-                        .collect();
-                    self.asm_analyzer
-                        .completion_with_documents(document, position, &others)
-                },
-                DocumentType::BuildFile => self.build_analyzer.completion(document, position),
-                DocumentType::Basic => self.basic_analyzer.completion(document, position),
-                DocumentType::CatartBasic => {
-                    self.basic_analyzer.catart_completion(document, position)
-                },
-                DocumentType::Unknown => Vec::new()
-            };
-
-            if !completions.is_empty() {
-                return Ok(Some(CompletionResponse::Array(completions)));
-            }
+        // Labels from the other open assembly files are offered too.
+        let others: Vec<Document> = if document.doc_type == DocumentType::Assembly {
+            self.documents
+                .iter()
+                .filter(|e| *e.key() != uri && e.value().doc_type == DocumentType::Assembly)
+                .map(|e| e.value().clone())
+                .collect()
         }
+        else {
+            Vec::new()
+        };
 
-        Ok(None)
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let csl_analyzer = Arc::clone(&self.csl_analyzer);
+
+        // Same class of bug already fixed for `hover`/`semantic_tokens_full`:
+        // the assembly path's symbol collection reads `INCLUDE`d files from
+        // disk (`collect_symbols_from_includes`) on essentially every
+        // completion request in a file with includes - common, since most
+        // basm sources include a shared routines/constants header. Cheap on
+        // an OS-cached local file, but inconsistent with every other handler
+        // in this file doing its blocking work off the async runtime's own
+        // worker threads (which also run the stdin-read loop).
+        let start = std::time::Instant::now();
+        let completions = match tokio::task::spawn_blocking(move || {
+            match document.doc_type {
+                DocumentType::Assembly => {
+                    asm_analyzer.completion_with_documents(&document, position, &others)
+                },
+                DocumentType::BuildFile => build_analyzer.completion(&document, position),
+                DocumentType::Basic => basic_analyzer.completion(&document, position),
+                DocumentType::CatartBasic => basic_analyzer.catart_completion(&document, position),
+                DocumentType::Csl => csl_analyzer.completion(&document, position),
+                DocumentType::Unknown => Vec::new()
+            }
+        })
+        .await
+        {
+            Ok(completions) => completions,
+            Err(_join_error) => return Ok(None)
+        };
+        tracing::debug!("Completion request for {} took {:?}", uri, start.elapsed());
+
+        if !completions.is_empty() {
+            Ok(Some(CompletionResponse::Array(completions)))
+        }
+        else {
+            Ok(None)
+        }
     }
 
     async fn goto_definition(
@@ -1452,7 +1506,7 @@ impl LanguageServer for CpcLspBackend {
             DocumentType::Basic | DocumentType::CatartBasic => {
                 self.basic_analyzer.goto_definition(entry.value(), position)
             },
-            DocumentType::Unknown => None
+            DocumentType::Csl | DocumentType::Unknown => None
         };
         if let Some(loc) = location {
             return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
@@ -1537,11 +1591,12 @@ impl LanguageServer for CpcLspBackend {
 
         // Assembly: collect references across ALL open Assembly documents.
         let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
-            Some(w) => w.to_uppercase(),
+            Some(w) => w,
             None => return Ok(None)
         };
         drop(entry);
 
+        let case_sensitive = self.asm_analyzer.config().case_sensitive;
         let mut all_refs: Vec<Location> = Vec::new();
         for doc_entry in self.documents.iter() {
             if doc_entry.value().doc_type != DocumentType::Assembly {
@@ -1549,7 +1604,7 @@ impl LanguageServer for CpcLspBackend {
             }
             all_refs.extend(
                 self.asm_analyzer
-                    .find_references_in(doc_entry.value(), &word)
+                    .find_references_in(doc_entry.value(), &word, case_sensitive)
             );
         }
 
@@ -1667,7 +1722,7 @@ impl LanguageServer for CpcLspBackend {
                 Ok(non_empty_workspace_edit(changes))
             },
 
-            DocumentType::Unknown => Ok(None)
+            DocumentType::Csl | DocumentType::Unknown => Ok(None)
         }
     }
 
@@ -1697,7 +1752,7 @@ impl LanguageServer for CpcLspBackend {
                     .prepare_call_hierarchy(entry.value(), position)
                     .or_else(|| self.bndbuild_cross_file_prepare(entry.value(), &uri, position))
             },
-            DocumentType::Unknown => None
+            DocumentType::Csl | DocumentType::Unknown => None
         };
 
         Ok(item.map(|i| vec![i]))
@@ -2027,6 +2082,9 @@ impl LanguageServer for CpcLspBackend {
                 {
                     self.basic_analyzer.code_lens(document)
                 },
+                DocumentType::Csl if self.csl_analyzer.config().code_lens => {
+                    self.csl_analyzer.code_lens(document)
+                },
                 _ => Vec::new()
             };
             if !lenses.is_empty() { Some(lenses) } else { None }
@@ -2209,6 +2267,7 @@ impl LanguageServer for CpcLspBackend {
                 &self.asm_analyzer,
                 &self.build_analyzer,
                 &self.basic_analyzer,
+                &self.csl_analyzer,
                 &document,
                 &self.workspace_roots(),
                 &self.build_error_diagnostics,
@@ -2441,6 +2500,7 @@ impl LanguageServer for CpcLspBackend {
                 &self.asm_analyzer,
                 &self.build_analyzer,
                 &self.basic_analyzer,
+                &self.csl_analyzer,
                 &document,
                 &self.workspace_roots(),
                 &self.build_error_diagnostics,
@@ -2508,6 +2568,78 @@ impl LanguageServer for CpcLspBackend {
                 let config = self.basic_analyzer.config();
                 tokio::task::spawn_blocking(move || {
                     crate::locomotive::run::run_document_in_emulator(&document, &config, tx)
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("run task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        if params.command == "cpclib.runCsl" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let Ok(uri) = Url::from_file_path(&fname)
+            else {
+                return Ok(None);
+            };
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            self.client
+                .log_message(MessageType::INFO, "Launching CSL script...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let outcome = {
+                let document = document.clone();
+                let config = self.csl_analyzer.config();
+                tokio::task::spawn_blocking(move || {
+                    crate::csl::run::run_document_in_emulator(&document, &config, tx)
                 })
                 .await
                 .map_err(|e| {
@@ -2919,6 +3051,31 @@ impl LanguageServer for CpcLspBackend {
             return Ok(summary.map(|s| serde_json::to_value(s).unwrap_or(serde_json::Value::Null)));
         }
 
+        if params.command == "cpclib.fileRegions" {
+            // A binary file (.sna/.cpr) - never one of the text documents
+            // `load_document` tracks, so the bytes are read straight off
+            // disk rather than through the document cache.
+            let Some(arg) = params.arguments.into_iter().next()
+            else {
+                return Ok(None);
+            };
+            let Some(path) = arg
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| Url::parse(s).ok())
+                .and_then(|uri| uri.to_file_path().ok())
+                .and_then(|p| camino::Utf8PathBuf::from_path_buf(p).ok())
+            else {
+                return Ok(None);
+            };
+            let Ok(bytes) = fs_err::read(&path)
+            else {
+                return Ok(Some(serde_json::json!({ "regions": [] })));
+            };
+            let regions = crate::fileformat::file_regions(&path, &bytes);
+            return Ok(Some(serde_json::json!({ "regions": regions })));
+        }
+
         if params.command == "cpclib.registersAtPosition" {
             let Some(arg) = params.arguments.into_iter().next()
             else {
@@ -3090,6 +3247,7 @@ impl LanguageServer for CpcLspBackend {
                     &self.asm_analyzer,
                     &self.build_analyzer,
                     &self.basic_analyzer,
+                    &self.csl_analyzer,
                     &document,
                     &self.workspace_roots(),
                     &self.build_error_diagnostics,
@@ -3989,12 +4147,14 @@ mod warnings_as_errors_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
+        let csl_analyzer = CslAnalyzer::new();
         let build_error_diagnostics = DashMap::new();
 
         let diags = compute_diagnostics(
             &asm_analyzer,
             &build_analyzer,
             &basic_analyzer,
+            &csl_analyzer,
             &doc,
             &[],
             &build_error_diagnostics,
@@ -4014,6 +4174,7 @@ mod warnings_as_errors_tests {
             &asm_analyzer,
             &build_analyzer,
             &basic_analyzer,
+            &csl_analyzer,
             &doc,
             &[],
             &build_error_diagnostics,
@@ -4039,6 +4200,7 @@ mod warnings_as_errors_tests {
 
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
+        let csl_analyzer = CslAnalyzer::new();
         let build_error_diagnostics = DashMap::new();
 
         let mut bnd_doc = Document::new(
@@ -4052,6 +4214,7 @@ mod warnings_as_errors_tests {
             &asm_analyzer,
             &build_analyzer,
             &basic_analyzer,
+            &csl_analyzer,
             &bnd_doc,
             &[],
             &build_error_diagnostics,
@@ -4313,6 +4476,7 @@ mod build_error_diagnostics_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
+        let csl_analyzer = CslAnalyzer::new();
         let build_error_diagnostics: DashMap<Url, Vec<Diagnostic>> = DashMap::new();
 
         let uri = Url::parse("file:///sna.asm").unwrap();
@@ -4325,6 +4489,7 @@ mod build_error_diagnostics_tests {
             &asm_analyzer,
             &build_analyzer,
             &basic_analyzer,
+            &csl_analyzer,
             &document,
             &[],
             &build_error_diagnostics,
@@ -4339,6 +4504,7 @@ mod build_error_diagnostics_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
+        let csl_analyzer = CslAnalyzer::new();
         let build_error_diagnostics: DashMap<Url, Vec<Diagnostic>> = DashMap::new();
 
         build_error_diagnostics.insert(
@@ -4355,6 +4521,7 @@ mod build_error_diagnostics_tests {
             &asm_analyzer,
             &build_analyzer,
             &basic_analyzer,
+            &csl_analyzer,
             &document,
             &[],
             &build_error_diagnostics,

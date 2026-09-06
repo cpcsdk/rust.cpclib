@@ -100,11 +100,16 @@ impl AssemblyAnalyzer {
             let mut chunk = Vec::new();
             collect_asm_diagnostics(error, None, document, &mut chunk);
             if chunk.is_empty() {
+                // See `asm_diag`'s own comment on `NO_LOCATION_RANGE`: a
+                // squiggle pinned to the start of the file reads as "the
+                // error is on line 1" when this error carries no location
+                // at all - saying so directly in the message removes the
+                // ambiguity.
                 chunk.push(Diagnostic {
                     range: NO_LOCATION_RANGE,
                     severity: Some(DiagnosticSeverity::ERROR),
                     source: Some("basm".to_string()),
-                    message: strip_ansi(&format!("{error}")),
+                    message: format!("(exact location unknown) {}", strip_ansi(&format!("{error}"))),
                     ..Default::default()
                 });
             }
@@ -787,6 +792,20 @@ pub(super) fn asm_diag(
     message: String,
     severity: DiagnosticSeverity
 ) -> Diagnostic {
+    // A location-less error (e.g. a top-level `FunctionError` with no
+    // parent span) still has to land *somewhere* to be reported at all -
+    // `NO_LOCATION_RANGE`, the very start of the file - but a squiggle there
+    // reads as "the error is on line 1" when it might be anywhere in a
+    // multi-thousand-line file with the real problem buried in an include.
+    // Saying so in the message itself is cheap and removes the ambiguity;
+    // relocating the squiggle elsewhere would only move the same confusion,
+    // not remove it.
+    let message = if span.is_none() {
+        format!("(exact location unknown) {message}")
+    }
+    else {
+        message
+    };
     let range = if let Some(s) = span {
         let (line_1, col_1) = s.relative_line_and_column();
         let line = line_1.saturating_sub(1) as u32;

@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo run *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -)",
+      "Bash(grep -n \"bnd,build\\\\|{bnd,build}\" src/extension.ts)",
+      "Bash(cargo fmt *)",
+      "Bash(python3 -m json.tool /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-vscode/package.json)",
+      "WebFetch(domain:code.visualstudio.com)",
+      "WebFetch(domain:crates.io)",
+      "Bash(cargo update *)",
+      "Bash(find /home/romain/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/minijinja-2.21.0/src -maxdepth 1 -iname *.rs)",
+      "Bash(find /home/romain/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/minijinja-2.21.0/src -iname *macro*)",
+      "Bash(find /home/romain/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/minijinja-2.21.0/src -iname undefined*)",
+      "Bash(awk 'NR<=1260 && /^    \\(pub \\)?fn /{line=NR\"\\\\t\"$0} END{}1' cpclib-asm/src/assembler/mod.rs)",
+      "Bash(awk -F'\\\\t' '$1<=1260')",
+      "Bash(awk -F: '$1<1310')",
+      "Bash(echo \"EXIT CODE: $?\")",
+      "Bash(xargs ls -la)",
+      "Bash(cargo search *)",
+      "Bash(grep -B2 -A6 \"method \\\\`find_references\\\\` is never used\")",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; cat {}')",
+      "Bash(grep -n \"RenameTarget::Local { name, scope\" -A 10 /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-lsp/src/basm/definition.rs)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-lsp --lib basm::)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo build -p cpclib-asmoptim -p cpclib-asm)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-z80flow -p cpclib-asm -p cpclib-asmoptim)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-z80flow)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-asm -p cpclib-asmoptim -p cpclib-basmopt -p cpclib-tokens)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-z80flow -p cpclib-asm -p cpclib-asmoptim -p cpclib-basmopt -p cpclib-tokens)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-lsp)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo build -p cpclib-z80flow)",
+      "Bash(CARGO_INCREMENTAL=0 timeout 590 cargo test -p cpclib-z80flow cost_range)",
+      "Bash(echo \"=== tsc rc=$?\")"
+    ]
+  }
+}

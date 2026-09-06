@@ -20,9 +20,13 @@ import {
     clearInstructionHint, reconcileVisibleEditors, disposeInstructionHintType, applyInstructionHint,
     showInstructionHint,
 } from './instructionHint';
-import { showEmulator, disposeEmulator, emulatorUrls } from './webviews/emulator';
+import { showEmulator, disposeEmulator, emulatorUrls, sessionCapabilities } from './webviews/emulator';
 import { showMemory, disposeMemory } from './webviews/memory';
 import { showCrtc } from './webviews/crtc';
+import { showPsg } from './webviews/psg';
+import { showFdc } from './webviews/fdc';
+import { showPpi } from './webviews/ppi';
+import { showTape } from './webviews/tape';
 import { showScreen, disposeScreen } from './webviews/screen';
 import { showBasicListing, registerBasicListingDoc, disposeBasicListing } from './basicListingDoc';
 import { showDisassembly, registerDisassemblyDoc, disposeDisassemblyDoc } from './disassemblyDoc';
@@ -241,6 +245,7 @@ export function registerDebugging(
             if (event.session.type !== DEBUG_TYPE) { return; }
             if (event.event === 'cpclib/emulatorReady') {
                 emulatorUrls.set(event.session.id, event.body?.url ?? '');
+                sessionCapabilities.set(event.session.id, new Set<string>(event.body?.supports ?? []));
                 await showEmulator(event.session, event.body?.url);
             }
             if (event.event === 'cpclib/memoryView') {
@@ -251,6 +256,18 @@ export function registerDebugging(
             }
             if (event.event === 'cpclib/crtcView') {
                 showCrtc(event.session, event.body);
+            }
+            if (event.event === 'cpclib/psgView') {
+                showPsg(event.session, event.body);
+            }
+            if (event.event === 'cpclib/fdcView') {
+                showFdc(event.session, event.body);
+            }
+            if (event.event === 'cpclib/ppiView') {
+                showPpi(event.session, event.body);
+            }
+            if (event.event === 'cpclib/tapeView') {
+                showTape(event.session, event.body);
             }
             if (event.event === 'cpclib/basicListingView') {
                 await showBasicListing(event.session, event.body);
@@ -300,6 +317,7 @@ export function registerDebugging(
                 await disposeBasicListing(session.id);
                 await disposeDisassemblyDoc(session.id);
                 emulatorUrls.delete(session.id);
+                sessionCapabilities.delete(session.id);
                 lastStop = undefined;
                 clearInstructionHint();
             }

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>bndbuild &#183; Build Profile</title>
+<style>
+:root {
+  --bg:#1e1e2e; --bg2:#181825; --surface:#313244; --overlay:#45475a;
+  --text:#cdd6f4; --sub:#a6adc8;
+  --blue:#89b4fa; --green:#a6e3a1; --red:#f38ba8;
+  --yellow:#f9e2af; --sky:#89dceb;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:var(--bg); color:var(--text);
+  font-family:'Cascadia Code','JetBrains Mono',ui-monospace,monospace;
+  font-size:13px; padding:28px 32px; line-height:1.5;
+}
+h1 { color:var(--blue); font-size:18px; margin-bottom:6px; letter-spacing:.3px; }
+.summary { color:var(--sub); margin-bottom:28px; }
+.summary b { color:var(--text); }
+h2 {
+  color:var(--blue); font-size:11px; text-transform:uppercase;
+  letter-spacing:1.5px; margin:28px 0 10px;
+  border-bottom:1px solid var(--surface); padding-bottom:5px;
+}
+.chart-wrap { overflow-x:auto; border-radius:8px; margin-bottom:6px; }
+table { border-collapse:collapse; width:100%; margin-top:4px; }
+thead th {
+  background:var(--surface); padding:7px 14px; text-align:left;
+  color:var(--blue); font-size:11px; text-transform:uppercase;
+  letter-spacing:.8px; white-space:nowrap;
+  border-bottom:1px solid var(--overlay);
+}
+tbody td { padding:6px 14px; border-bottom:1px solid var(--surface); vertical-align:middle; }
+tbody tr:hover td { background:var(--surface); }
+td.rank { color:var(--overlay); font-size:11px; text-align:right; padding-right:8px; width:32px; }
+td.name { max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+td.dur  { color:var(--yellow); font-weight:bold; white-space:nowrap; padding-right:6px; }
+td.pct  { color:var(--sub); font-size:11px; min-width:50px; white-space:nowrap; }
+td.tc   { color:var(--sub); text-align:center; white-space:nowrap; }
+td.slow { color:var(--sub); max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar-wrap { background:var(--bg2); border-radius:3px; height:8px; min-width:60px; max-width:260px; margin-top:5px; }
+.bar     { height:100%; border-radius:3px; min-width:2px; }
+.s-ok       { color:var(--green); }
+.s-failed   { color:var(--red); font-weight:bold; }
+.s-uptodate { color:var(--sky); }
+.s-running  { color:var(--yellow); }
+</style>
+</head>
+<body>
+<h1>&#9935; bndbuild &#183; Build Profile</h1>
+<div class="summary">
+  <b>Total:</b> 750s &nbsp;&#183;&nbsp;
+  <b>Rules:</b> 48 &nbsp;&#183;&nbsp; <span class='s-ok'>&#10004; all OK</span>
+</div>
+<h2>&#8987; Timeline</h2>
+<div class="chart-wrap"><svg xmlns="http://www.w3.org/2000/svg" width="1184" height="1286" style="font-family:inherit"><rect width="100%" height="100%" fill="#181825" rx="6"/><line x1="292" y1="8" x2="292" y2="1278" stroke="#45475a" stroke-width="1"/><line x1="292.0" y1="30" x2="292.0" y2="1278" stroke="#313244" stroke-width="1"/><text x="292.0" y="25" fill="#585b70" text-anchor="middle" font-size="11">0s</text><line x1="362.4" y1="30" x2="362.4" y2="1278" stroke="#313244" stroke-width="1"/><text x="362.4" y="25" fill="#585b70" text-anchor="middle" font-size="11">60s</text><line x1="432.8" y1="30" x2="432.8" y2="1278" stroke="#313244" stroke-width="1"/><text x="432.8" y="25" fill="#585b70" text-anchor="middle" font-size="11">120s</text><line x1="503.2" y1="30" x2="503.2" y2="1278" stroke="#313244" stroke-width="1"/><text x="503.2" y="25" fill="#585b70" text-anchor="middle" font-size="11">180s</text><line x1="573.7" y1="30" x2="573.7" y2="1278" stroke="#313244" stroke-width="1"/><text x="573.7" y="25" fill="#585b70" text-anchor="middle" font-size="11">240s</text><line x1="644.1" y1="30" x2="644.1" y2="1278" stroke="#313244" stroke-width="1"/><text x="644.1" y="25" fill="#585b70" text-anchor="middle" font-size="11">300s</text><line x1="714.5" y1="30" x2="714.5" y2="1278" stroke="#313244" stroke-width="1"/><text x="714.5" y="25" fill="#585b70" text-anchor="middle" font-size="11">360s</text><line x1="784.9" y1="30" x2="784.9" y2="1278" stroke="#313244" stroke-width="1"/><text x="784.9" y="25" fill="#585b70" text-anchor="middle" font-size="11">420s</text><line x1="855.3" y1="30" x2="855.3" y2="1278" stroke="#313244" stroke-width="1"/><text x="855.3" y="25" fill="#585b70" text-anchor="middle" font-size="11">480s</text><line x1="925.7" y1="30" x2="925.7" y2="1278" stroke="#313244" stroke-width="1"/><text x="925.7" y="25" fill="#585b70" text-anchor="middle" font-size="11">540s</text><line x1="996.1" y1="30" x2="996.1" y2="1278" stroke="#313244" stroke-width="1"/><text x="996.1" y="25" fill="#585b70" text-anchor="middle" font-size="11">600s</text><line x1="1066.6" y1="30" x2="1066.6" y2="1278" stroke="#313244" stroke-width="1"/><text x="1066.6" y="25" fill="#585b70" text-anchor="middle" font-size="11">660s</text><line x1="1137.0" y1="30" x2="1137.0" y2="1278" stroke="#313244" stroke-width="1"/><text x="1137.0" y="25" fill="#585b70" text-anchor="middle" font-size="11">720s</text><text x="286" y="43" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../polar_dots/POLAR.BIN</title>../polar_dots/POLAR.BIN</text><rect x="292.0" y="34" width="137.7" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../polar_dots/POLAR.BIN
+ok · 117s
+  117s — bndbuild -f ../polar_dots POLAR.BIN</title></rect><text x="360.9" y="43" fill="#1e1e2e" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold">117s</text><rect x="12" y="56" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="69" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>screen0_bottom.ga</title>screen0_bottom.ga</text><rect x="292.0" y="60" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>screen0_bottom.ga
+ok · 30ms
+  16ms — img2cpc 
+  --mode 0 
+  --skipoddpixels
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1 
+  --pen4 93 --pen5 69 --pen6 77 --pen7 95  --pen8 79 
+  --unlock-pens
+  data/mode0_bottom.png
+  scr --output screen0_bottom.scr --palette screen0_bottom.ga
+</title></rect><text x="286" y="95" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>screen1.scr</title>screen1.scr</text><rect x="292.0" y="86" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>screen1.scr
+ok · 0ms
+  22ms — img2cpc 
+  --mode 1 
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1
+  data/mode1.png
+  scr --output screen1.scr --palette screen1.ga --palette_fadeout screen1_fadeout.ga
+</title></rect><rect x="12" y="108" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="121" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>warlord-2023-hbl-spacepart.akm.asm</title>warlord-2023-hbl-spacepart.akm.asm</text><rect x="292.0" y="112" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>warlord-2023-hbl-spacepart.akm.asm
+ok · 1.55s
+  1.55s — SongToAkm -twe --exportPlayerConfig data/music/outer-polar-space-29102025.aks warlord-2023-hbl-spacepart.akm.asm</title></rect><text x="286" y="147" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>screen0_top.scr</title>screen0_top.scr</text><rect x="293.9" y="138" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>screen0_top.scr
+ok · 82ms
+  40ms — img2cpc 
+  --mode 0 
+  --skipoddpixels
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1 
+  --pen4 93 --pen5 69 --pen6 77 --pen7 95  --pen8 79 
+  --unlock-pens
+  data/mode0_top.png
+  scr --output screen0_top.scr --palette screen0_top.ga
+</title></rect><rect x="12" y="160" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="173" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>mask.scr</title>mask.scr</text><rect x="293.9" y="164" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>mask.scr
+ok · 80ms
+  49ms — img2cpc 
+  --mode 1 
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1
+  data/mask.png
+  scr --output mask.scr --palette mask.ga
+</title></rect><text x="286" y="199" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>generated.asm</title>generated.asm</text><rect x="294.0" y="190" width="9.5" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>generated.asm
+ok · 8.11s
+  8.18s — extern cargo run --manifest-path=generator/Cargo.toml  --release mask.scr</title></rect><rect x="12" y="212" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="225" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>C6.4000</title>C6.4000</text><rect x="303.6" y="216" width="30.5" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>C6.4000
+ok · 26.00s
+  25.99s — basm --snapshot -o polar.sna  src/sna.asm -DAKM=\&quot;warlord-2023-hbl-spacepart.akm.asm\&quot; -DAKM_CFG=\&quot;warlord-2023-hbl-spacepart.akm_playerconfig.asm\&quot; --lst polar.lst --ace polar.rasm --nochunk BRKC,BRKS,SYMB,REMU
+</title></rect><text x="286" y="251" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>POLAR.BIN</title>POLAR.BIN</text><rect x="334.1" y="242" width="95.7" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>POLAR.BIN
+ok · 81.52s
+  81.52s — basm src/link.asm --snapshot -o link.sna --lst link.lst</title></rect><text x="381.9" y="251" fill="#1e1e2e" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold">81.52s</text><rect x="12" y="264" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="277" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../MakeItEasy/CRTC2.PT2</title>../MakeItEasy/CRTC2.PT2</text><rect x="429.7" y="268" width="597.7" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../MakeItEasy/CRTC2.PT2
+ok · 509s
+  509s — bndbuild -f ../MakeItEasy CRTC2.PT2</title></rect><text x="728.6" y="277" fill="#1e1e2e" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold">509s</text><text x="286" y="303" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>loading_fadeout.ga</title>loading_fadeout.ga</text><rect x="429.7" y="294" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>loading_fadeout.ga
+ok · 29ms
+  22ms — img2cpc 
+  --mode 1 
+  files/loading.png
+  scr --r1 48  --output loading.scr --palette loading.ga --palette_fadeout loading_fadeout.ga
+</title></rect><rect x="12" y="316" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="329" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>MAIN_CRTC1.800</title>MAIN_CRTC1.800</text><rect x="429.8" y="320" width="24.6" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>MAIN_CRTC1.800
+ok · 20.99s
+  4.16s — basm src/sna_multimoderupture8.asm -o multimodehbl_crtc0.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=0
+  1ms — mv MAIN.800 MAIN_CRTC0.800
+  1ms — cp MAIN.4000 MAIN_CRTC0.4000
+  0ms — cp MAIN.C000 MAIN_CRTC0.C000
+  0ms — cp C4.4000 C4_CRTC0.4000
+  0ms — cp C5.4000 C5_CRTC0.4000
+  0ms — cp C7.4000 C7_CRTC0.4000
+  0ms — cp C6.4b42 C6_CRTC0.4b42
+  4.34s — basm src/sna_multimoderupture8.asm -o multimodehbl_crtc1.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=1
+  1ms — mv MAIN.800 MAIN_CRTC1.800
+  1ms — cp MAIN.4000 MAIN_CRTC1.4000
+  1ms — cp MAIN.C000 MAIN_CRTC1.C000
+  1ms — cp C4.4000 C4_CRTC1.4000
+  0ms — cp C5.4000 C5_CRTC1.4000
+  0ms — cp C7.4000 C7_CRTC1.4000
+  0ms — cp C6.4b42 C6_CRTC1.4b42
+  4.44s — basm src/sna_multimoderupture8.asm -o multimodehbl_crtc2.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=2
+  1ms — mv MAIN.800 MAIN_CRTC2.800
+  3ms — cp MAIN.4000 MAIN_CRTC2.4000
+  1ms — cp MAIN.C000 MAIN_CRTC2.C000
+  1ms — cp C4.4000 C4_CRTC2.4000
+  0ms — cp C5.4000 C5_CRTC2.4000
+  0ms — cp C7.4000 C7_CRTC2.4000
+  1ms — cp C6.4b42 C6_CRTC2.4b42
+  4.09s — basm src/sna_multimoderupture8.asm -o multimodehbl_crtc3.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=3
+  1ms — mv MAIN.800 MAIN_CRTC3.800
+  1ms — cp MAIN.4000 MAIN_CRTC3.4000
+  0ms — cp MAIN.C000 MAIN_CRTC3.C000
+  0ms — cp C4.4000 C4_CRTC3.4000
+  0ms — cp C5.4000 C5_CRTC3.4000
+  0ms — cp C7.4000 C7_CRTC3.4000
+  0ms — cp C6.4b42 C6_CRTC3.4b42
+  3.93s — basm src/sna_multimoderupture8.asm -o multimodehbl_crtc4.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=4
+  1ms — mv MAIN.800 MAIN_CRTC4.800
+  1ms — cp MAIN.4000 MAIN_CRTC4.4000
+  0ms — cp MAIN.C000 MAIN_CRTC4.C000
+  1ms — cp C4.4000 C4_CRTC4.4000
+  1ms — cp C5.4000 C5_CRTC4.4000
+  0ms — cp C7.4000 C7_CRTC4.4000
+  0ms — cp C6.4b42 C6_CRTC4.4b42</title></rect><rect x="429.8" y="335" width="4.9" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/sna_multimoderupture8.asm -o multimodehbl_crtc0.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=0 (4.16s)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>mv MAIN.800 MAIN_CRTC0.800 (1ms)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.4000 MAIN_CRTC0.4000 (1ms)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.C000 MAIN_CRTC0.C000 (0ms)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C4.4000 C4_CRTC0.4000 (0ms)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C5.4000 C5_CRTC0.4000 (0ms)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C7.4000 C7_CRTC0.4000 (0ms)</title></rect><rect x="434.7" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C6.4b42 C6_CRTC0.4b42 (0ms)</title></rect><rect x="434.7" y="335" width="5.1" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/sna_multimoderupture8.asm -o multimodehbl_crtc1.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=1 (4.34s)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>mv MAIN.800 MAIN_CRTC1.800 (1ms)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.4000 MAIN_CRTC1.4000 (1ms)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.C000 MAIN_CRTC1.C000 (1ms)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C4.4000 C4_CRTC1.4000 (1ms)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C5.4000 C5_CRTC1.4000 (0ms)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C7.4000 C7_CRTC1.4000 (0ms)</title></rect><rect x="439.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C6.4b42 C6_CRTC1.4b42 (0ms)</title></rect><rect x="439.8" y="335" width="5.2" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/sna_multimoderupture8.asm -o multimodehbl_crtc2.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=2 (4.44s)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>mv MAIN.800 MAIN_CRTC2.800 (1ms)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.4000 MAIN_CRTC2.4000 (3ms)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.C000 MAIN_CRTC2.C000 (1ms)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C4.4000 C4_CRTC2.4000 (1ms)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C5.4000 C5_CRTC2.4000 (0ms)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C7.4000 C7_CRTC2.4000 (0ms)</title></rect><rect x="445.0" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C6.4b42 C6_CRTC2.4b42 (1ms)</title></rect><rect x="445.0" y="335" width="4.8" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/sna_multimoderupture8.asm -o multimodehbl_crtc3.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=3 (4.09s)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>mv MAIN.800 MAIN_CRTC3.800 (1ms)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.4000 MAIN_CRTC3.4000 (1ms)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.C000 MAIN_CRTC3.C000 (0ms)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C4.4000 C4_CRTC3.4000 (0ms)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C5.4000 C5_CRTC3.4000 (0ms)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C7.4000 C7_CRTC3.4000 (0ms)</title></rect><rect x="449.8" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C6.4b42 C6_CRTC3.4b42 (0ms)</title></rect><rect x="449.8" y="335" width="4.6" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/sna_multimoderupture8.asm -o multimodehbl_crtc4.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=4 (3.93s)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>mv MAIN.800 MAIN_CRTC4.800 (1ms)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.4000 MAIN_CRTC4.4000 (1ms)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp MAIN.C000 MAIN_CRTC4.C000 (0ms)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C4.4000 C4_CRTC4.4000 (1ms)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C5.4000 C5_CRTC4.4000 (1ms)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C7.4000 C7_CRTC4.4000 (0ms)</title></rect><rect x="454.4" y="335" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>cp C6.4b42 C6_CRTC4.4b42 (0ms)</title></rect><text x="286" y="355" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>CRTC2.PT2</title>CRTC2.PT2</text><rect x="454.4" y="346" width="573.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>CRTC2.PT2
+ok · 488s
+  8.25s — basm src/dsk_multimoderupture8_part2.asm  -o CRTC0.PT2  -DSELECTED_CRTC=0  -DMAIN_800_FNAME=\&quot;MAIN_CRTC0.800\&quot;
+
+  91.40s — basm src/dsk_multimoderupture8_part1.asm  -o CRTC0.PT1  -DSELECTED_CRTC=0  -DPT2_FNAME=\&quot;CRTC0.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC0.4000\&quot;
+
+  32ms — basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc0.sna -DDSK=\&quot;MULTIHBL_CRTC0.DSK\&quot;  -DEXEC=\&quot;CRTC0.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC0.PT1\&quot; -DPT2_FNAME=\&quot;CRTC0.PT2\&quot;
+
+  8.29s — basm src/dsk_multimoderupture8_part2.asm  -o CRTC1.PT2  -DSELECTED_CRTC=1  -DMAIN_800_FNAME=\&quot;MAIN_CRTC1.800\&quot;
+
+  90.94s — basm src/dsk_multimoderupture8_part1.asm  -o CRTC1.PT1  -DSELECTED_CRTC=1  -DPT2_FNAME=\&quot;CRTC1.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC1.4000\&quot;
+
+  36ms — basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc1.sna -DDSK=\&quot;MULTIHBL_CRTC1.DSK\&quot;  -DEXEC=\&quot;CRTC1.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC1.PT1\&quot; -DPT2_FNAME=\&quot;CRTC1.PT2\&quot;
+
+  8.08s — basm src/dsk_multimoderupture8_part2.asm  -o CRTC2.PT2  -DSELECTED_CRTC=2  -DMAIN_800_FNAME=\&quot;MAIN_CRTC2.800\&quot;
+
+  83.26s — basm src/dsk_multimoderupture8_part1.asm  -o CRTC2.PT1  -DSELECTED_CRTC=2  -DPT2_FNAME=\&quot;CRTC2.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC2.4000\&quot;
+
+  35ms — basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc2.sna -DDSK=\&quot;MULTIHBL_CRTC2.DSK\&quot;  -DEXEC=\&quot;CRTC2.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC2.PT1\&quot; -DPT2_FNAME=\&quot;CRTC2.PT2\&quot;
+
+  6.71s — basm src/dsk_multimoderupture8_part2.asm  -o CRTC3.PT2  -DSELECTED_CRTC=3  -DMAIN_800_FNAME=\&quot;MAIN_CRTC3.800\&quot;
+
+  86.74s — basm src/dsk_multimoderupture8_part1.asm  -o CRTC3.PT1  -DSELECTED_CRTC=3  -DPT2_FNAME=\&quot;CRTC3.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC3.4000\&quot;
+
+  38ms — basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc3.sna -DDSK=\&quot;MULTIHBL_CRTC3.DSK\&quot;  -DEXEC=\&quot;CRTC3.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC3.PT1\&quot; -DPT2_FNAME=\&quot;CRTC3.PT2\&quot;
+
+  8.97s — basm src/dsk_multimoderupture8_part2.asm  -o CRTC4.PT2  -DSELECTED_CRTC=4  -DMAIN_800_FNAME=\&quot;MAIN_CRTC4.800\&quot;
+
+  95.44s — basm src/dsk_multimoderupture8_part1.asm  -o CRTC4.PT1  -DSELECTED_CRTC=4  -DPT2_FNAME=\&quot;CRTC4.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC4.4000\&quot;
+
+  43ms — basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc4.sna -DDSK=\&quot;MULTIHBL_CRTC4.DSK\&quot;  -DEXEC=\&quot;CRTC4.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC4.PT1\&quot; -DPT2_FNAME=\&quot;CRTC4.PT2\&quot;
+</title></rect><text x="740.9" y="355" fill="#1e1e2e" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold">488s</text><rect x="454.4" y="361" width="9.7" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part2.asm  -o CRTC0.PT2  -DSELECTED_CRTC=0  -DMAIN_800_FNAME=\&quot;MAIN_CRTC0.800\&quot;
+ (8.25s)</title></rect><rect x="464.1" y="361" width="107.3" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part1.asm  -o CRTC0.PT1  -DSELECTED_CRTC=0  -DPT2_FNAME=\&quot;CRTC0.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC0.4000\&quot;
+ (91.40s)</title></rect><rect x="571.4" y="361" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc0.sna -DDSK=\&quot;MULTIHBL_CRTC0.DSK\&quot;  -DEXEC=\&quot;CRTC0.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC0.PT1\&quot; -DPT2_FNAME=\&quot;CRTC0.PT2\&quot;
+ (32ms)</title></rect><rect x="571.4" y="361" width="9.7" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part2.asm  -o CRTC1.PT2  -DSELECTED_CRTC=1  -DMAIN_800_FNAME=\&quot;MAIN_CRTC1.800\&quot;
+ (8.29s)</title></rect><rect x="581.1" y="361" width="106.7" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part1.asm  -o CRTC1.PT1  -DSELECTED_CRTC=1  -DPT2_FNAME=\&quot;CRTC1.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC1.4000\&quot;
+ (90.94s)</title></rect><rect x="687.8" y="361" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc1.sna -DDSK=\&quot;MULTIHBL_CRTC1.DSK\&quot;  -DEXEC=\&quot;CRTC1.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC1.PT1\&quot; -DPT2_FNAME=\&quot;CRTC1.PT2\&quot;
+ (36ms)</title></rect><rect x="687.9" y="361" width="9.5" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part2.asm  -o CRTC2.PT2  -DSELECTED_CRTC=2  -DMAIN_800_FNAME=\&quot;MAIN_CRTC2.800\&quot;
+ (8.08s)</title></rect><rect x="697.4" y="361" width="97.7" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part1.asm  -o CRTC2.PT1  -DSELECTED_CRTC=2  -DPT2_FNAME=\&quot;CRTC2.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC2.4000\&quot;
+ (83.26s)</title></rect><rect x="795.1" y="361" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc2.sna -DDSK=\&quot;MULTIHBL_CRTC2.DSK\&quot;  -DEXEC=\&quot;CRTC2.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC2.PT1\&quot; -DPT2_FNAME=\&quot;CRTC2.PT2\&quot;
+ (35ms)</title></rect><rect x="795.1" y="361" width="7.9" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part2.asm  -o CRTC3.PT2  -DSELECTED_CRTC=3  -DMAIN_800_FNAME=\&quot;MAIN_CRTC3.800\&quot;
+ (6.71s)</title></rect><rect x="803.0" y="361" width="101.8" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part1.asm  -o CRTC3.PT1  -DSELECTED_CRTC=3  -DPT2_FNAME=\&quot;CRTC3.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC3.4000\&quot;
+ (86.74s)</title></rect><rect x="904.8" y="361" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc3.sna -DDSK=\&quot;MULTIHBL_CRTC3.DSK\&quot;  -DEXEC=\&quot;CRTC3.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC3.PT1\&quot; -DPT2_FNAME=\&quot;CRTC3.PT2\&quot;
+ (38ms)</title></rect><rect x="904.9" y="361" width="10.5" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part2.asm  -o CRTC4.PT2  -DSELECTED_CRTC=4  -DMAIN_800_FNAME=\&quot;MAIN_CRTC4.800\&quot;
+ (8.97s)</title></rect><rect x="915.4" y="361" width="112.0" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_part1.asm  -o CRTC4.PT1  -DSELECTED_CRTC=4  -DPT2_FNAME=\&quot;CRTC4.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC4.4000\&quot;
+ (95.44s)</title></rect><rect x="1027.4" y="361" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>basm src/dsk_multimoderupture8_join.asm  --override  --snapshot -o linked_multimodehbl_crtc4.sna -DDSK=\&quot;MULTIHBL_CRTC4.DSK\&quot;  -DEXEC=\&quot;CRTC4.HBL\&quot;  -DPT1_FNAME=\&quot;CRTC4.PT1\&quot; -DPT2_FNAME=\&quot;CRTC4.PT2\&quot;
+ (43ms)</title></rect><rect x="12" y="368" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="381" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../IntroHBL/INTRO.LNK</title>../IntroHBL/INTRO.LNK</text><rect x="1027.4" y="372" width="101.1" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../IntroHBL/INTRO.LNK
+ok · 86.11s
+  86.10s — bndbuild -f ../IntroHBL INTRO.LNK</title></rect><text x="1078.0" y="381" fill="#1e1e2e" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold">86.11s</text><text x="286" y="407" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../polar_dots/POLAR.LOA</title>../polar_dots/POLAR.LOA</text><rect x="1027.5" y="398" width="25.7" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../polar_dots/POLAR.LOA
+ok · 21.87s
+  21.89s — bndbuild -f ../polar_dots POLAR.LOA</title></rect><rect x="12" y="420" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="433" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../linking/HBL.001</title>../linking/HBL.001</text><rect x="1027.5" y="424" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../linking/HBL.001
+ok · 102ms
+  90ms — bndbuild -f ../linking HBL.000</title></rect><text x="286" y="459" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../polar_dots/POLAR.BIN</title>../polar_dots/POLAR.BIN</text><rect x="1027.5" y="450" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../polar_dots/POLAR.BIN
+ok · 53ms
+  46ms — bndbuild -f ../polar_dots POLAR.BIN</title></rect><rect x="12" y="472" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="485" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.000</title>HBL.000</text><rect x="1027.5" y="476" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.000
+ok · 48ms
+  35ms — basm src/hbl_000_and_001.asm</title></rect><text x="286" y="511" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>screen1_fadeout.ga</title>screen1_fadeout.ga</text><rect x="1027.6" y="502" width="2.0" height="18" fill="#89dceb" rx="3" opacity="0.88"><title>screen1_fadeout.ga
+up-to-date · 0ms</title></rect><rect x="12" y="524" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="537" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>loading.ga</title>loading.ga</text><rect x="1027.6" y="528" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>loading.ga
+ok · 0ms
+  20ms — img2cpc 
+  --mode 1 
+  data/loading.png
+  scr --r1 48 --output loading.scr --palette loading.ga --palette_fadeout loading_fadeout.ga
+</title></rect><text x="286" y="563" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>POLAR.LOA</title>POLAR.LOA</text><rect x="1027.6" y="554" width="25.5" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>POLAR.LOA
+ok · 21.77s
+  21.77s — basm src/polar_loader.asm -I ../linking/ --snapshot -o polar_screen.sna</title></rect><rect x="12" y="576" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="589" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>C4.4000</title>C4.4000</text><rect x="1053.1" y="580" width="3.6" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>C4.4000
+ok · 3.10s
+  3.09s — basm src/intro.asm --snapshot -o intro.sna --lst intro.lst</title></rect><text x="286" y="615" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>INTRO.LNK</title>INTRO.LNK</text><rect x="1056.8" y="606" width="71.7" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>INTRO.LNK
+ok · 61.11s
+  61.11s — basm src/intro_linked.asm --snapshot -o intro_linked.sna --ace linked.rasm --lst linked.lst</title></rect><text x="1092.6" y="615" fill="#1e1e2e" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="bold">61.11s</text><rect x="12" y="628" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="641" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../MakeItEasy/CRTC0.PT2</title>../MakeItEasy/CRTC0.PT2</text><rect x="1128.5" y="632" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../MakeItEasy/CRTC0.PT2
+ok · 55ms
+  65ms — bndbuild -f ../MakeItEasy CRTC0.PT2</title></rect><text x="286" y="667" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../MakeItEasy/CRTC1.PT2</title>../MakeItEasy/CRTC1.PT2</text><rect x="1128.5" y="658" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../MakeItEasy/CRTC1.PT2
+ok · 80ms
+  62ms — bndbuild -f ../MakeItEasy CRTC1.PT2</title></rect><rect x="12" y="680" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="693" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../polar_dots/POLAR.LOA</title>../polar_dots/POLAR.LOA</text><rect x="1128.6" y="684" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../polar_dots/POLAR.LOA
+ok · 0ms
+  8ms — bndbuild -f ../polar_dots POLAR.LOA</title></rect><text x="286" y="719" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../MakeItEasy/CRTC3.PT2</title>../MakeItEasy/CRTC3.PT2</text><rect x="1128.6" y="710" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../MakeItEasy/CRTC3.PT2
+ok · 61ms
+  65ms — bndbuild -f ../MakeItEasy CRTC3.PT2</title></rect><rect x="12" y="732" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="745" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../IntroHBL/INTRO.LOA</title>../IntroHBL/INTRO.LOA</text><rect x="1128.7" y="736" width="28.7" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../IntroHBL/INTRO.LOA
+ok · 24.42s
+  24.42s — bndbuild -f ../IntroHBL INTRO.LOA</title></rect><text x="286" y="771" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>loading_fadeout.ga</title>loading_fadeout.ga</text><rect x="1128.7" y="762" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>loading_fadeout.ga
+ok · 53ms
+  36ms — img2cpc 
+  --mode 1 
+  files/loading.png
+  scr --r1 48 --output loading.scr --palette loading.ga --palette_fadeout loading_fadeout.ga
+</title></rect><rect x="12" y="784" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="797" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>INTRO.LOA</title>INTRO.LOA</text><rect x="1128.8" y="788" width="28.6" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>INTRO.LOA
+ok · 24.37s
+  24.38s — basm src/intro_loader.asm -I ../linking/ --snapshot -o intro_loader.sna</title></rect><text x="286" y="823" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>generated</title>generated</text><rect x="1157.4" y="814" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>generated
+ok · 0ms
+  0ms — mkdir -p generated --ignore</title></rect><rect x="12" y="836" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="849" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>generated/BASIC_FONT_000.BIN</title>generated/BASIC_FONT_000.BIN</text><rect x="1157.4" y="840" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>generated/BASIC_FONT_000.BIN
+ok · 1.09s
+  1.08s — img2cpc --pen0 0 --pen1 26 --mode 2 data/vinz_font.png tile --width 1 --height 8 --output generated/BASIC_FONT.BIN
+</title></rect><text x="286" y="875" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.009</title>HBL.009</text><rect x="1158.7" y="866" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.009
+ok · 108ms
+  22ms — basm src/hbl_009.asm -o HBL.009 --binary</title></rect><rect x="12" y="888" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="901" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>demosystem.o</title>demosystem.o</text><rect x="1158.8" y="892" width="2.0" height="18" fill="#89dceb" rx="3" opacity="0.88"><title>demosystem.o
+up-to-date · 0ms</title></rect><text x="286" y="927" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.007</title>HBL.007</text><rect x="1158.8" y="918" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.007
+ok · 0ms
+  35ms — basm src/hbl_007.asm -o HBL.007 --binary</title></rect><rect x="12" y="940" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="953" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.008</title>HBL.008</text><rect x="1158.8" y="944" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.008
+ok · 0ms
+  18ms — basm src/hbl_008.asm -o HBL.008 --binary</title></rect><text x="286" y="979" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.010</title>HBL.010</text><rect x="1158.8" y="970" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.010
+ok · 0ms
+  28ms — basm src/hbl_010.asm -o HBL.010 --binary</title></rect><rect x="12" y="992" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="1005" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.000</title>HBL.000</text><rect x="1158.8" y="996" width="2.0" height="18" fill="#89dceb" rx="3" opacity="0.88"><title>HBL.000
+up-to-date · 0ms</title></rect><text x="286" y="1031" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.003</title>HBL.003</text><rect x="1158.8" y="1022" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.003
+ok · 56ms
+  29ms — basm src/hbl_003.asm -o HBL.003 --binary</title></rect><rect x="12" y="1044" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="1057" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.005</title>HBL.005</text><rect x="1158.8" y="1048" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.005
+ok · 0ms
+  32ms — basm src/hbl_005.asm -o HBL.005 --binary</title></rect><text x="286" y="1083" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.006</title>HBL.006</text><rect x="1158.8" y="1074" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.006
+ok · 31ms
+  6ms — basm src/hbl_006.asm -o HBL.006 --binary</title></rect><rect x="12" y="1096" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="1109" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.002</title>HBL.002</text><rect x="1158.9" y="1100" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.002
+ok · 28ms
+  30ms — basm src/hbl_002.asm -o HBL.002 --binary</title></rect><text x="286" y="1135" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>../MakeItEasy/MAKEIT.LOA</title>../MakeItEasy/MAKEIT.LOA</text><rect x="1158.9" y="1126" width="6.8" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>../MakeItEasy/MAKEIT.LOA
+ok · 5.76s
+  5.72s — bndbuild -f ../MakeItEasy MAKEIT.LOA</title></rect><rect x="12" y="1148" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="1161" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>loading.ga</title>loading.ga</text><rect x="1158.9" y="1152" width="2.0" height="18" fill="#89dceb" rx="3" opacity="0.88"><title>loading.ga
+up-to-date · 0ms</title></rect><text x="286" y="1187" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>MAKEIT.LOA</title>MAKEIT.LOA</text><rect x="1158.9" y="1178" width="6.8" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>MAKEIT.LOA
+ok · 5.76s
+  5.70s — basm src/loading_screen.asm -I ../linking/ --snapshot -o loading_screen.sna --ace loading.rasm</title></rect><rect x="12" y="1200" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="1213" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.BAS</title>HBL.BAS</text><rect x="1165.7" y="1204" width="3.3" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.BAS
+ok · 2.82s
+  2.87s — basm src/hbl.asm --basic --output=&quot;HBL.BAS&quot; --lst hbl.lst</title></rect><text x="286" y="1239" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.004</title>HBL.004</text><rect x="1169.0" y="1230" width="2.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.004
+ok · 0ms
+  5ms — basm src/hbl_004.asm -o HBL.004 --binary</title></rect><rect x="12" y="1252" width="280" height="26" fill="#1e1e2e" opacity="0.45"/><text x="286" y="1265" fill="#cdd6f4" text-anchor="end" dominant-baseline="middle" font-size="12"><title>HBL.DSK</title>HBL.DSK</text><rect x="1169.0" y="1256" width="3.0" height="18" fill="#a6e3a1" rx="3" opacity="0.88"><title>HBL.DSK
+ok · 2.57s
+  36ms — catalog data/CATART2.ASC build --output HBL.DSK
+  648ms — impdsk -dsk HBL.DSK -put HBL.BAS -hide
+  142ms — impdsk -dsk HBL.DSK -put HBL.000 -hide
+  151ms — impdsk -dsk HBL.DSK -put HBL.001 -hide
+  170ms — impdsk -dsk HBL.DSK -put HBL.002 -hide
+  184ms — impdsk -dsk HBL.DSK -put HBL.003 -hide
+  211ms — impdsk -dsk HBL.DSK -put HBL.004 -hide
+  218ms — impdsk -dsk HBL.DSK -put HBL.005 -hide
+  167ms — impdsk -dsk HBL.DSK -put HBL.006 -hide
+  162ms — impdsk -dsk HBL.DSK -put HBL.007 -hide
+  154ms — impdsk -dsk HBL.DSK -put HBL.008 -hide
+  153ms — impdsk -dsk HBL.DSK -put HBL.009 -hide
+  149ms — impdsk -dsk HBL.DSK -put HBL.010 -hide</title></rect><rect x="1169.0" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>catalog data/CATART2.ASC build --output HBL.DSK (36ms)</title></rect><rect x="1169.0" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.BAS -hide (648ms)</title></rect><rect x="1169.8" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.000 -hide (142ms)</title></rect><rect x="1169.9" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.001 -hide (151ms)</title></rect><rect x="1170.1" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.002 -hide (170ms)</title></rect><rect x="1170.3" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.003 -hide (184ms)</title></rect><rect x="1170.6" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.004 -hide (211ms)</title></rect><rect x="1170.8" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.005 -hide (218ms)</title></rect><rect x="1171.0" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.006 -hide (167ms)</title></rect><rect x="1171.3" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.007 -hide (162ms)</title></rect><rect x="1171.4" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.008 -hide (154ms)</title></rect><rect x="1171.6" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.009 -hide (153ms)</title></rect><rect x="1171.8" y="1271" width="1.0" height="3" fill="#a6e3a1" opacity="0.75"><title>impdsk -dsk HBL.DSK -put HBL.010 -hide (149ms)</title></rect></svg></div>
+<h2>&#128202; Duration &#8212; slowest first</h2>
+<table><thead><tr><th>#</th><th>Rule</th><th>Duration</th><th>Share</th><th>Status</th><th>Tasks</th><th>Slowest task</th></tr></thead><tbody><tr><td class='rank'>1</td><td class='name' title='../MakeItEasy/CRTC2.PT2'>../MakeItEasy/CRTC2.PT2</td><td class='dur'>509s<div class='bar-wrap'><div class='bar' style='width:67.9%;background:#a6e3a1'></div></div></td><td class='pct'>67.9%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../MakeItEasy CRTC2.PT2 (509s)</td></tr><tr><td class='rank'>2</td><td class='name' title='CRTC2.PT2'>CRTC2.PT2</td><td class='dur'>488s<div class='bar-wrap'><div class='bar' style='width:65.1%;background:#a6e3a1'></div></div></td><td class='pct'>65.1%</td><td class='s-ok'><b>ok</b></td><td class='tc'>15</td><td class='slow'>basm src/dsk_multimoderupture8_part1.asm  -o CRTC4.PT1  -DSELECTED_CRTC=4  -DPT2_FNAME=\&quot;CRTC4.PT2\&quot; -DMAIN_4000_FNAME=\&quot;MAIN_CRTC4.4000\&quot;
+ (95.44s)</td></tr><tr><td class='rank'>3</td><td class='name' title='../polar_dots/POLAR.BIN'>../polar_dots/POLAR.BIN</td><td class='dur'>117s<div class='bar-wrap'><div class='bar' style='width:15.7%;background:#a6e3a1'></div></div></td><td class='pct'>15.7%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../polar_dots POLAR.BIN (117s)</td></tr><tr><td class='rank'>4</td><td class='name' title='../IntroHBL/INTRO.LNK'>../IntroHBL/INTRO.LNK</td><td class='dur'>86.11s<div class='bar-wrap'><div class='bar' style='width:11.5%;background:#a6e3a1'></div></div></td><td class='pct'>11.5%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../IntroHBL INTRO.LNK (86.10s)</td></tr><tr><td class='rank'>5</td><td class='name' title='POLAR.BIN'>POLAR.BIN</td><td class='dur'>81.52s<div class='bar-wrap'><div class='bar' style='width:10.9%;background:#a6e3a1'></div></div></td><td class='pct'>10.9%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/link.asm --snapshot -o link.sna --lst link.lst (81.52s)</td></tr><tr><td class='rank'>6</td><td class='name' title='INTRO.LNK'>INTRO.LNK</td><td class='dur'>61.11s<div class='bar-wrap'><div class='bar' style='width:8.2%;background:#a6e3a1'></div></div></td><td class='pct'>8.2%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/intro_linked.asm --snapshot -o intro_linked.sna --ace linked.rasm --lst linked.lst (61.11s)</td></tr><tr><td class='rank'>7</td><td class='name' title='C6.4000'>C6.4000</td><td class='dur'>26.00s<div class='bar-wrap'><div class='bar' style='width:3.5%;background:#a6e3a1'></div></div></td><td class='pct'>3.5%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm --snapshot -o polar.sna  src/sna.asm -DAKM=\&quot;warlord-2023-hbl-spacepart.akm.asm\&quot; -DAKM_CFG=\&quot;warlord-2023-hbl-spacepart.akm_playerconfig.asm\&quot; --lst polar.lst --ace polar.rasm --nochunk BRKC,BRKS,SYMB,REMU
+ (25.99s)</td></tr><tr><td class='rank'>8</td><td class='name' title='../IntroHBL/INTRO.LOA'>../IntroHBL/INTRO.LOA</td><td class='dur'>24.42s<div class='bar-wrap'><div class='bar' style='width:3.3%;background:#a6e3a1'></div></div></td><td class='pct'>3.3%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../IntroHBL INTRO.LOA (24.42s)</td></tr><tr><td class='rank'>9</td><td class='name' title='INTRO.LOA'>INTRO.LOA</td><td class='dur'>24.37s<div class='bar-wrap'><div class='bar' style='width:3.2%;background:#a6e3a1'></div></div></td><td class='pct'>3.2%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/intro_loader.asm -I ../linking/ --snapshot -o intro_loader.sna (24.38s)</td></tr><tr><td class='rank'>10</td><td class='name' title='../polar_dots/POLAR.LOA'>../polar_dots/POLAR.LOA</td><td class='dur'>21.87s<div class='bar-wrap'><div class='bar' style='width:2.9%;background:#a6e3a1'></div></div></td><td class='pct'>2.9%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../polar_dots POLAR.LOA (21.89s)</td></tr><tr><td class='rank'>11</td><td class='name' title='POLAR.LOA'>POLAR.LOA</td><td class='dur'>21.77s<div class='bar-wrap'><div class='bar' style='width:2.9%;background:#a6e3a1'></div></div></td><td class='pct'>2.9%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/polar_loader.asm -I ../linking/ --snapshot -o polar_screen.sna (21.77s)</td></tr><tr><td class='rank'>12</td><td class='name' title='MAIN_CRTC1.800'>MAIN_CRTC1.800</td><td class='dur'>20.99s<div class='bar-wrap'><div class='bar' style='width:2.8%;background:#a6e3a1'></div></div></td><td class='pct'>2.8%</td><td class='s-ok'><b>ok</b></td><td class='tc'>40</td><td class='slow'>basm src/sna_multimoderupture8.asm -o multimodehbl_crtc2.sna --snapshot --lst multimodehbl.lst --ace multimodehbl.rasm -DSELECTED_CRTC=2 (4.44s)</td></tr><tr><td class='rank'>13</td><td class='name' title='generated.asm'>generated.asm</td><td class='dur'>8.11s<div class='bar-wrap'><div class='bar' style='width:1.1%;background:#a6e3a1'></div></div></td><td class='pct'>1.1%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>extern cargo run --manifest-path=generator/Cargo.toml  --release mask.scr (8.18s)</td></tr><tr><td class='rank'>14</td><td class='name' title='../MakeItEasy/MAKEIT.LOA'>../MakeItEasy/MAKEIT.LOA</td><td class='dur'>5.76s<div class='bar-wrap'><div class='bar' style='width:0.8%;background:#a6e3a1'></div></div></td><td class='pct'>0.8%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../MakeItEasy MAKEIT.LOA (5.72s)</td></tr><tr><td class='rank'>15</td><td class='name' title='MAKEIT.LOA'>MAKEIT.LOA</td><td class='dur'>5.76s<div class='bar-wrap'><div class='bar' style='width:0.8%;background:#a6e3a1'></div></div></td><td class='pct'>0.8%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/loading_screen.asm -I ../linking/ --snapshot -o loading_screen.sna --ace loading.rasm (5.70s)</td></tr><tr><td class='rank'>16</td><td class='name' title='C4.4000'>C4.4000</td><td class='dur'>3.10s<div class='bar-wrap'><div class='bar' style='width:0.4%;background:#a6e3a1'></div></div></td><td class='pct'>0.4%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/intro.asm --snapshot -o intro.sna --lst intro.lst (3.09s)</td></tr><tr><td class='rank'>17</td><td class='name' title='HBL.BAS'>HBL.BAS</td><td class='dur'>2.82s<div class='bar-wrap'><div class='bar' style='width:0.4%;background:#a6e3a1'></div></div></td><td class='pct'>0.4%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl.asm --basic --output=&quot;HBL.BAS&quot; --lst hbl.lst (2.87s)</td></tr><tr><td class='rank'>18</td><td class='name' title='HBL.DSK'>HBL.DSK</td><td class='dur'>2.57s<div class='bar-wrap'><div class='bar' style='width:0.3%;background:#a6e3a1'></div></div></td><td class='pct'>0.3%</td><td class='s-ok'><b>ok</b></td><td class='tc'>13</td><td class='slow'>impdsk -dsk HBL.DSK -put HBL.BAS -hide (648ms)</td></tr><tr><td class='rank'>19</td><td class='name' title='warlord-2023-hbl-spacepart.akm.asm'>warlord-2023-hbl-spacepart.akm.asm</td><td class='dur'>1.55s<div class='bar-wrap'><div class='bar' style='width:0.2%;background:#a6e3a1'></div></div></td><td class='pct'>0.2%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>SongToAkm -twe --exportPlayerConfig data/music/outer-polar-space-29102025.aks warlord-2023-hbl-spacepart.akm.asm (1.55s)</td></tr><tr><td class='rank'>20</td><td class='name' title='generated/BASIC_FONT_000.BIN'>generated/BASIC_FONT_000.BIN</td><td class='dur'>1.09s<div class='bar-wrap'><div class='bar' style='width:0.1%;background:#a6e3a1'></div></div></td><td class='pct'>0.1%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc --pen0 0 --pen1 26 --mode 2 data/vinz_font.png tile --width 1 --height 8 --output generated/BASIC_FONT.BIN
+ (1.08s)</td></tr><tr><td class='rank'>21</td><td class='name' title='HBL.009'>HBL.009</td><td class='dur'>108ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_009.asm -o HBL.009 --binary (22ms)</td></tr><tr><td class='rank'>22</td><td class='name' title='../linking/HBL.001'>../linking/HBL.001</td><td class='dur'>102ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../linking HBL.000 (90ms)</td></tr><tr><td class='rank'>23</td><td class='name' title='screen0_top.scr'>screen0_top.scr</td><td class='dur'>82ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 0 
+  --skipoddpixels
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1 
+  --pen4 93 --pen5 69 --pen6 77 --pen7 95  --pen8 79 
+  --unlock-pens
+  data/mode0_top.png
+  scr --output screen0_top.scr --palette screen0_top.ga
+ (40ms)</td></tr><tr><td class='rank'>24</td><td class='name' title='../MakeItEasy/CRTC1.PT2'>../MakeItEasy/CRTC1.PT2</td><td class='dur'>80ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../MakeItEasy CRTC1.PT2 (62ms)</td></tr><tr><td class='rank'>25</td><td class='name' title='mask.scr'>mask.scr</td><td class='dur'>80ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 1 
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1
+  data/mask.png
+  scr --output mask.scr --palette mask.ga
+ (49ms)</td></tr><tr><td class='rank'>26</td><td class='name' title='../MakeItEasy/CRTC3.PT2'>../MakeItEasy/CRTC3.PT2</td><td class='dur'>61ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../MakeItEasy CRTC3.PT2 (65ms)</td></tr><tr><td class='rank'>27</td><td class='name' title='HBL.003'>HBL.003</td><td class='dur'>56ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_003.asm -o HBL.003 --binary (29ms)</td></tr><tr><td class='rank'>28</td><td class='name' title='../MakeItEasy/CRTC0.PT2'>../MakeItEasy/CRTC0.PT2</td><td class='dur'>55ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../MakeItEasy CRTC0.PT2 (65ms)</td></tr><tr><td class='rank'>29</td><td class='name' title='../polar_dots/POLAR.BIN'>../polar_dots/POLAR.BIN</td><td class='dur'>53ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../polar_dots POLAR.BIN (46ms)</td></tr><tr><td class='rank'>30</td><td class='name' title='loading_fadeout.ga'>loading_fadeout.ga</td><td class='dur'>53ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 1 
+  files/loading.png
+  scr --r1 48 --output loading.scr --palette loading.ga --palette_fadeout loading_fadeout.ga
+ (36ms)</td></tr><tr><td class='rank'>31</td><td class='name' title='HBL.000'>HBL.000</td><td class='dur'>48ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_000_and_001.asm (35ms)</td></tr><tr><td class='rank'>32</td><td class='name' title='HBL.006'>HBL.006</td><td class='dur'>31ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_006.asm -o HBL.006 --binary (6ms)</td></tr><tr><td class='rank'>33</td><td class='name' title='screen0_bottom.ga'>screen0_bottom.ga</td><td class='dur'>30ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 0 
+  --skipoddpixels
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1 
+  --pen4 93 --pen5 69 --pen6 77 --pen7 95  --pen8 79 
+  --unlock-pens
+  data/mode0_bottom.png
+  scr --output screen0_bottom.scr --palette screen0_bottom.ga
+ (16ms)</td></tr><tr><td class='rank'>34</td><td class='name' title='loading_fadeout.ga'>loading_fadeout.ga</td><td class='dur'>29ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 1 
+  files/loading.png
+  scr --r1 48  --output loading.scr --palette loading.ga --palette_fadeout loading_fadeout.ga
+ (22ms)</td></tr><tr><td class='rank'>35</td><td class='name' title='HBL.002'>HBL.002</td><td class='dur'>28ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_002.asm -o HBL.002 --binary (30ms)</td></tr><tr><td class='rank'>36</td><td class='name' title='HBL.008'>HBL.008</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_008.asm -o HBL.008 --binary (18ms)</td></tr><tr><td class='rank'>37</td><td class='name' title='HBL.004'>HBL.004</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_004.asm -o HBL.004 --binary (5ms)</td></tr><tr><td class='rank'>38</td><td class='name' title='loading.ga'>loading.ga</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 1 
+  data/loading.png
+  scr --r1 48 --output loading.scr --palette loading.ga --palette_fadeout loading_fadeout.ga
+ (20ms)</td></tr><tr><td class='rank'>39</td><td class='name' title='../polar_dots/POLAR.LOA'>../polar_dots/POLAR.LOA</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>bndbuild -f ../polar_dots POLAR.LOA (8ms)</td></tr><tr><td class='rank'>40</td><td class='name' title='HBL.007'>HBL.007</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_007.asm -o HBL.007 --binary (35ms)</td></tr><tr><td class='rank'>41</td><td class='name' title='HBL.010'>HBL.010</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_010.asm -o HBL.010 --binary (28ms)</td></tr><tr><td class='rank'>42</td><td class='name' title='HBL.005'>HBL.005</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>basm src/hbl_005.asm -o HBL.005 --binary (32ms)</td></tr><tr><td class='rank'>43</td><td class='name' title='screen1.scr'>screen1.scr</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>img2cpc 
+  --mode 1 
+  --pen0 0 --pen1 13 --pen2 4 --pen3 1
+  data/mode1.png
+  scr --output screen1.scr --palette screen1.ga --palette_fadeout screen1_fadeout.ga
+ (22ms)</td></tr><tr><td class='rank'>44</td><td class='name' title='generated'>generated</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#a6e3a1'></div></div></td><td class='pct'>0.0%</td><td class='s-ok'><b>ok</b></td><td class='tc'>1</td><td class='slow'>mkdir -p generated --ignore (0ms)</td></tr><tr><td class='rank'>45</td><td class='name' title='screen1_fadeout.ga'>screen1_fadeout.ga</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#89dceb'></div></div></td><td class='pct'>0.0%</td><td class='s-uptodate'><b>up-to-date</b></td><td class='tc'>0</td><td class='slow'></td></tr><tr><td class='rank'>46</td><td class='name' title='demosystem.o'>demosystem.o</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#89dceb'></div></div></td><td class='pct'>0.0%</td><td class='s-uptodate'><b>up-to-date</b></td><td class='tc'>0</td><td class='slow'></td></tr><tr><td class='rank'>47</td><td class='name' title='HBL.000'>HBL.000</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#89dceb'></div></div></td><td class='pct'>0.0%</td><td class='s-uptodate'><b>up-to-date</b></td><td class='tc'>0</td><td class='slow'></td></tr><tr><td class='rank'>48</td><td class='name' title='loading.ga'>loading.ga</td><td class='dur'>0ms<div class='bar-wrap'><div class='bar' style='width:0.0%;background:#89dceb'></div></div></td><td class='pct'>0.0%</td><td class='s-uptodate'><b>up-to-date</b></td><td class='tc'>0</td><td class='slow'></td></tr></tbody></table>
+</body>
+</html>

@@ -11,6 +11,9 @@ import { registerAssemble } from './commands/assemble';
 import { registerBuildActiveFile } from './commands/buildActiveFile';
 import { registerEditConfig } from './commands/editConfig';
 import { registerMusic } from './commands/music';
+import { registerCsl } from './commands/csl';
+import { registerHexView } from './commands/hexView';
+import { registerCslEmulatorCommands } from './commands/cslEmulators';
 import { registerBreakpointSync } from './commands/breakpointSync';
 import { registerCycleCountStatusBar } from './statusBar/cycleCount';
 import { registerRegistersStatusBar } from './statusBar/registers';
@@ -59,6 +62,9 @@ export function activate(context: ExtensionContext): void {
     registerPeephole(context);
     registerAssemble(context);
     registerMusic(context);
+    registerCsl(context);
+    registerHexView(context);
+    registerCslEmulatorCommands(context, () => resolvedServerPath);
     registerEditConfig(context);
 
     registerDebugging(context, () => resolvedServerPath);

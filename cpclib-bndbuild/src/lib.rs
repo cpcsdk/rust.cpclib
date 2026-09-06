@@ -44,6 +44,7 @@ pub mod lsp;
 pub mod pipeline;
 pub mod rules;
 pub mod runners;
+pub mod shell_pipe;
 pub mod task;
 pub use builder::*;
 pub use cpclib_common;

@@ -586,8 +586,9 @@ impl EmulatorConf {
 
     /// Generate the args for the corresponding emulator
     pub fn args_for_emu(&self, emu: &Emulator) -> Result<Vec<String>, String> {
-        // Use CSL script for Amspirit emulator
-        if let Emulator::Amspirit(_) = emu {
+        // Emulators that natively accept a CSL file get one synthesized
+        // from this whole config, instead of per-field ad-hoc CLI args.
+        if emu.accept_csl() {
             return self.args_for_emu_amspirit_with_csl(emu);
         }
 
@@ -841,45 +842,67 @@ impl EmulatorConf {
     fn args_for_emu_amspirit_with_csl(&self, emu: &Emulator) -> Result<Vec<String>, String> {
         // Generate CSL script from configuration
         let csl_script: cpclib_csl::CslScript = self.clone().into();
-
-        // Convert to string
-        let csl_content = csl_script.to_string();
-
-        // Save to temporary file
-        let tempfile = camino_tempfile::Builder::new()
-            .suffix(".csl")
-            .tempfile()
-            .map_err(|e| format!("Failed to create temporary CSL file: {}", e))?;
-
-        // Get the path as Utf8PathBuf before writing
-        let temp_path_utf8 = tempfile.path().to_owned();
-
-        fs_err::write(&temp_path_utf8, csl_content)
-            .map_err(|e| format!("Failed to write CSL file: {}", e))?;
-
-        // Keep the temporary file (prevent automatic deletion)
-        let _kept = tempfile
-            .into_temp_path()
-            .keep()
-            .map_err(|e| format!("Failed to keep temporary CSL file: {}", e))?;
-
-        // Ensure we have an absolute path
-        let absolute_path = if temp_path_utf8.is_absolute() {
-            temp_path_utf8
-        }
-        else {
-            let canonical = temp_path_utf8
-                .canonicalize()
-                .map_err(|e| format!("Failed to canonicalize CSL file path: {}", e))?;
-            Utf8PathBuf::from_path_buf(canonical)
-                .map_err(|p| format!("Invalid UTF-8 in canonical path: {:?}", p))?
-        };
+        let absolute_path = write_csl_script_to_temp_file(&csl_script)?;
 
         // Get wine-compatible absolute path if needed
         let csl_path = emu.wine_compatible_fname(&absolute_path)?;
+        Ok(native_csl_args(emu, &csl_path))
+    }
+}
 
-        // Return args with CSL file using absolute path
-        Ok(vec![format!("--csl={}", csl_path)])
+/// Serializes `script` and writes it to a fresh, kept (not
+/// auto-deleted-on-drop) temp `.csl` file, returning its absolute path.
+/// Shared by `EmulatorConf::args_for_emu_amspirit_with_csl` (a script
+/// synthesized from scalar config fields) and `run_csl_file` (a user's own
+/// `.csl` file, after `csl_interpreter::resolve_relative_paths` has
+/// rewritten its paths to absolute) - both need "a real file on disk the
+/// emulator can be pointed at", never the in-memory `CslScript` itself.
+fn write_csl_script_to_temp_file(script: &cpclib_csl::CslScript) -> Result<Utf8PathBuf, String> {
+    let csl_content = script.to_string();
+
+    let tempfile = camino_tempfile::Builder::new()
+        .suffix(".csl")
+        .tempfile()
+        .map_err(|e| format!("Failed to create temporary CSL file: {}", e))?;
+    let temp_path_utf8 = tempfile.path().to_owned();
+
+    fs_err::write(&temp_path_utf8, csl_content)
+        .map_err(|e| format!("Failed to write CSL file: {}", e))?;
+
+    // Keep the temporary file (prevent automatic deletion).
+    let _kept = tempfile
+        .into_temp_path()
+        .keep()
+        .map_err(|e| format!("Failed to keep temporary CSL file: {}", e))?;
+
+    if temp_path_utf8.is_absolute() {
+        Ok(temp_path_utf8)
+    }
+    else {
+        let canonical = temp_path_utf8
+            .canonicalize()
+            .map_err(|e| format!("Failed to canonicalize CSL file path: {}", e))?;
+        Utf8PathBuf::from_path_buf(canonical)
+            .map_err(|p| format!("Invalid UTF-8 in canonical path: {:?}", p))
+    }
+}
+
+/// Builds the launch args for `emu.accept_csl()`-shaped CSL support - the
+/// flag shape is per-emulator, since their CLIs disagree on it (both
+/// confirmed against each emulator's own documented flags): used both by
+/// `EmulatorConf::args_for_emu_amspirit_with_csl` (a script synthesized
+/// from an `EmulatorConf`) and `run_csl_file` (a user's own pre-existing
+/// `.csl` file), so there is exactly one place that knows the shape.
+fn native_csl_args(emu: &Emulator, csl_path: &Utf8Path) -> Vec<String> {
+    match emu {
+        // SugarboxV2: `-s, --csl <script>` - "Run a CSL script on start"
+        // (Tom1975/SugarboxV2's own docs) - a space-separated value, not a
+        // `--csl=` one.
+        Emulator::SugarBoxV2(_) => vec!["--csl".to_string(), csl_path.to_string()],
+        // AMSpiriT and everything else `accept_csl()` might cover in the
+        // future default to the `--csl=<path>` shape already verified for
+        // AMSpiriT.
+        _ => vec![format!("--csl={csl_path}")]
     }
 }
 
@@ -989,11 +1012,25 @@ pub fn start_emulator<E: EventObserver>(
     o: &E
 ) -> Result<(), String> {
     let args = conf.args_for_emu(emu)?;
+    spawn_emulator_with_args(emu, conf.transparent, &args, o)
+}
+
+/// The actual process-spawn primitive `start_emulator` builds its args for -
+/// factored out so a caller that already has its own args (e.g. a raw
+/// `--csl=<path>` for a natively-CSL-capable emulator, bypassing
+/// `EmulatorConf::args_for_emu`'s synthesis entirely) can reuse the same
+/// install-check-free spawn without going through an `EmulatorConf` at all.
+fn spawn_emulator_with_args<E: EventObserver>(
+    emu: &Emulator,
+    #[cfg_attr(not(feature = "transparent-x11"), allow(unused_variables))] transparent: bool,
+    args: &[String],
+    o: &E
+) -> Result<(), String> {
     let app = emu.configuration();
 
     let cmd = emu.get_command().into();
     #[cfg(feature = "transparent-x11")]
-    let runner = if conf.transparent {
+    let runner = if transparent {
         DelegatedRunner::new_transparent(app, cmd)
     }
     else {
@@ -1002,7 +1039,7 @@ pub fn start_emulator<E: EventObserver>(
     #[cfg(not(feature = "transparent-x11"))]
     let runner = DelegatedRunner::new(app, cmd);
 
-    runner.inner_run(&args, o)
+    runner.inner_run(args, o)
 }
 
 pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> Option<EmuWindow> {
@@ -1838,6 +1875,28 @@ pub struct EmuCli {
     )]
     snapshot: Option<String>,
 
+    #[arg(
+        long = "csl",
+        value_name = "FILE",
+        help = "Run this CSL (CPC Script Language) file. Emulators with native CSL support \
+                (see Emulator::accept_csl) receive it directly; every other emulator is driven \
+                through the CSL interpreter instead (see cpclib_runner::csl_interpreter) - only \
+                leading disk/snapshot instructions and key_output/wait* are honored there.",
+        conflicts_with_all = ["snapshot", "drive_a", "drive_b", "auto_run_file", "auto_type_file"]
+    )]
+    csl: Option<Utf8PathBuf>,
+
+    #[arg(
+        long = "csl-base-dir",
+        value_name = "DIR",
+        help = "Resolve --csl's script's own relative disk_insert/snapshot_load/etc. paths \
+                against this directory instead of the --csl file's own parent directory. Set \
+                automatically by editor integrations when the script is a temp copy of a file \
+                that lives (and whose relative paths are meant to resolve) somewhere else.",
+        requires = "csl"
+    )]
+    csl_base_dir: Option<Utf8PathBuf>,
+
     #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(&["64", "128", "192", "256", "320", "576", "1088", "2112"]), help="Memory configuration")]
     memory: Option<String>,
 
@@ -2289,12 +2348,191 @@ impl Dispatch {
     }
 }
 
+/// Resolves an `--emulator` choice into the `Emulator` it spawns - factored
+/// out of `handle_arguments`'s own match so `run_csl_file` can reuse it
+/// without duplicating the arm list. `Emulator1984Js` has no `Emulator`
+/// variant (it is served on loopback, never spawned as a process - see
+/// `Dispatch::of`), so it is the one choice this returns `Err` for.
+fn emulator_from_choice(choice: Emu) -> Result<Emulator, String> {
+    Ok(match choice {
+        Emu::Ace => Emulator::Ace(Default::default()),
+        Emu::Winape => Emulator::Winape(Default::default()),
+        Emu::Cpcec => Emulator::Cpcec(Default::default()),
+        Emu::Caprice => Emulator::CapriceForever(Default::default()),
+        Emu::Amspirit => Emulator::Amspirit(Default::default()),
+        Emu::Amspiritlite => Emulator::AmspiritLite(Default::default()),
+        Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
+        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
+        Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
+        Emu::Cadence => Emulator::Cadence(Default::default()),
+        Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
+        Emu::Emulator1984Js => {
+            return Err(
+                "1984js is served in a browser, not spawned as a process - it cannot run a CSL \
+                 file this way."
+                    .to_string()
+            );
+        },
+        Emu::Rvm => Emulator::RetroVm(Default::default())
+    })
+}
+
+/// Runs a `.csl` file against `cli.emulator` - the `--csl` entry point,
+/// independent of `handle_arguments`'s main flow (no Ace ROM/albireo setup,
+/// no HFE conversion - a CSL script's own `disk_insert`/`snapshot_load` are
+/// the only media it can express anyway).
+///
+/// Emulators natively accepting CSL (`Emulator::accept_csl`) get the file
+/// passed straight through as `--csl=<path>`, bypassing
+/// `EmulatorConf::args_for_emu`'s synthesis-from-scalar-fields path
+/// entirely - the user's own file is what runs, not a reconstruction of it.
+/// Every other emulator is driven through `csl_interpreter`: leading
+/// disk/snapshot instructions become launch arguments, then
+/// `key_output`/`key_from_file`/`wait*` are replayed live via the same
+/// `Robot`/enigo layer `Commands::Run`'s `--text` already uses. See
+/// `csl_interpreter`'s own doc comment for what's deliberately left
+/// unsupported.
+fn run_csl_file<E: EventObserver + Clone + 'static>(
+    cli: &EmuCli,
+    csl_path: &Utf8Path,
+    o: &E
+) -> Result<(), String> {
+    let source = fs_err::read_to_string(csl_path)
+        .map_err(|e| format!("Could not read {csl_path}: {e}"))?;
+    let script = cpclib_csl::parse_csl_with_rich_errors(&source, Some(csl_path.to_string()))
+        .map_err(|e| e.to_string())?;
+
+    // Every native-CSL-capable emulator launches with its own install
+    // directory as its working directory (see `crate::runner::exec`'s
+    // `RunInDir::AppDir`), not this file's location - a relative
+    // `disk_insert`/`snapshot_load`/etc. path in the script means "next to
+    // this script", so it must be made absolute *before* the script ever
+    // reaches an emulator (native: re-serialized below; non-native:
+    // folded into `EmulatorConf` further down) - otherwise a perfectly
+    // ordinary, portable CSL script (real Shaker-authored ones routinely
+    // look exactly like this) fails with "unable to find the dsk".
+    //
+    // `--csl-base-dir` overrides this when `csl_path` is itself a temp
+    // copy living somewhere unrelated to the script's *real* location
+    // (e.g. an editor's "unsaved changes" copy) - see that flag's own
+    // help text and `cpclib_bndbuild::pipeline::csl_run`'s doc comment.
+    let base_dir = cli
+        .csl_base_dir
+        .as_deref()
+        .or_else(|| csl_path.parent())
+        .unwrap_or_else(|| Utf8Path::new("."));
+    let script = crate::csl_interpreter::resolve_relative_paths(&script, base_dir);
+
+    let emu = emulator_from_choice(cli.emulator)?;
+
+    {
+        let conf = emu.configuration();
+        if !conf.is_cached() {
+            conf.install(o)?;
+        }
+    }
+
+    if emu.accept_csl() {
+        let rewritten_path = write_csl_script_to_temp_file(&script)?;
+        let csl_arg = emu.wine_compatible_fname(&rewritten_path)?;
+        let args = native_csl_args(&emu, &csl_arg);
+        if cli.background {
+            let (emu, args, transparent, o_owned) = (emu.clone(), args, cli.transparent, o.clone());
+            std::thread::spawn(move || {
+                spawn_emulator_with_args(&emu, transparent, &args, &o_owned)
+            });
+            return Ok(());
+        }
+        return spawn_emulator_with_args(&emu, cli.transparent, &args, o);
+    }
+
+    // Non-native: fold leading config into a fresh EmulatorConf (drive_a/
+    // drive_b/memory/crtc still honor whatever the CLI itself was also
+    // given, same as the main flow - a CSL script's own leading
+    // disk_insert/snapshot_load additionally override those, since the
+    // script is what the user actually asked to run).
+    let (leading, live) = crate::csl_interpreter::split_leading_and_live(&script);
+    let base_conf = EmulatorConf::builder()
+        .transparent(cli.transparent)
+        .maybe_drive_a(cli.drive_a.clone().map(Into::into))
+        .maybe_drive_b(cli.drive_b.clone().map(Into::into))
+        .maybe_crtc(cli.crtc)
+        .maybe_snapshot(cli.snapshot.clone().map(Into::into))
+        .debug_files(cli.debug.clone())
+        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
+        .break_on_bad_hbl(cli.break_on_bad_hbl)
+        .break_on_bad_vbl(cli.break_on_bad_vbl)
+        .build();
+    let conf = crate::csl_interpreter::fold_leading_instructions(&leading, base_conf);
+
+    let (t_emu, conf_thread, o_thread) = (emu.clone(), conf.clone(), o.clone());
+    let emu_thread = std::thread::spawn(move || start_emulator(&t_emu, &conf_thread, &o_thread));
+
+    // A script with nothing left to replay live (every instruction folded
+    // into `conf` above - a bare `disk_insert`/`snapshot_load` script with
+    // no `key_output`/`wait*` is a real, common case) needs no window at
+    // all: skip the settle-time sleep and the window search, since both
+    // exist solely to prepare for the typing loop below.
+    if !live.is_empty() {
+        std::thread::sleep(Duration::from_secs(3));
+
+        let window = get_emulator_window(&emu, &conf);
+        if window.is_none() {
+            o.emit_stderr(&format!(
+                "No emulator window found for '{}' - live CSL instructions (key_output/wait*) will \
+                 not be replayed.\n",
+                emu.get_command()
+            ));
+        }
+        else {
+            let enigo_settings = {
+                let mut settings = Settings {
+                    linux_delay: 1000 / 10,
+                    ..Default::default()
+                };
+                if let Some(EmuWindow::Xvfb(display, _)) = &window {
+                    settings.x11_display = Some(format!(":{display}"));
+                }
+                settings
+            };
+            let enigo = Enigo::new(&enigo_settings).map_err(|e| e.to_string())?;
+            let events = enigo.into();
+            let mut robot = Robot::new(&emu, window, events);
+
+            for step in crate::csl_interpreter::plan_live_steps(&live) {
+                match step {
+                    crate::csl_interpreter::CslLiveStep::TypeText(text) => robot.handle_raw_text(text),
+                    crate::csl_interpreter::CslLiveStep::Sleep(d) => std::thread::sleep(d),
+                    crate::csl_interpreter::CslLiveStep::Unsupported(msg) => {
+                        o.emit_stdout(&format!("CSL: skipped unsupported live step - {msg}\n"));
+                    }
+                }
+            }
+
+            if !cli.keepemulator {
+                robot.close();
+            }
+        }
+    }
+
+    if cli.background {
+        return Ok(());
+    }
+    emu_thread
+        .join()
+        .unwrap_or_else(|_| Err("emulator thread panicked".to_string()))
+}
+
 pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     mut cli: EmuCli,
     o: &E
 ) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder().map_err(|e| format!("Unable to clear the cache folder. {e}"))?;
+    }
+
+    if let Some(csl_path) = cli.csl.clone() {
+        return run_csl_file(&cli, &csl_path, o);
     }
 
     let builder = EmulatorConf::builder()
@@ -2331,24 +2569,10 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Dispatch::Native => {}
     }
 
-    let emu = match cli.emulator {
-        Emu::Ace => Emulator::Ace(Default::default()),
-        Emu::Winape => Emulator::Winape(Default::default()),
-        Emu::Cpcec => Emulator::Cpcec(Default::default()),
-        Emu::Caprice => Emulator::CapriceForever(Default::default()),
-        Emu::Amspirit => Emulator::Amspirit(Default::default()),
-        Emu::Amspiritlite => Emulator::AmspiritLite(Default::default()),
-        Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
-        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
-        Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
-        Emu::Cadence => Emulator::Cadence(Default::default()),
-        Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
-        // Unreachable: every command with this emulator is served above. It
-        // used to fall through to the desktop 1984, which is the bug that
-        // comment claimed could not happen.
-        Emu::Emulator1984Js => unreachable!("1984js is served, never spawned"),
-        Emu::Rvm => Emulator::RetroVm(Default::default())
-    };
+    // Guaranteed not `Emulator1984Js` here: `Dispatch::of` above already
+    // served (or refused) it before anything native is reached.
+    let emu = emulator_from_choice(cli.emulator)
+        .expect("1984js is served/refused above, never reaches emulator_from_choice");
 
     {
         // ensure emulator is installed to properly handle its setup
@@ -2546,11 +2770,32 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Some(handle)
     };
 
-    if cli.albireo.is_some() {
-        std::thread::sleep(Duration::from_secs(5));
-    }
-    else {
-        std::thread::sleep(Duration::from_secs(3));
+    // This sleep exists to give the emulator's window time to actually
+    // appear before the code below goes looking for it with
+    // `get_emulator_window` - it is dead time otherwise. Only `Orgams` and
+    // `Run` with `--text` ever call `get_emulator_window`; a plain
+    // `run --background` (by far the most common shape - every editor
+    // "Run in emulator"/"Debug" integration launches exactly this) needs no
+    // window at all and used to pay this tax unconditionally regardless of
+    // `--background` or whether `--text` was even given, turning every such
+    // launch into a flat 3-5 extra real seconds for nothing. `get_emulator_
+    // window`'s own retry loop (`get_emulator_window_xcap`, up to ~6s on its
+    // own) already tolerates the window not being up yet on its first poll,
+    // so skipping this upfront wait when it is not needed costs nothing when
+    // it *is* needed elsewhere - just a couple of extra poll iterations.
+    let needs_window_settle_time = match &cli.command {
+        #[cfg(feature = "screenshot")]
+        Commands::Orgams(_) => true,
+        Commands::Run { text } => text.is_some(),
+        Commands::Debug { .. } => false
+    };
+    if needs_window_settle_time {
+        if cli.albireo.is_some() {
+            std::thread::sleep(Duration::from_secs(5));
+        }
+        else {
+            std::thread::sleep(Duration::from_secs(3));
+        }
     }
 
     let res = match cli.command {
@@ -2873,6 +3118,86 @@ mod tests {
                 Dispatch::RefuseDebug,
                 "{emulator:?}"
             );
+        }
+    }
+
+    #[test]
+    fn csl_flag_parses_against_the_real_cli() {
+        let args = ["cpc", "--csl", "script.csl", "--emulator", "winape", "run"];
+        let cli = EmuCli::try_parse_from(args).unwrap();
+        assert_eq!(cli.csl, Some(Utf8PathBuf::from("script.csl")));
+    }
+
+    #[test]
+    fn csl_flag_conflicts_with_snapshot_and_drives() {
+        let args = [
+            "cpc", "--csl", "script.csl", "--snapshot", "game.sna", "run"
+        ];
+        assert!(
+            EmuCli::try_parse_from(args).is_err(),
+            "--csl and --snapshot must be mutually exclusive"
+        );
+    }
+
+    #[test]
+    fn csl_base_dir_flag_parses_alongside_csl_and_survives_a_space() {
+        let args = [
+            "cpc",
+            "--csl",
+            "script.csl",
+            "--csl-base-dir",
+            "MODULE A",
+            "run"
+        ];
+        let cli = EmuCli::try_parse_from(args).unwrap();
+        assert_eq!(cli.csl_base_dir, Some(Utf8PathBuf::from("MODULE A")));
+    }
+
+    #[test]
+    fn csl_base_dir_flag_requires_csl() {
+        let args = ["cpc", "--csl-base-dir", "somewhere", "run"];
+        assert!(
+            EmuCli::try_parse_from(args).is_err(),
+            "--csl-base-dir without --csl should be rejected"
+        );
+    }
+
+    #[test]
+    fn native_csl_args_uses_the_flag_shape_each_emulator_actually_documents() {
+        let path = Utf8PathBuf::from("/tmp/test.csl");
+
+        // AMSpiriT: `--csl=<path>` as one argv element.
+        assert_eq!(
+            native_csl_args(&Emulator::Amspirit(Default::default()), &path),
+            vec!["--csl=/tmp/test.csl".to_string()]
+        );
+
+        // SugarboxV2: `--csl <path>` as two argv elements (its own docs
+        // show `-s, --csl <script>`, a space-separated value).
+        assert_eq!(
+            native_csl_args(&Emulator::SugarBoxV2(Default::default()), &path),
+            vec!["--csl".to_string(), "/tmp/test.csl".to_string()]
+        );
+    }
+
+    #[test]
+    fn emulator_from_choice_rejects_only_1984js() {
+        assert!(emulator_from_choice(Emu::Emulator1984Js).is_err());
+        for choice in [
+            Emu::Ace,
+            Emu::Winape,
+            Emu::Cpcec,
+            Emu::Caprice,
+            Emu::Amspirit,
+            Emu::Amspiritlite,
+            Emu::Sugarbox,
+            Emu::Cpcemupower,
+            Emu::Cpcemu,
+            Emu::Cadence,
+            Emu::Emulator1984,
+            Emu::Rvm
+        ] {
+            assert!(emulator_from_choice(choice).is_ok(), "{choice:?}");
         }
     }
 }

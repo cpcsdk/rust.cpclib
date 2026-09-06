@@ -448,6 +448,58 @@ fn disassembled_instructions_carry_their_source_line() {
     assert!(instructions[2].get("location").is_none());
 }
 
+/// Hand-written comments from the real source are shown next to the
+/// disassembled instruction they document - the block immediately above a
+/// line as `precedingComments`, a trailing same-line `;` as `comment`. Pure
+/// source-file text (`Session::attach_source_comments`, `session.rs`), so
+/// this needs a real file on disk, unlike the fixture above's fake paths.
+#[test]
+fn disassembly_carries_the_comment_on_its_own_line_and_the_block_above_it() {
+    let dir = std::env::temp_dir();
+    let path = dir.join(format!("cpclib-dap-comment-test-{}.asm", std::process::id()));
+    std::fs::write(
+        &path,
+        "org 0x4000\n\
+         ; Clears the screen before the title appears\n\
+         ; (must run once, before the first VSYNC)\n\
+         ld a,0 ; border black\n\
+         nop\n"
+    )
+    .unwrap();
+
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec![path.to_string_lossy().to_string()],
+        rows: vec![
+            SourceMapRow::flat(0, 4, 0x4000, 3),
+            SourceMapRow::flat(0, 5, 0x4003, 1),
+        ]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+
+    let from_emulator = json!({
+        "type": "response", "command": "disassemble", "success": true,
+        "body": {"instructions": [
+            {"address": "0x4000", "instruction": "ld a,0"},
+            {"address": "0x4003", "instruction": "nop"}
+        ]}
+    });
+    let out = session.on_emulator_message(&from_emulator);
+    let _ = std::fs::remove_file(&path);
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+
+    assert_eq!(instructions[0]["comment"], json!("border black"));
+    assert_eq!(
+        instructions[0]["precedingComments"],
+        json!([
+            "Clears the screen before the title appears",
+            "(must run once, before the first VSYNC)"
+        ])
+    );
+    assert!(instructions[1].get("comment").is_none());
+    assert!(instructions[1].get("precedingComments").is_none());
+}
+
 /// The editor's own built-in disassembly (the raw `"disassemble"` response,
 /// answered here rather than forwarded) runs through the same
 /// `annotate_disassembly` as `-dv`'s panel - so the same-address-ambiguity

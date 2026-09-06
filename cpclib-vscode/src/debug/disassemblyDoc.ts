@@ -115,6 +115,14 @@ function renderDisassemblyDocument(dump: Disassembly): {
     );
 
     for (const entry of dump.instructions) {
+        // Hand-written narration from the source, not anything computed -
+        // shown as real comment lines, so the existing z80-asm grammar
+        // reuse (see this file's own header comment) colors them exactly
+        // like the source they came from, no separate styling needed.
+        for (const preceding of entry.precedingComments ?? []) {
+            lines.push(`; ${preceding}`);
+        }
+
         if (entry.symbol) {
             const alternatives = (entry.symbolAlternatives ?? []).length
                 ? `  ; also ${entry.symbolAlternatives!.join(', ')}`
@@ -133,9 +141,14 @@ function renderDisassemblyDocument(dump: Disassembly): {
             ? `${locationName}:${entry.line}${entry.column ? `:${entry.column}` : ''}`
             : '';
         const symbolsPart = (entry.symbols ?? []).length
-            ? ` (${(entry.symbols ?? []).join(', ')})`
+            ? `(${(entry.symbols ?? []).join(', ')})`
             : '';
-        const commentBody = hasLocation ? `${locationLabel}${symbolsPart}` : symbolsPart.trim();
+        // Location/symbols (computed here) and `entry.comment` (the actual
+        // hand-written trailing comment on this line, if any) are two
+        // different kinds of information sharing one trailing-comment slot -
+        // joined, not one replacing the other.
+        const commentParts = [locationLabel, symbolsPart, entry.comment].filter(Boolean);
+        const commentBody = commentParts.join(' ');
 
         // Marker + address + bytes: matched (and colored) as one unit by
         // `#address_bytes` in the grammar - see z80-disasm.tmLanguage.json.

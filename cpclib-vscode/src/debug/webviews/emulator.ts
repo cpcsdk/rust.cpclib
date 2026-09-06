@@ -15,6 +15,16 @@ const emulatorPanels = new Map<string, vscode.WebviewPanel>();
  */
 export const emulatorUrls = new Map<string, string>();
 
+/**
+ * The `cpclib/...` custom requests this session's backend actually answers -
+ * from `cpclib/emulatorReady`'s own `supports` field (`cpclib-dap/src/
+ * lib.rs`'s `ADVERTISED_CAPABILITIES`). A hardware-inspection panel checks
+ * this before enabling itself, rather than guessing from the emulator's name:
+ * two versions of the same backend could differ, and the whole point of
+ * staying emulator-agnostic is not hardcoding per-emulator assumptions here.
+ */
+export const sessionCapabilities = new Map<string, Set<string>>();
+
 export async function showEmulator(session: vscode.DebugSession, url: string | undefined): Promise<void> {
     if (!url) { return; }
     if (!vscode.workspace.getConfiguration('cpclib').get<boolean>('debug.openInWebview', true)) {

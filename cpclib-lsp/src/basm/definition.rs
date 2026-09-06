@@ -391,12 +391,28 @@ impl AssemblyAnalyzer {
     }
 
     /// TODO rename it find_reference_in_by_text and rewrite find_reference_in using the listing. The references will be stored in expressions
-    /// Find all occurrences of `word_upper` (already uppercased) as whole words in `document`.
-    pub fn find_references_in(&self, document: &Document, word_upper: &str) -> Vec<Location> {
+    /// Find all occurrences of `word` as whole words in `document`.
+    /// `case_sensitive` matches [`Self::find_definition_in`]'s own contract -
+    /// this used to always fold to uppercase regardless, which meant two
+    /// legitimately distinct globals differing only by case (allowed under
+    /// the default `case_sensitive = true`) were treated as one symbol here
+    /// even though goto-definition already kept them apart correctly.
+    pub fn find_references_in(
+        &self,
+        document: &Document,
+        word: &str,
+        case_sensitive: bool
+    ) -> Vec<Location> {
+        let pattern = if case_sensitive {
+            word.to_string()
+        }
+        else {
+            word.to_uppercase()
+        };
         let text = document.text();
         let mut refs = Vec::new();
         for (line_idx, line) in text.lines().enumerate() {
-            for (abs, after) in word_matches_on_line(line, word_upper) {
+            for (abs, after) in word_matches_on_line(line, &pattern, case_sensitive) {
                 refs.push(Location {
                     uri: document.uri.clone(),
                     range: Range {
@@ -605,6 +621,12 @@ impl AssemblyAnalyzer {
         target: &RenameTarget,
         new_name: &str
     ) -> Vec<TextEdit> {
+        // Matches goto-definition's own `self.config().case_sensitive` -
+        // `Global`/`Qualified` below used to always fold to uppercase
+        // regardless, which silently merged two legitimately distinct
+        // globals differing only by case (allowed under the default
+        // `case_sensitive = true`) into one rename.
+        let case_sensitive = self.config().case_sensitive;
         match target {
             RenameTarget::Global(old) => {
                 // Exclude any `FUNCTION`/`REPEAT`/`ITERATE`/`MACRO` body in
@@ -636,7 +658,7 @@ impl AssemblyAnalyzer {
                     })
                     .unwrap_or_default();
 
-                find_label_word_and_prefix_matches(document, old)
+                find_label_word_and_prefix_matches(document, old, case_sensitive)
                     .into_iter()
                     .filter(|(range, _)| {
                         !shadow_ranges
@@ -653,7 +675,7 @@ impl AssemblyAnalyzer {
                     .collect()
             },
             RenameTarget::Qualified(old) => {
-                self.find_references_in(document, &old.to_uppercase())
+                self.find_references_in(document, old, case_sensitive)
                     .into_iter()
                     .map(|loc| {
                         TextEdit {
@@ -821,14 +843,23 @@ fn names_match(a: &str, b: &str, case_sensitive: bool) -> bool {
 /// directly since it needs its own, different trailing-boundary rule (a
 /// match immediately followed by `.` must be *accepted*, not rejected —
 /// `.` is itself an `is_ident_byte` character).
-fn pattern_starts_on_line(line: &str, pattern_upper: &str) -> Vec<(usize, usize)> {
-    let line_up = line.to_uppercase();
+fn pattern_starts_on_line(
+    line: &str,
+    pattern: &str,
+    case_sensitive: bool
+) -> Vec<(usize, usize)> {
+    let line_for_match = if case_sensitive {
+        line.to_string()
+    }
+    else {
+        line.to_uppercase()
+    };
     let bytes = line.as_bytes();
-    let plen = pattern_upper.len();
+    let plen = pattern.len();
     let mut out = Vec::new();
     let mut start = 0;
-    while start + plen <= line_up.len() {
-        let Some(pos) = line_up[start..].find(pattern_upper)
+    while start + plen <= line_for_match.len() {
+        let Some(pos) = line_for_match[start..].find(pattern)
         else {
             break;
         };
@@ -847,32 +878,44 @@ fn pattern_starts_on_line(line: &str, pattern_upper: &str) -> Vec<(usize, usize)
 /// character) — the strict "whole word" match `find_references_in`,
 /// `find_local_matches_in_scope`, `find_bare_word_matches_in_scope`, and
 /// `bare_word_matches_on_line` all need.
-fn word_matches_on_line(line: &str, pattern_upper: &str) -> Vec<(usize, usize)> {
+fn word_matches_on_line(
+    line: &str,
+    pattern: &str,
+    case_sensitive: bool
+) -> Vec<(usize, usize)> {
     let bytes = line.as_bytes();
-    pattern_starts_on_line(line, pattern_upper)
+    pattern_starts_on_line(line, pattern, case_sensitive)
         .into_iter()
         .filter(|&(_, after)| after >= bytes.len() || !is_ident_byte(bytes[after]))
         .collect()
 }
 
-/// Occurrences of `word_upper` in `document`, either as an exact whole word
-/// or as a `.`-qualifying prefix (`word_upper` immediately followed by `.`
-/// and further identifier characters, e.g. matching the `OLD` in
-/// `OLD.local`) — used for global label rename, which must also update
-/// qualified references to its own locals. Returns `(range, matched_text)`;
-/// `matched_text` is exactly `word_upper` for a plain match, or
-/// `word_upper` plus its `.suffix` for a qualified-prefix match.
-fn find_label_word_and_prefix_matches(document: &Document, word: &str) -> Vec<(Range, String)> {
-    // Callers pass the word as written (whatever case the source uses) —
-    // matching must be case-insensitive regardless, like every other
-    // symbol lookup in this module (`find_references_in`,
-    // `find_local_matches_in_scope`).
-    let word_upper = word.to_uppercase();
+/// Occurrences of `word` in `document`, either as an exact whole word or as
+/// a `.`-qualifying prefix (`word` immediately followed by `.` and further
+/// identifier characters, e.g. matching the `OLD` in `OLD.local`) — used for
+/// global label rename, which must also update qualified references to its
+/// own locals. Returns `(range, matched_text)`; `matched_text` is exactly
+/// `word` (case-normalized per `case_sensitive`, like the search itself) for
+/// a plain match, or that plus its `.suffix` for a qualified-prefix match.
+/// `case_sensitive` matches [`AssemblyAnalyzer::find_definition_in`]'s own
+/// contract - see [`AssemblyAnalyzer::find_references_in`]'s doc comment for
+/// why this now takes it instead of always folding to uppercase.
+fn find_label_word_and_prefix_matches(
+    document: &Document,
+    word: &str,
+    case_sensitive: bool
+) -> Vec<(Range, String)> {
+    let pattern = if case_sensitive {
+        word.to_string()
+    }
+    else {
+        word.to_uppercase()
+    };
     let text = document.text();
     let mut matches = Vec::new();
     for (line_idx, line) in text.lines().enumerate() {
         let bytes = line.as_bytes();
-        for (abs, after) in pattern_starts_on_line(line, &word_upper) {
+        for (abs, after) in pattern_starts_on_line(line, &pattern, case_sensitive) {
             if after < bytes.len() && bytes[after] == b'.' {
                 let mut end = after + 1;
                 while end < bytes.len() && is_ident_byte(bytes[end]) {
@@ -904,7 +947,7 @@ fn find_label_word_and_prefix_matches(document: &Document, word: &str) -> Vec<(R
                             character: after as u32
                         }
                     },
-                    word_upper.clone()
+                    pattern.clone()
                 ));
             }
         }
@@ -928,7 +971,7 @@ fn find_local_matches_in_scope(
             break;
         };
         let line = line.trim_end_matches(['\n', '\r']);
-        for (abs, after) in word_matches_on_line(line, &pattern) {
+        for (abs, after) in word_matches_on_line(line, &pattern, false) {
             matches.push(Range {
                 start: Position {
                     line: line_idx,
@@ -960,7 +1003,7 @@ fn find_bare_word_matches_in_scope(
             break;
         };
         let line = line.trim_end_matches(['\n', '\r']);
-        for (abs, after) in word_matches_on_line(line, &name_upper) {
+        for (abs, after) in word_matches_on_line(line, &name_upper, false) {
             matches.push(Range {
                 start: Position {
                     line: line_idx,
@@ -979,7 +1022,7 @@ fn find_bare_word_matches_in_scope(
 /// Whole-word (case-insensitive) matches of `name_upper` (already
 /// uppercased) on a single `line`, as `[start, end)` column pairs.
 fn bare_word_matches_on_line(line: &str, name_upper: &str) -> Vec<(u32, u32)> {
-    word_matches_on_line(line, name_upper)
+    word_matches_on_line(line, name_upper, false)
         .into_iter()
         .map(|(s, e)| (s as u32, e as u32))
         .collect()
@@ -1386,6 +1429,51 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
             .find_definition_in(&doc, "BUFFER", true)
             .expect("uppercase declaration");
         assert_eq!(loc.range.start.line, 3, "{loc:?}");
+    }
+
+    /// Same fix as `case_sensitive_lookup_does_not_confuse_differently_cased_symbols`,
+    /// but for `find_references_in` - it used to always fold to uppercase
+    /// regardless of `case_sensitive`, so `BUFFER` (a call on line 4) would
+    /// have wrongly come back as a reference to lowercase `buffer` too.
+    #[test]
+    fn find_references_in_respects_case_sensitivity() {
+        let text = "buffer: ret\nBUFFER: ret\n    call buffer\n    call BUFFER\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///case_refs.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let lower_refs = analyzer.find_references_in(&doc, "buffer", true);
+        let lower_lines: Vec<u32> = lower_refs.iter().map(|l| l.range.start.line).collect();
+        assert_eq!(lower_lines, vec![0, 2], "{lower_refs:?}");
+
+        let upper_refs = analyzer.find_references_in(&doc, "BUFFER", true);
+        let upper_lines: Vec<u32> = upper_refs.iter().map(|l| l.range.start.line).collect();
+        assert_eq!(upper_lines, vec![1, 3], "{upper_refs:?}");
+    }
+
+    /// Same bug, through `rename_occurrences_in`'s `Global` arm - renaming
+    /// `buffer` used to also silently rewrite the distinct `BUFFER` symbol,
+    /// merging two symbols a `case_sensitive = true` project (the default)
+    /// deliberately keeps apart.
+    #[test]
+    fn rename_global_respects_case_sensitivity() {
+        let text = "buffer: ret\nBUFFER: ret\n    call buffer\n    call BUFFER\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///case_rename.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer.config().case_sensitive,
+            "this test relies on the default"
+        );
+
+        let target = RenameTarget::Global("buffer".to_string());
+        let edits = analyzer.rename_occurrences_in(&doc, &target, "renamed");
+        let touched_lines: Vec<u32> = edits.iter().map(|e| e.range.start.line).collect();
+        assert_eq!(
+            touched_lines,
+            vec![0, 2],
+            "renaming lowercase 'buffer' must not touch the distinct 'BUFFER' symbol: {edits:?}"
+        );
     }
 
     #[test]
@@ -2194,27 +2282,38 @@ mod word_scanner_tests {
     fn pattern_starts_on_line_only_checks_the_leading_boundary() {
         // "OLD" followed by "." (an ident byte) is still reported here -
         // rejecting on the trailing side is left to the caller.
-        let hits = pattern_starts_on_line("call OLD.local", "OLD");
+        let hits = pattern_starts_on_line("call OLD.local", "OLD", false);
         assert_eq!(hits, vec![(5, 8)]);
     }
 
     #[test]
     fn pattern_starts_on_line_rejects_a_match_preceded_by_an_ident_byte() {
         // "OLD" inside "FOO_OLD" is not preceded by a word boundary.
-        let hits = pattern_starts_on_line("call FOO_OLD", "OLD");
+        let hits = pattern_starts_on_line("call FOO_OLD", "OLD", false);
         assert!(hits.is_empty(), "{hits:?}");
     }
 
     #[test]
     fn word_matches_on_line_rejects_a_match_followed_by_an_ident_byte() {
         // "OLD" inside "OLDFOO" fails the trailing boundary check.
-        let hits = word_matches_on_line("call OLDFOO", "OLD");
+        let hits = word_matches_on_line("call OLDFOO", "OLD", false);
         assert!(hits.is_empty(), "{hits:?}");
     }
 
     #[test]
     fn word_matches_on_line_accepts_a_standalone_word() {
-        let hits = word_matches_on_line("call OLD", "OLD");
+        let hits = word_matches_on_line("call OLD", "OLD", false);
+        assert_eq!(hits, vec![(5, 8)]);
+    }
+
+    #[test]
+    fn pattern_starts_on_line_is_case_sensitive_when_asked() {
+        // Lowercase "old" must not match "OLD" when case_sensitive is true -
+        // regression guard for the bug where every match in this module
+        // silently folded to uppercase regardless of the caller's config.
+        let hits = pattern_starts_on_line("call old", "OLD", true);
+        assert!(hits.is_empty(), "{hits:?}");
+        let hits = pattern_starts_on_line("call OLD", "OLD", true);
         assert_eq!(hits, vec![(5, 8)]);
     }
 }

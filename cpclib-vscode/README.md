@@ -365,14 +365,13 @@ Then press `F5` in VS Code to launch the extension development host.
 
 ## License
 
-[License information from main project]
+[MIT](LICENSE)
 
 ## Links
 
 - **Documentation**: https://cpcsdk.github.io/rust.cpclib/
 - **GitHub Repository**: https://github.com/cpcsdk/rust.cpclib
 - **Issue Tracker**: https://github.com/cpcsdk/rust.cpclib/issues
-- **Benediction Discord**: [Join for support and discussions]
 
 ## Acknowledgments
 

@@ -4,6 +4,7 @@ pub use xcap;
 
 pub mod ace_config;
 pub mod child_registry;
+pub mod csl_interpreter;
 pub mod delegated;
 pub mod embedded;
 pub mod emucontrol;

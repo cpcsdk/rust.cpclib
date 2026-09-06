@@ -8,18 +8,19 @@
 //! Semicolons are used for comments.
 
 use std::fmt;
+use std::ops::Range;
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 /// CSL language version
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CslVersion {
     pub major: u8,
     pub minor: u8
 }
 
 impl CslVersion {
-    pub fn new(major: u8, minor: u8) -> Self {
+    pub const fn new(major: u8, minor: u8) -> Self {
         Self { major, minor }
     }
 
@@ -133,12 +134,16 @@ pub enum MemoryExpansion {
 
 impl fmt::Display for MemoryExpansion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Must match `csl_parser::parse_memory_expansion`'s accepted tokens
+        // exactly (the numeric codes "0".."4", not a human-readable KB
+        // description) - anything else produces a `memory_exp` line the
+        // parser rejects outright.
         match self {
-            Self::Kb128 => write!(f, "128"),
-            Self::Kb256Standard => write!(f, "256"),
-            Self::Kb256Silicon => write!(f, "256S"),
-            Self::Mb4 => write!(f, "4M"),
-            Self::Kb512DkTronics => write!(f, "512")
+            Self::Kb128 => write!(f, "0"),
+            Self::Kb256Standard => write!(f, "1"),
+            Self::Kb256Silicon => write!(f, "2"),
+            Self::Mb4 => write!(f, "3"),
+            Self::Kb512DkTronics => write!(f, "4")
         }
     }
 }
@@ -911,21 +916,58 @@ impl CslInstruction {
 }
 
 /// CSL script representation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct CslScript {
-    instructions: Vec<CslInstruction>
+    instructions: Vec<CslInstruction>,
+    /// Byte-range source span of each instruction, one entry per
+    /// `instructions`, in the same order - only ever populated by
+    /// `csl_parser::parse_csl_with_rich_errors` (a script built via
+    /// `CslScriptBuilder`/the `with_*` helpers, e.g. the one synthesized
+    /// from an `EmulatorConf`, has no source text to point at, so it stays
+    /// `None`). Used by `cpclib-lsp` to report parse errors and to walk
+    /// instructions in source order.
+    spans: Option<Vec<Range<usize>>>
 }
 
 impl CslScript {
     /// Create a new empty CSL script
     pub fn new() -> Self {
         Self {
-            instructions: Vec::new()
+            instructions: Vec::new(),
+            spans: None
         }
     }
 
     pub fn instructions(&self) -> &[CslInstruction] {
         &self.instructions
+    }
+
+    /// Byte-range spans of each instruction in `instructions()`, in the
+    /// same order, if this script came from `parse_csl_with_rich_errors`.
+    /// `None` for scripts built via `CslScriptBuilder`/the `with_*`
+    /// helpers, which have no source text to point at.
+    pub fn spans(&self) -> Option<&[Range<usize>]> {
+        self.spans.as_deref()
+    }
+
+    /// The instruction at `index` together with its source span, if this
+    /// script has spans (see [`Self::spans`]).
+    pub fn located_instruction(&self, index: usize) -> Option<(&CslInstruction, Range<usize>)> {
+        let span = self.spans.as_ref()?.get(index)?.clone();
+        Some((self.instructions.get(index)?, span))
+    }
+
+    /// Populate the per-instruction spans - only called by
+    /// `csl_parser::parse_csl_with_rich_errors` right after a successful
+    /// parse, where `spans.len()` is guaranteed to equal
+    /// `self.instructions.len()` (one span is recorded per parsed line).
+    pub(crate) fn set_spans(&mut self, spans: Vec<Range<usize>>) {
+        debug_assert_eq!(
+            spans.len(),
+            self.instructions.len(),
+            "set_spans: one span must be recorded per parsed instruction"
+        );
+        self.spans = Some(spans);
     }
 
     /// Add an instruction to the script
@@ -1064,6 +1106,16 @@ impl Default for CslScript {
     }
 }
 
+impl PartialEq for CslScript {
+    /// Two scripts are equal when their instructions match - `spans` is
+    /// positional metadata from parsing, not part of a script's semantic
+    /// identity (e.g. two independently-parsed but textually-different
+    /// scripts producing the same instructions should compare equal).
+    fn eq(&self, other: &Self) -> bool {
+        self.instructions == other.instructions
+    }
+}
+
 /// Builder for CSL scripts that validates instructions as they are added
 #[derive(Debug, Clone, PartialEq)]
 pub struct CslScriptBuilder {
@@ -1152,7 +1204,8 @@ impl CslScriptBuilder {
     /// Returns an error if the script is invalid
     pub fn build(self) -> Result<CslScript, String> {
         Ok(CslScript {
-            instructions: self.instructions
+            instructions: self.instructions,
+            spans: None
         })
     }
 
@@ -1287,6 +1340,36 @@ impl fmt::Display for CslScript {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_memory_expansion_display_form_reparses_to_the_same_variant() {
+        // `Display` must produce exactly what `csl_parser::parse_memory_expansion`
+        // accepts (the numeric codes "0".."4") - it used to instead write
+        // human-readable KB descriptions ("128"/"256"/"256S"/"4M"/"512"),
+        // which the parser rejects outright, so a script built via
+        // `CslInstruction::memory_exp`/`with_memory_exp` and then
+        // serialized (e.g. `Amspirit`'s synthesized CSL,
+        // `From<EmulatorConf> for CslScript`) could never be re-parsed.
+        for variant in [
+            MemoryExpansion::Kb128,
+            MemoryExpansion::Kb256Standard,
+            MemoryExpansion::Kb256Silicon,
+            MemoryExpansion::Mb4,
+            MemoryExpansion::Kb512DkTronics
+        ] {
+            let script = CslScript::new().with_memory_exp(variant);
+            let text = script.to_string();
+            let reparsed = crate::csl_parser::parse_csl_with_rich_errors(&text, None)
+                .unwrap_or_else(|e| panic!("{variant:?} produced unparseable CSL: {text:?}\n{e}"));
+            assert!(
+                matches!(
+                    reparsed.instructions().iter().find(|i| matches!(i, CslInstruction::MemoryExp(_))),
+                    Some(CslInstruction::MemoryExp(v)) if *v == variant
+                ),
+                "{variant:?} round-tripped to a different variant via {text:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_special_key_escape_sequences() {

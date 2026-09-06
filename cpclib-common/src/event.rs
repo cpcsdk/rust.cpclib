@@ -51,7 +51,7 @@ impl<E: EventObserver> EventObserver for Box<E> {
     }
 }
 
-impl<T: EventObserver> EventObserver for Arc<T> {
+impl<T: EventObserver + ?Sized> EventObserver for Arc<T> {
     fn emit_stdout(&self, s: &str) {
         self.deref().emit_stdout(s)
     }

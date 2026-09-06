@@ -148,6 +148,7 @@ export function createLanguageClient(
             { scheme: 'file', language: 'bndbuild' },
             { scheme: 'file', language: 'locomotive-basic' },
             { scheme: 'file', language: 'catart-basic' },
+            { scheme: 'file', language: 'csl' },
             // Unsaved buffers (language mode set manually, not yet written to
             // disk) get no `file:` URI - without these, the client silently
             // drops didOpen/didChange for them and the server never sees the
@@ -155,7 +156,8 @@ export function createLanguageClient(
             { scheme: 'untitled', language: 'basm' },
             { scheme: 'untitled', language: 'bndbuild' },
             { scheme: 'untitled', language: 'locomotive-basic' },
-            { scheme: 'untitled', language: 'catart-basic' }
+            { scheme: 'untitled', language: 'catart-basic' },
+            { scheme: 'untitled', language: 'csl' }
         ],
         synchronize: {
             // The bndbuild half mirrors `BUILD_FILE_GLOB` (also covering the
@@ -178,7 +180,7 @@ export function createLanguageClient(
             fileEvents: (() => {
                 logStartupTiming('createFileSystemWatcher: start (broad, recursive, workspace-wide)');
                 const watcher = workspace.createFileSystemWatcher(
-                    '{**/*.{asm,z80,bas,BAS,CAT,cat,ASC,asc},' +
+                    '{**/*.{asm,z80,bas,BAS,CAT,cat,ASC,asc,csl,CSL},' +
                     '**/*.bnd,**/*.BND,**/*.build,**/*.BUILD,**/bndbuild.yml,**/BNDBUILD.YML}'
                 );
                 logStartupTiming('createFileSystemWatcher: call returned');

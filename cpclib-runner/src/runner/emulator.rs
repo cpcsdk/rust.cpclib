@@ -168,6 +168,18 @@ impl Emulator {
             Emulator::Ace(_) | Emulator::SugarBoxV2(_) | Emulator::Amspirit(_)
         )
     }
+
+    /// Whether this emulator accepts a CSL (CPC Script Language) file
+    /// directly as a launch argument - AMSpiriT (`--csl=<path>`) and
+    /// SugarboxV2 (`-s`/`--csl <path>`, "Run a CSL script on start",
+    /// confirmed against Tom1975/SugarboxV2's own documented CLI flags).
+    /// Everyone else needs its instructions translated/replayed instead
+    /// (see `EmulatorConf::args_for_emu`'s non-native branch, and
+    /// `cpclib_runner::csl_interpreter` for `.csl` files supplied
+    /// directly rather than synthesized from an `EmulatorConf`).
+    pub fn accept_csl(&self) -> bool {
+        matches!(self, Emulator::Amspirit(_) | Emulator::SugarBoxV2(_))
+    }
 }
 
 impl Emulator {
@@ -223,6 +235,45 @@ mod test {
         let urls = AmspiritVersion::default().static_download_urls();
         assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn only_amspirit_and_sugarbox_accept_csl_natively() {
+        use super::*;
+
+        // Confirmed against each emulator's own documented CLI flags:
+        // AMSpiriT's `--csl=<path>` and SugarboxV2's `-s, --csl <script>`
+        // ("Run a CSL script on start", Tom1975/SugarboxV2's own docs).
+        assert!(Emulator::Amspirit(AmspiritVersion::default()).accept_csl());
+        assert!(Emulator::SugarBoxV2(SugarBoxV2Version::default()).accept_csl());
+
+        // Every other variant - including AmspiritLite, which is a
+        // different binary with its own HTTP API rather than a `--csl`
+        // flag - must not claim native support.
+        assert!(!Emulator::Ace(AceVersion::default()).accept_csl());
+        assert!(
+            !Emulator::AmspiritLite(crate::runner::emulator::AmspiritLiteVersion::default())
+                .accept_csl()
+        );
+        assert!(!Emulator::Cadence(crate::runner::emulator::CadenceVersion::default()).accept_csl());
+        assert!(
+            !Emulator::CapriceForever(
+                crate::runner::emulator::CapriceForeverVersion::default()
+            )
+            .accept_csl()
+        );
+        assert!(!Emulator::CpcEmu(CpcEmuVersion::default()).accept_csl());
+        assert!(!Emulator::Cpcec(crate::runner::emulator::CpcecVersion::default()).accept_csl());
+        assert!(
+            !Emulator::CpcEmuPower(crate::runner::emulator::CpcEmuPowerVersion::default())
+                .accept_csl()
+        );
+        assert!(
+            !Emulator::Emulator1984(crate::runner::emulator::Emulator1984Version::default())
+                .accept_csl()
+        );
+        assert!(!Emulator::RetroVm(RetroVmVersion::default()).accept_csl());
+        assert!(!Emulator::Winape(WinapeVersion::default()).accept_csl());
     }
 
     #[test]

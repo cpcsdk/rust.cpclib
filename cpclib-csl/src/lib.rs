@@ -6,6 +6,7 @@
 pub mod csl;
 pub mod csl_parser;
 pub mod error;
+pub mod lsp;
 
 // Re-export commonly used types
 pub use csl::*;

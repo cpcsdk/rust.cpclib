@@ -16,6 +16,9 @@ pub enum DocumentType {
     /// Reuses `BasicAnalyzer` for everything except diagnostics (see
     /// `locomotive::catart`).
     CatartBasic,
+    /// CSL (CPC Script Language) file (`.csl`): a line-oriented emulator
+    /// automation script, parsed by `cpclib_csl`.
+    Csl,
     /// Unknown file type
     Unknown
 }
@@ -44,6 +47,9 @@ impl DocumentType {
         {
             Self::CatartBasic
         }
+        else if path.ends_with(".csl") || path.ends_with(".CSL") {
+            Self::Csl
+        }
         else {
             Self::Unknown
         }
@@ -57,6 +63,7 @@ impl DocumentType {
             "bndbuild" | "Buildfile" => Self::BuildFile,
             "locomotive-basic" => Self::Basic,
             "catart-basic" => Self::CatartBasic,
+            "csl" => Self::Csl,
             _ => Self::Unknown
         }
     }

@@ -2,6 +2,8 @@
 //!
 //! This module provides parsing capabilities for CSL script files.
 
+use std::ops::Range;
+
 #[cfg(test)]
 use cpclib_common::winnow::ModalParser;
 use cpclib_common::winnow::ascii::{dec_uint, line_ending};
@@ -798,8 +800,11 @@ pub fn parse_csl_with_rich_errors(
 
     let mut located_input = LocatingSlice::new(input);
 
-    // Parse with builder to catch validation errors
+    // Parse with builder to catch validation errors. `spans` mirrors
+    // `builder`'s instructions one-for-one (one push per loop iteration),
+    // so it can be handed to `CslScript::set_spans` once `build()` succeeds.
     let mut builder = CslScriptBuilder::new();
+    let mut spans: Vec<Range<usize>> = Vec::new();
     loop {
         // Skip whitespace/newlines
         let _ = take_while(0.., [' ', '\t', '\n', '\r'])
@@ -821,30 +826,39 @@ pub fn parse_csl_with_rich_errors(
             convert_parse_error_to_csl_error(input, &located_input, e, filename.clone())
         })?;
 
+        // The whole line just consumed - used both as this instruction's
+        // recorded span and, if the builder rejects it below, as the
+        // error's span (covers the real offending line, not one byte).
+        let offset_after = input.len() - located_input.len();
+        let span = offset_before..offset_after;
+
         // Add instruction to builder with validation - capture validation errors
         builder = builder
             .with_instruction(instruction)
             .map_err(|validation_err| {
-                // Create a rich error for validation failures
-                let span = offset_before..offset_before.saturating_add(1);
-                let mut error = CslError::new(input.to_string(), span, validation_err);
+                let mut error = CslError::new(input.to_string(), span.clone(), validation_err);
                 if let Some(fname) = filename.clone() {
                     error = error.with_filename(fname);
                 }
                 error
             })?;
+        spans.push(span);
     }
 
     // Build final script
-    builder.build().map_err(|validation_err| {
-        // Create error for build-time validation failures
-        let span = 0..1;
-        let mut error = CslError::new(input.to_string(), span, validation_err);
+    let last_span = spans.last().cloned().unwrap_or(0..input.len().min(1));
+    let mut script = builder.build().map_err(|validation_err| {
+        // Create error for build-time validation failures. `CslScriptBuilder::build`
+        // never actually returns `Err` today, so this is defensive: point at the
+        // last parsed instruction rather than a fixed, meaningless `0..1`.
+        let mut error = CslError::new(input.to_string(), last_span.clone(), validation_err);
         if let Some(fname) = filename.clone() {
             error = error.with_filename(fname);
         }
         error
-    })
+    })?;
+    script.set_spans(spans);
+    Ok(script)
 }
 
 // Helper to convert parse errors to CSL errors
@@ -859,7 +873,15 @@ fn convert_parse_error_to_csl_error(
     use crate::error::{CslError, suggest_instruction};
 
     let offset = input.len().saturating_sub(located_input.len());
-    let span = offset..offset.saturating_add(1);
+    // Span the rest of the offending line (not just the byte winnow
+    // stopped at), so the diagnostic underlines the actual bad token
+    // instead of a single, often-meaningless character.
+    let remaining = &input[offset..];
+    let line_end_rel = remaining
+        .find(['\n', '\r'])
+        .unwrap_or(remaining.len())
+        .max(1);
+    let span = offset..offset + line_end_rel;
 
     // Try to extract a meaningful error message from the context
     let mut message = "Parse error".to_string();
@@ -881,13 +903,12 @@ fn convert_parse_error_to_csl_error(
     }
 
     // Check if this looks like an instruction name error
-    if offset < input.len() {
-        let remaining = &input[offset..];
-        if let Some(word_end) = remaining.find(|c: char| c.is_whitespace() || c == '\n') {
-            let word = &remaining[..word_end];
-            if let Some(suggestion) = suggest_instruction(word) {
-                notes.push(format!("Did you mean '{}'?", suggestion));
-            }
+    if offset < input.len()
+        && let Some(word_end) = remaining.find(|c: char| c.is_whitespace() || c == '\n')
+    {
+        let word = &remaining[..word_end];
+        if let Some(suggestion) = suggest_instruction(word) {
+            notes.push(format!("Did you mean '{}'?", suggestion));
         }
     }
 
@@ -1172,6 +1193,42 @@ wait 100000
         let input = "csl_version 1.1\nreset\nwait 1000\n";
         let result = parse_csl_with_rich_errors(input, None);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_successful_parse_records_one_span_per_instruction() {
+        let input = "csl_version 1.1\nreset\nwait 1000\n";
+        let script = parse_csl_with_rich_errors(input, None).unwrap();
+        let spans = script.spans().expect("a successful parse must record spans");
+        assert_eq!(spans.len(), script.instructions().len());
+        assert_eq!(spans.len(), 3);
+
+        // Each span must slice out exactly the source text of its own line.
+        assert_eq!(&input[spans[0].clone()], "csl_version 1.1\n");
+        assert_eq!(&input[spans[1].clone()], "reset\n");
+        assert_eq!(&input[spans[2].clone()], "wait 1000\n");
+
+        let (instr, span) = script.located_instruction(1).unwrap();
+        assert!(matches!(instr, CslInstruction::Reset(ResetType::Hard)));
+        assert_eq!(span, spans[1]);
+    }
+
+    #[test]
+    fn test_builder_constructed_script_has_no_spans() {
+        // A script assembled programmatically (e.g. `From<EmulatorConf>`)
+        // never had source text, so it must not claim to have spans.
+        let script = CslScript::new().with_reset(ResetType::Soft);
+        assert!(script.spans().is_none());
+    }
+
+    #[test]
+    fn test_parse_error_span_covers_whole_offending_line_not_one_byte() {
+        // "rset" is a typo for "reset" on the second line - the error span
+        // should cover that whole line, not a single synthesized byte.
+        let input = "csl_version 1.1\nrset H\nwait 1000\n";
+        let error =
+            parse_csl_with_rich_errors(input, None).expect_err("typo must fail to parse");
+        assert_eq!(&input[error.span.clone()], "rset H");
     }
 
     #[test]

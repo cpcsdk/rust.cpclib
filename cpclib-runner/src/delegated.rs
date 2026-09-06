@@ -15,9 +15,9 @@ use tar::Archive;
 use xz2::read::XzDecoder;
 
 use crate::event::EventObserver;
-use crate::runner::exec::{ExternRunner, RunInDir, Runner};
+use crate::runner::exec::{ExternRunner, RunInDir, Runner, TaskStdin, TaskStdout};
 
-static GITHUB_URL: &str = "https://github.com/";
+static GITHUB_URL: &str = "https://github.com";
 
 /// From the full release url page, get the url for the given release
 pub fn github_get_assets_for_version_url<GI: GithubInformation>(
@@ -217,7 +217,7 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
 
         if let Some(key) = self.linux_key() {
             urls.linux = Some(format!(
-                "{}/{}",
+                "{}{}",
                 GITHUB_URL,
                 map.get(key).ok_or_else(|| {
                     format!(
@@ -230,7 +230,7 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
         }
         if let Some(key) = self.windows_key() {
             urls.windows = Some(format!(
-                "{}/{}",
+                "{}{}",
                 GITHUB_URL,
                 map.get(key).ok_or_else(|| {
                     format!(
@@ -243,7 +243,7 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
         }
         if let Some(key) = self.macos_key() {
             urls.macos = Some(format!(
-                "{}/{}",
+                "{}{}",
                 GITHUB_URL,
                 map.get(key).ok_or_else(|| {
                     format!(
@@ -605,6 +605,25 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        self.inner_run_redirected(itr, o, None, None)
+    }
+
+    fn inner_run_with_stdin<S: AsRef<str>>(
+        &self,
+        itr: &[S],
+        o: &E,
+        stdin: Option<TaskStdin>
+    ) -> Result<(), String> {
+        self.inner_run_redirected(itr, o, stdin, None)
+    }
+
+    fn inner_run_redirected<S: AsRef<str>>(
+        &self,
+        itr: &[S],
+        o: &E,
+        stdin: Option<TaskStdin>,
+        stdout: Option<TaskStdout>
+    ) -> Result<(), String> {
         let cfg = &self.app;
 
         // ensure the emulator exists
@@ -645,10 +664,85 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
         };
         #[cfg(not(feature = "transparent-x11"))]
         let runner = ExternRunner::<E>::new(cfg.in_dir);
-        runner.inner_run(&command, o)
+        runner.inner_run_redirected(&command, o, stdin, stdout)
     }
 
     fn get_command(&self) -> &str {
         &self.cmd
+    }
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod delegated_stdin_tests {
+    use cpclib_common::event::CapturingObserver;
+
+    use super::*;
+    use crate::runner::exec::TaskStdin;
+
+    /// Regression guard for a real bug: `DelegatedRunner::inner_run`
+    /// (used by every Delegated task kind - rasm, vasm, grafx2, vlink, ...)
+    /// used to call `ExternRunner::inner_run` directly, bypassing the
+    /// stdin-aware/non-PTY path added for redirection and piping. Under a
+    /// PTY, stdout and stderr get merged into a single stream - so a
+    /// redirected/piped Delegated task's error output would leak into the
+    /// `>`/`>>` target or the next pipe stage instead of reaching the
+    /// observer's stderr separately, exactly like `extern`/`echo`/`rm`
+    /// already do. Rigs a `DelegateApplicationDescription` pointing at a
+    /// real, already-in-place binary (a copy of `/usr/bin/cat`) so
+    /// `is_cached()` is true and no network download ever runs, then drives
+    /// the real `DelegatedRunner` -> `ExternRunner` dispatch path directly.
+    #[test]
+    fn a_delegated_tasks_stdout_and_stderr_stay_separated_under_redirection() {
+        let folder = "cpclib-runner-test-delegated-stdin-fix";
+        let dest_dir = base_cache_folder().join(folder);
+        fs_err::create_dir_all(&dest_dir).unwrap();
+        let dest_bin = dest_dir.join("cat");
+        fs_err::copy("/usr/bin/cat", &dest_bin).unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs_err::metadata(&dest_bin).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs_err::set_permissions(&dest_bin, perms).unwrap();
+        }
+
+        let cfg = DelegateApplicationDescription::<CapturingObserver>::builder()
+            .download_fn_url("unused - is_cached() is true so this never runs")
+            .folder(folder)
+            .archive_format(ArchiveFormat::Raw)
+            .exec_fname("cat")
+            .build();
+        assert!(cfg.is_cached(), "the pre-placed binary must count as cached");
+
+        let runner = DelegatedRunner::new(cfg, "cat".to_string());
+        let observer = CapturingObserver::new();
+
+        let input_dir = camino_tempfile::tempdir().unwrap();
+        let input_path = input_dir.path().join("input.txt");
+        fs_err::write(&input_path, "delegated content\n").unwrap();
+        let missing_path = input_dir.path().join("does-not-exist.txt");
+
+        // `cat input.txt does-not-exist.txt` with a redirected/piped-style
+        // stdin context (`TaskStdin::Empty`: no real input, matching what
+        // `execute_pipe` passes a first stage with only a `>` redirect and
+        // no `<file`) - this alone must be enough to force the non-PTY path.
+        let result = runner.inner_run_with_stdin(
+            &[input_path.as_str(), missing_path.as_str()],
+            &observer,
+            Some(TaskStdin::Empty)
+        );
+
+        assert!(result.is_err(), "cat should fail on the missing file");
+        assert_eq!(
+            observer.stdout_joined(),
+            "delegated content\n",
+            "stdout must be exactly the readable file's content, not merged with stderr"
+        );
+        assert!(
+            !observer.get_stderr().is_empty(),
+            "cat's error about the missing file must reach the observer's stderr"
+        );
+
+        let _ = fs_err::remove_dir_all(&dest_dir);
     }
 }

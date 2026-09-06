@@ -16,4 +16,4 @@ pub mod tracker;
 pub mod extra;
 pub mod twocdt;
 pub mod vlink;
-pub use exec::{ExternRunner, Runner, RunnerWithClap};
+pub use exec::{ExternRunner, Runner, RunnerWithClap, TaskStdin, TaskStdout};

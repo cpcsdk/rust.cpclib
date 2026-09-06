@@ -20,6 +20,13 @@ pub const GATE_ARRAY_REFERENCE: i64 = 0x7C00_0002;
 pub const PSG_REFERENCE: i64 = 0x7C00_0004;
 pub const PPI_REFERENCE: i64 = 0x7C00_0005;
 pub const DISC_REFERENCE: i64 = 0x7C00_0006;
+/// Not a Variables-pane scope (deliberately absent from `extra_scopes`/
+/// `is_chip_scope`) - a snapshot has nothing meaningful about the tape
+/// transport worth showing, unlike CRTC/GA/PSG/PPI/Disc, so there is no
+/// "cached machine state" fallback for it to fit into. Used only as
+/// `chip_command`'s dispatch key for the dedicated `-tapeview` panel, which
+/// only ever answers from a live peer.
+pub const TAPE_REFERENCE: i64 = 0x7C00_0007;
 
 /// The Z80 flag register, bit by bit.
 ///
@@ -655,10 +662,22 @@ pub fn crtc_registers(sna: &cpclib_sna::Snapshot) -> [u8; 18] {
     std::array::from_fn(get)
 }
 
-/// The same, from an AmspiritLite `/api/crtc` body (`crtc_pane`'s own `regs`
-/// array).
+/// The same, from a direct-endpoint `getCrtcState`/`/api/crtc` body.
+///
+/// Two backends, two field names for the same array - AmspiritLite's own
+/// `crtc_pane` calls this `regs`; SugarBox's real `getCrtcState` (live-tested
+/// against an actual running v2.1.1 instance, not just its docs - see the
+/// roadmap's own notes on `EMULATOR_INTERFACE.md` being wrong here) calls it
+/// `registers` and has 18 entries where AmspiritLite sends fewer. Before this
+/// checked both names, a `-crtcview` against SugarBox silently hung forever:
+/// `crtc_view_command`'s direct-endpoint branch drops the pending request
+/// with no answer at all when this returns `None`, since there is nothing
+/// wrong to report - it simply never occurred to send one.
 pub fn crtc_registers_from_json(body: &Value) -> Option<[u8; 18]> {
-    let regs = body.get("regs")?.as_array()?;
+    let regs = body
+        .get("registers")
+        .or_else(|| body.get("regs"))?
+        .as_array()?;
     let mut out = [0u8; 18];
     for (slot, value) in out.iter_mut().zip(regs.iter()) {
         *slot = value.as_u64().unwrap_or(0) as u8;

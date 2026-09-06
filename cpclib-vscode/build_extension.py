@@ -217,12 +217,21 @@ class ExtensionBuilder:
 
     def rename_vsix_with_platform(self, platform_suffix: str):
         """Rename the generated .vsix file to include platform suffix"""
-        # Find the generated .vsix file
-        vsix_files = list(self.project_root.glob("*.vsix"))
+        # Find the generated .vsix file. If a previous, already-renamed
+        # .vsix (e.g. cpclib-vscode-linux-0.0.1.vsix) is still lying around
+        # from an earlier run, glob() order is unspecified and could pick
+        # that stale file instead of vsce's freshly-packaged one, producing
+        # a doubly-suffixed name (cpclib-vscode-linux-linux-0.0.1.vsix).
+        # The newest file by mtime is always the one vsce just created.
+        vsix_files = sorted(
+            self.project_root.glob("*.vsix"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
         if not vsix_files:
             self.error("No .vsix file found to rename")
             return None
-        
+
         original_vsix = vsix_files[0]
         # Extract name and version from original filename
         # Expected format: cpclib-vscode-0.0.1.vsix

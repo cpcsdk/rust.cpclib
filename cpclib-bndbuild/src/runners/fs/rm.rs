@@ -1,16 +1,21 @@
+use std::io::Read;
+
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, FromArgMatches, Parser};
 use cpclib_runner::event::EventObserver;
 #[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
+use cpclib_runner::runner::TaskStdin;
 
 use crate::expand_glob;
 
 #[derive(Parser, Debug)]
 #[command(name = "rm", about = "Delete files.")]
 struct RmArgs {
-    /// Files to delete
-    #[arg(required = true, help = "Files to delete")]
+    /// Files to delete. May be omitted if a newline/whitespace-separated
+    /// list is piped or redirected into stdin instead (`find ... | rm` /
+    /// `rm < filelist.txt`).
+    #[arg(help = "Files to delete")]
     files: Vec<String>
 }
 
@@ -20,15 +25,52 @@ impl<E: EventObserver> Runner for RmRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        self.inner_run_with_stdin(itr, o, None)
+    }
+
+    fn inner_run_with_stdin<S: AsRef<str>>(
+        &self,
+        itr: &[S],
+        o: &E,
+        stdin: Option<TaskStdin>
+    ) -> Result<(), String> {
         let Some(matches) = self.get_matches(itr, o)?
         else {
             return Ok(());
         };
         let args = RmArgs::from_arg_matches(&matches).map_err(|e| e.to_string())?;
 
+        let files: Vec<String> = if !args.files.is_empty() {
+            args.files
+        }
+        else if let Some(stdin @ (TaskStdin::File(_) | TaskStdin::Reader(_))) = stdin {
+            let mut reader: Box<dyn Read> = match stdin {
+                TaskStdin::File(path) => {
+                    Box::new(
+                        fs_err::File::open(&path)
+                            .map_err(|e| format!("unable to open {path} for reading: {e}"))?
+                    )
+                },
+                TaskStdin::Reader(r) => Box::new(r),
+                TaskStdin::Empty => unreachable!("excluded by the if let guard above")
+            };
+            let mut buf = String::new();
+            reader
+                .read_to_string(&mut buf)
+                .map_err(|e| format!("error reading stdin: {e}"))?;
+            buf.split_whitespace().map(str::to_owned).collect()
+        }
+        else {
+            return Err(
+                "rm: no files given (pass them as arguments, or pipe/redirect a \
+                 whitespace-separated list into stdin)"
+                    .to_string()
+            );
+        };
+
         let mut errors = String::new();
 
-        for fname in args.files.iter().flat_map(|s| expand_glob(s.as_str())) {
+        for fname in files.iter().flat_map(|s| expand_glob(s.as_str())) {
             let fname = Utf8Path::new(&fname);
             let res = if fname.is_dir() {
                 fs_err::remove_dir_all(fname)

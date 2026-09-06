@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Krusty/Benediction &amp; copilot" />
+  <title>Orgams Binary Format Specification</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    div.abstract {
+      margin: 2em 2em 2em 2em;
+      text-align: left;
+      font-size: 85%;
+    }
+    div.abstract-title {
+      font-weight: bold;
+      text-align: center;
+      padding: 0;
+      margin-bottom: 0.5em;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Orgams Binary Format Specification</h1>
+<p class="author">Krusty/Benediction &amp; copilot</p>
+<div class="abstract">
+<div class="abstract-title">Abstract</div>
+<p>This document specifies the Orgams binary format, used for storing
+z80 assembler source code in a compact binary representation. The format
+preserves source code structure, expressions, and formatting information
+while enabling efficient storage and reconstruction of assembler
+programs, particularly for Amstrad CPC demo development.</p>
+</div>
+</header>
+<h1 id="introduction">Introduction</h1>
+<p>The Orgams binary format is designed to store z80 assembler source
+code in a compact binary representation that maintains fidelity to the
+original source formatting and structure. This format is primarily used
+by the Orgams assembler tool in the context of Amstrad CPC demoscene
+development.</p>
+<p>This specification defines the binary encoding of assembler
+instructions, expressions, directives, labels, and control structures.
+The format uses a chunk-based structure with specialized encoding for
+different types of source code elements.</p>
+<h1 id="file-structure">File Structure</h1>
+<p>An Orgams binary file consists of the following components in
+sequence:</p>
+<ol type="1">
+<li>Header</li>
+<li>Source Code Chunk (SRCc)</li>
+<li>Null Separator (0x00)</li>
+<li>Labels Chunk (LBLs)</li>
+<li>Null Separator (0x00)</li>
+<li>Checksum Chunk (ChCk)</li>
+</ol>
+<p>All multi-byte values are stored in little-endian byte order.</p>
+<h2 id="header">Header</h2>
+<p>The header consists of:</p>
+<ul>
+<li>Magic bytes: 4 bytes (0x4F 0x52 0x47 0x41) “ORGA”</li>
+<li>Version: 1 byte (currently 0x02)</li>
+<li>Header size: 1 byte indicating additional header data length</li>
+<li>Header data: Variable length data of specified size</li>
+</ul>
+<h2 id="chunks">Chunks</h2>
+<p>Each chunk begins with a 4-byte ASCII identifier:</p>
+<ul>
+<li>“SRCc” (0x63 0x52 0x43 0x53): Source code data</li>
+<li>“LBLs” (0x73 0x4C 0x42 0x4C): Label definitions</li>
+<li>“ChCk” (0x6B 0x43 0x68 0x43): Checksum data</li>
+</ul>
+<p>Chunks are separated by null bytes (0x00).</p>
+<h1 id="source-code-chunk-srcc">Source Code Chunk (SRCc)</h1>
+<p>The SRCc chunk contains the main source code as a sequence of items.
+Each item represents a construct in the assembler source.</p>
+<h2 id="item-encoding">Item Encoding</h2>
+<p>Items are encoded using marker bytes that indicate their type. Some
+markers are used directly, while others require an escape prefix.</p>
+<h3 id="direct-markers">Direct Markers</h3>
+<p>The following marker bytes are used directly without prefix:</p>
+<table>
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 25%" />
+<col style="width: 46%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Marker</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MARKER_NEWLINE</td>
+<td>0x4A</td>
+<td>Line terminator</td>
+</tr>
+<tr class="even">
+<td>MARKER_COMMENT</td>
+<td>0x43</td>
+<td>Comment - followed by length-prefixed string</td>
+</tr>
+<tr class="odd">
+<td>MARKER_INDENT</td>
+<td>0x49</td>
+<td>Indentation - followed by space count</td>
+</tr>
+<tr class="even">
+<td>MARKER_ASSIGN</td>
+<td>0x64</td>
+<td>Assignment - followed by label and expression</td>
+</tr>
+<tr class="odd">
+<td>MARKER_BYTE</td>
+<td>0x42</td>
+<td>BYTE directive - followed by expression list</td>
+</tr>
+<tr class="even">
+<td>MARKER_WORD</td>
+<td>0x57</td>
+<td>WORD directive - followed by expression list</td>
+</tr>
+<tr class="odd">
+<td>MARKER_MACRO_DEF</td>
+<td>0x6D</td>
+<td>Macro definition - followed by macro data</td>
+</tr>
+<tr class="even">
+<td>MARKER_LABEL_ADDR</td>
+<td>0x60-0xDF</td>
+<td>Label reference - followed by label encoding</td>
+</tr>
+</tbody>
+</table>
+<h3 id="escaped-commands">Escaped Commands</h3>
+<p>Commands are prefixed with the escape marker 0x7F:</p>
+<table>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 24%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Command</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>CMD_ASIS</td>
+<td>0x01</td>
+<td>Raw string - followed by length-prefixed string</td>
+</tr>
+<tr class="even">
+<td>CMD_IF</td>
+<td>0x09</td>
+<td>IF statement - followed by expression</td>
+</tr>
+<tr class="odd">
+<td>CMD_ELSE</td>
+<td>0x0A</td>
+<td>ELSE statement</td>
+</tr>
+<tr class="even">
+<td>CMD_END</td>
+<td>0x0B</td>
+<td>END statement</td>
+</tr>
+<tr class="odd">
+<td>CMD_BRK</td>
+<td>0x0C</td>
+<td>BRK statement</td>
+</tr>
+<tr class="even">
+<td>CMD_RESTORE</td>
+<td>0x0D</td>
+<td>RESTORE statement</td>
+</tr>
+<tr class="odd">
+<td>CMD_FILL</td>
+<td>0x0E</td>
+<td>FILL directive - followed by size and value expressions</td>
+</tr>
+<tr class="even">
+<td>CMD_ENT</td>
+<td>0x0F</td>
+<td>ENT directive - followed by expression</td>
+</tr>
+<tr class="odd">
+<td>CMD_ORG</td>
+<td>0x10</td>
+<td>ORG directive - followed by expression</td>
+</tr>
+<tr class="even">
+<td>CMD_ORG2</td>
+<td>0x11</td>
+<td>ORG2 directive - followed by two expressions</td>
+</tr>
+<tr class="odd">
+<td>CMD_SKIP</td>
+<td>0x12</td>
+<td>SKIP directive - followed by expression</td>
+</tr>
+<tr class="even">
+<td>CMD_IMPORT</td>
+<td>0x13</td>
+<td>IMPORT directive - followed by length-prefixed string</td>
+</tr>
+<tr class="odd">
+<td>CMD_ENDM</td>
+<td>0x14</td>
+<td>ENDM statement</td>
+</tr>
+<tr class="even">
+<td>CMD_STORE_PC_INSTR</td>
+<td>0x15</td>
+<td>Store PC instruction marker</td>
+</tr>
+<tr class="odd">
+<td>CMD_STORE_PC_LINE</td>
+<td>0x16</td>
+<td>Store PC line marker</td>
+</tr>
+<tr class="even">
+<td>CMD_REPEAT</td>
+<td>0x17</td>
+<td>REPEAT statement - followed by expression and item</td>
+</tr>
+<tr class="odd">
+<td>CMD_MACRO_USE</td>
+<td>0x18</td>
+<td>Macro call - followed by macro data</td>
+</tr>
+<tr class="even">
+<td>CMD_END_BIS</td>
+<td>0x19</td>
+<td>END_BIS statement</td>
+</tr>
+</tbody>
+</table>
+<h2 id="instruction-encoding">Instruction Encoding</h2>
+<p>Z80 instructions are encoded using their native opcodes. Instructions
+with opcodes that conflict with markers are prefixed with 0x7F (escape
+byte).</p>
+<p>Instruction format:</p>
+<pre class="text"><code>[escape|prefix] opcode [operand0] [operand1] ...</code></pre>
+<p>Where: - <strong>escape</strong>: Optional <code>0x7F</code> byte if
+opcode conflicts with a marker - <strong>prefix</strong>: Optional
+instruction prefix byte (see table below) - <strong>opcode</strong>:
+1-byte z80 instruction opcode - <strong>operands</strong>: Zero or more
+expressions (each as length + expression bytes)</p>
+<h3 id="prefix-bytes">Prefix Bytes</h3>
+<p>Extended instructions use prefix bytes:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Prefix</th>
+<th>Value</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>IX_CODE</td>
+<td>0xDD</td>
+<td>IX register operations</td>
+</tr>
+<tr class="even">
+<td>IY_CODE</td>
+<td>0xFD</td>
+<td>IY register operations</td>
+</tr>
+<tr class="odd">
+<td>MARKER_IX_IND</td>
+<td>0xDF</td>
+<td>IX indexed addressing</td>
+</tr>
+<tr class="even">
+<td>MARKER_IY_IND</td>
+<td>0xFF</td>
+<td>IY indexed addressing</td>
+</tr>
+<tr class="odd">
+<td>EXTENDED_CODE</td>
+<td>0xED</td>
+<td>Extended instructions</td>
+</tr>
+<tr class="even">
+<td>BIT_CODE</td>
+<td>0xCB</td>
+<td>Bit operations</td>
+</tr>
+</tbody>
+</table>
+<p>For indexed addressing (<code>0xDF</code>/<code>0xFF</code>), the
+format is: prefix + displacement_byte + opcode</p>
+<p>The displacement is a signed byte (-128 to +127) that immediately
+follows the prefix.</p>
+<h3 id="instruction-examples">Instruction Examples</h3>
+<ul>
+<li><code>PUSH AF</code>: <code>0xF5</code> (no prefix, no
+operands)</li>
+<li><code>PUSH IX</code>: <code>0xDD 0xF5</code> (IX prefix +
+opcode)</li>
+<li><code>LD A,(IX+5)</code>: <code>0xDF 0x05 0x7E</code> (IX indexed
+prefix + displacement + opcode)</li>
+<li><code>LD A,42</code>: <code>0x3E 0x01 0x30 0x2A</code> (opcode +
+expression: 1 byte length + decimal 8-bit marker + value)</li>
+<li>Escaped instruction (if opcode is 0x4A): <code>0x7F 0x4A</code>
+(escape + opcode)</li>
+</ul>
+<h2 id="string-types">String Types</h2>
+<h3 id="length-prefixed-string-len-string">Length-Prefixed String (Len +
+String)</h3>
+<p>Format: <code>length_byte</code> + <code>length</code> bytes of
+content</p>
+<ul>
+<li>First byte: length (0-255)</li>
+<li>Following bytes: string content</li>
+<li>Content uses Windows-1252 encoding</li>
+<li>Used for comments, strings, import paths</li>
+</ul>
+<p>Example: “Hello” → <code>0x05 0x48 0x65 0x6C 0x6C 0x6F</code></p>
+<h3 id="bit-7-terminated-string">Bit-7 Terminated String</h3>
+<p>Format: sequence of bytes where the last byte has bit 7 set to 1</p>
+<ul>
+<li>All bytes except last: normal character values (0x00-0x7F)</li>
+<li>Last byte: character value OR 0x80 (bit 7 set)</li>
+<li>When reading: clear bit 7 from last byte to get actual
+character</li>
+<li>Used for labels and identifiers in string table</li>
+<li>Terminator detection: <code>byte &amp; 0x80 != 0</code></li>
+</ul>
+<p>Example: “AB” → <code>0x41 0xC2</code> (A=0x41, B=0x42|0x80=0xC2)</p>
+<h1 id="expressions">Expressions</h1>
+<p>Expressions represent mathematical and logical operations. They
+consist of sequences of ExpressionMembers.</p>
+<h2 id="expression-types">Expression Types</h2>
+<ul>
+<li><strong>Sized Expression</strong>: 1-byte length + expression bytes
+(total length = length byte value)</li>
+<li><strong>Unsized Expression</strong>: variable length expression data
+with implicit termination</li>
+</ul>
+<h2 id="expression-members">Expression Members</h2>
+<h3 id="short-decimal-constants">Short Decimal Constants</h3>
+<ul>
+<li>0x00-0x1F: Direct encoding of values 0-31</li>
+</ul>
+<h3 id="operators">Operators</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Operator</th>
+<th>Value</th>
+<th>Symbol</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>EXP_OP_PLUS</td>
+<td>0x2B</td>
+<td>+</td>
+</tr>
+<tr class="even">
+<td>EXP_OP_MINUS</td>
+<td>0x2D</td>
+<td>-</td>
+</tr>
+<tr class="odd">
+<td>EXP_OP_TIMES</td>
+<td>0x2A</td>
+<td>*</td>
+</tr>
+<tr class="even">
+<td>EXP_OP_DIV</td>
+<td>0x2F</td>
+<td>/</td>
+</tr>
+<tr class="odd">
+<td>EXP_OP_MOD</td>
+<td>0x25</td>
+<td>%</td>
+</tr>
+<tr class="even">
+<td>EXP_OP_AND</td>
+<td>0x26</td>
+<td>&amp;</td>
+</tr>
+<tr class="odd">
+<td>EXP_OP_OR</td>
+<td>0x7C</td>
+<td>|</td>
+</tr>
+<tr class="even">
+<td>EXP_OP_XOR</td>
+<td>0x5E</td>
+<td>^</td>
+</tr>
+<tr class="odd">
+<td>EXP_OP_EQ</td>
+<td>0x3D</td>
+<td>=</td>
+</tr>
+<tr class="even">
+<td>EXP_OP_LT</td>
+<td>0x3C</td>
+<td>&lt;</td>
+</tr>
+<tr class="odd">
+<td>EXP_OP_GT</td>
+<td>0x3E</td>
+<td>&gt;</td>
+</tr>
+<tr class="even">
+<td>EXP_OP_PAREN_OPEN</td>
+<td>0x28</td>
+<td>(</td>
+</tr>
+<tr class="odd">
+<td>EXP_OP_PAREN_CLOSE</td>
+<td>0x29</td>
+<td>)</td>
+</tr>
+<tr class="even">
+<td>EXP_SPACE</td>
+<td>0x20</td>
+<td>space</td>
+</tr>
+</tbody>
+</table>
+<h3 id="numeric-values">Numeric Values</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Type</th>
+<th>Marker</th>
+<th>Format</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Decimal 8-bit</td>
+<td>0x30</td>
+<td>marker + 1 byte</td>
+</tr>
+<tr class="even">
+<td>Decimal 16-bit</td>
+<td>0x31</td>
+<td>marker + 2 bytes (little-endian)</td>
+</tr>
+<tr class="odd">
+<td>Decimal custom</td>
+<td>0x32-0x33</td>
+<td>marker + length + length bytes</td>
+</tr>
+<tr class="even">
+<td>Hexadecimal 8-bit</td>
+<td>0x34</td>
+<td>marker + 1 byte</td>
+</tr>
+<tr class="odd">
+<td>Hexadecimal 16-bit</td>
+<td>0x35</td>
+<td>marker + 2 bytes</td>
+</tr>
+<tr class="even">
+<td>Hexadecimal custom</td>
+<td>0x36-0x37</td>
+<td>marker + length + length bytes</td>
+</tr>
+<tr class="odd">
+<td>Binary 8-bit</td>
+<td>0x38</td>
+<td>marker + 1 byte</td>
+</tr>
+<tr class="even">
+<td>Binary 16-bit</td>
+<td>0x39</td>
+<td>marker + 2 bytes</td>
+</tr>
+<tr class="odd">
+<td>Binary custom</td>
+<td>0x3A-0x3B</td>
+<td>marker + length + length bytes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="labels-and-special">Labels and Special</h3>
+<table>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 24%" />
+<col style="width: 44%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Element</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Label reference</td>
+<td>0x60-0xFF</td>
+<td>Label index</td>
+</tr>
+<tr class="even">
+<td>EXP_DOLLAR</td>
+<td>0x24</td>
+<td>$ symbol</td>
+</tr>
+<tr class="odd">
+<td>EXP_DOUBLE_DOLLAR</td>
+<td>0x44</td>
+<td>$$ symbol</td>
+</tr>
+<tr class="even">
+<td>EXP_STRING</td>
+<td>0x53</td>
+<td>String in expression - followed by length-prefixed string</td>
+</tr>
+</tbody>
+</table>
+<h3 id="special-elements">Special Elements</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Element</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>EXP_ITER1</td>
+<td>0x41</td>
+<td>Iteration marker 1</td>
+</tr>
+<tr class="even">
+<td>EXP_ITER2</td>
+<td>0x42</td>
+<td>Iteration marker 3</td>
+</tr>
+<tr class="odd">
+<td>EXP_ITER3</td>
+<td>0x43</td>
+<td>Iteration marker 3</td>
+</tr>
+</tbody>
+</table>
+<h3 id="multi-term-expressions">Multi-term Expressions</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Element</th>
+<th>Value</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>EXP_MULTI_TERM_BEGIN</td>
+<td>0x42</td>
+<td>Begin complex expression</td>
+</tr>
+<tr class="even">
+<td>EXP_MULTI_TERM_END</td>
+<td>0x45</td>
+<td>End complex expression</td>
+</tr>
+</tbody>
+</table>
+<p>Multi-term expressions are enclosed between begin (0x42) and end
+(0x45) markers.</p>
+<h2 id="expression-examples">Expression Examples</h2>
+<ul>
+<li><code>42</code>: <code>0x30 0x2A</code> (decimal 8-bit: 42)</li>
+<li><code>0x100</code>: <code>0x35 0x00 0x01</code> (hexadecimal 16-bit:
+0x0100)</li>
+<li><code>label + 1</code>: <code>label_index 0x2B 0x01</code> (label +
+short decimal 1)</li>
+<li><code>(a + b) * 2</code>:
+<code>0x42 label_a 0x2B label_b 0x45 0x2A 0x02</code> (multi-term)</li>
+</ul>
+<h1 id="labels-chunk-lbls">Labels Chunk (LBLs)</h1>
+<p>The LBLs chunk contains label definitions:</p>
+<ul>
+<li>Version byte: 0x02</li>
+<li>Sequence of bit-7 terminated strings</li>
+<li>Each string followed by null separator (0x00)</li>
+<li>Labels are referenced by index (0-based) in expressions</li>
+</ul>
+<p>Example: Two labels “A” and “MY_LABEL”:</p>
+<pre><code>0x02 0xC1 0x00 0x4D 0x59 0x5F 0x4C 0x41 0x42 0xC5 0x4C 0x00</code></pre>
+<ul>
+<li>0x02: version</li>
+<li>0xC1: “A” with bit 7 set</li>
+<li>0x00: separator</li>
+<li>0x4D…0xC5: “MY_LABE” + “L” with bit 7 set</li>
+<li>0x00: separator</li>
+</ul>
+<h1 id="checksum-chunk-chck">Checksum Chunk (ChCk)</h1>
+<p>Contains validation data:</p>
+<ul>
+<li>4 bytes: CRC or checksum of file content</li>
+</ul>
+<h1 id="display-formatting">Display Formatting</h1>
+<p>Source reconstruction uses state-based formatting:</p>
+<h2 id="line-states">Line States</h2>
+<ul>
+<li>Empty: Start of line</li>
+<li>AfterLabel: Following a label</li>
+<li>AfterStatement: Following a statement</li>
+<li>AfterRepeatBloc: In repeat block</li>
+<li>AfterIf: After IF statement</li>
+<li>AfterOrg: After ORG directive</li>
+</ul>
+<h2 id="formatting-rules">Formatting Rules</h2>
+<table>
+<thead>
+<tr class="header">
+<th>State</th>
+<th>Prefix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Empty</td>
+<td>TAB_COMMAND/TAB_INSTR spaces</td>
+</tr>
+<tr class="even">
+<td>AfterLabel</td>
+<td>TAB_COMMAND/TAB_INSTR spaces</td>
+</tr>
+<tr class="odd">
+<td>AfterStatement</td>
+<td>“:”</td>
+</tr>
+<tr class="even">
+<td>AfterRepeatBloc</td>
+<td>TAB_COMMAND spaces</td>
+</tr>
+<tr class="odd">
+<td>AfterIf</td>
+<td>“:”</td>
+</tr>
+<tr class="even">
+<td>AfterOrg</td>
+<td>“:”</td>
+</tr>
+</tbody>
+</table>
+<p>TAB_INSTR = 10 spaces, TAB_COMMAND = 6 spaces.</p>
+<h1 id="examples">Examples</h1>
+<h2 id="simple-instruction">Simple Instruction</h2>
+<pre><code>PUSH AF</code></pre>
+<p>Encoded: <code>0xF5 0x4A</code></p>
+<h2 id="comment">Comment</h2>
+<pre><code>; Hello World</code></pre>
+<p>Encoded:
+<code>0x43 0x0C 0x48 0x65 0x6C 0x6C 0x6F 0x20 0x57 0x6F 0x72 0x6C 0x64</code></p>
+<h2 id="if-statement">IF Statement</h2>
+<pre><code>IF condition
+  instruction
+ELSE
+  other
+END</code></pre>
+<p>Encoded:
+<code>0x7F 0x09 expression_bytes 0x7F 0x0A 0x7F 0x0B</code></p>
+<h1 id="security-considerations">Security Considerations</h1>
+<p>This format does not contain executable code and poses no direct
+security risks. However, as with any binary format, implementations
+should validate input data to prevent buffer overflows or malformed data
+processing.</p>
+<h1 id="iana-considerations">IANA Considerations</h1>
+<p>This document has no IANA actions.</p>
+<h1 id="implementation-notes">Implementation Notes</h1>
+<ul>
+<li>Parsing uses Winnow combinator library</li>
+<li>Display reconstruction aims for exact source fidelity</li>
+<li>Windows-1252 encoding for text content</li>
+<li>Little-endian byte order throughout</li>
+</ul>
+<p>— back</p>
+<h1 id="acknowledgments">Acknowledgments</h1>
+<p>This specification is based on the implementation in
+binary_decoder.rs of the cpclib-orgams-ascii crate.</p>
+<h1 id="references">References</h1>
+<h1 id="authors-address">Author’s Address</h1>
+<p>Romain Duroselle Email: romain@cpcdemotools.org</p>
+</body>
+</html>

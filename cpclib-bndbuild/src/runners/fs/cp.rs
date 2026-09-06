@@ -149,7 +149,7 @@ mod test {
         let mut src = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         let dst = camino_tempfile::NamedUtf8TempFile::new().unwrap();
 
-        src.as_file_mut().write("test".as_bytes()).unwrap();
+        src.as_file_mut().write_all("test".as_bytes()).unwrap();
 
         let src = src.into_temp_path();
         let dst = dst.into_temp_path();

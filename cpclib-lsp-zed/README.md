@@ -319,6 +319,13 @@ Due to Zed's extension architecture limitations, some features available in the 
 - **Zed limitation:** No status bar API for extensions
 - **Alternative:** Use hover tooltips on instructions (shows register values when statically determinable)
 
+**Skipping Full Assembly on Background Tabs**
+- The LSP server has a mechanism to skip the expensive multi-pass assemble on a document that isn't the active editor tab - built specifically to avoid a multi-tab workspace restore triggering a full assemble (potentially "tens of seconds on a real demo") on every tab at once
+- **How it's supposed to work:** the editor tells the server which document is active via a custom `cpclib.setActiveDocument` notification; the VS Code extension (`cpclib-vscode/src/lsp/activeDocument.ts`) sends this on every `onDidChangeActiveTextEditor`
+- **Zed limitation:** this extension never sends that notification - Zed's WASM extension API (`zed_extension_api = "0.7.0"`, see `src/lib.rs`) exposes language-server bootstrapping/configuration hooks, not an "active editor changed" event an extension could forward
+- **Effect:** every `.asm` tab opened in Zed gets the full assemble the VS Code-side mechanism exists to avoid - most noticeable restoring a workspace with several files open at once
+- **Workaround:** none from the extension side; closing unused tabs limits how many pay the cost at once
+
 ### ✅ Fully Supported
 
 Everything else works identically (or should work with proper testing):

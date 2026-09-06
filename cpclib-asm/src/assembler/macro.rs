@@ -334,7 +334,9 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 match *segment {
                     MacroSegment::Lit { start, end } => {
                         columns.push_piece(cursor.position() as usize, start, true);
-                        cursor.write_all(listing[start..end].as_bytes()).expect(MSG);
+                        cursor
+                            .write_all(&listing.as_bytes()[start..end])
+                            .expect(MSG);
                         source = end;
                     },
                     MacroSegment::ArgCount => {
@@ -349,7 +351,11 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                             // written by whoever wrote the macro, in the macro's
                             // own body, so there is nothing caller-specific in it
                             // to substitute.
-                            None => cursor.write_all(listing[start..end].as_bytes()).expect(MSG)
+                            None => {
+                                cursor
+                                    .write_all(&listing.as_bytes()[start..end])
+                                    .expect(MSG)
+                            }
                         }
                     },
                     MacroSegment::Arg { index } => {

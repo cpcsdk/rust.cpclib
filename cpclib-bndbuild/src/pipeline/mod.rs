@@ -9,6 +9,7 @@
 //! are represented/dispatched only has to update this one file.
 
 pub mod basic_run;
+pub mod csl_run;
 pub mod debug;
 pub mod music_run;
 
@@ -103,6 +104,61 @@ pub fn launch_emulator_with_snapshot<E: BndBuilderObserver + 'static>(
     )
     .into();
     task.execute(observer)
+}
+
+/// Launch an emulator on a `.csl` (CPC Script Language) file, without
+/// waiting for it to close - the `.csl`-file analogue of
+/// [`launch_emulator_with_snapshot`], built the same way (an
+/// `EmulatorFacade` task, `--background` for the same reason: the caller is
+/// an editor request handler and must not block on the user closing the
+/// emulator).
+///
+/// `emulator` need not natively support CSL
+/// (`cpclib_runner::runner::emulator::Emulator::accept_csl`) - `emucontrol`'s
+/// own `--csl` handling (`emucontrol::run_csl_file`) picks the native
+/// `--csl=` launch or its CSL-interpreter fallback on its own, so this
+/// function never needs to know which case applies.
+///
+/// `base_dir`, when given, is passed through as `--csl-base-dir` -
+/// `emucontrol::run_csl_file` resolves the script's own relative
+/// `disk_insert`/`snapshot_load`/etc. paths against it instead of
+/// `csl_file`'s own parent directory, which matters whenever `csl_file` is
+/// a temp copy of a script that lives (and whose relative paths are
+/// meant to resolve) somewhere else entirely - see
+/// `csl_run::run_csl_in_emulator`'s own doc comment. Both this and
+/// `csl_file` are shell-quoted (`shlex`), since a real project directory
+/// routinely has spaces in it (e.g. a Shaker `CSL/MODULE A/` layout).
+pub fn launch_emulator_with_csl<E: BndBuilderObserver + 'static>(
+    csl_file: &Utf8Path,
+    base_dir: Option<&Utf8Path>,
+    emulator: &str,
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let args = csl_launch_args(csl_file, base_dir, emulator)?;
+    let task: Task = InnerTask::Emulator(Emulator::EmulatorFacade, StandardTaskArguments::new(args))
+        .into();
+    task.execute(observer)
+}
+
+/// The pure argument-string-building half of [`launch_emulator_with_csl`],
+/// pulled out so it's unit-testable without going through a real
+/// `Task::execute` (which would try to actually locate/spawn an
+/// emulator).
+fn csl_launch_args(
+    csl_file: &Utf8Path,
+    base_dir: Option<&Utf8Path>,
+    emulator: &str
+) -> Result<String, String> {
+    let mut parts = vec!["--emulator".to_string(), emulator.to_string()];
+    if let Some(dir) = base_dir {
+        parts.push("--csl-base-dir".to_string());
+        parts.push(dir.to_string());
+    }
+    parts.push("--csl".to_string());
+    parts.push(csl_file.to_string());
+    parts.push("--background".to_string());
+    parts.push("run".to_string());
+    shlex::try_join(parts.iter().map(String::as_str)).map_err(|e| e.to_string())
 }
 
 /// Converts `song_path` (any format Arkos Tracker 3 can import: AKS/SKS/128/
@@ -400,6 +456,38 @@ mod tests {
         args.extend(args_str.split_whitespace());
         let parsed = cpclib_runner::emucontrol::EmuCli::try_parse_from(args);
         assert!(parsed.is_ok(), "{parsed:?}");
+    }
+
+    /// A real Shaker-style layout (`CSL/MODULE A/script.CSL`) has a space
+    /// in its own directory name - the constructed `--csl-base-dir` value
+    /// must survive being split back into argv by the same `shlex`-based
+    /// splitter the real CLI uses (`cpclib_runner::runner::arguments::
+    /// get_all_args`), not just look plausible as a raw string. `EmuCli`'s
+    /// fields are private, so parsing successfully (rather than splitting
+    /// the space-containing directory into two arguments, which would
+    /// make `run` an unexpected extra positional and fail to parse) is
+    /// what this actually checks.
+    #[test]
+    fn csl_launch_args_survives_a_space_in_the_base_dir() {
+        let args = csl_launch_args(
+            Utf8Path::new("/tmp/script.csl"),
+            Some(Utf8Path::new("/project/CSL/MODULE A")),
+            "sugarbox"
+        )
+        .unwrap();
+
+        let split = shlex::split(&args).unwrap();
+        let mut argv: Vec<&str> = vec!["cpc"];
+        argv.extend(split.iter().map(String::as_str));
+        let parsed = cpclib_runner::emucontrol::EmuCli::try_parse_from(argv);
+        assert!(parsed.is_ok(), "{parsed:?}");
+    }
+
+    #[test]
+    fn csl_launch_args_omits_base_dir_when_not_given() {
+        let args =
+            csl_launch_args(Utf8Path::new("/tmp/script.csl"), None, "amspirit").unwrap();
+        assert!(!args.contains("--csl-base-dir"), "{args}");
     }
 
     #[test]

@@ -1,0 +1,507 @@
+Found 96 files to test:
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MEMMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/SWAPI.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MONIQUE.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/SYMBFLAG.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MACRO.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/CONST.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/BRICMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/EXTMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORGMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORG.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MEMMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONOMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/CONST.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/CH.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/ORGMAP.I
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/FARCALL.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/EXCEPT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/AAP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/LISZT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CONV-NRT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CHECK.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/HEAP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/STATUS.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/TXTFIRM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/BITSET.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/ASSET.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CONV.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/SCR-LO.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CHUNK.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/FIELD.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CUE.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/IO.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/STRING.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/SCREEN.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/WRITE.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORG.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/FILENAME.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/SWAP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISAROM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISA.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISATST.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/WRITETST.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/PARSE.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DECEXP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/TOKEN.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DECEXPT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORGUI.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/SYMB.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/IMPORT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/CHUNKCC.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/FIND.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPTST.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/VISU.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/EVACMD.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/CACHE.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNTNRT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPY.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSEVA.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNTROM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/SCAN.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/PAGEFIRM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/IMPEVA.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSETO.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASS.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPROM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST2.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONHELP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONUI.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/RSX.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TR.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/BT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MON.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST1.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/SEAHEX.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRUI.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/HISTRIOM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/CH.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/HISTMOD.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/SAVE.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/BRK.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/MULF.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/INIT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/UPD-SCR.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/ED.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/MIRROR.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPBAR.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPROM.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/IMPEXP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/SYNHIGH.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPTST.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/DECEXP.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/EDNRT.O
+  /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/DETECT.O
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MEMMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/SWAPI.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MONIQUE.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/SYMBFLAG.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MACRO.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/CONST.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/BRICMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/EXTMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORGMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORG.I...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MEMMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONOMAP.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/CONST.I...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/CH.I...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/ORGMAP.I...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/FARCALL.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/EXCEPT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/AAP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/LISZT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CONV-NRT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CHECK.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/HEAP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/STATUS.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/TXTFIRM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/BITSET.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/ASSET.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CONV.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/SCR-LO.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CHUNK.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/FIELD.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CUE.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/IO.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/STRING.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/SCREEN.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/WRITE.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORG.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/FILENAME.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/SWAP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISAROM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISA.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISATST.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/WRITETST.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/PARSE.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DECEXP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/TOKEN.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DECEXPT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORGUI.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/SYMB.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/IMPORT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/CHUNKCC.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/FIND.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPTST.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/VISU.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/EVACMD.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/CACHE.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNTNRT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPY.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSEVA.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNTROM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/SCAN.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/PAGEFIRM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/IMPEVA.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSETO.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASS.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPROM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST2.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONHELP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONUI.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/RSX.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TR.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/BT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MON.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST1.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/SEAHEX.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRUI.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/HISTRIOM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/CH.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/HISTMOD.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/SAVE.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/BRK.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/MULF.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/INIT.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/UPD-SCR.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/ED.O...
+  FAILED
+    No specific error info found.
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/MIRROR.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPBAR.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPROM.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/IMPEXP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/SYNHIGH.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPTST.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/DECEXP.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/EDNRT.O...
+  PASSED
+
+Testing /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/DETECT.O...
+  PASSED
+
+==================================================
+FINAL REPORT
+==================================================
+Total files tested: 96
+Passed: 81
+Failed: 15
+
+PASSED FILES (81):
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MEMMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/SWAPI.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MONIQUE.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/SYMBFLAG.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/MACRO.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/CONST.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/BRICMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/EXTMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORGMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MEMMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONOMAP.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/CONST.I
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/FARCALL.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/EXCEPT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/AAP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/LISZT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CONV-NRT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CHECK.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/HEAP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/STATUS.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/TXTFIRM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/ASSET.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CONV.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/SCR-LO.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CHUNK.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/FIELD.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/CUE.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/IO.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/STRING.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/WRITE.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORG.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/FILENAME.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/SWAP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISAROM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISA.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DISATST.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/WRITETST.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DECEXP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/TOKEN.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/DECEXPT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORGUI.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/SYMB.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/IMPORT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/CHUNKCC.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/FIND.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/VISU.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/EVACMD.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/CACHE.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNTNRT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPY.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSEVA.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNTROM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COUNT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/PAGEFIRM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/IMPEVA.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASSETO.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/ASS.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPROM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST2.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONHELP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/RSX.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/BT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MON.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRTEST1.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/SEAHEX.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/HISTRIOM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/HISTMOD.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/BRK.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/MULF.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/UPD-SCR.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/MIRROR.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPBAR.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPROM.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/IMPEXP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/SYNHIGH.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/OCCUPTST.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/DECEXP.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/EDNRT.O
+  ✓ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/DETECT.O
+
+FAILED FILES (15):
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/ORG.I
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/CH.I
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/ORGMAP.I
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/BITSET.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/bricbrac/SCREEN.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgext/PARSE.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/COCOPTST.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgass/SCAN.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/MONUI.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TR.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/monogams/TRUI.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/CH.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/SAVE.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/INIT.O
+  ✗ /home/romain/Perso/CPC/rust.cpcdemotools/cpclib-orgams-ascii/tests/orgams-main/orgams/ED.O

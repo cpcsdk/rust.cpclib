@@ -83,7 +83,7 @@ impl<T: BndBuilderObserver> BndBuilderObserver for Box<T> {
     }
 }
 
-impl<T: BndBuilderObserver> BndBuilderObserver for Arc<T> {
+impl<T: BndBuilderObserver + ?Sized> BndBuilderObserver for Arc<T> {
     fn update(&self, event: BndBuilderEvent) {
         self.deref().update(event)
     }

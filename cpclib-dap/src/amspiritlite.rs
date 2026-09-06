@@ -394,6 +394,18 @@ pub fn chip_command(reference: i64) -> Option<&'static str> {
         // The FDC really is readable here - a snapshot only ever carried the
         // motor and the track.
         crate::inspect::DISC_REFERENCE => "cpclib/fdc",
+        // AMSpiriT Lite's own `/api/` has no PPI endpoint, so `supports`
+        // below still says no for that peer and `chip_scope` falls back to
+        // the snapshot route for it, same as before this arm existed - this
+        // is what lets SugarBox's own `cpclib/ppi` (which does exist) be
+        // reached at all, despite `PPI_REFERENCE` already being a Variables-
+        // pane scope.
+        crate::inspect::PPI_REFERENCE => "cpclib/ppi",
+        // AMSpiriT Lite has no tape endpoint either (confirmed live:
+        // `/api/tape` is HTTP 404) - `TAPE_REFERENCE` is never a Variables-
+        // pane scope (see its own doc comment), so this arm only ever
+        // matters for the dedicated `-tapeview` panel.
+        crate::inspect::TAPE_REFERENCE => "cpclib/tape",
         _ => return None
     })
 }
@@ -408,8 +420,167 @@ pub fn chip_variables(reference: i64, body: &Value) -> Vec<Value> {
     match reference {
         crate::inspect::CRTC_REFERENCE => crtc_pane(body),
         crate::inspect::GATE_ARRAY_REFERENCE => gate_array_pane(body),
+        crate::inspect::PSG_REFERENCE => psg_pane(body),
+        crate::inspect::PPI_REFERENCE => ppi_pane(body),
+        crate::inspect::TAPE_REFERENCE => tape_pane(body),
         _ => flat_pane(body, &[])
     }
+}
+
+/// The PPI 8255. AmspiritLite has no endpoint for this at all (confirmed
+/// live, 2026-09-06: `/api/ppi` returns HTTP 404) - this only ever runs
+/// against a real answer from SugarBox's own `getPpiState`
+/// (`{controlWord, portA, portB, portC}`, also live-tested), normalised to
+/// the same `A`/`B`/`C`/`control` names the snapshot path already uses
+/// (`inspect.rs`'s own `PPI_REFERENCE` arm) so the panel reads identically
+/// whichever source answered. No per-bit decoding (Group A/B mode, VSYNC/
+/// keyboard-row bits): the exact CPC-specific bit assignments were not
+/// confirmed against a live, non-zero sample this pass, and getting one
+/// wrong would mislabel a bit rather than just show a raw byte - the
+/// existing snapshot-path labels ("port B: VSYNC, printer, tape, jumpers")
+/// already say what each port is *for*, without claiming which bit is
+/// which.
+fn ppi_pane(body: &Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut consumed: Vec<&str> = Vec::new();
+
+    for (key, sugarbox_key, meaning) in [
+        ("A", "portA", "port A: PSG data"),
+        ("B", "portB", "port B: VSYNC, printer, tape, jumpers"),
+        ("C", "portC", "port C: keyboard line, tape and PSG control")
+    ] {
+        if let Some((matched, value)) = first_present(body, &[key, sugarbox_key]) {
+            out.push(scalar(key, value, meaning));
+            consumed.push(matched);
+        }
+    }
+    if let Some((matched, value)) = first_present(body, &["control", "controlWord"]) {
+        out.push(scalar("control", value, "the 8255 control byte"));
+        consumed.push(matched);
+    }
+
+    out.extend(flat_pane(body, &consumed));
+    out
+}
+
+/// The cassette transport. SugarBox-only: AmspiritLite has no tape endpoint
+/// at all (confirmed live: `/api/tape` is HTTP 404), and a snapshot carries
+/// nothing about it worth showing either, unlike CRTC/GA/PSG/PPI/Disc - see
+/// `TAPE_REFERENCE`'s own doc comment for why this chip has no Variables-
+/// pane scope or snapshot fallback to begin with.
+///
+/// SugarBox's real `getTapeState` (live-tested, 2026-09-06) is
+/// `{blocks, counter, currentBlock, currentBlockType, inserted, length,
+/// motor, nbInversions, path, play, record, tapePos}` - quite different
+/// from `EMULATOR_INTERFACE.md`'s documented `present`/`playing`/
+/// `position`/`length` shape. `blocks`' own per-element shape was not
+/// confirmed (a synthetic `.cdt` built for this pass was not accepted by
+/// the emulator as a valid tape, so nothing meaningful ever populated it) -
+/// shown here only as a count, not a decoded per-block table, rather than
+/// guess at field names for content never actually observed.
+fn tape_pane(body: &Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut consumed: Vec<&str> = Vec::new();
+
+    for (name, key, meaning) in [
+        ("inserted", "inserted", "a tape is loaded"),
+        ("path", "path", ""),
+        ("motor", "motor", "cassette motor relay"),
+        ("play", "play", ""),
+        ("record", "record", ""),
+        ("position", "tapePos", "counter: position on the tape"),
+        ("length", "length", ""),
+        ("current block", "currentBlock", "index into the block list"),
+        ("current block type", "currentBlockType", "TZX/CDT block type id"),
+        ("inversions", "nbInversions", "counter: signal-edge inversions read")
+    ] {
+        if let Some(value) = body.get(key) {
+            out.push(scalar(name, value, meaning));
+            consumed.push(key);
+        }
+    }
+    if let Some(blocks) = body.get("blocks").and_then(Value::as_array) {
+        out.push(scalar("blocks", &json!(blocks.len()), "number of TZX/CDT blocks on this tape"));
+        consumed.push("blocks");
+    }
+
+    out.extend(flat_pane(body, &consumed));
+    out
+}
+
+/// The first of `keys` present in `body`, with the key that matched - two
+/// backends naming the same thing differently is the norm here, not the
+/// exception (every one of these pairs was confirmed live, not guessed:
+/// AmspiritLite's own `/api/psg` vs SugarBox's real `getPsgState`).
+fn first_present<'a>(body: &'a Value, keys: &[&'a str]) -> Option<(&'a str, &'a Value)> {
+    keys.iter().find_map(|k| body.get(*k).map(|v| (*k, v)))
+}
+
+/// The PSG (AY-3-8912): per-channel tone/volume, noise, envelope, and the
+/// raw registers when the backend sends them.
+///
+/// Two backends, two field-naming conventions for the same chip - both
+/// live-tested against a real running instance, not assumed from
+/// `EMULATOR_INTERFACE.md` (which for PSG/FDC turned out to describe neither
+/// backend's real answer): AmspiritLite's own `/api/psg`
+/// (`period_a`/`vol_a`/…/`noise`/`env_period`/`env_shape`) and SugarBox's
+/// real `getPsgState` (`chanAFreq`/`chanAVol`/…/`noiseFreq`/`envFreq`/
+/// `envShape`, plus a `registers` array AmspiritLite does not send).
+///
+/// Shown under whichever name the emulator itself used, not converted to
+/// Hz: SugarBox's own field is already named "Freq", but neither backend
+/// documents the unit precisely enough to justify inventing a conversion
+/// on top of a name that may already mean exactly what it says.
+fn psg_pane(body: &Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut consumed: Vec<&str> = Vec::new();
+
+    for (channel, freq_keys, vol_keys) in [
+        ("A", ["chanAFreq", "period_a"], ["chanAVol", "vol_a"]),
+        ("B", ["chanBFreq", "period_b"], ["chanBVol", "vol_b"]),
+        ("C", ["chanCFreq", "period_c"], ["chanCVol", "vol_c"])
+    ] {
+        if let Some((key, value)) = first_present(body, &freq_keys) {
+            out.push(scalar(
+                &format!("Channel {channel}"),
+                value,
+                "tone frequency/period, as the emulator itself reports it"
+            ));
+            consumed.push(key);
+        }
+        if let Some((key, value)) = first_present(body, &vol_keys) {
+            out.push(scalar(&format!("Channel {channel} volume"), value, ""));
+            consumed.push(key);
+        }
+    }
+    if let Some((key, value)) = first_present(body, &["noiseFreq", "noise"]) {
+        out.push(scalar("Noise", value, "noise generator frequency/period"));
+        consumed.push(key);
+    }
+    if let Some((key, value)) = first_present(body, &["mixer"]) {
+        out.push(scalar("Mixer", value, "raw AY-3-8912 mixer register (R7)"));
+        consumed.push(key);
+    }
+    if let Some((key, value)) = first_present(body, &["envFreq", "env_period"]) {
+        out.push(scalar("Envelope", value, "envelope frequency/period"));
+        consumed.push(key);
+    }
+    if let Some((key, value)) = first_present(body, &["envShape", "env_shape"]) {
+        out.push(scalar("Envelope shape", value, "raw AY-3-8912 envelope shape register (R13)"));
+        consumed.push(key);
+    }
+    if let Some(registers) = body.get("registers").and_then(Value::as_array) {
+        out.extend(
+            registers
+                .iter()
+                .enumerate()
+                .map(|(index, value)| scalar(&format!("R{index}"), value, "AY-3-8912 register"))
+        );
+        consumed.push("registers");
+    }
+
+    out.extend(flat_pane(body, &consumed));
+    out
 }
 
 /// One variable, formatted by what it is: a number reads in both bases,
@@ -467,7 +638,12 @@ fn flat_pane(body: &Value, consumed: &[&str]) -> Vec<Value> {
 
 /// The CRTC, with the selected register marked and the raster counter kept.
 fn crtc_pane(body: &Value) -> Vec<Value> {
-    let selected = body.get("selected_reg").and_then(Value::as_u64);
+    // AmspiritLite calls this `selected_reg`; SugarBox's real `getCrtcState`
+    // (live-tested, not just its docs) calls it `addrReg`.
+    let selected = body
+        .get("selected_reg")
+        .or_else(|| body.get("addrReg"))
+        .and_then(Value::as_u64);
     let mut out = crate::inspect::crtc_registers_from_json(body)
         .map(|regs| crate::inspect::crtc_warning_variables(&regs))
         .unwrap_or_default();
@@ -479,7 +655,11 @@ fn crtc_pane(body: &Value) -> Vec<Value> {
         ));
     }
 
-    if let Some(registers) = body.get("regs").and_then(Value::as_array) {
+    if let Some(registers) = body
+        .get("registers")
+        .or_else(|| body.get("regs"))
+        .and_then(Value::as_array)
+    {
         out.extend(registers.iter().enumerate().map(|(index, value)| {
             let name = format!("R{index}");
             // The register the next &BDxx write lands in, underlined.
@@ -511,12 +691,30 @@ fn crtc_pane(body: &Value) -> Vec<Value> {
         ));
     }
 
-    out.extend(flat_pane(body, &["regs", "selected_reg", "rasterline"]));
+    out.extend(flat_pane(
+        body,
+        &["regs", "registers", "selected_reg", "addrReg", "rasterline"]
+    ));
     out
 }
 
 /// The Gate Array: the palette as colours, and the banking that decides which
 /// page is where.
+/// The Gate Array. `mode` is the one field both backends happen to name the
+/// same; everything else is AmspiritLite's own naming
+/// (`ink_idx`/`border_idx`, a raw 5-bit colour selector `colour()` itself
+/// decodes - see its own doc comment). SugarBox's real `getGateArrayState`
+/// (live-tested, not just its docs) uses different names again
+/// (`pen`/`inks`/`inkRegs`/`border`/`borderReg`/`lowerRomEnabled`/
+/// `upperRomEnabled`/`selectedRom`/`ramBankConfig`/`asicLocked`/
+/// `interruptCounter`/`interruptRaised`/`memWindows`) - only `pen` (the
+/// selected pen index, a plain number, nothing to get wrong) is decoded
+/// here to match; SugarBox's `inks`/`inkRegs` are deliberately **not** fed
+/// through `colour()`, since a single all-zero live sample could not
+/// distinguish which of the two is the raw 0-31 selector `colour()` expects
+/// versus an already-resolved ink number - guessing risks silently showing
+/// the wrong colour, worse than the honest raw dump `flat_pane` already
+/// gives them below. Confirming that distinction live is a real follow-up.
 fn gate_array_pane(body: &Value) -> Vec<Value> {
     let mut out = Vec::new();
     if let Some(mode) = body.get("mode") {
@@ -534,6 +732,10 @@ fn gate_array_pane(body: &Value) -> Vec<Value> {
         if let Some(value) = body.get(key) {
             out.push(scalar(key, value, meaning));
         }
+    }
+
+    if let Some(pen) = body.get("pen") {
+        out.push(scalar("selected pen", pen, "the pen the next &7Fxx colour write lands in"));
     }
 
     if let Some(inks) = body.get("ink_idx").and_then(Value::as_array) {
@@ -555,6 +757,7 @@ fn gate_array_pane(body: &Value) -> Vec<Value> {
             "rmr",
             "ram_mode",
             "ram_page",
+            "pen",
             "ink_idx",
             "ink_rgb",
             "border_idx",
@@ -1676,6 +1879,51 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
+
+        // Every command below eventually blocks this thread on a
+        // synchronous HTTP round trip to the emulator (`perform`, a plain
+        // `TcpStream` request/read with a 5s timeout) - an unresponsive
+        // emulator therefore freezes the whole debug session, `pause`
+        // included, with the editor's stepping controls doing nothing and
+        // no way to tell "it's stuck" from "it's thinking". This does not
+        // fix that (the real fix is moving the HTTP call off this thread,
+        // a larger refactor), but at least surfaces it: a background
+        // thread fires an output line if the command has not finished by
+        // `STALL_THRESHOLD`, and is otherwise cancelled with no visible
+        // effect (silent in the fast, common case). An `AtomicBool` set by
+        // an RAII guard rather than a flag set at the end of this
+        // function's body, since it has several early returns below and a
+        // guard's `Drop` fires no matter which one is taken.
+        const STALL_THRESHOLD: std::time::Duration = std::time::Duration::from_millis(500);
+        struct StallGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for StallGuard {
+            fn drop(&mut self) {
+                self.0.store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let _stall_guard = StallGuard(done.clone());
+        {
+            let done = done.clone();
+            let outgoing = self.outgoing.clone();
+            let seq = self.next_seq();
+            let command = command.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(STALL_THRESHOLD);
+                if !done.load(std::sync::atomic::Ordering::Acquire) {
+                    let _ = outgoing.send(crate::protocol::event(
+                        "output",
+                        json!({
+                            "category": "console",
+                            "output": format!(
+                                "... still waiting for the emulator to answer '{command}'\n"
+                            )
+                        }),
+                        seq
+                    ));
+                }
+            });
+        }
 
         // The editor's set is remembered rather than merely forwarded: it has
         // to go out again alongside whatever a step over arms behind it, since

@@ -17,3 +17,25 @@ __pycache__
 # Node modules
 node_modules/
 **/node_modules/
+
+# VS Code extension build output/packages
+cpclib-vscode/out/
+cpclib-vscode/*.vsix
+
+# Build/doc-site output and local virtual environments - regenerable,
+# platform-specific (CMakeCache.txt embeds absolute local paths), and large
+build/
+site/
+windows_venv/
+*_venv/
+
+# Claude Code local, per-machine settings (settings.json itself is shared)
+.claude/settings.local.json
+
+# Externally-managed tree-sitter grammar sources, cloned locally per
+# cpclib-lsp-zed/JINJA_TEMPLATE_SOLUTION.md's own setup instructions - not
+# submodules, just vendored checkouts (one is a full nested git repo, the
+# other an empty/uninitialized one) - the compiled jinja2.wasm alongside
+# them is the real build output and stays tracked.
+cpclib-lsp-zed/grammars/jinja2/
+cpclib-lsp-zed/grammars/yaml/

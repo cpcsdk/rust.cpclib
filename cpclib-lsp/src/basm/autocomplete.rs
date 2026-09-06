@@ -1323,6 +1323,15 @@ fn synthetic_include_uri(filename: &str, doc_uri: &Url) -> Url {
 fn collect_symbols_by_text(document: &Document) -> Vec<(String, String)> {
     let text = document.text();
     let mut syms: Vec<(String, String)> = Vec::new();
+    // A `Vec` scan per candidate against everything accumulated so far would
+    // be O(total-symbols²) - this is the text-scan fallback used whenever
+    // the document doesn't parse cleanly (the common state while mid-typing
+    // a line), so for the file currently being edited it runs from scratch
+    // on many completion keystrokes. A `HashSet` of names seen so far
+    // instead, matching the same fix already applied to the sibling
+    // `other_documents`/include-merging loop above, makes each candidate an
+    // O(1) check.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut current_global: Option<String> = None;
     for line in text.lines() {
         let trimmed = line.trim_start();
@@ -1364,7 +1373,7 @@ fn collect_symbols_by_text(document: &Document) -> Vec<(String, String)> {
             // same in `seg` (original case) as in `seg_upper`.
             if let Some(name) = seg[klen..].rsplit(',').next() {
                 let name = name.trim();
-                if !name.is_empty() && !syms.iter().any(|(s, _)| s == name) {
+                if !name.is_empty() && seen.insert(name.to_string()) {
                     syms.push((name.to_string(), "section".to_string()));
                 }
             }
@@ -1418,7 +1427,7 @@ fn collect_symbols_by_text(document: &Document) -> Vec<(String, String)> {
             }
             name.to_string()
         };
-        if !syms.iter().any(|(s, _)| s == &display) {
+        if seen.insert(display.clone()) {
             syms.push((display, detail.to_string()));
         }
     }

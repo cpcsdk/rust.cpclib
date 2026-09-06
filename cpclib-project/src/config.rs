@@ -29,6 +29,7 @@ pub struct LspConfig {
     pub asm: AsmConfig,
     pub basic: BasicConfig,
     pub bndbuild: BndbuildConfig,
+    pub csl: CslConfig,
     pub dap: DapConfig,
     pub music: MusicConfig
 }
@@ -372,6 +373,37 @@ impl Default for BndbuildConfig {
     }
 }
 
+/// CSL (CPC Script Language) settings: `.csl` files are parsed by
+/// `cpclib_csl` and, unlike bndbuild/asm/basic, only ever produce a single
+/// parse-error diagnostic (there is no severity to escalate and no warning
+/// classes to toggle), so this config is deliberately smaller than its
+/// siblings.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CslConfig {
+    /// The "▶ Run in emulator" CodeLens at the top of a `.csl` file.
+    pub code_lens: bool,
+    /// Which emulator `cpclib.runCsl` launches. Emulators natively
+    /// accepting a CSL file (`Emulator::accept_csl()` - today `amspirit`
+    /// and `sugarbox`) receive it directly as a `--csl` argument; every
+    /// other emulator is driven through `cpclib_runner`'s CSL interpreter
+    /// (leading config/media instructions folded into launch args,
+    /// `key_output`/`key_from_file` replayed live).
+    pub run_emulator: String
+}
+
+impl Default for CslConfig {
+    // Written out rather than derived, for the same reason as
+    // `BndbuildConfig::default` - a derived `bool` default is `false`,
+    // which for a feature that ships enabled would be a silent regression.
+    fn default() -> Self {
+        Self {
+            code_lens: true,
+            run_emulator: "amspirit".to_string()
+        }
+    }
+}
+
 /// basm accepts either case; this is the one written by default.
 fn default_breakpoint_directive() -> String {
     "BREAKPOINT".to_string()
@@ -702,6 +734,14 @@ code_lens = true
 missing_build_structure = true
 # A dependency that's neither an existing file nor a target this file builds.
 missing_dependency = true
+
+[csl]
+# The "▶ Run in emulator" CodeLens at the top of a .csl file.
+code_lens = true
+# Emulator launched by "▶ Run in emulator" on .csl files. Emulators with
+# native CSL support (today: amspirit, sugarbox) receive the file directly;
+# every other emulator is driven through the CSL interpreter instead.
+run_emulator = "amspirit"
 
 [music]
 # Arkos-Tracker-compatible source-file extensions recognized by the "Play in

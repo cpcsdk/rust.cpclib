@@ -116,6 +116,15 @@ CPC debug console commands:
   -crtcview                     open a CRTC panel, flagging register
                                 combinations known to lose sync or mistime a
                                 raster line
+  -psgview                      open a PSG (AY-3-8912) panel: the sixteen
+                                raw registers plus which one is selected
+  -fdcview                      open an FDC panel: motor/track from a
+                                snapshot, or whatever a live emulator's own
+                                FDC endpoint reports
+  -ppiview                      open a PPI (8255) panel: ports A/B/C and
+                                the control byte
+  -tapeview                     open a tape/cassette panel; only answers on
+                                an emulator with a native tape endpoint
   -timer [add|reset|rm] [name]  stopwatches in NOPs; bare -timer lists them
   -bv                           the live BASIC listing sitting in memory,
                                 tokenised and rendered - useful for a BASIC
@@ -245,7 +254,9 @@ enum Purpose {
     /// `-sv`'s own Gate Array read, once `ScreenViewCrtc` answered.
     ScreenViewGa,
     /// `-sv`'s own pixel bytes, once address/mode/palette are all known.
-    ScreenViewMemory
+    ScreenViewMemory,
+    /// `-tapeview`'s own answer - see `tape_view_command`'s doc comment.
+    TapeState
 }
 
 /// An editor `stackTrace` held while the stack is fetched.
@@ -691,6 +702,16 @@ pub struct Session<P: DapPeer> {
     pending_chip_prints: Vec<Value>,
     /// `-crtcview` requests waiting for the same.
     pending_crtc_views: Vec<Value>,
+    /// `-psgview`/`-fdcview` requests waiting for the same, tagged with
+    /// which chip (`PSG_REFERENCE`/`DISC_REFERENCE`) each is for - see
+    /// `simple_chip_view_command`'s own doc comment for why these share one
+    /// queue instead of one each.
+    pending_simple_chip_views: Vec<(i64, Value)>,
+    /// `-tapeview` requests waiting for a live peer's own `cpclib/tape`
+    /// answer - not part of `pending_simple_chip_views` since tape has no
+    /// snapshot fallback to coordinate with (see `TAPE_REFERENCE`'s own
+    /// doc comment).
+    pending_tape_views: Vec<Value>,
     /// A `-bv` request waiting on its (one or two round trip) answer - see
     /// `basic_listing_view`'s own doc comment.
     pending_basic_listing: Option<Value>,
@@ -775,6 +796,8 @@ impl<P: DapPeer> Session<P> {
             pending_chip_scopes: Vec::new(),
             pending_chip_prints: Vec::new(),
             pending_crtc_views: Vec::new(),
+            pending_simple_chip_views: Vec::new(),
+            pending_tape_views: Vec::new(),
             pending_basic_listing: None,
             pending_screen_view: None,
             open_screen_view: None,
@@ -1315,6 +1338,7 @@ impl<P: DapPeer> Session<P> {
                 Purpose::ScreenViewCrtc => return self.complete_screen_view_crtc(message),
                 Purpose::ScreenViewGa => return self.complete_screen_view_ga(message),
                 Purpose::ScreenViewMemory => return self.complete_screen_view_memory(message),
+                Purpose::TapeState => return self.complete_tape_state(message),
                 Purpose::Plain => {}
             }
             let command = own.command;
@@ -1402,6 +1426,7 @@ impl<P: DapPeer> Session<P> {
                             None
                         );
                         self.resolve_ambiguous_operand_symbols(instructions, ambiguous);
+                        self.attach_source_comments(instructions);
                     }
                     return vec![annotated];
                 },
@@ -1504,7 +1529,15 @@ impl<P: DapPeer> Session<P> {
             .map(decode_base64)
             .unwrap_or_default();
 
-        if bytes.is_empty() {
+        // A short read (fewer bytes than `watch.width` asked for - possible
+        // near a page/bank boundary, or from a backend that clamps a read)
+        // must be a hard failure, not silently reinterpreted as a narrower
+        // value: `complete_memory_view` already treats a short/empty read
+        // this way, and rendering a truncated word watch as a confident
+        // 4-digit value with the high byte silently zeroed would be exactly
+        // the "wrong answer presented as right" failure `evaluate`'s own
+        // doc comment warns against.
+        if bytes.len() < watch.width {
             let seq = self.next_seq();
             return Some(vec![protocol::failure(
                 &watch.request,
@@ -1524,7 +1557,7 @@ impl<P: DapPeer> Session<P> {
 
         // Little-endian, like everything else the Z80 does with a word.
         let value = match watch.width {
-            2 if bytes.len() >= 2 => u32::from(bytes[0]) | (u32::from(bytes[1]) << 8),
+            2 => u32::from(bytes[0]) | (u32::from(bytes[1]) << 8),
             _ => u32::from(bytes[0])
         };
         // Both halves matter, and which one depends on the label: for a code
@@ -2255,6 +2288,7 @@ impl<P: DapPeer> Session<P> {
             Some(&costs)
         );
         self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
+        self.attach_source_comments(&mut instructions);
 
         let seq = self.next_seq();
         vec![protocol::response(
@@ -2417,6 +2451,7 @@ impl<P: DapPeer> Session<P> {
         self.pending_crtc_views.push(request.clone());
         if self.pending_chip_scopes.is_empty()
             && self.pending_chip_prints.is_empty()
+            && self.pending_simple_chip_views.is_empty()
             && self.pending_crtc_views.len() == 1
         {
             self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
@@ -2826,6 +2861,178 @@ impl<P: DapPeer> Session<P> {
         vec![event, receipt]
     }
 
+    /// `-psgview`/`-fdcview` - open a chip pane with no register-combination
+    /// validation of its own (unlike CRTC). Same trigger/wait shape as
+    /// `crtc_view_command`, and same reasoning for it (`-chips`'s own doc
+    /// comment: one fetch coordination scheme for `machine_state`, not two
+    /// that could disagree) - but simpler, and shared: the already-decoded
+    /// `{name, value}` list `chip_scope`/`describe_chips` already trust
+    /// (`inspect::chip_variables` for a cached snapshot,
+    /// `amspiritlite::chip_variables` for a direct-endpoint answer) is the
+    /// whole body for every chip that needs no bit-level validation of its
+    /// own - no separate raw-byte-array step the way CRTC's own
+    /// `crtc_registers`/`crtc_registers_from_json` provide. One function
+    /// rather than one copy per chip, since PSG and FDC differ only in which
+    /// reference/event name they use, never in how the data is fetched or
+    /// waited for - and a second copy is exactly the signal that this should
+    /// have been one function to begin with.
+    ///
+    /// PSG tone periods are shown under the emulator's own field names
+    /// (`amspiritlite::psg_pane`), not converted to Hz - see that function's
+    /// own doc comment for why. The FDC's raw-track/MFM bitstream view is
+    /// still deferred (its `bits` field turned out, live-tested, to be an
+    /// opaque encoded string, not the plain bit array `EMULATOR_INTERFACE.md`
+    /// claims - decoding it needs more investigation this pass did not do);
+    /// its sector table is not deferred, since `getFdcState`'s real shape
+    /// (also live-tested) is straightforward - see `simple_chip_view_answer`.
+    fn simple_chip_view_command(
+        &mut self,
+        request: &Value,
+        reference: i64
+    ) -> std::io::Result<Vec<Value>> {
+        if let Some(sna) = self.machine_state.as_deref() {
+            let variables = crate::inspect::chip_variables(reference, sna).unwrap_or_default();
+            // A snapshot never carries a sector table (only the FDC's motor
+            // and track - `inspect.rs`'s own `DISC_REFERENCE` arm), so there
+            // is no raw body to pass through here, unlike the direct-endpoint
+            // branch in `complete_machine_state`.
+            return Ok(self.simple_chip_view_answer(request, reference, variables, None));
+        }
+
+        if let Some(command) = crate::amspiritlite::chip_command(reference)
+            && self.peer_mut().supports(command)
+        {
+            self.pending_simple_chip_views.push((reference, request.clone()));
+            self.send_own(command, json!({}), Purpose::MachineState)?;
+            return Ok(Vec::new());
+        }
+
+        self.pending_simple_chip_views.push((reference, request.clone()));
+        if self.pending_chip_scopes.is_empty()
+            && self.pending_chip_prints.is_empty()
+            && self.pending_crtc_views.is_empty()
+            && self.pending_simple_chip_views.len() == 1
+        {
+            self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
+        }
+        Ok(Vec::new())
+    }
+
+    /// Which event name/console receipt a "simple" chip view uses - the one
+    /// thing `simple_chip_view_command`'s callers still need to say per chip.
+    fn simple_chip_view_meta(reference: i64) -> (&'static str, &'static str) {
+        match reference {
+            crate::inspect::PSG_REFERENCE => ("cpclib/psgView", "PSG view opened"),
+            crate::inspect::DISC_REFERENCE => ("cpclib/fdcView", "FDC view opened"),
+            crate::inspect::PPI_REFERENCE => ("cpclib/ppiView", "PPI view opened"),
+            _ => ("cpclib/chipView", "view opened")
+        }
+    }
+
+    /// The chip's own view event plus its console receipt.
+    ///
+    /// `raw`, when given, is the direct-endpoint answer's own body,
+    /// unmodified - used only to forward SugarboxV2's real `drives` array
+    /// (per-drive status and, per track, a real sector table: `c`/`h`/`r`/
+    /// `n`/`size`/`deleted`/`hdrCrc`/`dataCrc`/`st1`/`st2` - live-tested
+    /// field names, not `EMULATOR_INTERFACE.md`'s documented
+    /// `track`/`side`/`sector`/`realSize`/`idamOffset`/`damOffset` shape,
+    /// which this answer does not actually have at this level) straight to
+    /// the client rather than flattening it into the generic `{name,
+    /// value}` list `variables` already is - a real sector table does not
+    /// fit that shape, and passing the emulator's own JSON through avoids
+    /// inventing a parallel Rust-side structure for data this crate does
+    /// nothing with beyond displaying it.
+    fn simple_chip_view_answer(
+        &mut self,
+        request: &Value,
+        reference: i64,
+        variables: Vec<Value>,
+        raw: Option<&Value>
+    ) -> Vec<Value> {
+        let (event_name, opened_message) = Self::simple_chip_view_meta(reference);
+        let mut body = json!({ "registers": variables });
+        if let Some(drives) = raw.and_then(|raw| raw.get("drives")) {
+            body["drives"] = drives.clone();
+        }
+        let seq = self.next_seq();
+        let event = protocol::event(event_name, body, seq);
+        let seq = self.next_seq();
+        let receipt = protocol::response(
+            request,
+            json!({ "result": opened_message, "variablesReference": 0 }),
+            seq
+        );
+        vec![event, receipt]
+    }
+
+    fn psg_view_command(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        self.simple_chip_view_command(request, crate::inspect::PSG_REFERENCE)
+    }
+
+    /// `-fdcview` - open the FDC pane (motor/track from a snapshot, or
+    /// whatever fields a live peer's own `cpclib/fdc` answer has).
+    fn fdc_view_command(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        self.simple_chip_view_command(request, crate::inspect::DISC_REFERENCE)
+    }
+
+    /// `-ppiview` - open the PPI pane. AmspiritLite has no endpoint for
+    /// this at all (confirmed live: `/api/ppi` is HTTP 404), so this only
+    /// ever shows real data on a SugarBox session - degrades to the
+    /// snapshot's own port A/B/C/control bytes elsewhere, same as every
+    /// other simple chip view.
+    fn ppi_view_command(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        self.simple_chip_view_command(request, crate::inspect::PPI_REFERENCE)
+    }
+
+    /// `-tapeview` - open the tape/cassette pane. Unlike PSG/FDC/PPI, this
+    /// never falls back to a full `cpclib/machineState` fetch: a snapshot
+    /// carries nothing about the tape transport worth showing (see
+    /// `TAPE_REFERENCE`'s own doc comment), so there is nothing a machine-
+    /// state round trip could add - answered immediately, one way or the
+    /// other, rather than paying for a fetch that cannot help.
+    fn tape_view_command(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::TAPE_REFERENCE)
+            && self.peer_mut().supports(command)
+        {
+            self.pending_tape_views.push(request.clone());
+            self.send_own(command, json!({}), Purpose::TapeState)?;
+            return Ok(Vec::new());
+        }
+
+        let seq = self.next_seq();
+        Ok(vec![protocol::failure(
+            request,
+            "this emulator has no tape/cassette endpoint",
+            seq
+        )])
+    }
+
+    /// A live peer answered `cpclib/tape`; answer every `-tapeview` waiting.
+    fn complete_tape_state(&mut self, response: &Value) -> Vec<Value> {
+        let waiting = std::mem::take(&mut self.pending_tape_views);
+        if waiting.is_empty() {
+            return Vec::new();
+        }
+        let body = response.get("body").cloned().unwrap_or(json!({}));
+        let variables = crate::amspiritlite::chip_variables(crate::inspect::TAPE_REFERENCE, &body);
+
+        let mut out = Vec::new();
+        for request in waiting {
+            let seq = self.next_seq();
+            let event = protocol::event("cpclib/tapeView", json!({ "registers": variables }), seq);
+            let seq = self.next_seq();
+            let receipt = protocol::response(
+                &request,
+                json!({ "result": "Tape view opened", "variablesReference": 0 }),
+                seq
+            );
+            out.push(event);
+            out.push(receipt);
+        }
+        out
+    }
+
     /// Every chip scope, flattened into console text.
     fn describe_chips(&self) -> String {
         let Some(sna) = self.machine_state.as_deref()
@@ -2895,8 +3102,13 @@ impl<P: DapPeer> Session<P> {
         let waiting = std::mem::take(&mut self.pending_chip_scopes);
         let printing = std::mem::take(&mut self.pending_chip_prints);
         let viewing = std::mem::take(&mut self.pending_crtc_views);
+        let simple_viewing = std::mem::take(&mut self.pending_simple_chip_views);
         let screen_view = self.pending_screen_view.take();
-        if waiting.is_empty() && printing.is_empty() && viewing.is_empty() && screen_view.is_none()
+        if waiting.is_empty()
+            && printing.is_empty()
+            && viewing.is_empty()
+            && simple_viewing.is_empty()
+            && screen_view.is_none()
         {
             return Vec::new();
         }
@@ -2933,6 +3145,10 @@ impl<P: DapPeer> Session<P> {
                 for request in viewing {
                     out.extend(self.crtc_view_answer(&request, &regs));
                 }
+            }
+            for (reference, request) in simple_viewing {
+                let variables = crate::amspiritlite::chip_variables(reference, &body);
+                out.extend(self.simple_chip_view_answer(&request, reference, variables, Some(&body)));
             }
             if let Some(request) = screen_view.and_then(|p| p.request) {
                 let seq = self.next_seq();
@@ -3000,6 +3216,18 @@ impl<P: DapPeer> Session<P> {
                 // No machine to describe itself: said plainly, rather than
                 // reporting all-zero registers that would raise a false
                 // "R0 != 63" warning about bytes that were never read.
+                None => {
+                    let seq = self.next_seq();
+                    out.push(protocol::failure(&request, &why, seq));
+                }
+            }
+        }
+        for (reference, request) in simple_viewing {
+            match self.machine_state.as_deref() {
+                Some(sna) => {
+                    let variables = crate::inspect::chip_variables(reference, sna).unwrap_or_default();
+                    out.extend(self.simple_chip_view_answer(&request, reference, variables, None));
+                },
                 None => {
                     let seq = self.next_seq();
                     out.push(protocol::failure(&request, &why, seq));
@@ -3315,6 +3543,10 @@ impl<P: DapPeer> Session<P> {
             "-dv" | "-disassemble" => self.disassembly_view(request, &arguments),
             "-chips" | "-crtc" | "-ga" => self.chips_command(request),
             "-crtcview" | "-cv" => self.crtc_view_command(request),
+            "-psgview" | "-pv" => self.psg_view_command(request),
+            "-fdcview" | "-fv" => self.fdc_view_command(request),
+            "-ppiview" | "-pi" => self.ppi_view_command(request),
+            "-tapeview" | "-tv" => self.tape_view_command(request),
             "-timer" | "-t" => self.timer_command(request, &arguments),
             "-bv" | "-listing" => self.basic_listing_view(request),
             "-sv" | "-screen" => self.screen_view_command(request, &arguments),
@@ -3449,7 +3681,21 @@ impl<P: DapPeer> Session<P> {
                 Some((name, suffix)) if suffix.eq_ignore_ascii_case("follow") => {
                     Some(RegisterUse::Follow(name.to_ascii_uppercase()))
                 },
-                Some(_) => None,
+                // A comma-suffix is only ever meaningful as `,follow` in
+                // this command's grammar - routing a typo like `HL,folow`
+                // through the generic address/label parser below would
+                // report "neither an address nor a label" with
+                // `similar_symbols` suggestions drawn from the *program's*
+                // symbol table, which will never contain anything
+                // resembling a comma-suffixed register name. A direct hint
+                // is both cheaper and actually useful here.
+                Some((name, suffix)) => {
+                    return Ok(vec![protocol::failure(
+                        request,
+                        &format!("'{suffix}' is not a valid suffix - did you mean '{name},follow'?"),
+                        seq
+                    )]);
+                },
                 None if self.last_registers.contains_key(&where_.to_ascii_uppercase()) => {
                     Some(RegisterUse::Snapshot(where_.to_ascii_uppercase()))
                 },
@@ -3773,6 +4019,7 @@ impl<P: DapPeer> Session<P> {
         if self.pending_chip_scopes.is_empty()
             && self.pending_chip_prints.is_empty()
             && self.pending_crtc_views.is_empty()
+            && self.pending_simple_chip_views.is_empty()
         {
             let _ = self.send_own("cpclib/machineState", json!({}), Purpose::MachineState);
         }
@@ -4033,6 +4280,7 @@ impl<P: DapPeer> Session<P> {
             Some(&costs)
         );
         self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
+        self.attach_source_comments(&mut instructions);
 
         let seq = self.next_seq();
         let event = protocol::event(
@@ -5466,6 +5714,70 @@ impl<P: DapPeer> Session<P> {
         }
     }
 
+    /// Hand-written narration from the source, shown next to the
+    /// disassembled instruction it documents - not anything computed. Two
+    /// things, both read straight off the source line(s) `annotate_
+    /// disassembly` already resolved (`instruction["line"]`/
+    /// `instruction["location"]`), no new file access beyond `source_line`'s
+    /// existing per-file cache:
+    /// - `comment`: a trailing `;` comment on the instruction's own line.
+    /// - `precedingComments`: the block of comment/blank lines immediately
+    ///   above it, in source order, stopping at the first line with real
+    ///   code - the block that documents what follows, not unrelated code
+    ///   sitting above it.
+    ///
+    /// Not emulator-specific: this is pure source-file text, so it applies
+    /// identically whichever backend answered the disassembly itself.
+    fn attach_source_comments(&mut self, instructions: &mut [Value]) {
+        for instruction in instructions.iter_mut() {
+            let Some(line) = instruction.get("line").and_then(Value::as_u64)
+            else {
+                continue;
+            };
+            let Some(path) = instruction
+                .get("location")
+                .and_then(|l| l.get("path"))
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+            else {
+                continue;
+            };
+            let line = line as u32;
+
+            if let Some(text) = self.source_line(&path, line)
+                && let Some(comment) = trailing_comment(&text)
+                && !comment.is_empty()
+            {
+                instruction["comment"] = json!(comment);
+            }
+
+            let mut preceding = Vec::new();
+            let mut probe = line;
+            while probe > 1 {
+                probe -= 1;
+                let Some(text) = self.source_line(&path, probe)
+                else {
+                    break;
+                };
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    // Blank spacing between a comment block and the line it
+                    // documents does not end the block.
+                    continue;
+                }
+                let Some(stripped) = trimmed.strip_prefix(';')
+                else {
+                    break;
+                };
+                preceding.push(stripped.trim().to_string());
+            }
+            if !preceding.is_empty() {
+                preceding.reverse();
+                instruction["precedingComments"] = json!(preceding);
+            }
+        }
+    }
+
     /// Say where the program stopped, in a message of our own.
     ///
     /// The stack trace already carries the file and line, and the editor is
@@ -6306,9 +6618,47 @@ pub(crate) fn mentions_word(text: &str, word: &str) -> bool {
     false
 }
 
+/// The first unquoted `;` in `line`, if any - a `'...'`/`"..."` span is
+/// skipped whole, so a string literal containing `;` is not mistaken for a
+/// comment start. Mirrors the same rule the assembler's own lexer applies to
+/// a line comment, without needing a full tokenizer just for this.
+fn trailing_comment(line: &str) -> Option<&str> {
+    let mut quote: Option<char> = None;
+    for (index, ch) in line.char_indices() {
+        match quote {
+            Some(q) => {
+                if ch == q {
+                    quote = None;
+                }
+            },
+            None => {
+                match ch {
+                    '\'' | '"' => quote = Some(ch),
+                    ';' => return Some(line[index + 1..].trim()),
+                    _ => {}
+                }
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_a_defs_directive;
+
+    /// A `;` inside a string/char literal must not be mistaken for a
+    /// comment start - `db 'a;b'` is not a comment on `'a`.
+    #[test]
+    fn trailing_comment_ignores_semicolons_inside_quotes() {
+        use super::trailing_comment;
+
+        assert_eq!(trailing_comment("ld a,0 ; border black"), Some("border black"));
+        assert_eq!(trailing_comment("db 'a;b' ; real comment"), Some("real comment"));
+        assert_eq!(trailing_comment("db \"a;b\""), None);
+        assert_eq!(trailing_comment("nop"), None);
+        assert_eq!(trailing_comment("nop ;"), Some(""));
+    }
 
     /// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument -
     /// `_`, blank, and unset must all mean "live/CPU view" (`None`), a bare
