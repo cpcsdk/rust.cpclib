@@ -130,6 +130,18 @@ impl DownloadableInformation for SugarBoxV2Version {
                 // break dynamic linking (the pthread/glibc crash explained
                 // above), which is the entire reason this wrapper bypasses
                 // `AppRun` in the first place.
+                //
+                // `cd "$HERE"` (also part of the real `AppRun`, per its own
+                // "Fix CWD so Sugarbox finds ROM/, CONF/, etc. via
+                // std::filesystem::current_path()" comment) was skipped
+                // here at first, on the theory that `ExternRunner`'s own
+                // `RunInDir::AppDir` might already point the child at a
+                // usable directory - it does not: confirmed by a real
+                // "*** ERROR LOADING Keyboard ..." failure (Sugarbox
+                // resolving `Keyboards/101_keyboard_linux` against whatever
+                // CWD it inherited, which is `RunInDir::AppDir`'s value -
+                // the cache folder itself, one level above `squashfs-root/
+                // usr/` where `Keyboards/`/`ROM/`/`CONF/` actually live).
                 fs_err::write(
                     &app_image,
                     "#!/bin/sh\n\
@@ -137,6 +149,7 @@ impl DownloadableInformation for SugarBoxV2Version {
                      export QT_PLUGIN_PATH=\"$HERE/plugins\"\n\
                      export QT_QPA_PLATFORM_PLUGIN_PATH=\"$HERE/plugins/platforms\"\n\
                      export QT_XCB_GL_INTEGRATION=xcb_glx\n\
+                     cd \"$HERE\" || exit 1\n\
                      exec \"$HERE/Sugarbox\" \"$@\"\n"
                 )
                 .map_err(|e| e.to_string())?;
