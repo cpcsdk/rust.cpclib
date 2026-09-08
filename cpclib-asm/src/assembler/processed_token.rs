@@ -868,7 +868,8 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
-    let show_progress = env.read().unwrap().options().parse_options().show_progress;
+    let show_progress = env.read().unwrap().options().parse_options().show_progress
+        || crate::progress::has_progress_sink();
     if show_progress {
         let mut env_write = env.write().unwrap();
         let iter = tokens.iter();

@@ -27,7 +27,7 @@ fn test_cata_catart() {
     let catalog_type = CatalogType::Cat;
     eprintln!("Catalog type: {:?}", catalog_type);
 
-    let catalog_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type)
+    let catalog_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type, &())
         .expect("Unable to extract BASIC program from catalog");
 
     eprintln!("BASIC program extracted successfully");

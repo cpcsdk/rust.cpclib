@@ -29,6 +29,7 @@ enumflags2.workspace = true
 time.workspace = true
 
 [dev-dependencies]
+gag.workspace = true
 test-generator.workspace = true
 camino-tempfile.workspace = true
 pretty_assertions.workspace = true

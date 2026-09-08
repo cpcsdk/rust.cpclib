@@ -32,17 +32,6 @@ pub fn build_command() -> clap::Command {
     cli::CatalogApp::command()
 }
 
-pub fn display_catalog_using_catart(
-    catalog_bytes: &[u8],
-    catalog_type: CatalogType
-) -> Result<(), String> {
-    let screen_output = catalog_screen_output(catalog_bytes, catalog_type)?;
-
-    println!("{}", screen_output);
-
-    Ok(())
-}
-
 pub fn catalog_screen_output(
     catalog_bytes: &[u8],
     catalog_type: CatalogType
@@ -132,20 +121,22 @@ pub fn catalog_to_catart_commands(
 
 pub fn catalog_to_basic_listing(
     catalog_bytes: &[u8],
-    catalog_type: CatalogType
+    catalog_type: CatalogType,
+    o: &dyn EventObserver
 ) -> Result<BasicProgram, String> {
-    catalog_to_basic_listing_with_headers(catalog_bytes, catalog_type, true)
+    catalog_to_basic_listing_with_headers(catalog_bytes, catalog_type, true, o)
 }
 
 pub fn catalog_to_basic_listing_with_headers(
     catalog_bytes: &[u8],
     catalog_type: CatalogType,
-    show_headers: bool
+    show_headers: bool,
+    o: &dyn EventObserver
 ) -> Result<BasicProgram, String> {
     let catalog = catalog_extraction(catalog_bytes, catalog_type)?;
 
     // Get BASIC listing with optional headers
-    Ok(catalog.extract_basic_from_sequential_catart(show_headers))
+    Ok(catalog.extract_basic_from_sequential_catart(show_headers, o))
 }
 
 pub fn handle_catalog_command(args: CatalogApp, o: &dyn EventObserver) -> Result<(), String> {
@@ -1001,7 +992,7 @@ fn build_catart_from_basic(
         info!("✓ Screens are identical!");
         o.emit_stdout("\n=== Reconstructed CatArt Output ===\n");
         // Use the same code path as test_crtc_catart
-        match catalog_to_basic_listing(catalog_bytes, CatalogType::Cat) {
+        match catalog_to_basic_listing(catalog_bytes, CatalogType::Cat, o) {
             Ok(catalog_basic_program) => {
                 match BasicCommandList::try_from(&catalog_basic_program) {
                     Ok(catalog_basic_command_list) => {
@@ -1048,7 +1039,7 @@ fn build_catart_from_basic(
     // Step 8: Display the generated BASIC program and compare its bytes
     info!("Displaying generated BASIC program from catalog:");
     o.emit_stdout("\n=== Reconstructed BASIC Program ===\n");
-    match catalog_to_basic_listing(catalog_bytes, CatalogType::Cat) {
+    match catalog_to_basic_listing(catalog_bytes, CatalogType::Cat, o) {
         Ok(reconstructed_basic) => {
             o.emit_stdout(&format!("\n{}", reconstructed_basic));
 
@@ -1162,7 +1153,7 @@ fn decode_catalog_command(
     // Load the raw catalog bytes
     let catalog_bytes = load_catalog_bytes(catalog_fname)?;
 
-    match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat) {
+    match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat, o) {
         Ok(basic_program) => {
             if let Some(path) = output_path {
                 let mut file = File::create(path)

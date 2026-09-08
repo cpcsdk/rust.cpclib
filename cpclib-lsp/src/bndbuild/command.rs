@@ -42,6 +42,112 @@ pub struct RuleRunOutcome {
 /// level so it stands out in the client's output channel).
 pub type OutputLine = (bool, String);
 
+/// `ProgressUpdate`/`ProgressState` live in `cpclib-bndbuild`, not here:
+/// `cpclib-dap` needs them too (for its own "preparing the debug session"
+/// progress), and `cpclib-lsp` depends on `cpclib-dap` - so anything shared
+/// between the two cannot live in this crate, only in one both already
+/// depend on. See `cpclib_bndbuild::progress`'s own doc for the full
+/// reasoning.
+pub use cpclib_bndbuild::progress::{ProgressState, ProgressUpdate};
+
+/// Reacts to `StartRule`/`StartTask`, forwarding them as
+/// `ProgressUpdate::Rule`/`ProgressUpdate::Task` - text output stays
+/// `StreamingObserver`'s job; this observer only carries the structured
+/// signals a progress consumer needs.
+#[derive(Debug)]
+struct RuleProgressObserver {
+    tx: UnboundedSender<ProgressUpdate>
+}
+
+impl EventObserver for RuleProgressObserver {
+    fn emit_stdout(&self, _s: &str) {}
+
+    fn emit_stderr(&self, _s: &str) {}
+}
+
+impl BndBuilderObserver for RuleProgressObserver {
+    fn update(&self, event: BndBuilderEvent) {
+        match event {
+            BndBuilderEvent::StartRule { rule, nb, out_of } => {
+                let _ = self.tx.send(ProgressUpdate::Rule {
+                    rule: rule.to_string(),
+                    nb,
+                    out_of
+                });
+            },
+            BndBuilderEvent::StartTask(_rule, task) => {
+                let _ = self.tx.send(ProgressUpdate::Task {
+                    command: task.to_string()
+                });
+            },
+            _ => {}
+        }
+    }
+}
+
+/// Forwards basm's internal [`cpclib_asm::progress::AsmProgressEvent`]s to
+/// the same channel `RuleProgressObserver` uses, so a single consumer sees
+/// rule-level and basm-internal progress interleaved in real time.
+struct AsmProgressForwarder(UnboundedSender<ProgressUpdate>);
+
+impl cpclib_asm::progress::AsmProgressSink for AsmProgressForwarder {
+    fn on_progress(&self, event: cpclib_asm::progress::AsmProgressEvent) {
+        let _ = self.0.send(ProgressUpdate::Asm(event));
+    }
+}
+
+/// Runs `work` (a `BndBuilder::execute`/`execute_task` call, or any other
+/// basm-driving call - e.g. `basm::run::run_document_in_emulator`'s direct
+/// `assemble_for_debug`, which has no `BndBuilder`/rule at all) with `tx`'s
+/// progress events wired up for the whole call - including basm's own
+/// internal rayon parallelism (`build_processed_tokens_list`'s
+/// `tokens.par_iter()` for `INCLUDE` parsing), which a plain thread-local
+/// `cpclib_asm::progress::install_progress_sink` call on just the calling
+/// thread would miss: that work runs on whichever rayon worker thread
+/// happens to pick it up, not necessarily the caller's own thread.
+///
+/// To cover that, `work` runs inside a thread pool built fresh for this one
+/// call (torn down when this returns) rather than rayon's shared global
+/// default pool, with the sink broadcast onto every one of its worker
+/// threads before `work` starts. A dedicated pool, not the global one, is
+/// what makes this safe to use from more than one build at a time: rayon's
+/// `ThreadPool::install` runs `work` *inside* that pool (any nested
+/// `par_iter`/`join`/`scope` it triggers - including bndbuild's own
+/// parallel rule scheduling - follows it there too), so broadcasting the
+/// sink only onto this pool can never leak this build's progress events
+/// into a second build's, or into unrelated rayon work elsewhere in the
+/// process that happens to run on the shared global pool at the same time.
+///
+/// No sink is installed at all when `tx` is `None` - `work` just runs
+/// directly, no pool needed. `pub(crate)` so `basm::run` can reuse it too -
+/// this mechanism has nothing bndbuild-rule-specific about it.
+pub(crate) fn run_with_progress_sink<R: Send>(
+    tx: Option<UnboundedSender<ProgressUpdate>>,
+    work: impl FnOnce() -> R + Send
+) -> R {
+    let Some(tx) = tx
+    else {
+        return work();
+    };
+
+    let sink: Arc<dyn cpclib_asm::progress::AsmProgressSink> =
+        Arc::new(AsmProgressForwarder(tx));
+
+    let pool = match cpclib_common::rayon::ThreadPoolBuilder::new().build() {
+        Ok(pool) => pool,
+        // Exceedingly rare (OS thread creation failure) - degrade to
+        // running the build without a progress bar rather than failing the
+        // build entirely over a missing UI nicety.
+        Err(_) => return work()
+    };
+
+    pool.broadcast(|_| cpclib_asm::progress::install_progress_sink(Some(Arc::clone(&sink))));
+    let result = pool.install(work);
+    pool.broadcast(|_| cpclib_asm::progress::install_progress_sink(None));
+
+    result
+}
+
 /// Forwards build progress and task stdout/stderr to a channel in real time,
 /// so the editor can show it as the build runs (mirrors what a terminal used
 /// to show before rules were run in-process). `pub(crate)` so other LSP
@@ -218,12 +324,15 @@ impl BuildFileAnalyzer {
     /// diagnostic on its own line, whether or not the rule ultimately failed.
     ///
     /// When `output` is provided, every line of build progress/stdout/stderr
-    /// is forwarded to it as the build runs.
+    /// is forwarded to it as the build runs. When `progress` is provided,
+    /// structured rule-level and basm-internal progress events are forwarded
+    /// to it too, independently of `output`.
     pub fn run_rule(
         &self,
         document: &Document,
         rule: &str,
-        output: Option<UnboundedSender<OutputLine>>
+        output: Option<UnboundedSender<OutputLine>>,
+        progress: Option<UnboundedSender<ProgressUpdate>>
     ) -> RuleRunOutcome {
         let Ok(path) = document.uri.to_file_path()
         else {
@@ -264,44 +373,52 @@ impl BuildFileAnalyzer {
             builder.add_observer(BndBuilderObserverRc::new(StreamingObserver { tx }));
         }
 
-        let mut outcome = match builder.execute(rule) {
-            Ok(()) => {
-                RuleRunOutcome {
-                    message: format!("Rule '{rule}' built successfully"),
-                    diagnostics: Vec::new(),
-                    build_errors: Vec::new(),
-                    success: true
+        if let Some(tx) = progress.clone() {
+            builder.add_observer(BndBuilderObserverRc::new(RuleProgressObserver { tx }));
+        }
+
+        let mut outcome = run_with_progress_sink(progress, || {
+            match builder.execute(rule) {
+                Ok(()) => {
+                    RuleRunOutcome {
+                        message: format!("Rule '{rule}' built successfully"),
+                        diagnostics: Vec::new(),
+                        build_errors: Vec::new(),
+                        success: true
+                    }
+                },
+                Err(e) => {
+                    // The failing target may be a *dependency* of the
+                    // clicked rule: anchor the diagnostic on the rule that
+                    // actually failed.
+                    let (failing_target, msg) = match &e {
+                        cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
+                            (fname.clone(), msg.clone())
+                        },
+                        cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
+                            match source.as_ref() {
+                                cpclib_bndbuild::BndBuilderError::ExecuteError {
+                                    fname,
+                                    msg
+                                } => (fname.clone(), msg.clone()),
+                                other => (rule.to_string(), other.to_string())
+                            }
+                        },
+                        other => (rule.to_string(), other.to_string())
+                    };
+                    let failed_task_index = task_tracker.failed_index_for(&failing_target);
+                    let full_output = strip_ansi(&task_tracker.output_for(&failing_target));
+                    failure_outcome(
+                        document,
+                        rule,
+                        &failing_target,
+                        strip_ansi(&msg),
+                        failed_task_index,
+                        &full_output
+                    )
                 }
-            },
-            Err(e) => {
-                // The failing target may be a *dependency* of the clicked
-                // rule: anchor the diagnostic on the rule that actually failed.
-                let (failing_target, msg) = match &e {
-                    cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
-                        (fname.clone(), msg.clone())
-                    },
-                    cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
-                        match source.as_ref() {
-                            cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
-                                (fname.clone(), msg.clone())
-                            },
-                            other => (rule.to_string(), other.to_string())
-                        }
-                    },
-                    other => (rule.to_string(), other.to_string())
-                };
-                let failed_task_index = task_tracker.failed_index_for(&failing_target);
-                let full_output = strip_ansi(&task_tracker.output_for(&failing_target));
-                failure_outcome(
-                    document,
-                    rule,
-                    &failing_target,
-                    strip_ansi(&msg),
-                    failed_task_index,
-                    &full_output
-                )
             }
-        };
+        });
 
         outcome.diagnostics.extend(ignored_error_diagnostics(
             document,
@@ -413,7 +530,8 @@ impl BuildFileAnalyzer {
         yaml_text: &str,
         yaml_start_line: u32,
         rule: &str,
-        output: Option<UnboundedSender<OutputLine>>
+        output: Option<UnboundedSender<OutputLine>>,
+        progress: Option<UnboundedSender<ProgressUpdate>>
     ) -> RuleRunOutcome {
         let Ok(path) = host_document.uri.to_file_path()
         else {
@@ -483,49 +601,56 @@ impl BuildFileAnalyzer {
             builder.add_observer(BndBuilderObserverRc::new(StreamingObserver { tx }));
         }
 
+        if let Some(tx) = progress.clone() {
+            builder.add_observer(BndBuilderObserverRc::new(RuleProgressObserver { tx }));
+        }
+
         let block_document = Document::new(host_document.uri.clone(), yaml_text.to_string(), 0);
 
-        let mut outcome = match builder.execute(rule) {
-            Ok(()) => {
-                RuleRunOutcome {
-                    message: format!("Rule '{rule}' built successfully"),
-                    diagnostics: Vec::new(),
-                    build_errors: Vec::new(),
-                    success: true
+        let mut outcome = run_with_progress_sink(progress, || {
+            match builder.execute(rule) {
+                Ok(()) => {
+                    RuleRunOutcome {
+                        message: format!("Rule '{rule}' built successfully"),
+                        diagnostics: Vec::new(),
+                        build_errors: Vec::new(),
+                        success: true
+                    }
+                },
+                Err(e) => {
+                    let (failing_target, msg) = match &e {
+                        cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
+                            (fname.clone(), msg.clone())
+                        },
+                        cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
+                            match source.as_ref() {
+                                cpclib_bndbuild::BndBuilderError::ExecuteError {
+                                    fname,
+                                    msg
+                                } => (fname.clone(), msg.clone()),
+                                other => (rule.to_string(), other.to_string())
+                            }
+                        },
+                        other => (rule.to_string(), other.to_string())
+                    };
+                    let failed_task_index = task_tracker.failed_index_for(&failing_target);
+                    let full_output = strip_ansi(&task_tracker.output_for(&failing_target));
+                    let mut o = failure_outcome(
+                        &block_document,
+                        rule,
+                        &failing_target,
+                        strip_ansi(&msg),
+                        failed_task_index,
+                        &full_output
+                    );
+                    for d in o.diagnostics.iter_mut() {
+                        d.range.start.line += yaml_start_line;
+                        d.range.end.line += yaml_start_line;
+                    }
+                    o
                 }
-            },
-            Err(e) => {
-                let (failing_target, msg) = match &e {
-                    cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
-                        (fname.clone(), msg.clone())
-                    },
-                    cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
-                        match source.as_ref() {
-                            cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
-                                (fname.clone(), msg.clone())
-                            },
-                            other => (rule.to_string(), other.to_string())
-                        }
-                    },
-                    other => (rule.to_string(), other.to_string())
-                };
-                let failed_task_index = task_tracker.failed_index_for(&failing_target);
-                let full_output = strip_ansi(&task_tracker.output_for(&failing_target));
-                let mut o = failure_outcome(
-                    &block_document,
-                    rule,
-                    &failing_target,
-                    strip_ansi(&msg),
-                    failed_task_index,
-                    &full_output
-                );
-                for d in o.diagnostics.iter_mut() {
-                    d.range.start.line += yaml_start_line;
-                    d.range.end.line += yaml_start_line;
-                }
-                o
             }
-        };
+        });
 
         let mut ignored =
             ignored_error_diagnostics(&block_document, task_tracker.take_ignored_errors());
@@ -1310,7 +1435,7 @@ mod tests {
         let content = "- tgt: ok.txt\n  phony: true\n  cmd: echo fine\n\n- tgt: broken\n  phony: true\n  cmd: cp does_not_exist_anywhere.src dst.bin\n";
         let document = doc(tmp.path().as_std_path(), content);
 
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", None);
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", None, None);
         assert!(!outcome.success);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];
@@ -1330,9 +1455,71 @@ mod tests {
         let content = "- tgt: fine\n  phony: true\n  cmd: echo all good\n";
         let document = doc(tmp.path().as_std_path(), content);
 
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "fine", None);
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "fine", None, None);
         assert!(outcome.success, "{}", outcome.message);
         assert!(outcome.diagnostics.is_empty());
+    }
+
+    /// Proves the actual point of `has_progress_sink()` end to end: a real
+    /// `basm` task, run through a bndbuild rule whose command text never
+    /// mentions `--progress`, still reports both rule-level and basm's own
+    /// internal progress once a progress channel is supplied - installing a
+    /// sink must be independently sufficient, not something the user also
+    /// has to ask for via the task's own arguments (which the LSP has no
+    /// clean way to inject without polluting the user's build file - see
+    /// `BasmRunner::inner_run`'s doc).
+    ///
+    /// `main.asm` includes two other files so `build_processed_tokens_list`
+    /// actually takes its `tokens.par_iter()` path (real files almost
+    /// always do) - this is an end-to-end sanity check that the pieces are
+    /// wired together correctly; the deterministic proof that the sink
+    /// itself reaches every rayon worker thread (not just the calling one)
+    /// lives in `cpclib_asm::progress::tests::
+    /// installing_a_sink_reaches_every_rayon_worker_thread`.
+    #[serial]
+    #[test]
+    fn a_basm_rule_reports_progress_even_without_the_progress_flag() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let dir = tmp.path().as_std_path();
+        let content = "- tgt: main.bin\n  cmd: basm main.asm -o main.bin\n";
+        let document = doc(dir, content);
+        std::fs::write(
+            dir.join("main.asm"),
+            "    org 0x4000\n    include \"one.asm\"\n    include \"two.asm\"\n    ret\n"
+        )
+        .unwrap();
+        std::fs::write(dir.join("one.asm"), "one_label:\n    nop\n").unwrap();
+        std::fs::write(dir.join("two.asm"), "two_label:\n    nop\n").unwrap();
+
+        let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let outcome =
+            BuildFileAnalyzer::new().run_rule(&document, "main.bin", None, Some(progress_tx));
+        assert!(outcome.success, "{}", outcome.message);
+
+        let mut updates = Vec::new();
+        while let Ok(update) = progress_rx.try_recv() {
+            updates.push(update);
+        }
+
+        assert!(
+            updates.iter().any(|u| matches!(
+                u,
+                ProgressUpdate::Rule {
+                    nb: 1,
+                    out_of: 1,
+                    ..
+                }
+            )),
+            "expected the rule-level '[1/1]' signal, got: {updates:?}"
+        );
+        assert!(
+            updates.iter().any(|u| matches!(
+                u,
+                ProgressUpdate::Asm(cpclib_asm::progress::AsmProgressEvent::Parse { .. })
+            )),
+            "expected basm's own internal Parse progress even though the rule's command \
+             never passed --progress, got: {updates:?}"
+        );
     }
 
     #[serial]
@@ -1408,7 +1595,7 @@ mod tests {
         let document = doc(tmp.path().as_std_path(), content);
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "fine", Some(tx));
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "fine", Some(tx), None);
         assert!(outcome.success, "{}", outcome.message);
 
         let mut lines = Vec::new();
@@ -1432,7 +1619,7 @@ mod tests {
         let document = doc(tmp.path().as_std_path(), content);
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", Some(tx));
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", Some(tx), None);
         assert!(!outcome.success);
 
         let mut lines = Vec::new();
@@ -1452,7 +1639,7 @@ mod tests {
         let content = "- tgt: multi\n  phony: true\n  cmd:\n    - echo first task ok\n    - cp does_not_exist_anywhere.src dst.bin\n    - echo third task never runs\n";
         let document = doc(tmp.path().as_std_path(), content);
 
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "multi", None);
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "multi", None, None);
         assert!(!outcome.success);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];
@@ -1530,7 +1717,7 @@ mod tests {
         let content = "- tgt: tolerant\n  phony: true\n  cmd:\n    - echo first task ok\n    - -cp does_not_exist_anywhere.src dst.bin\n    - echo third task still runs\n";
         let document = doc(tmp.path().as_std_path(), content);
 
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "tolerant", None);
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "tolerant", None, None);
         assert!(
             outcome.success,
             "an ignored error must not fail the rule: {}",
@@ -1562,7 +1749,7 @@ mod tests {
             "- tgt: broken\n  phony: true\n  cmd: extern cat /this/path/does/not/exist12345\n";
         let document = doc(tmp.path().as_std_path(), content);
 
-        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", None);
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", None, None);
         assert!(!outcome.success);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];
@@ -1889,7 +2076,8 @@ mod tests {
             yaml_text,
             1,
             "fine",
-            Some(tx)
+            Some(tx),
+            None
         );
         assert!(outcome.success, "{}", outcome.message);
         assert!(outcome.diagnostics.is_empty());
@@ -1920,7 +2108,7 @@ mod tests {
         let yaml_text = "- tgt: multi\n  phony: true\n  cmd:\n    - echo first task ok\n    - cp does_not_exist_anywhere.src dst.bin\n    - echo third task never runs";
 
         let outcome =
-            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "multi", None);
+            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "multi", None, None);
         assert!(!outcome.success);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];
@@ -1951,7 +2139,7 @@ mod tests {
         let yaml_text = "- tgt: count\n  phony: true\n  cmd: extern wc -l data.txt";
 
         let outcome =
-            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 1, "count", None);
+            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 1, "count", None, None);
         assert!(outcome.success, "{}", outcome.message);
     }
 
@@ -2002,6 +2190,7 @@ mod tests {
             &yaml_text,
             1,
             "broken",
+            None,
             None
         );
         assert!(!outcome.success);
@@ -2032,7 +2221,7 @@ mod tests {
         let yaml_text = "- tgt: lax\n  phony: true\n  cmd:\n    - -cp does_not_exist_anywhere.src dst.bin\n    - echo still runs";
 
         let outcome =
-            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "lax", None);
+            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "lax", None, None);
         assert!(outcome.success, "{}", outcome.message);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];

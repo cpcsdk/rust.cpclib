@@ -48,6 +48,14 @@ fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::e
 }
 
 // Get highlight.js content (download once, then cache)
+//
+// Left as eprintln! rather than threaded to an `EventObserver`: the call
+// chain up to any observer-carrying entry point runs `to_html` (already a
+// pure `&self -> String` function, per its own earlier "Debug:" print
+// removal in lib.rs) -> `BasmDocGenerator::generate_html`/`save_to_file`
+// (pure builder-pattern API) -> `cmdline::handle_matches` -> bndbuild's
+// `define_custom_builder_runner!` macro closure, none of which forward an
+// observer today. These are also rare, network-failure-only paths.
 pub fn get_highlightjs() -> String {
     download_or_cache(HIGHLIGHTJS_URL, "highlight.min.js").unwrap_or_else(|e| {
         eprintln!(
@@ -58,7 +66,8 @@ pub fn get_highlightjs() -> String {
     })
 }
 
-// Get atom-one-dark CSS content (download once, then cache)
+// Get atom-one-dark CSS content (download once, then cache). See
+// `get_highlightjs`'s comment above for why this stays an eprintln!.
 pub fn get_highlightjs_css() -> String {
     download_or_cache(HIGHLIGHTJS_CSS_URL, "atom-one-dark.min.css").unwrap_or_else(|e| {
         eprintln!(
@@ -69,7 +78,9 @@ pub fn get_highlightjs_css() -> String {
     })
 }
 
-// Get documentation.js content from embedded templates
+// Get documentation.js content from embedded templates. See
+// `get_highlightjs`'s comment above for why this stays an eprintln! - this
+// one should in practice never fire (the asset is embedded at compile time).
 pub fn get_documentation_js() -> String {
     Templates::get("documentation.js")
         .map(|file| String::from_utf8_lossy(file.data.as_ref()).to_string())
@@ -79,7 +90,8 @@ pub fn get_documentation_js() -> String {
         })
 }
 
-// Get documentation.css content from embedded templates
+// Get documentation.css content from embedded templates. See
+// `get_highlightjs`'s comment above for why this stays an eprintln!.
 pub fn get_documentation_css() -> String {
     Templates::get("documentation.css")
         .map(|file| String::from_utf8_lossy(file.data.as_ref()).to_string())

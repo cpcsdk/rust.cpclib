@@ -96,7 +96,7 @@ impl DownloadableInformation for AmspiritVersion {
         let owned_result = self.target_os_exec_fname().to_owned();
 
         let post_install: Box<PostInstallFn<E>> =
-            Box::new(move |d: &DelegateApplicationDescription<E>| {
+            Box::new(move |d: &DelegateApplicationDescription<E>, _o: &E| {
                 fs_err::rename(
                     d.cache_folder().join(&owned_original),
                     d.cache_folder().join(&owned_result)

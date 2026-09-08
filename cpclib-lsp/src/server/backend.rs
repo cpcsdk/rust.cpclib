@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -1086,6 +1087,196 @@ async fn report_removal_blockers(
             )
         )
         .await;
+}
+
+static PROGRESS_TOKEN_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Starts a `WorkDoneProgress` bar on the client for a build titled `title`,
+/// returning the channel to feed [`crate::bndbuild::command::ProgressUpdate`]s
+/// into and the task translating them into `Begin`/`Report`/`End`
+/// notifications. Dropping the sender (done automatically once the
+/// `spawn_blocking` build closure that owns it returns) ends the task; the
+/// caller should `.await` the returned handle afterward so the `End`
+/// notification is sent before moving on.
+///
+/// Best-effort: if the client doesn't support `window/workDoneProgress/
+/// create` (or refuses it), the returned channel is still valid to send
+/// into — `run_rule`/`run_embedded_rule` don't need to know either way — but
+/// the consumer task drains and discards updates without notifying, so no
+/// build failure results from a client that lacks progress-bar support.
+fn start_build_progress(
+    client: &Client,
+    title: String
+) -> (
+    tokio::sync::mpsc::UnboundedSender<crate::bndbuild::command::ProgressUpdate>,
+    tokio::task::JoinHandle<()>
+) {
+    let token =
+        NumberOrString::Number(PROGRESS_TOKEN_COUNTER.fetch_add(1, Ordering::Relaxed) as i32);
+    start_build_progress_with_token(client, title, token, true)
+}
+
+/// [`start_build_progress`], but for a token the *client* generated and is
+/// already listening on (`client_owns_token = true`) rather than one this
+/// server must ask the client to create.
+///
+/// Why this exists at all: `vscode-languageclient`'s own handling of a
+/// server-initiated `window/workDoneProgress/create` renders as - its own
+/// source comment says so verbatim - "a silent window progress with a
+/// hidden notification" (`ProgressLocation.Window`, a barely-visible
+/// status-bar sliver, not the prominent bottom-right toast
+/// `ProgressLocation.Notification` gives). There is no client option to
+/// change that default. The fix used throughout the LSP ecosystem (and
+/// here) is for the *client* to generate the token itself, wrap the
+/// triggering command in its own `vscode.window.withProgress({location:
+/// Notification})`, and listen via `client.onProgress` directly - bypassing
+/// the library's own silent handler entirely, since that only ever fires in
+/// response to a `workDoneProgress/create` *request*, which this path never
+/// sends. `cpclib.runAssembly`'s handler passes its client-supplied token
+/// here for exactly this reason (see `cpclib-vscode/src/debug/register.ts`).
+fn start_build_progress_with_token(
+    client: &Client,
+    title: String,
+    token: NumberOrString,
+    client_owns_token: bool
+) -> (
+    tokio::sync::mpsc::UnboundedSender<crate::bndbuild::command::ProgressUpdate>,
+    tokio::task::JoinHandle<()>
+) {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let client = client.clone();
+    let task = tokio::spawn(async move {
+        let supported = if client_owns_token {
+            // The client is already listening on this exact token (it
+            // generated it and registered its own `onProgress` handler
+            // before invoking the command that led here) - asking it to
+            // "create" what it already owns would be redundant at best and,
+            // per the LSP spec, `workDoneProgress/create` is specifically
+            // for a token the *server* mints, not one the client handed it.
+            true
+        }
+        else {
+            // `tower_lsp::Client::send_request` awaits the client's response
+            // with no timeout of its own - if the client never answers this
+            // particular request (for whatever reason), this would otherwise
+            // hang forever rather than falling back, silently taking the
+            // rest of this function (including the diagnostic log below)
+            // with it.
+            let create_result = tokio::time::timeout(
+                Duration::from_secs(5),
+                client.send_request::<request::WorkDoneProgressCreate>(
+                    WorkDoneProgressCreateParams {
+                        token: token.clone()
+                    }
+                )
+            )
+            .await;
+            // Temporary diagnostic: the LSP output channel is the one place
+            // guaranteed visible to whoever is testing this, unlike a log
+            // file whose path/rotation can be a mystery from the outside.
+            // Remove once progress reporting is confirmed working end to
+            // end.
+            client
+                .log_message(
+                    MessageType::INFO,
+                    format!(
+                        "[progress] workDoneProgress/create for token {token:?}: {create_result:?}"
+                    )
+                )
+                .await;
+            matches!(create_result, Ok(Ok(())))
+        };
+
+        if !supported {
+            while rx.recv().await.is_some() {}
+            return;
+        }
+
+        client
+            .send_notification::<notification::Progress>(ProgressParams {
+                token: token.clone(),
+                value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(
+                    WorkDoneProgressBegin {
+                        title,
+                        cancellable: Some(false),
+                        message: None,
+                        percentage: Some(0)
+                    }
+                ))
+            })
+            .await;
+
+        // Real projects produce far more updates than any UI needs: a
+        // ~38s build of birthtro (a real, sizeable demo) generated over
+        // 1.4 million `ProgressUpdate`s, almost all `PassProgress` -
+        // basm's own inner loop reports every 64-token chunk it visits,
+        // across every one of the (unknowable in advance) passes it takes
+        // to stabilize addresses. Forwarding each one as its own
+        // `$/progress` notification would flood the client for no visible
+        // benefit - VS Code's own progress UI doesn't redraw anywhere near
+        // that fast. Every update still updates `state` (so the message/
+        // percentage sent once the throttle allows it is never stale), but
+        // only a `Rule` transition (rare - one per rule in the build) or a
+        // window's worth of time elapsed actually triggers a send.
+        const PROGRESS_THROTTLE: Duration = Duration::from_millis(200);
+
+        let mut state = crate::bndbuild::command::ProgressState::new();
+        let mut last_sent = tokio::time::Instant::now() - PROGRESS_THROTTLE;
+        let mut received = 0u64;
+        let mut sent = 0u64;
+        while let Some(update) = rx.recv().await {
+            received += 1;
+            // A rule or task starting is a rare, meaningful transition -
+            // always sent immediately rather than held for the throttle
+            // window, unlike the flood of basm-internal phase events.
+            let is_rule_transition = matches!(
+                update,
+                crate::bndbuild::command::ProgressUpdate::Rule { .. }
+                    | crate::bndbuild::command::ProgressUpdate::Task { .. }
+            );
+            let (message, percentage) = state.apply(update);
+
+            let now = tokio::time::Instant::now();
+            if !is_rule_transition && now.duration_since(last_sent) < PROGRESS_THROTTLE {
+                continue;
+            }
+            last_sent = now;
+            sent += 1;
+
+            client
+                .send_notification::<notification::Progress>(ProgressParams {
+                    token: token.clone(),
+                    value: ProgressParamsValue::WorkDone(WorkDoneProgress::Report(
+                        WorkDoneProgressReport {
+                            cancellable: Some(false),
+                            message: Some(message),
+                            percentage
+                        }
+                    ))
+                })
+                .await;
+        }
+
+        client
+            .log_message(
+                MessageType::INFO,
+                format!(
+                    "[progress] token {token:?} done: received {received} update(s), sent \
+                     {sent} report notification(s)"
+                )
+            )
+            .await;
+
+        client
+            .send_notification::<notification::Progress>(ProgressParams {
+                token,
+                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
+                    WorkDoneProgressEnd { message: None }
+                ))
+            })
+            .await;
+    });
+    (tx, task)
 }
 
 /// `None` when `changes` is empty (nothing to rename — the client should
@@ -2195,6 +2386,14 @@ impl LanguageServer for CpcLspBackend {
                 })
             };
 
+            // Structured progress (rule-level "step N of M" plus basm's own
+            // internal parse/load/pass/save events), rendered by the client
+            // as a real percentage-driven progress bar instead of the
+            // indeterminate spinner a bare "build started" notification
+            // would give.
+            let (progress_tx, progress_task) =
+                start_build_progress(&self.client, format!("Building '{rule}'"));
+
             // The build is heavy and synchronous: run it on a worker thread.
             let outcome = {
                 let document = document.clone();
@@ -2219,7 +2418,8 @@ impl LanguageServer for CpcLspBackend {
                                     &block.yaml_text,
                                     block.yaml_start_line as u32,
                                     &rule,
-                                    Some(tx)
+                                    Some(tx),
+                                    Some(progress_tx)
                                 )
                             },
                             None => {
@@ -2238,7 +2438,8 @@ impl LanguageServer for CpcLspBackend {
                         crate::bndbuild::BuildFileAnalyzer::new().run_rule(
                             &document,
                             &rule,
-                            Some(tx)
+                            Some(tx),
+                            Some(progress_tx)
                         )
                     }
                 })
@@ -2252,6 +2453,7 @@ impl LanguageServer for CpcLspBackend {
                 })?
             };
             let _ = log_task.await;
+            let _ = progress_task.await;
 
             // Static analysis diagnostics + the failure highlight (if any):
             // publishing replaces the previous set, so a successful build
@@ -2933,6 +3135,19 @@ impl LanguageServer for CpcLspBackend {
             else {
                 return Ok(None);
             };
+            // The editor generates and already listens on this token itself
+            // (see `cpclib.runAsm`'s handler in `cpclib-vscode/src/debug/
+            // register.ts`) so it can wrap the whole run in its own
+            // `vscode.window.withProgress({location: Notification})` -
+            // vscode-languageclient's own automatic handling of a
+            // *server*-created token only ever renders a barely-visible
+            // `ProgressLocation.Window` sliver (see
+            // `start_build_progress_with_token`'s own doc). Falls back to
+            // the server generating one itself for a caller that doesn't
+            // supply it (e.g. an older client, or a direct `workspace/
+            // executeCommand` call from something other than this
+            // extension).
+            let client_token = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
             let Ok(uri) = Url::from_file_path(&fname)
             else {
                 return Ok(None);
@@ -2966,11 +3181,26 @@ impl LanguageServer for CpcLspBackend {
                 })
             };
 
+            let (progress_tx, progress_task) = match client_token {
+                Some(token) => start_build_progress_with_token(
+                    &self.client,
+                    "Assembling…".to_string(),
+                    NumberOrString::String(token),
+                    true
+                ),
+                None => start_build_progress(&self.client, "Assembling…".to_string())
+            };
+
             let outcome = {
                 let document = document.clone();
                 let config = self.asm_analyzer.config();
                 tokio::task::spawn_blocking(move || {
-                    crate::basm::run::run_document_in_emulator(&document, &config, tx)
+                    crate::basm::run::run_document_in_emulator(
+                        &document,
+                        &config,
+                        tx,
+                        Some(progress_tx)
+                    )
                 })
                 .await
                 .map_err(|e| {
@@ -2982,6 +3212,7 @@ impl LanguageServer for CpcLspBackend {
                 })?
             };
             let _ = log_task.await;
+            let _ = progress_task.await;
 
             self.client
                 .show_message(

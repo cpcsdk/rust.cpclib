@@ -176,10 +176,10 @@ pub fn hideur_handle(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), 
         let amsfile = AmsdosFile::from_buffer(&content);
         match amsfile.header() {
             Some(header) => {
-                println!("{header:?}");
+                o.emit_stdout(&format!("{header:?}\n"));
             },
             None => {
-                eprintln!("This is an ASCII file");
+                o.emit_stderr("This is an ASCII file\n");
             }
         }
     }

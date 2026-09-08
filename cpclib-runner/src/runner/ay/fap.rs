@@ -120,8 +120,8 @@ impl FAPVersion {
                 });
 
             let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-            > = Box::new(|desc: &DelegateApplicationDescription<E>| {
+                dyn Fn(&DelegateApplicationDescription<E>, &E) -> Result<(), String>
+            > = Box::new(|desc: &DelegateApplicationDescription<E>, _o: &E| {
                 // Ensure player binaries are available from the official v1.0.2 release archive.
                 let release_zip = desc
                     .cache_folder()

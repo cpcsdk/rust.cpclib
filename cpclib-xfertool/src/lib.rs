@@ -111,7 +111,10 @@ pub fn build_args_parser() -> clap::Command {
     }
 }
 
-pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
+pub fn process(
+    matches: &clap::ArgMatches,
+    o: &dyn cpclib_common::event::EventObserver
+) -> anyhow::Result<()> {
     // Retreivethe hostname from the args or from the environment
     let hostname: String = match matches.get_one::<String>("CPCADDR") {
         Some(cpcaddr) => cpcaddr.to_string(),
@@ -149,8 +152,8 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
 
         #[cfg(feature = "watch")]
         if y_opt.get_flag("WATCH") {
-            println!(
-                "I will not stop and redo the operation when detecting a modification of the file"
+            o.emit_stdout(
+                "I will not stop and redo the operation when detecting a modification of the file\n"
             );
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher = RecommendedWatcher::new(
@@ -181,14 +184,14 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
             .current_folder_content()
             .map_err(|e| anyhow::Error::msg(e.to_string()))?;
         for file in content.files() {
-            println!("{file:?}");
+            o.emit_stdout(&format!("{file:?}\n"));
         }
     }
     else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
         let cwd = xfer
             .current_working_directory()
             .map_err(|e| anyhow::Error::msg(e.to_string()))?;
-        println!("{cwd}");
+        o.emit_stdout(&format!("{cwd}\n"));
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
         xfer.cd(cd_opt.get_one::<String>("directory").unwrap())
@@ -197,7 +200,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
         #[cfg(feature = "interactive")]
         {
-            println!("Benediction welcomes you to the interactive mode for M4.");
+            o.emit_stdout("Benediction welcomes you to the interactive mode for M4.\n");
             interact::XferInteractor::start(&xfer);
         }
     }

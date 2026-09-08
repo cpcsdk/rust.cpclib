@@ -269,14 +269,18 @@ impl Z80 {
         duration
     }
 
-    /// TODO need to manage memory
-    fn write_memory_byte(&self, _addr: u16, _val: u8) {
-        eprintln!("[ERROR] Memory byte not written");
-    }
+    // TODO need to manage memory. This whole module is unreachable from any
+    // production entry point in the workspace (its sole public caller,
+    // `execute_dummy_listing`, has no callers either - see the crate's own
+    // "should be deprecated" note in lib.rs) and is exercised only by this
+    // crate's own unit tests, where the stub's silent no-op/default is
+    // already tolerated. Left as plain stubs rather than wired to an
+    // `EventObserver`: not worth threading one through `Z80::execute`'s
+    // large opcode match for genuinely unfinished, effectively dead code.
+    fn write_memory_byte(&self, _addr: u16, _val: u8) {}
 
-    /// TODO need to manage memory
+    // TODO need to manage memory (see `write_memory_byte`'s comment above).
     fn read_memory_byte(&self, _addr: u16) -> u8 {
-        eprintln!("[ERROR] Memory byte not read");
         u8::default()
     }
 

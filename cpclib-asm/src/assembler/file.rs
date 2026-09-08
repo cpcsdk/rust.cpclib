@@ -331,7 +331,7 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
 
     let fname_repr = fname.as_str();
 
-    let progress = if options.show_progress {
+    let progress = if options.show_progress || crate::progress::has_progress_sink() {
         Progress::instance().add_load(fname_repr);
         Some(fname_repr)
     }

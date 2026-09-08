@@ -2,7 +2,7 @@ use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
 use fs_err::PathExt;
 
@@ -99,7 +99,7 @@ impl ParsingStateVerified for Token {
     parsing_state_verified_inner!();
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub struct ParserOptions {
     /// Search path to find files
     pub search_path: Vec<Utf8PathBuf>,
@@ -117,6 +117,16 @@ pub struct ParserOptions {
     /// LSP server (whose real stdout carries JSON-RPC protocol traffic, not
     /// build output) must suppress it here instead.
     pub quiet: bool,
+    /// `PRINT_PARSE` messages recorded while parsing, instead of a raw
+    /// `println!` at the point of parsing (see [`Self::quiet`]'s own doc for
+    /// why that's unsafe for an embedding caller). `Arc<Mutex<_>>` because
+    /// [`ParserOptions`] is cloned into every recursive `INCLUDE`'s own
+    /// context (parsing can run on rayon worker threads), and every clone
+    /// must still append to the *same* buffer, not its own copy - a caller
+    /// that owns the top-level `ParserOptions` (e.g. `cpclib_basm::process`)
+    /// drains this once parsing finishes and forwards each line through
+    /// whichever `EventObserver` it was given.
+    pub print_parse_buffer: Arc<Mutex<Vec<String>>>,
     /// Same reasoning as `quiet`: `FakeInstruction`/`RedundantAccumulatorPrefix`
     /// warnings are detected *in the parser* (`wrap_optional_accumulator_warning`
     /// in `parser/instructions.rs`), which constructs a real `WarningWrapper`
@@ -129,6 +139,25 @@ pub struct ParserOptions {
     pub disabled_warning_categories: BitFlags<WarningCategory>
 }
 
+impl Eq for ParserOptions {}
+
+impl PartialEq for ParserOptions {
+    /// `print_parse_buffer` is excluded on purpose: it's an output sink, not
+    /// part of an option's identity (and `Mutex<Vec<String>>` isn't
+    /// comparable anyway) - two otherwise-identical options must still
+    /// compare equal regardless of what either has recorded so far.
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.search_path == other.search_path
+            && self.read_referenced_files == other.read_referenced_files
+            && self.show_progress == other.show_progress
+            && self.dotted_directive == other.dotted_directive
+            && self.assembler_flavor == other.assembler_flavor
+            && self.quiet == other.quiet
+            && self.disabled_warning_categories == other.disabled_warning_categories
+    }
+}
+
 impl Default for ParserOptions {
     fn default() -> Self {
         ParserOptions {
@@ -138,6 +167,7 @@ impl Default for ParserOptions {
             show_progress: false,
             assembler_flavor: AssemblerFlavor::Basm,
             quiet: false,
+            print_parse_buffer: Arc::new(Mutex::new(Vec::new())),
             disabled_warning_categories: BitFlags::empty()
         }
     }
@@ -182,6 +212,10 @@ impl From<ParserContext> for ParserContextBuilder {
 }
 
 impl ParserContextBuilder {
+    pub fn options(&self) -> &ParserOptions {
+        &self.options
+    }
+
     pub fn current_filename(&self) -> Option<&Utf8Path> {
         self.current_filename.as_ref().map(|p| p.as_path())
     }

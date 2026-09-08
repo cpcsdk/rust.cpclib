@@ -99,7 +99,7 @@ impl<E: EventObserver> Runner for CprCliRunner<E> {
 
             let missing = to_keep.sub(&available);
             if !missing.is_empty() {
-                eprintln!("These banks are not available {missing:?}");
+                o.emit_stderr(&format!("These banks are not available {missing:?}\n"));
             }
 
             let to_remove = available.sub(&to_keep);
@@ -126,7 +126,7 @@ impl<E: EventObserver> Runner for CprCliRunner<E> {
         };
 
         // Execute the command
-        cmd.handle(&mut cpr, cpr2.as_mut());
+        cmd.handle(&mut cpr, cpr2.as_mut(), o);
 
         Ok(())
     }

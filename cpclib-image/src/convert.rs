@@ -1278,7 +1278,6 @@ impl<C: AmstradColor> ImageConverter<C> {
             o
         } = params;
 
-        println!("Converting to sprite with encoding and palette {:?} {}", encoding, palette.to_ansi_string());
         match &encoding {
             SpriteEncoding::Linear => {
                 let mut converter = ImageConverter {
@@ -1459,8 +1458,6 @@ impl<C: AmstradColor> ImageConverter<C> {
                 *sprite_format
             )?;
 
-            println!("Handling mask");
-
             let mask_transformations = transformations
                 .clone()
                 .build_mask_from_background_ink(*mask_ink);
@@ -1520,8 +1517,6 @@ impl<C: AmstradColor> ImageConverter<C> {
         let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
         self.palette = LockablePalette::<C>::locked(sprite.palette().unwrap());
-
-        println!("The locked palette {}", self.palette.to_ansi_string());
 
         sprite
     }

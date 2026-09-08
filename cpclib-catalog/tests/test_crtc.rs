@@ -30,7 +30,7 @@ fn test_crtc_catart() {
     let binary_catalog = manager.catalog_slice().expect("Failed to read catalog slice");
     let catalog_type = CatalogType::Cat;
 
-    let catalog_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type)
+    let catalog_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type, &())
         .expect("Unable to extract BASIC program from catalog");
 
     eprintln!("{}", catalog_basic_program.to_string());
@@ -499,7 +499,7 @@ fn test_crtc_two_paths_comparison() {
 
     // PATH 1: catalog_to_basic_listing (used by test) → extract_basic_from_sequential_catart
     eprintln!("PATH 1: catalog_to_basic_listing (extract_basic_from_sequential_catart)");
-    let path1_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type)
+    let path1_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type, &())
         .expect("Unable to extract BASIC program from catalog");
     let path1_basic_commands = BasicCommandList::try_from(&path1_basic_program)
         .expect("Unable to get commands from path1 BASIC");

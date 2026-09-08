@@ -99,7 +99,7 @@ impl Emulator1984Version {
         #[cfg(target_os = "linux")]
         let builder = {
             let post_install: Box<PostInstallFn<E>> = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, o: &E| -> Result<(), String> {
                     use std::os::unix::fs::PermissionsExt;
 
                     let app_image = desc.exec_fname();
@@ -112,26 +112,26 @@ impl Emulator1984Version {
 
                     // Check if SDL3 is available system-wide
                     if !is_sdl3_available_system() {
-                        eprintln!("⚠️  WARNING: SDL3 is not installed on your system.");
-                        eprintln!("The 1984 emulator requires SDL3 to run.");
-                        eprintln!();
-                        eprintln!("To install SDL3 on Ubuntu/Debian:");
-                        eprintln!(
-                            "  wget https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10.tar.gz"
+                        o.emit_stderr("⚠️  WARNING: SDL3 is not installed on your system.\n");
+                        o.emit_stderr("The 1984 emulator requires SDL3 to run.\n");
+                        o.emit_stderr("\n");
+                        o.emit_stderr("To install SDL3 on Ubuntu/Debian:\n");
+                        o.emit_stderr(
+                            "  wget https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10.tar.gz\n"
                         );
-                        eprintln!("  tar xzf SDL3-3.4.10.tar.gz");
-                        eprintln!("  cd SDL3-3.4.10");
-                        eprintln!("  cmake -B build -DCMAKE_BUILD_TYPE=Release");
-                        eprintln!("  cmake --build build");
-                        eprintln!("  sudo cmake --install build");
-                        eprintln!("  sudo ldconfig");
-                        eprintln!();
-                        eprintln!("Emulator downloaded but will not run until SDL3 is installed.");
+                        o.emit_stderr("  tar xzf SDL3-3.4.10.tar.gz\n");
+                        o.emit_stderr("  cd SDL3-3.4.10\n");
+                        o.emit_stderr("  cmake -B build -DCMAKE_BUILD_TYPE=Release\n");
+                        o.emit_stderr("  cmake --build build\n");
+                        o.emit_stderr("  sudo cmake --install build\n");
+                        o.emit_stderr("  sudo ldconfig\n");
+                        o.emit_stderr("\n");
+                        o.emit_stderr("Emulator downloaded but will not run until SDL3 is installed.\n");
                     }
 
                     // Download required ROM files
                     let rom_dir = desc.cache_folder();
-                    download_roms(&rom_dir)?;
+                    download_roms(&rom_dir, o)?;
 
                     Ok(())
                 }
@@ -142,7 +142,7 @@ impl Emulator1984Version {
         #[cfg(any(target_os = "macos", target_os = "openbsd"))]
         let builder = {
             let post_install: Box<PostInstallFn<E>> = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, o: &E| -> Result<(), String> {
                     use std::thread::available_parallelism;
 
                     let source_root = locate_source_root(&desc.cache_folder())?;
@@ -191,7 +191,7 @@ impl Emulator1984Version {
 
                     // Download required ROM files
                     let rom_dir = desc.cache_folder();
-                    download_roms(&rom_dir)?;
+                    download_roms(&rom_dir, o)?;
 
                     Ok(())
                 }
@@ -202,10 +202,10 @@ impl Emulator1984Version {
         #[cfg(target_os = "windows")]
         let builder = {
             let post_install: Box<PostInstallFn<E>> = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, o: &E| -> Result<(), String> {
                     // Download required ROM files
                     let rom_dir = desc.cache_folder();
-                    download_roms(&rom_dir)?;
+                    download_roms(&rom_dir, o)?;
 
                     Ok(())
                 }
@@ -273,7 +273,7 @@ impl crate::delegated::DownloadableInformation for Emulator1984Version {
     fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
         let post_install: Box<PostInstallFn<E>> =
             Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
                     use std::thread::available_parallelism;
 
                     let source_root = locate_source_root(&desc.cache_folder())?;
@@ -448,20 +448,20 @@ fn is_sdl3_available_system() -> bool {
 }
 
 /// Download required ROM files for the 1984 emulator
-fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
-    eprintln!("Downloading required ROM files for 1984 emulator...");
+fn download_roms<E: EventObserver>(target_dir: &Utf8Path, o: &E) -> Result<(), String> {
+    o.emit_stderr("Downloading required ROM files for 1984 emulator...\n");
 
     for rom_file in ROM_FILES {
         let rom_path = target_dir.join(rom_file);
 
         // Skip if ROM already exists
         if rom_path.exists() {
-            eprintln!("  ✓ {} already exists", rom_file);
+            o.emit_stderr(&format!("  ✓ {} already exists\n", rom_file));
             continue;
         }
 
         let rom_url = format!("{}/{}", ROM_BASE_URL, rom_file);
-        eprintln!("  Downloading {}...", rom_file);
+        o.emit_stderr(&format!("  Downloading {}...\n", rom_file));
 
         // Try curl first, then wget
         let result = Command::new("curl")
@@ -497,7 +497,7 @@ fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
             });
 
         match result {
-            Ok(_) => eprintln!("  ✓ {} downloaded successfully", rom_file),
+            Ok(_) => o.emit_stderr(&format!("  ✓ {} downloaded successfully\n", rom_file)),
             Err(e) => {
                 return Err(format!(
                     "Failed to download {} from {}: {}. Please install curl or wget.",
@@ -507,6 +507,6 @@ fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
         }
     }
 
-    eprintln!("✓ All ROM files downloaded successfully");
+    o.emit_stderr("✓ All ROM files downloaded successfully\n");
     Ok(())
 }

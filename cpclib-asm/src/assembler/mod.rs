@@ -184,7 +184,7 @@ impl EnvOptions {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn show_progress(&self) -> bool {
-        self.parse.show_progress
+        self.parse.show_progress || crate::progress::has_progress_sink()
     }
 
     #[cfg(target_arch = "wasm32")]

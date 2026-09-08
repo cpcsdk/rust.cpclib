@@ -328,6 +328,12 @@ impl WindowEventsManager {
                 if let Some(extra2) = extra2
                     && extra2 != extra
                 {
+                    // Left as eprintln!: `WindowEventsManager`/`RobotImpl` have
+                    // no `EventObserver` in scope, and this low-level keystroke
+                    // helper is reached from many Robot methods (`close`,
+                    // `unidos_select_drive`, `type_text`, ...) that don't carry
+                    // one either - threading it through would touch the whole
+                    // keystroke-simulation surface for one rare diagnostic.
                     eprintln!("{c:?} requires a different modifier than {extra:?}");
                 }
 
@@ -585,7 +591,11 @@ impl EmulatorConf {
     }
 
     /// Generate the args for the corresponding emulator
-    pub fn args_for_emu(&self, emu: &Emulator) -> Result<Vec<String>, String> {
+    pub fn args_for_emu(
+        &self,
+        emu: &Emulator,
+        o: &dyn EventObserver
+    ) -> Result<Vec<String>, String> {
         // Emulators that natively accept a CSL file get one synthesized
         // from this whole config, instead of per-field ad-hoc CLI args.
         if emu.accept_csl() {
@@ -678,7 +688,7 @@ impl EmulatorConf {
                 Emulator::RetroVm(_) => args.push(sna.to_string()),
                 Emulator::Cadence(_) => args.push(sna.to_string()),
                 Emulator::Emulator1984(_) => {
-                    eprintln!("snapshot loading is currently ignored for 1984");
+                    o.emit_stderr("snapshot loading is currently ignored for 1984\n");
                 }
             }
         }
@@ -721,8 +731,8 @@ impl EmulatorConf {
                     args.push(fname.to_string());
                 },
                 Emulator::Winape(_) => {
-                    eprintln!(
-                        "Breapoints are currently ignored. TODO convert them in the appropriate format"
+                    o.emit_stderr(
+                        "Breapoints are currently ignored. TODO convert them in the appropriate format\n"
                     );
                     let mut sym_string = String::new();
                     for rasm_fname in &self.debug_files {
@@ -745,8 +755,8 @@ impl EmulatorConf {
                     }
                 },
                 _ => {
-                    eprintln!(
-                        "Debug files are currently ignored. TODO convert them in the appropriate format"
+                    o.emit_stderr(
+                        "Debug files are currently ignored. TODO convert them in the appropriate format\n"
                     )
                 }
             }
@@ -787,10 +797,10 @@ impl EmulatorConf {
                     args.push(format!("--paste={text}"));
                 },
                 _ => {
-                    eprintln!(
-                        "Auto type file is currently ignored for this emulator {:?}",
+                    o.emit_stderr(&format!(
+                        "Auto type file is currently ignored for this emulator {:?}\n",
                         emu
-                    )
+                    ))
                 }
             }
         }
@@ -802,7 +812,7 @@ impl EmulatorConf {
                     args.push(run.clone())
                 },
                 Emulator::CpcEmu(_) => {
-                    eprintln!("auto_run is currently ignored for CPCEmu");
+                    o.emit_stderr("auto_run is currently ignored for CPCEmu\n");
                 },
                 Emulator::Winape(_) => {
                     args.push(format!("/A:{run}"));
@@ -824,10 +834,10 @@ impl EmulatorConf {
                     args.push(format!("/Command=RUN\"\"{run}"));
                 },
                 Emulator::RetroVm(_) => {
-                    eprintln!("auto_run is currently ignored for RetroVM");
+                    o.emit_stderr("auto_run is currently ignored for RetroVM\n");
                 },
                 Emulator::Cadence(_) => {
-                    eprintln!("auto_run is currently ignored for Cadence");
+                    o.emit_stderr("auto_run is currently ignored for Cadence\n");
                 },
                 Emulator::Emulator1984(_) => {
                     args.push(format!("--autostart={run}"));
@@ -1011,7 +1021,7 @@ pub fn start_emulator<E: EventObserver>(
     conf: &EmulatorConf,
     o: &E
 ) -> Result<(), String> {
-    let args = conf.args_for_emu(emu)?;
+    let args = conf.args_for_emu(emu, o)?;
     spawn_emulator_with_args(emu, conf.transparent, &args, o)
 }
 
@@ -1042,13 +1052,21 @@ fn spawn_emulator_with_args<E: EventObserver>(
     runner.inner_run(args, o)
 }
 
-pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> Option<EmuWindow> {
+pub fn get_emulator_window(
+    emu: &Emulator,
+    _conf: &EmulatorConf,
+    #[cfg_attr(
+        not(any(feature = "transparent-x11", feature = "screenshot")),
+        allow(unused_variables)
+    )]
+    o: &dyn EventObserver
+) -> Option<EmuWindow> {
     #[cfg(feature = "transparent-x11")]
     if conf.transparent {
-        return Some(get_emulator_window_xvfb(emu));
+        return Some(get_emulator_window_xvfb(emu, o));
     }
     #[cfg(feature = "screenshot")]
-    return get_emulator_window_xcap(emu);
+    return get_emulator_window_xcap(emu, o);
 
     #[cfg(not(feature = "screenshot"))]
     None
@@ -1056,7 +1074,7 @@ pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> Option<EmuWi
 
 // XX this code seems buggy ATM it is unable to collect the window, no idea why
 #[cfg(feature = "transparent-x11")]
-fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
+fn get_emulator_window_xvfb(emu: &Emulator, o: &dyn EventObserver) -> EmuWindow {
     // get the latest x server. Lets' hope it is the virtual one of the transparent emulator
     let display = fs_err::read_dir("/tmp/.X11-unix")
         .unwrap()
@@ -1088,7 +1106,7 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
         0 => None,
         1 => windows.pop(),
         _ => {
-            eprintln!("There are several available windows. I pick one, but it may be wrong");
+            o.emit_stderr("There are several available windows. I pick one, but it may be wrong\n");
             windows.pop()
         }
     };
@@ -1097,28 +1115,28 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
 }
 
 #[cfg(feature = "screenshot")]
-fn get_emulator_window_xcap(emu: &Emulator) -> Option<EmuWindow> {
+fn get_emulator_window_xcap(emu: &Emulator, o: &dyn EventObserver) -> Option<EmuWindow> {
     const MAX_ATTEMPTS: usize = 30;
     const RETRY_DELAY_MS: u64 = 200;
 
     for _ in 0..MAX_ATTEMPTS {
-        if let Some(window) = get_emulator_window_xcap_once(emu) {
+        if let Some(window) = get_emulator_window_xcap_once(emu, o) {
             return Some(window);
         }
 
         std::thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
     }
 
-    eprintln!(
-        "No window emulator found after {} ms",
+    o.emit_stderr(&format!(
+        "No window emulator found after {} ms\n",
         MAX_ATTEMPTS as u64 * RETRY_DELAY_MS
-    );
+    ));
 
     None
 }
 
 #[cfg(feature = "screenshot")]
-fn get_emulator_window_xcap_once(emu: &Emulator) -> Option<EmuWindow> {
+fn get_emulator_window_xcap_once(emu: &Emulator, o: &dyn EventObserver) -> Option<EmuWindow> {
     let windows = xcap::Window::all().unwrap();
     let mut windows = windows
         .into_iter()
@@ -1129,7 +1147,7 @@ fn get_emulator_window_xcap_once(emu: &Emulator) -> Option<EmuWindow> {
         0 => return None,
         1 => windows.pop().unwrap(),
         _ => {
-            eprintln!("There are several available windows. I pick one, but it may be wrong");
+            o.emit_stderr("There are several available windows. I pick one, but it may be wrong\n");
             windows.pop().unwrap()
         }
     };
@@ -2476,7 +2494,7 @@ fn run_csl_file<E: EventObserver + Clone + 'static>(
     if !live.is_empty() {
         std::thread::sleep(Duration::from_secs(3));
 
-        let window = get_emulator_window(&emu, &conf);
+        let window = get_emulator_window(&emu, &conf, o);
         if window.is_none() {
             o.emit_stderr(&format!(
                 "No emulator window found for '{}' - live CSL instructions (key_output/wait*) will \
@@ -2811,7 +2829,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
             orgamsa2orgamsb,
             orgamsb2orgamsa
         }) => {
-            let window = get_emulator_window(&emu, &conf).ok_or_else(|| {
+            let window = get_emulator_window(&emu, &conf, o).ok_or_else(|| {
                 format!(
                     "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
                     emu.get_command()
@@ -2883,7 +2901,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
             cli.keepemulator = true;
 
             if let Some(text) = text {
-                let window = get_emulator_window(&emu, &conf).ok_or_else(|| {
+                let window = get_emulator_window(&emu, &conf, o).ok_or_else(|| {
                     format!(
                         "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
                         emu.get_command()

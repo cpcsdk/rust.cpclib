@@ -42,6 +42,7 @@ pub mod event;
 pub mod executor;
 pub mod lsp;
 pub mod pipeline;
+pub mod progress;
 pub mod rules;
 pub mod runners;
 pub mod shell_pipe;
@@ -224,6 +225,13 @@ pub fn build_args_parser() -> clap::Command {
             .default_value("bndbuild")
             .num_args(0..=1)
             .help("Show the help of the given subcommand CMD.")
+    );
+
+    let cmd = cmd.arg(
+        Arg::new("progress")
+            .long("progress")
+            .action(ArgAction::SetTrue)
+            .help("Report rule-level and basm-internal (parse/pass/save) progress as the build runs - independent of any --progress passed to a task's own basm command.")
     );
 
     #[cfg(feature = "rayon")]

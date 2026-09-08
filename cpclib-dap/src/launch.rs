@@ -172,6 +172,20 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
     })
 }
 
+/// [`assemble_for_debug`], with basm's own internal (parse/load/pass/save)
+/// progress reported over `progress` while it runs - the direct-file launch
+/// path's own counterpart to `build_rule_for_debug`'s progress support. No
+/// `Rule`/`Task` updates are possible here (there is no `BndBuilder`/rule at
+/// all on this path), only `ProgressUpdate::Asm` ones.
+pub fn assemble_for_debug_with_progress(
+    entry: &Path,
+    config: &AsmConfig,
+    progress: Option<std::sync::mpsc::Sender<cpclib_bndbuild::progress::ProgressUpdate>>
+) -> Result<Launched, String> {
+    let _sink_guard = progress.map(DapProgressSinkGuard::install);
+    assemble_for_debug(entry, config)
+}
+
 /// Where cpclib-dap's own cache of a direct-file launch lives, keyed by the
 /// entry's canonical path so two projects with the same file name never
 /// collide, and named `.map.json`/`.sna` to match `cached_for_debug`'s
@@ -535,10 +549,108 @@ fn is_embedded_host(path: &cpclib_common::camino::Utf8Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("asm"))
 }
 
-pub fn build_rule_for_debug(build_file: &Path, target: &str) -> Result<RuleLaunch, String> {
+/// Reacts to `StartRule`/`StartTask`, forwarding them as
+/// `ProgressUpdate::Rule`/`ProgressUpdate::Task` over a plain
+/// `std::sync::mpsc::Sender` - `build_rule_for_debug` runs synchronously on
+/// whatever thread `run_stdio`'s "launch" handler spawns for it (see that
+/// module's own doc), so there is no tokio runtime here to hand an
+/// `UnboundedSender` to, unlike the LSP server's equivalent
+/// `RuleProgressObserver`.
+#[derive(Debug)]
+struct DapRuleProgressObserver(std::sync::mpsc::Sender<cpclib_bndbuild::progress::ProgressUpdate>);
+
+impl cpclib_common::event::EventObserver for DapRuleProgressObserver {
+    fn emit_stdout(&self, _s: &str) {}
+
+    fn emit_stderr(&self, _s: &str) {}
+}
+
+impl cpclib_bndbuild::event::BndBuilderObserver for DapRuleProgressObserver {
+    fn update(&self, event: cpclib_bndbuild::event::BndBuilderEvent) {
+        let update = match event {
+            cpclib_bndbuild::event::BndBuilderEvent::StartRule { rule, nb, out_of } => {
+                Some(cpclib_bndbuild::progress::ProgressUpdate::Rule {
+                    rule: rule.to_string(),
+                    nb,
+                    out_of
+                })
+            },
+            cpclib_bndbuild::event::BndBuilderEvent::StartTask(_rule, task) => {
+                Some(cpclib_bndbuild::progress::ProgressUpdate::Task {
+                    command: task.to_string()
+                })
+            },
+            _ => None
+        };
+        if let Some(update) = update {
+            let _ = self.0.send(update);
+        }
+    }
+}
+
+/// Forwards basm's internal [`cpclib_asm::progress::AsmProgressEvent`]s to
+/// the same channel `DapRuleProgressObserver` uses, so a single consumer
+/// sees rule-level and basm-internal progress interleaved in real time.
+struct DapAsmProgressForwarder(std::sync::mpsc::Sender<cpclib_bndbuild::progress::ProgressUpdate>);
+
+impl cpclib_asm::progress::AsmProgressSink for DapAsmProgressForwarder {
+    fn on_progress(&self, event: cpclib_asm::progress::AsmProgressEvent) {
+        let _ = self.0.send(cpclib_bndbuild::progress::ProgressUpdate::Asm(event));
+    }
+}
+
+/// Installs a [`DapAsmProgressForwarder`] on this thread and broadcast onto
+/// the process's rayon global pool for the guard's lifetime, restoring
+/// `None` everywhere on drop (including on an early return, since
+/// restoration happens in `Drop`, not after a fallible call).
+struct DapProgressSinkGuard;
+
+impl DapProgressSinkGuard {
+    fn install(tx: std::sync::mpsc::Sender<cpclib_bndbuild::progress::ProgressUpdate>) -> Self {
+        let sink: std::sync::Arc<dyn cpclib_asm::progress::AsmProgressSink> =
+            std::sync::Arc::new(DapAsmProgressForwarder(tx));
+        cpclib_asm::progress::install_progress_sink(Some(std::sync::Arc::clone(&sink)));
+        cpclib_common::rayon::broadcast(|_| {
+            cpclib_asm::progress::install_progress_sink(Some(std::sync::Arc::clone(&sink)));
+        });
+        Self
+    }
+}
+
+impl Drop for DapProgressSinkGuard {
+    fn drop(&mut self) {
+        cpclib_asm::progress::install_progress_sink(None);
+        cpclib_common::rayon::broadcast(|_| {
+            cpclib_asm::progress::install_progress_sink(None);
+        });
+    }
+}
+
+pub fn build_rule_for_debug(
+    build_file: &Path,
+    target: &str,
+    progress: Option<std::sync::mpsc::Sender<cpclib_bndbuild::progress::ProgressUpdate>>
+) -> Result<RuleLaunch, String> {
     let build_file = cpclib_common::camino::Utf8Path::from_path(build_file)
         .ok_or("the build file path is not utf-8")?;
-    let builder = builder_for(build_file, target)?;
+    let mut builder = builder_for(build_file, target)?;
+
+    // Basm's own internal (parse/load/pass/save) progress, forwarded to the
+    // same channel - see `cpclib_asm::progress::AsmProgressSink`'s own doc
+    // for why a plain thread-local install alone would silently miss
+    // `INCLUDE`-parsing work, which runs on rayon worker threads. Safe to
+    // broadcast onto the process-wide rayon global pool here (unlike the
+    // LSP server's own dedicated-pool `run_with_progress_sink`): a
+    // `cpclib-dap` process handles one "launch" at a time, so there is no
+    // second, concurrent build sharing it to contaminate.
+    let _sink_guard = progress.clone().map(DapProgressSinkGuard::install);
+
+    if let Some(tx) = progress {
+        use cpclib_bndbuild::event::BndBuilderObserved;
+        builder.add_observer(cpclib_bndbuild::event::BndBuilderObserverRc::new(
+            DapRuleProgressObserver(tx)
+        ));
+    }
 
     let rule = builder
         .rules()
@@ -669,6 +781,80 @@ pub fn debuggable_rules(build_file: &Path) -> Vec<String> {
     debuggable_targets_of(&builder)
 }
 
+/// The nearby build file + rule that would build and launch `entry` in an
+/// emulator, if one exists.
+///
+/// A direct assemble (`assemble_for_debug`) has no dependency resolution
+/// behind it - an `incbin`/`include` of a generated asset a build rule would
+/// normally produce first (a converted screen, a packed sprite sheet, ...)
+/// fails outright, even though the project's own build file already knows
+/// how to produce it. When a nearby build file names a rule reachable
+/// (through [`entry_building`]'s "which source does the snapshot this rule
+/// launches come from" lookup, the same one [`build_rule_for_debug`] itself
+/// uses) from `entry`, running *that* rule is the more correct answer: it
+/// builds every dependency the project's own build system knows about, not
+/// just whatever happens to already be on disc.
+///
+/// Deliberately reuses "debuggable" (a rule ending its emulator command in a
+/// bare `run` token, per [`debuggable_targets_of`]/[`pipeline::debug::
+/// debug_arguments`](cpclib_bndbuild::pipeline::debug::debug_arguments)) as
+/// the definition of "launches an emulator" here too, rather than a second,
+/// looser notion of "runnable" - every rule shaped to be run is already
+/// shaped to be debugged, and vice versa, so one concept covers both
+/// callers.
+///
+/// `None` when no candidate build file (searched the same way
+/// [`cpclib_project::build_defs::definitions_for_entry`] does: `entry`'s own
+/// directory, then upwards to the project root) names such a rule - the
+/// caller then falls back to a direct assemble, exactly today's behaviour.
+pub fn find_debuggable_rule_for_entry(entry: &Path) -> Option<(PathBuf, String)> {
+    let canonical_entry = fs_err::canonicalize(entry).ok()?;
+
+    for build_file in cpclib_project::build_defs::candidate_build_files(entry) {
+        let build_file_utf8 = cpclib_common::camino::Utf8Path::from_path(&build_file)?;
+        let Ok((_, builder)) = cpclib_bndbuild::BndBuilder::from_path(build_file_utf8, true)
+        else {
+            continue;
+        };
+
+        for rule in builder.rules() {
+            let Some(rewritten) = rule.commands().iter().find_map(|task| {
+                let rendered = task.to_string();
+                let (program, arguments) = rendered.split_once(' ')?;
+                let program = program.strip_prefix('-').unwrap_or(program);
+                if !cpclib_bndbuild::task::EMUCTRL_CMDS.contains(&program) {
+                    return None;
+                }
+                cpclib_bndbuild::pipeline::debug::debug_arguments(arguments)
+            })
+            else {
+                continue;
+            };
+            let Some(snapshot) = cpclib_bndbuild::pipeline::debug::snapshot_of(&rewritten)
+            else {
+                continue;
+            };
+            let snapshot_name =
+                cpclib_common::camino::Utf8Path::new(&snapshot).file_name().unwrap_or_default();
+            let Some(source) = entry_building(&builder, snapshot_name)
+            else {
+                continue;
+            };
+            let resolved = build_file_utf8
+                .parent()
+                .map(|dir| dir.join(&source))
+                .unwrap_or(source);
+            let matches = fs_err::canonicalize(resolved.as_std_path())
+                .is_ok_and(|p| p == canonical_entry);
+            if matches {
+                let target = rule.targets().first()?.to_string();
+                return Some((build_file, target));
+            }
+        }
+    }
+    None
+}
+
 /// The targets of every rule in `builder` that launches an emulator.
 fn debuggable_targets_of(builder: &cpclib_bndbuild::BndBuilder) -> Vec<String> {
     builder
@@ -689,4 +875,179 @@ fn debuggable_targets_of(builder: &cpclib_bndbuild::BndBuilder) -> Vec<String> {
         })
         .flat_map(|rule| rule.targets().iter().map(|t| t.to_string()))
         .collect()
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use serial_test::serial;
+
+    use super::*;
+
+    /// Proves the actual point of wiring `build_rule_for_debug` into
+    /// `cpclib_bndbuild::progress`: a real debug-session "launch" against a
+    /// `rule`, exactly like the one a real project's `test_sna`/`debug_sna`
+    /// launch drives, must report both the rule-level "step N of M" signal
+    /// and basm's own internal (parse/load/pass/save) progress while the
+    /// assemble it depends on runs - not leave the channel empty and make
+    /// the caller fall back to an indeterminate spinner for however long
+    /// that assemble takes.
+    ///
+    /// `#[serial(cwd)]`: `BndBuilder::from_path` (reached via
+    /// `build_rule_for_debug`) changes the process's current directory as a
+    /// side effect, which races against every other test elsewhere in this
+    /// crate that resolves its own fixture through a relative path - shares
+    /// the `cwd` key with all of them (`lib.rs`, `inspect.rs`).
+    /// Restores the process's current directory on drop - `BndBuilder::
+    /// from_path` (via `decode_from_reader`) sets it to the build file's own
+    /// directory as a side effect and never puts it back (see that
+    /// function's own "XXX here it is problematic to modify work dir"
+    /// comment), which would otherwise permanently break every other test
+    /// in this crate that resolves a fixture through a relative path
+    /// (`lib.rs`'s and `inspect.rs`'s own `#[serial(cwd)]` tests) - not just
+    /// while this one runs, but for the rest of the process, regardless of
+    /// run order.
+    struct RestoreCwd(std::path::PathBuf);
+    impl Drop for RestoreCwd {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.0);
+        }
+    }
+
+    #[test]
+    #[serial(cwd)]
+    fn build_rule_for_debug_reports_progress_for_its_own_dependency_build() {
+        let _restore_cwd = RestoreCwd(std::env::current_dir().unwrap());
+
+        let dir = std::env::temp_dir().join(format!(
+            "cpclib-dap-progress-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        std::fs::write(
+            dir.join("build.bnd"),
+            "- tgt: main.bin\n  dep: main.asm\n  cmd: basm main.asm -o main.bin\n\n\
+             - tgt: test_launch\n  dep: main.bin\n  cmd: emu --snapshot main.bin run\n"
+        )
+        .unwrap();
+        std::fs::write(dir.join("main.asm"), "    org 0x4000\n    nop\n    ret\n").unwrap();
+
+        let (progress_tx, progress_rx) = std::sync::mpsc::channel();
+        let launched = build_rule_for_debug(
+            &dir.join("build.bnd"),
+            "test_launch",
+            Some(progress_tx)
+        )
+        .unwrap_or_else(|e| panic!("build_rule_for_debug failed: {e}"));
+        assert_eq!(launched.snapshot, dir.join("main.bin"));
+
+        let updates: Vec<_> = progress_rx.try_iter().collect();
+        assert!(
+            updates
+                .iter()
+                .any(|u| matches!(u, cpclib_bndbuild::progress::ProgressUpdate::Rule { .. })),
+            "expected the rule-level '[1/1]' signal, got: {updates:?}"
+        );
+        assert!(
+            updates.iter().any(|u| matches!(
+                u,
+                cpclib_bndbuild::progress::ProgressUpdate::Asm(
+                    cpclib_asm::progress::AsmProgressEvent::PassStarted { .. }
+                )
+            )),
+            "expected basm's own internal pass progress while its dependency \
+             build ran, got: {updates:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Same proof as `build_rule_for_debug_reports_progress_...` above, for
+    /// the direct-file ("program", no `rule`) launch path -
+    /// `assemble_for_debug_with_progress` has no `BndBuilder`/rule to fire
+    /// `Rule`/`Task` updates from, only basm's own internal progress, but
+    /// that must still flow.
+    #[test]
+    fn assemble_for_debug_with_progress_reports_basm_internal_progress() {
+        let dir = std::env::temp_dir().join(format!(
+            "cpclib-dap-progress-program-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let entry = dir.join("main.asm");
+        std::fs::write(&entry, "    org 0x4000\n    run $\n    nop\n    ret\n").unwrap();
+
+        let (progress_tx, progress_rx) = std::sync::mpsc::channel();
+        let config = cpclib_project::config::AsmConfig::default();
+        let result = assemble_for_debug_with_progress(&entry, &config, Some(progress_tx));
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let updates: Vec<_> = progress_rx.try_iter().collect();
+        assert!(
+            updates.iter().any(|u| matches!(
+                u,
+                cpclib_bndbuild::progress::ProgressUpdate::Asm(
+                    cpclib_asm::progress::AsmProgressEvent::Parse { .. }
+                )
+            )),
+            "expected basm's own internal Parse progress, got: {updates:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The actual bug this whole lookup exists to fix: "Run in emulator" on
+    /// `sna.asm` failing because a direct assemble has no dependency
+    /// resolution, so a generated asset (`face3_cpc.scr`, produced by a
+    /// separate rule) is never built first. `test_launch` here mirrors that
+    /// real project's shape exactly - a debuggable rule (`emu ... run`)
+    /// depending on a snapshot built from `main.asm` by another rule.
+    #[test]
+    #[serial(cwd)]
+    fn find_debuggable_rule_for_entry_matches_the_rule_that_builds_the_entry() {
+        let _restore_cwd = RestoreCwd(std::env::current_dir().unwrap());
+
+        let dir = std::env::temp_dir().join(format!(
+            "cpclib-dap-find-rule-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        std::fs::write(
+            dir.join("build.bnd"),
+            "- tgt: main.bin\n  dep: main.asm\n  cmd: basm main.asm -o main.bin\n\n\
+             - tgt: test_launch\n  dep: main.bin\n  cmd: emu --snapshot main.bin run\n"
+        )
+        .unwrap();
+        std::fs::write(dir.join("main.asm"), "    org 0x4000\n    nop\n    ret\n").unwrap();
+
+        let found = find_debuggable_rule_for_entry(&dir.join("main.asm"));
+        assert_eq!(
+            found,
+            Some((dir.join("build.bnd"), "test_launch".to_string())),
+            "{found:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A source no nearby build file mentions falls back to `None` - the
+    /// caller then takes the direct-assemble path, exactly today's
+    /// behaviour for a standalone file.
+    #[test]
+    #[serial(cwd)]
+    fn find_debuggable_rule_for_entry_is_none_when_no_rule_builds_the_source() {
+        let _restore_cwd = RestoreCwd(std::env::current_dir().unwrap());
+
+        let dir = std::env::temp_dir().join(format!(
+            "cpclib-dap-find-rule-none-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("standalone.asm"), "    org 0x4000\n    ret\n").unwrap();
+
+        assert!(find_debuggable_rule_for_entry(&dir.join("standalone.asm")).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

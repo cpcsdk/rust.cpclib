@@ -74,7 +74,7 @@ impl<E: EventObserver> Runner for LocomotiveRunner<E> {
         )
         .map_err(|e| e.to_string())?;
 
-        cpclib_locomotive::handle_locomotive_arguments(cli).map_err(|e| e.to_string())
+        cpclib_locomotive::handle_locomotive_arguments(cli, o).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {

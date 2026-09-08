@@ -89,10 +89,12 @@ impl CharCommandList {
                 Err(missing) => {
                     let mut params = Vec::new();
                     for i in 0..missing {
-                        params.push(data.get(idx + 1 + i).cloned().unwrap_or_else(|| {
-                            eprintln!("missing byte");
-                            0xFF
-                        }));
+                        // `from_bytes`/`From<&[u8]>` is a pure decode path
+                        // with no `EventObserver` reachable without breaking
+                        // the `From` trait's fixed signature; truncated
+                        // input already degrades gracefully to 0xFF below,
+                        // so this isn't worth a diagnostic.
+                        params.push(data.get(idx + 1 + i).cloned().unwrap_or(0xFF));
                     }
                     let cmd = match data[idx] {
                         SOH => CharCommand::PrintSymbol(params[0]),

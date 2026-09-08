@@ -74,7 +74,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
         let fname = Utf8PathBuf::from(fname);
 
         let post_install: Box<PostInstallFn<E>> =
-            Box::new(move |d: &DelegateApplicationDescription<E>| {
+            Box::new(move |d: &DelegateApplicationDescription<E>, _o: &E| {
                 use std::os::unix::fs::PermissionsExt;
 
                 let fname = d.cache_folder().join(&fname);

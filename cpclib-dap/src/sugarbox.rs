@@ -592,14 +592,17 @@ where E: cpclib_common::event::EventObserver + 'static {
 
     let port = port_to_serve_on(port);
     let executable = configuration.exec_fname();
-    let child = std::process::Command::new(executable.as_str())
+    let mut command = std::process::Command::new(executable.as_str());
+    command
         .arg("--debug")
         .arg("--debug_server")
         .arg(port.to_string())
         .arg("--hide")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    crate::amspiritlite::strip_snap_leaked_env_vars(&mut command);
+    let child = command
         .spawn()
         .map_err(|e| format!("cannot start {executable}: {e}"))?;
 

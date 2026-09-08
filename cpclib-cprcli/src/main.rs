@@ -53,5 +53,5 @@ fn main() {
         panic!("No command provided");
     };
 
-    cmd.handle(&mut cpr, cpr2.as_mut());
+    cmd.handle(&mut cpr, cpr2.as_mut(), &());
 }

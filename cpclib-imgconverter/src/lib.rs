@@ -822,15 +822,16 @@ where
     C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
 {
 
-    println!("Loading palette: ({}) {}", 
-    
+    o.emit_stdout(&format!(
+        "Loading palette: ({}) {}\n",
         if palette.is_plus() {
             "Amstrad Plus"
         }
         else {
             "Amstrad CPC"
         },
-        palette_ansi_colors_repr(&palette));
+        palette_ansi_colors_repr(&palette)
+    ));
 
 
 
@@ -1084,7 +1085,7 @@ where
                     folder.canonicalize().unwrap()
                 };
                 let folder = Utf8PathBuf::from_path_buf(folder).unwrap();
-                file.save_in_folder(folder)?;
+                file.save_in_folder(folder, o)?;
             }
             else {
                 let fname = sub_dsk.unwrap().get_one::<String>("DSK").unwrap();
@@ -1971,7 +1972,7 @@ pub fn fade_process(args: &FadeArgs, o: &dyn EventObserver) -> Result<(), String
     }
 
     if args.preview {
-        fade_display_preview(&fades);
+        fade_display_preview(&fades, o);
     }
 
     Ok(())
@@ -2032,9 +2033,12 @@ fn palette_ansi_colors_repr<C: AmstradColor>(palette: &Palette<C>) -> String {
         .join(" ")
 }
 
-fn fade_display_preview<C: AmstradColor>(palettes: &[Palette<C>]) {
+fn fade_display_preview<C: AmstradColor>(
+    palettes: &[Palette<C>],
+    o: &dyn EventObserver
+) {
     for palette in palettes {
-        println!("{}", palette_ansi_colors_repr(palette));
+        o.emit_stdout(&format!("{}\n", palette_ansi_colors_repr(palette)));
     }
 }
 

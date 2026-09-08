@@ -1027,6 +1027,12 @@ impl FunctionBuilder for ProcessedToken<'_, Token> {
 /// Warning !!! As the env is read only, we cannot assemble directly inside
 /// To overcome that, we use a bank in a copied Env. It has not been deeply tested
 pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
+    // Not a real build phase - an internal, disposable sub-assembly (e.g.
+    // for an `ASM(...)`-style function call) must not leak into a caller's
+    // progress stream. See `cpclib_asm::progress::suppress_progress_sink`'s
+    // own doc.
+    let _suppressed = crate::progress::suppress_progress_sink();
+
     let code = match code {
         ExprResult::String(code) => code,
         _ => {

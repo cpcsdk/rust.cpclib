@@ -985,14 +985,17 @@ where
     let port = port_to_serve_on(port);
 
     let executable = configuration.exec_fname();
-    let child = std::process::Command::new(executable.as_str())
+    let mut command = std::process::Command::new(executable.as_str());
+    command
         .arg(path.as_os_str())
         .arg("--web-server")
         .arg("--web-port")
         .arg(port.to_string())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    strip_snap_leaked_env_vars(&mut command);
+    let child = command
         .spawn()
         .map_err(|e| format!("cannot start {executable}: {e}"))?;
 
@@ -1044,7 +1047,8 @@ where
     // every fixed address this crate relies on (`basic.rs`'s own pointer
     // table, `PROGRAM_START`) already assumes.
     let executable = configuration.exec_fname();
-    let child = std::process::Command::new(executable.as_str())
+    let mut command = std::process::Command::new(executable.as_str());
+    command
         .arg("--model")
         .arg("6128")
         .arg("--web-server")
@@ -1052,7 +1056,9 @@ where
         .arg(port.to_string())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    strip_snap_leaked_env_vars(&mut command);
+    let child = command
         .spawn()
         .map_err(|e| format!("cannot start {executable}: {e}"))?;
 
@@ -1123,14 +1129,17 @@ where
     let port = port_to_serve_on(port);
 
     let executable = configuration.exec_fname();
-    let child = std::process::Command::new(executable.as_str())
+    let mut command = std::process::Command::new(executable.as_str());
+    command
         .arg(disk.as_os_str())
         .arg("--web-server")
         .arg("--web-port")
         .arg(port.to_string())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    strip_snap_leaked_env_vars(&mut command);
+    let child = command
         .spawn()
         .map_err(|e| format!("cannot start {executable}: {e}"))?;
 
@@ -1168,6 +1177,26 @@ fn a_free_port() -> Option<u16> {
     let port = listener.local_addr().ok()?.port();
     drop(listener);
     Some(port)
+}
+
+/// Strip the same snap-leaked env vars `Runner`/`ExternRunner` already
+/// strips (`cpclib_runner::runner::exec::SNAP_LEAKED_ENV_VARS`) before
+/// spawning an emulator - every launch here goes through a plain
+/// `std::process::Command`, not through that runner machinery, so it needs
+/// its own copy of the same fix. Observed directly: without it, a
+/// snap-packaged VS Code's environment reaches the emulator and it crashes
+/// on a Qt/pthread symbol-lookup error the instant it starts (`libpthread
+/// .so.0: undefined symbol: __libc_pthread_init`) - not a slow start, an
+/// immediate crash, which from the caller's side just looks like "did not
+/// start listening within 30 seconds" since nothing is left to bind the
+/// port at all.
+pub(crate) fn strip_snap_leaked_env_vars(command: &mut std::process::Command) {
+    #[cfg(target_os = "linux")]
+    for var in cpclib_runner::runner::exec::SNAP_LEAKED_ENV_VARS {
+        command.env_remove(var);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = command;
 }
 
 /// Block until the debug server answers, or give up saying so.

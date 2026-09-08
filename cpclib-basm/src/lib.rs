@@ -229,14 +229,16 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
         .unwrap_or_else(|| builder.context_name().unwrap())
         .to_owned();
 
-    if options.show_progress {
+    let show_progress = options.show_progress || cpclib_asm::progress::has_progress_sink();
+
+    if show_progress {
         Progress::instance().add_parse(&fname);
     };
 
     let res = crate::parse_z80_with_context_builder(code, builder)
         .map_err(|e| BasmError::from(e.render()));
 
-    if options.show_progress {
+    if show_progress {
         Progress::instance().remove_parse(&fname);
     };
 
@@ -827,6 +829,12 @@ pub fn process(
 
     // standard assembling
     let (listing, options) = parse(matches)?;
+    // Any `PRINT_PARSE` the source hit is buffered, not printed live (see
+    // `ParserOptions::print_parse_buffer`'s own doc) - flush it through this
+    // caller's own observer now that parsing has actually finished.
+    for line in options.print_parse_buffer.lock().unwrap().drain(..) {
+        o.emit_stdout(&format!("{line}\n"));
+    }
     let env = assemble(matches, &listing, options, o.clone()).map_err(move |error| {
         BasmError::ErrorWithListing {
             error: Box::new(error),
@@ -1270,5 +1278,88 @@ mod tests {
     fn non_html_listing_destination_keeps_text_renderer() {
         assert!(!listing_output_uses_html("demo.lst"));
         assert!(!listing_output_uses_html("-"));
+    }
+
+    /// `PRINT_PARSE` (`ASMCONTROL PRINT_PARSE, "..."`) is buffered at parse
+    /// time (see `cpclib_asm::parser::context::ParserOptions::
+    /// print_parse_buffer`'s own doc), and `process` - the exact function
+    /// bndbuild's *embedded* (in-process) `basm` task calls, reached in turn
+    /// from a real build run inside the LSP/DAP servers - drains and
+    /// redelivers it through whichever `EventObserver` it was given, right
+    /// after `parse` returns. This is the full round trip proving both
+    /// halves of that contract:
+    ///
+    /// - the standalone `basm` binary's own `main()` passes `Arc::new(())`
+    ///   (whose `emit_stdout` really does `println!`) - the message must
+    ///   still reach real stdout for that caller, just after parsing
+    ///   finishes rather than live-interleaved with it.
+    /// - bndbuild's embedded task passes a real, non-printing observer
+    ///   (`StreamingObserver`/`CapturingObserver`-shaped) - the message must
+    ///   reach *that* observer and never touch the real process stdout,
+    ///   which is what corrupted the LSP's JSON-RPC transport before this
+    ///   was fixed.
+    ///
+    /// `#[ignore]`d for the same reason `cpclib-asm`'s own former
+    /// stdout-capture test was: `gag::BufferRedirect::stdout()` grabs the
+    /// real process fd, which any concurrently-running test (including
+    /// cargo's own "test ... ok" lines) would leak into. Run alone:
+    /// `cargo test -p cpclib-basm --lib -- --ignored --test-threads=1
+    /// --nocapture print_parse_never_touches_the_real_stdout`.
+    #[test]
+    #[ignore = "captures the real process stdout fd; must run alone, see doc comment"]
+    fn print_parse_never_touches_the_real_stdout_but_still_reaches_the_observer() {
+        use std::sync::Arc;
+
+        use cpclib_common::event::CapturingObserver;
+
+        let dir = camino_tempfile::tempdir().unwrap();
+        let entry = dir.path().join("main.asm");
+        std::fs::write(
+            &entry,
+            "    ASMCONTROL PRINT_PARSE, \"hello from parse time\"\n    org 0x4000\n    ret\n"
+        )
+        .unwrap();
+        let matches = crate::build_args_parser()
+            .try_get_matches_from(["basm", entry.as_str()])
+            .unwrap();
+
+        // The standalone-CLI shape: message still reaches real stdout,
+        // just after parsing (not interleaved with it) - the pre-existing
+        // guarantee, delivered through the new, safe mechanism.
+        {
+            let stdout = gag::BufferRedirect::stdout().unwrap();
+            let o: Arc<dyn cpclib_asm::EnvEventObserver> = Arc::new(());
+            crate::process(&matches, o).unwrap();
+            let mut buf = String::new();
+            std::io::Read::read_to_string(&mut stdout.into_inner(), &mut buf).unwrap();
+            assert!(
+                buf.contains("[PARSE]") && buf.contains("hello from parse time"),
+                "expected PRINT_PARSE to still reach real stdout for the () \
+                 observer (standalone-CLI shape), got: {buf:?}"
+            );
+        }
+
+        // The embedded-task shape: nothing reaches real stdout, but the
+        // message does reach the caller's own observer.
+        {
+            let stdout = gag::BufferRedirect::stdout().unwrap();
+            let captured = Arc::new(CapturingObserver::new());
+            crate::process(&matches, captured.clone()).unwrap();
+            let mut buf = String::new();
+            std::io::Read::read_to_string(&mut stdout.into_inner(), &mut buf).unwrap();
+            assert!(
+                buf.is_empty(),
+                "PRINT_PARSE must never touch the real process stdout when \
+                 the caller supplied a non-printing observer - this is \
+                 exactly what corrupted the LSP's JSON-RPC transport before \
+                 this was fixed. Leaked: {buf:?}"
+            );
+            assert!(
+                captured.stdout_joined().contains("hello from parse time"),
+                "the message must still reach the caller's own observer, \
+                 got: {:?}",
+                captured.stdout_joined()
+            );
+        }
     }
 }

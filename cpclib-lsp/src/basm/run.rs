@@ -17,7 +17,7 @@ use std::sync::Arc;
 use cpclib_project::config::AsmConfig;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::bndbuild::command::{OutputLine, StreamingObserver};
+use crate::bndbuild::command::{OutputLine, ProgressUpdate, StreamingObserver, run_with_progress_sink};
 use crate::common::document::Document;
 
 /// Which program to build for a document.
@@ -86,7 +86,8 @@ fn failure(message: impl Into<String>) -> AssemblyRunOutcome {
 pub fn run_document_in_emulator(
     document: &Document,
     config: &AsmConfig,
-    tx: UnboundedSender<OutputLine>
+    tx: UnboundedSender<OutputLine>,
+    progress: Option<UnboundedSender<ProgressUpdate>>
 ) -> AssemblyRunOutcome {
     let Ok(opened) = document.uri.to_file_path()
     else {
@@ -117,8 +118,37 @@ pub fn run_document_in_emulator(
         }
     };
 
+    // A nearby build file may already know how to build `entry` - complete
+    // with whatever dependency graph produces its generated assets (a
+    // converted screen, a packed sprite sheet, ...), which a direct assemble
+    // has no way to build first (`assemble_for_debug` parses and assembles
+    // `entry` alone; see its own doc). When such a rule exists, running it -
+    // dependencies and all, exactly as `cpclib.runRule` would - is what
+    // "Run in emulator" is actually supposed to do; a direct assemble is
+    // only the fallback for a file no build file mentions.
+    if let Some((build_file, target)) = cpclib_dap::launch::find_debuggable_rule_for_entry(&entry)
+    {
+        let Ok(text) = fs_err::read_to_string(&build_file)
+        else {
+            return failure(format!("cannot read {}", build_file.display()));
+        };
+        let Ok(uri) = tower_lsp::lsp_types::Url::from_file_path(&build_file)
+        else {
+            return failure(format!("{} has no file URL", build_file.display()));
+        };
+        let document = Document::new(uri, text, 0);
+        let outcome =
+            crate::bndbuild::BuildFileAnalyzer::new().run_rule(&document, &target, Some(tx), progress);
+        return AssemblyRunOutcome {
+            success: outcome.success,
+            message: outcome.message
+        };
+    }
+
     // The same build F5 performs.
-    let built = match cpclib_dap::launch::assemble_for_debug(&entry, config) {
+    let built = match run_with_progress_sink(progress, || {
+        cpclib_dap::launch::assemble_for_debug(&entry, config)
+    }) {
         Ok(built) => built,
         Err(problem) => return failure(format!("assembling failed: {problem}"))
     };
@@ -159,6 +189,48 @@ pub fn run_document_in_emulator(
                 config.run_emulator
             ))
         },
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+
+    /// Proves the actual point of wiring `run_with_progress_sink` around
+    /// `assemble_for_debug` here: this direct-file assemble path (no
+    /// `BndBuilder`/rule at all, unlike `cpclib.runRule`'s own build) must
+    /// still report basm's own internal (parse/pass/save) progress once a
+    /// sink is supplied - installing one has to be independently sufficient
+    /// on this path too, the same as it is for a rule-based build. Stops
+    /// short of the emulator-launch tail of `run_document_in_emulator`
+    /// itself (spawning a real emulator binary isn't something a unit test
+    /// should depend on) - this exercises the exact same
+    /// `run_with_progress_sink`/`assemble_for_debug` pairing that function's
+    /// own build step uses.
+    #[test]
+    fn assembling_for_run_in_emulator_reports_progress() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        let entry = dir.path().join("main.asm");
+        std::fs::write(&entry, "    org 0x4000\n    run $\n    nop\n    ret\n").unwrap();
+
+        let config = cpclib_project::config::AsmConfig::default();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let result = run_with_progress_sink(Some(tx), || {
+            cpclib_dap::launch::assemble_for_debug(entry.as_std_path(), &config)
+        });
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let mut updates = Vec::new();
+        while let Ok(update) = rx.try_recv() {
+            updates.push(update);
+        }
+        assert!(
+            updates.iter().any(|u| matches!(
+                u,
+                ProgressUpdate::Asm(cpclib_asm::progress::AsmProgressEvent::Parse { .. })
+            )),
+            "expected basm's own internal Parse progress, got: {updates:?}"
+        );
     }
 }
 

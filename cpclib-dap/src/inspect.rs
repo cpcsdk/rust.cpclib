@@ -1362,6 +1362,7 @@ pub fn chip_placeholder(reference: i64, why: &str) -> Option<Vec<Value>> {
 #[cfg(test)]
 mod tests {
     use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+    use serial_test::serial;
 
     use super::*;
 
@@ -1378,7 +1379,14 @@ mod tests {
     /// of the identical snapshot. This pins the repeat down as a real,
     /// non-background render (not a blank/wrong-address void) at both the
     /// original position and well into the wrapped repeat.
+    // `#[serial(cwd)]`: this relative path is resolved against the
+    // process's current directory, which `cpclib_bndbuild::BndBuilder::
+    // from_path` changes as a side effect elsewhere in this crate's own
+    // tests (e.g. `launch::progress_tests`' rule-building test) - shares the
+    // `cwd` key with every other test with the same hazard, in this file
+    // and `lib.rs`.
     #[test]
+    #[serial(cwd)]
     fn blight_snapshot_wraps_into_a_real_repeat_past_200_lines() {
         let sna = cpclib_sna::Snapshot::load("tests/graphics/blight/snapshot.sna")
             .expect("load sna - run from the cpclib-dap crate root");
@@ -1547,7 +1555,9 @@ mod tests {
     /// (lit "hello" text pixels), not the small residual of a wrong,
     /// mostly-background-colour address a few hundred bytes off would
     /// produce.
+    // Same `cwd` hazard as `blight_snapshot_wraps_...` above.
     #[test]
+    #[serial(cwd)]
     fn hello_snapshot_renders_a_screen_dominated_by_lit_text() {
         let sna = cpclib_sna::Snapshot::load("tests/graphics/hello/snapshot.sna")
             .expect("load sna - run from the cpclib-dap crate root");

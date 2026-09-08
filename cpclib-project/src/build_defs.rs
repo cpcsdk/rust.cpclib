@@ -44,7 +44,7 @@ impl BuildDefinitions {
 
 /// Build files worth inspecting for `entry`, nearest first: its own directory,
 /// then upwards to the project root.
-fn candidate_build_files(entry: &Path) -> Vec<PathBuf> {
+pub fn candidate_build_files(entry: &Path) -> Vec<PathBuf> {
     const NAMES: &[&str] = &["build.bnd", "bnd.build", "bndbuild.yml"];
     let mut out = Vec::new();
     let mut dir = entry.parent();

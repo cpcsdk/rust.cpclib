@@ -64,7 +64,7 @@ impl Grafx2Version {
         #[cfg(target_os = "linux")]
         let builder = {
             let post_install: Box<PostInstallFn<E>> = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
                     use std::os::unix::fs::PermissionsExt;
 
                     let app_image = desc.exec_fname();

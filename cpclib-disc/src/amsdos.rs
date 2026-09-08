@@ -1406,17 +1406,17 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
     }
 
     /// Print the catalog on screen
-    pub fn print_catalog(&self) {
+    pub fn print_catalog(&self, o: &dyn cpclib_common::event::EventObserver) {
         let entries = match self.catalog() {
             Ok(entries) => entries,
             Err(e) => {
-                eprintln!("Unable to read the catalog: {e}");
+                o.emit_stderr(&format!("Unable to read the catalog: {e}\n"));
                 return;
             }
         };
         for entry in entries.visible_entries() {
             if !entry.is_erased() && !entry.is_system() {
-                println!("{}", entry.format());
+                o.emit_stdout(&format!("{}\n", entry.format()));
             }
         }
     }
@@ -2000,12 +2000,16 @@ impl AmsdosFile {
     }
 
     /// Save the file at the given path (header and data)
-    pub fn save_in_folder<P: AsRef<Utf8Path>>(&self, folder: P) -> std::io::Result<()> {
+    pub fn save_in_folder<P: AsRef<Utf8Path>>(
+        &self,
+        folder: P,
+        o: &dyn cpclib_common::event::EventObserver
+    ) -> std::io::Result<()> {
         use std::io::Write;
 
         let folder = folder.as_ref();
         let fname = self.amsdos_filename().unwrap().unwrap().filename();
-        println!("Will write in {fname}");
+        o.emit_stdout(&format!("Will write in {fname}\n"));
         let mut file = File::create(folder.join(fname))?;
         file.write_all(self.content())?;
         Ok(())

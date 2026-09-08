@@ -1,4 +1,5 @@
 use colored::*;
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_cpr::{CartridgeBank, Cpr, CprInfo};
 const DATA_WIDTH: usize = 16;
@@ -69,14 +70,14 @@ fn compare_lines(first: &str, second: &str) -> String {
 }
 
 impl Command {
-    pub fn handle(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
+    pub fn handle(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>, o: &dyn EventObserver) {
         match self {
-            Command::Info => self.handle_info(cpr, cpr2),
-            Command::Dump => self.handle_dump(cpr, cpr2)
+            Command::Info => self.handle_info(cpr, cpr2, o),
+            Command::Dump => self.handle_dump(cpr, cpr2, o)
         }
     }
 
-    fn handle_info(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
+    fn handle_info(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>, o: &dyn EventObserver) {
         let info = CprInfo::from(cpr as &Cpr);
 
         if let Some(cpr2) = cpr2 {
@@ -85,16 +86,16 @@ impl Command {
             let info1 = info.to_string();
             let info2 = info2.to_string();
             let summary = compare_lines(&info1, &info2);
-            println!("{summary}");
+            o.emit_stdout(&format!("{summary}\n"));
         }
         else {
-            println!("{info}");
+            o.emit_stdout(&format!("{info}\n"));
         }
     }
 
-    fn handle_dump(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
+    fn handle_dump(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>, o: &dyn EventObserver) {
         for bank in cpr.banks() {
-            println!("Bank {}", bank.code().as_str());
+            o.emit_stdout(&format!("Bank {}\n", bank.code().as_str()));
 
             let mem = mem_to_string(bank, None, None);
             if let Some(cpr2) = cpr2.as_ref() {
@@ -104,10 +105,10 @@ impl Command {
                 let mem2 = mem_to_string(bank2, None, None);
 
                 let summary = diff_lines(&mem, &mem2);
-                println!("{summary}");
+                o.emit_stdout(&format!("{summary}\n"));
             }
             else {
-                println!("{mem}");
+                o.emit_stdout(&format!("{mem}\n"));
             }
         }
     }

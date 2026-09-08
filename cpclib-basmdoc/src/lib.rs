@@ -1029,24 +1029,6 @@ impl DocumentationPage {
                 }
             }
             else {
-                // Debug: show what Source items exist
-                let source_items: Vec<_> = self
-                    .content
-                    .iter()
-                    .filter(|it| it.item.is_source())
-                    .map(|it| {
-                        format!(
-                            "  source_file='{}' display_source_file='{}'",
-                            it.source_file, it.display_source_file
-                        )
-                    })
-                    .collect();
-
-                eprintln!("WARNING: No Source item found for file: {}", fname);
-                eprintln!("Available Source items:");
-                for item in source_items {
-                    eprintln!("{}", item);
-                }
                 source_code = String::new();
             }
 

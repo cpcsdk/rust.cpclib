@@ -898,7 +898,7 @@ pub mod built_info {
 }
 
 #[cfg(feature = "cmdline")]
-pub fn print_info(sna: &Snapshot) {
+pub fn print_info(sna: &Snapshot, o: &dyn EventObserver) {
     let mut table = Table::new();
     table.set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(vec!["Flag", "Value"]);
@@ -913,11 +913,11 @@ pub fn print_info(sna: &Snapshot) {
             })
             .map(|(f, v)| vec![f.to_owned(), v.to_string()])
     );
-    println!("{table}");
+    o.emit_stdout(&format!("{table}\n"));
 
-    println!("# Chunks");
+    o.emit_stdout("# Chunks\n");
     for chunk in sna.chunks() {
-        chunk.print_info();
+        chunk.print_info(o);
     }
 }
 
@@ -956,7 +956,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
     sna.debug = matches.contains_id("debug");
 
     if matches.get_flag("info") {
-        print_info(&sna);
+        print_info(&sna, o);
         return Ok(());
     }
 
@@ -1013,7 +1013,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
     if matches.contains_id("getToken") {
         for token in matches.get_many::<String>("getToken").unwrap() {
             let token = SnapshotFlag::from_str(token).unwrap();
-            println!("{:?} => {}", token, sna.get_value(&token));
+            o.emit_stdout(&format!("{:?} => {}\n", token, sna.get_value(&token)));
         }
         return Ok(());
     }

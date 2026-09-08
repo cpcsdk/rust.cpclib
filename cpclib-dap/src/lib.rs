@@ -440,14 +440,59 @@ pub fn run_stdio() -> std::io::Result<()> {
                         .and_then(Value::as_str)
                         .map(|p| p.to_ascii_lowercase().ends_with(".bas"))
                         .unwrap_or(false);
-                    let outcome = if is_basic {
-                        start_basic_session(&message)
-                            .map(|(s, url, notices)| (ActiveSession::Basic(Box::new(s)), url, notices))
+
+                    // A `rule` launch's own assemble (`build_rule_for_debug`,
+                    // driven by `start_session` below) can take real time -
+                    // a full project build, not a cached re-launch - and
+                    // used to leave the client with nothing but the
+                    // indeterminate `progressStart`/`progressEnd` spinner
+                    // above for the whole duration. Run it on its own
+                    // thread so this thread can drain its progress channel
+                    // live, turning each update into a real `progressUpdate`
+                    // event with an actual percentage - the exact same
+                    // `ProgressState` the LSP server's own `$/progress` and
+                    // the `bndbuild` CLI's `--progress` are built on (see
+                    // `cpclib_bndbuild::progress`'s own doc for why it lives
+                    // there rather than in any one of the three).
+                    let (progress_tx, progress_rx) =
+                        std::sync::mpsc::channel::<cpclib_bndbuild::progress::ProgressUpdate>();
+                    let message_for_worker = message.clone();
+                    let worker = std::thread::spawn(move || {
+                        if is_basic {
+                            start_basic_session(&message_for_worker).map(|(s, url, notices)| {
+                                (ActiveSession::Basic(Box::new(s)), url, notices)
+                            })
+                        }
+                        else {
+                            start_session(&message_for_worker, Some(progress_tx)).map(
+                                |(s, url, notices)| (ActiveSession::Z80(Box::new(s)), url, notices)
+                            )
+                        }
+                    });
+
+                    let mut progress_state = cpclib_bndbuild::progress::ProgressState::new();
+                    while let Ok(update) = progress_rx.recv() {
+                        if client_accepts_progress {
+                            let (progress_message, percentage) = progress_state.apply(update);
+                            seq += 1;
+                            emit(
+                                &protocol::event(
+                                    "progressUpdate",
+                                    json!({
+                                        "progressId": "launch",
+                                        "message": progress_message,
+                                        "percentage": percentage
+                                    }),
+                                    seq
+                                ),
+                                &mut output
+                            )?;
+                        }
                     }
-                    else {
-                        start_session(&message)
-                            .map(|(s, url, notices)| (ActiveSession::Z80(Box::new(s)), url, notices))
-                    };
+
+                    let outcome = worker
+                        .join()
+                        .unwrap_or_else(|_| Err("the build thread panicked".to_string()));
                     if client_accepts_progress {
                         seq += 1;
                         emit(
@@ -595,7 +640,8 @@ pub fn run_stdio() -> std::io::Result<()> {
 ///   whole point: a real demo's assembly arguments live in the build file, not
 ///   in a debug configuration.
 fn start_session(
-    request: &Value
+    request: &Value,
+    progress: Option<std::sync::mpsc::Sender<cpclib_bndbuild::progress::ProgressUpdate>>
 ) -> Result<(session::Session<Backend>, String, Vec<String>), String> {
     let arguments = request.get("arguments").cloned().unwrap_or(json!({}));
     // Problems found while working out what to debug, said in the console once
@@ -655,7 +701,7 @@ fn start_session(
                     .ok_or("no build file found; set \"buildFile\" in the launch configuration")?
             },
         };
-        let launched = launch::build_rule_for_debug(&build_file, rule)?;
+        let launched = launch::build_rule_for_debug(&build_file, rule, progress)?;
         let snapshot = fs_err::read(&launched.snapshot).map_err(|e| {
             format!(
                 "{} was not produced by '{rule}': {e}",
@@ -795,7 +841,7 @@ fn start_session(
                 );
                 cached
             },
-            None => launch::assemble_for_debug(&entry, &config)?
+            None => launch::assemble_for_debug_with_progress(&entry, &config, progress)?
         };
         (
             built.snapshot,
@@ -1326,6 +1372,8 @@ fn source_map_for_project(
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
+
     use super::*;
 
     /// Reported live: no way to run or debug a raw `.sna` sitting on disk -
@@ -1336,7 +1384,17 @@ mod tests {
     /// `debugSnapshot` sends, run against a real fixture
     /// (`tests/graphics/hello/snapshot.sna`, already used elsewhere in this
     /// crate's own screen-viewer tests).
+    ///
+    /// `#[serial(cwd)]`: this relative path is resolved against the
+    /// process's current directory, which `cpclib_bndbuild::BndBuilder::
+    /// from_path` changes as a side effect (to resolve a build file's own
+    /// relative paths) - any test that builds a rule concurrently with this
+    /// one (e.g. `launch::progress_tests`' own rule-building test) can flip
+    /// the directory out from under this one mid-run. Shares the `cwd` key
+    /// with every other test with the same hazard, in this file and
+    /// `inspect.rs`.
     #[test]
+    #[serial(cwd)]
     fn a_raw_sna_program_launches_with_no_assembly_and_an_empty_source_map() {
         let request = json!({
             "seq": 1,
@@ -1347,7 +1405,7 @@ mod tests {
                 "stopOnEntry": false
             }
         });
-        let (_session, url, notices) = start_session(&request)
+        let (_session, url, notices) = start_session(&request, None)
             .expect("a raw .sna launch must succeed with no assembly step - run from the crate root");
         assert!(url.starts_with("http://"), "{url}");
         // Nothing was ever assembled for this launch, so nothing should
@@ -1383,7 +1441,7 @@ mod tests {
                 "stopOnEntry": false
             }
         });
-        let result = start_session(&request);
+        let result = start_session(&request, None);
         let _ = std::fs::remove_file(&path);
 
         let error = match result {
@@ -1403,7 +1461,10 @@ mod tests {
     /// must advertise none of them - a client trusting an empty list to mean
     /// "hide every panel" is the whole point of sending this rather than
     /// guessing from the emulator's name.
+    // Same `cwd` hazard as `a_raw_sna_program_launches_...` above: it calls
+    // `start_session` with a relative `"program"` path.
     #[test]
+    #[serial(cwd)]
     fn the_default_backend_advertises_no_hardware_capabilities_and_names_itself() {
         use peer::DapPeer;
 
@@ -1416,7 +1477,7 @@ mod tests {
                 "stopOnEntry": false
             }
         });
-        let (session, _url, _notices) = start_session(&request)
+        let (session, _url, _notices) = start_session(&request, None)
             .expect("a raw .sna launch must succeed - run from the crate root");
 
         assert_eq!(session.peer().name(), "1984js");

@@ -17,6 +17,7 @@ use std::{io::{Read, Write}};
 pub use clap::{CommandFactory, Parser, Subcommand};
 use cpclib_basic::BasicProgram;
 use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::event::EventObserver;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 use cpclib_files::FileAndSupport;
 use fs_err::File;
@@ -65,7 +66,7 @@ pub enum Commands {
 /// Returns `Err` if the input file cannot be read, its content cannot be
 /// parsed as a Locomotive BASIC program (encode) or Amsdos-header/tokenised
 /// BASIC binary (decode), or the output file cannot be written.
-pub fn handle_locomotive_arguments(cli: Cli) -> Result<(), String>{
+pub fn handle_locomotive_arguments(cli: Cli, o: &dyn EventObserver) -> Result<(), String>{
     match cli.command {
         Commands::Encode {
             input,
@@ -75,7 +76,7 @@ pub fn handle_locomotive_arguments(cli: Cli) -> Result<(), String>{
             encode_command(&input, &output, header)?;
         },
         Commands::Decode { input, output } => {
-            decode_command(&input, output.as_ref())?;
+            decode_command(&input, output.as_ref(), o)?;
         }
     }
 
@@ -135,7 +136,11 @@ fn encode_command(
     Ok(())
 }
 
-fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> Result<(), String>{
+fn decode_command(
+    input: &Utf8PathBuf,
+    output: Option<&Utf8PathBuf>,
+    o: &dyn EventObserver
+) -> Result<(), String>{
     // Read the BASIC binary file (with potential Amsdos header)
     let file = FileAndSupport::build(input)?;
     let content = file.content();
@@ -154,7 +159,7 @@ fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> Result<(
         f.write_all(repr.as_bytes()).map_err(|e| format!("Error writing to output file: {e}"))?;
     }
     else {
-        println!("{repr}");
+        o.emit_stdout(&format!("{repr}\n"));
     }
 
     Ok(())

@@ -16,6 +16,7 @@ impl Vlink {
 
     fn build_vlink<E: EventObserver>(
         desc: &DelegateApplicationDescription<E>,
+        _o: &E,
         _archive_format: ArchiveFormat,
         exec_fname: &str
     ) -> Result<(), String> {
@@ -93,7 +94,7 @@ impl Vlink {
         #[cfg(target_os = "macos")]
         {
             let post_install: Box<PostInstallFn<E>> =
-                Box::new(|desc| Self::build_vlink(desc, ArchiveFormat::TarGz, "vlink"));
+                Box::new(|desc, o| Self::build_vlink(desc, o, ArchiveFormat::TarGz, "vlink"));
 
             DelegateApplicationDescription::builder()
                 .download_fn_url("http://sun.hasenbraten.de/vlink/release/vlink.tar.gz")
@@ -117,7 +118,7 @@ impl Vlink {
         #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
         {
             let post_install: Box<PostInstallFn<E>> =
-                Box::new(|desc| Self::build_vlink(desc, ArchiveFormat::TarGz, "vlink"));
+                Box::new(|desc, o| Self::build_vlink(desc, o, ArchiveFormat::TarGz, "vlink"));
 
             DelegateApplicationDescription::builder()
                 .download_fn_url("http://sun.hasenbraten.de/vlink/release/vlink.tar.gz")

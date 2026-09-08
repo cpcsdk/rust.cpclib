@@ -112,7 +112,7 @@ impl AmspiritLiteVersion {
         #[cfg(target_os = "linux")]
         let builder = {
             let post_install: Box<PostInstallFn<E>> = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
                     ensure_executable(&desc.exec_fname())
                 }
             );
@@ -122,7 +122,7 @@ impl AmspiritLiteVersion {
         #[cfg(target_os = "macos")]
         let builder = {
             let post_install: Box<PostInstallFn<E>> = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
                     super::cadence::install_macos_dmg_release(
                         &desc.cache_folder(),
                         &desc.exec_fname()

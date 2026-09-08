@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { workspace, ExtensionContext } from 'vscode';
 import * as path from 'path';
-import { bndbuildCommandPrefix, buildBndbuildTask, BndbuildTaskProvider } from './bndbuildTaskProvider';
+import {
+    bndbuildCommandPrefix, buildBndbuildTask, BndbuildTaskProvider, BndbuildRulePseudoterminal,
+} from './bndbuildTaskProvider';
 
 // Every currently-open `EmbeddedRulePseudoterminal`'s writer, so
 // `installLogMessageMirror`'s single `window/logMessage` handler can push
@@ -18,13 +20,14 @@ export const activeEmbeddedTaskWriters = new Set<(text: string) => void>();
 
 /// A `vscode.Pseudoterminal` wrapping the LSP's own `cpclib.runRule` command
 /// - the execution mechanism for a `#!bndbuild`-embedded rule in a `.asm`
-/// file, which (unlike a real `.bnd` file) has no on-disk YAML file a
-/// `ShellExecution` could target, so it can't become a real terminal Task
-/// the way `buildBndbuildTask`'s tasks are. While `cpclib.runRule` runs,
-/// this terminal receives a live mirror of the same build output the
-/// "CPClib LSP" output channel gets (via `installLogMessageMirror`), so an
-/// embedded rule's task terminal behaves like a real one rather than a bare
-/// "see elsewhere" pointer.
+/// file, which (unlike a real `.bnd` file) has no on-disk YAML file a real
+/// `bndbuild` subprocess could target the way `buildBndbuildTask`'s tasks
+/// do, so it goes through the LSP server's own command instead - the only
+/// option available for this case. While `cpclib.runRule` runs, this
+/// terminal receives a live mirror of the same build output the "CPClib
+/// LSP" output channel gets (via `installLogMessageMirror`), so an embedded
+/// rule's task terminal behaves like a real one rather than a bare "see
+/// elsewhere" pointer.
 class EmbeddedRulePseudoterminal implements vscode.Pseudoterminal {
     private readonly writeEmitter = new vscode.EventEmitter<string>();
     private readonly closeEmitter = new vscode.EventEmitter<number>();
@@ -81,7 +84,10 @@ export function buildEmbeddedRuleTask(rule: string, hostFilePath: string, taskNa
 // `BndbuildTaskProvider`, via a real VS Code Task/terminal, so build errors
 // get clickable Problems-panel entries through the already-working `$basm`
 // problemMatcher - the LSP's own `cpclib.runRule` streaming path proved
-// unreliable at making its own diagnostics clickable.
+// unreliable at making its own diagnostics clickable. `buildBndbuildTask`'s
+// own `BndbuildRulePseudoterminal` also drives a native VS Code progress
+// notification from this same run (`--progress`'s machine-readable output),
+// so this path isn't a tradeoff against that - both come from one process.
 async function runRuleInTerminal(target: string, filePath: string): Promise<void> {
     const config = workspace.getConfiguration('cpclib-lsp');
     const bndbuildCommand = bndbuildCommandPrefix(config);
@@ -96,6 +102,13 @@ async function runRuleInTerminal(target: string, filePath: string): Promise<void
 /// string - see that method's own doc comment for why that distinction
 /// matters), and bypasses dependency resolution/up-to-date checks entirely,
 /// so it runs even when the rule's target already exists.
+///
+/// Uses `buildBndbuildTask`'s own `BndbuildRulePseudoterminal` (not a plain
+/// `ShellExecution`) for the same reason: `--only-task` still runs through
+/// `execute_task`'s own observer list, which `--progress` (added below)
+/// feeds the same basm-internal parse/pass/save events into - there just is
+/// no separate rule-level "step N of M" line to show alongside them, since
+/// `--only-task` runs exactly one task by definition.
 function buildBndbuildOnlyTaskTask(
     rule: string,
     filePath: string,
@@ -110,14 +123,14 @@ function buildBndbuildOnlyTaskTask(
         target: rule,
         file: filePath,
     };
+    const command = `${bndbuildCommand} -f "${fileName}" --only-task "${rule}:${taskIndex}" --progress`;
     const task = new vscode.Task(
         def,
         vscode.TaskScope.Workspace,
         taskName,
         'bndbuild',
-        new vscode.ShellExecution(
-            `${bndbuildCommand} -f "${fileName}" --only-task "${rule}:${taskIndex}"`,
-            { cwd: workDir },
+        new vscode.CustomExecution(
+            async () => new BndbuildRulePseudoterminal(command, workDir, `Building ${taskName}`),
         ),
         '$basm',
     );

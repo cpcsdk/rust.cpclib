@@ -2834,7 +2834,18 @@ pub fn parse_assembler_control_print_parse(
                 });
             if !input.state.options.quiet {
                 let (line, column) = Z80Span::from(input2).relative_line_and_column();
-                println!("[PARSE] {ctx}:{line}:{column} {msg}");
+                // Not a raw `println!`: this runs mid-parse, before any `Env`
+                // (and its `EventObserver`) exists, and a caller embedding
+                // this parse in-process (the LSP/DAP servers) has its real
+                // stdout carrying protocol traffic, not build output - see
+                // `ParserOptions::print_parse_buffer`'s own doc.
+                input
+                    .state
+                    .options
+                    .print_parse_buffer
+                    .lock()
+                    .unwrap()
+                    .push(format!("[PARSE] {ctx}:{line}:{column} {msg}"));
             }
             p
         })

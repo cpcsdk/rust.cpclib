@@ -211,7 +211,7 @@ impl BdAsmEnv {
 
     /// Convert data bloc addresses to file offsets by subtracting origin
     /// Returns the data blocs as file offsets, with a warning if origin is not set
-    fn data_blocs_offsets(&self) -> Result<Vec<RangeInclusive<u16>>> {
+    fn data_blocs_offsets(&self, o: &dyn EventObserver) -> Result<Vec<RangeInclusive<u16>>> {
         let mut data_blocs: Vec<RangeInclusive<u16>> = Vec::new();
         for bloc in &self.blocs {
             data_blocs.push(bloc.to_range_inclusive()?);
@@ -230,8 +230,8 @@ impl BdAsmEnv {
         else {
             // No origin, use addresses as-is (assume they are offsets)
             if !data_blocs.is_empty() {
-                eprintln!(
-                    "; Warning: --data specified without --origin; treating addresses as file offsets"
+                o.emit_stderr(
+                    "; Warning: --data specified without --origin; treating addresses as file offsets\n"
                 );
             }
             Ok(data_blocs)
@@ -239,9 +239,9 @@ impl BdAsmEnv {
     }
 
     /// Create a listing from the input bytes, handling data blocs
-    fn create_listing(&self, input_bytes: &[u8]) -> Result<Listing> {
+    fn create_listing(&self, input_bytes: &[u8], o: &dyn EventObserver) -> Result<Listing> {
         // Convert data bloc addresses to file offsets
-        let data_blocs_offsets = self.data_blocs_offsets()?;
+        let data_blocs_offsets = self.data_blocs_offsets(o)?;
 
         // Retrieve the listing
         let mut listing: Listing = if !data_blocs_offsets.is_empty() {
@@ -561,7 +561,7 @@ pub fn process<O: EventObserver>(cli: &BdAsmCli, o: &O) -> Result<()> {
     }
 
     // Create the listing and inject labels
-    let mut listing = env.create_listing(input_bytes)?;
+    let mut listing = env.create_listing(input_bytes, o)?;
     env.inject_labels(&mut listing, input_bytes.len(), o)?;
 
     // Generate output

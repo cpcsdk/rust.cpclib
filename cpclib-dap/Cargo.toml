@@ -35,3 +35,4 @@ thiserror.workspace = true
 [dev-dependencies]
 camino-tempfile.workspace = true
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
+serial_test.workspace = true

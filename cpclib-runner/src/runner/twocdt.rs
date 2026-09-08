@@ -20,9 +20,9 @@ impl TwoCdtVersion {
         #[cfg(target_os = "macos")]
         {
             let post_install: Box<
-                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+                dyn Fn(&DelegateApplicationDescription<E>, &E) -> Result<(), String>
             > = Box::new(
-                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
                     use std::os::unix::fs::PermissionsExt;
                     use std::process::Command;
 

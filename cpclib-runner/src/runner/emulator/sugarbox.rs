@@ -74,7 +74,7 @@ impl DownloadableInformation for SugarBoxV2Version {
         // way, only what that path actually *runs* changes.
         #[cfg(target_os = "linux")]
         if matches!(self, Self::V2_1_1) {
-            let post_install: Box<PostInstallFn<E>> = Box::new(|desc| {
+            let post_install: Box<PostInstallFn<E>> = Box::new(|desc, _o| {
                 use std::os::unix::fs::PermissionsExt;
 
                 fn make_executable(path: &cpclib_common::camino::Utf8Path) -> Result<(), String> {

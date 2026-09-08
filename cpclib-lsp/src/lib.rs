@@ -1,5 +1,5 @@
 mod basm;
-mod bndbuild;
+pub mod bndbuild;
 mod common;
 mod csl;
 mod fileformat;

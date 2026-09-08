@@ -940,6 +940,13 @@ impl BndBuilderApp {
         self.matches.get_one::<String>("file").map(|s| s.as_str())
     }
 
+    /// Whether `--progress` was passed - report rule-level and basm-internal
+    /// progress as the build runs, independent of any `--progress` a task's
+    /// own `basm` command line might separately carry.
+    pub fn wants_progress(&self) -> bool {
+        self.matches.get_flag("progress")
+    }
+
     /// Return the profile output path passed via `--profile`, if any.
     pub fn profile_output(&self) -> Option<&str> {
         self.matches

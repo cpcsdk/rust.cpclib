@@ -112,6 +112,9 @@ fn run_as_bndbuild(args: Vec<String>) -> ! {
 
     let mut app = BndBuilderApp::from_matches(matches);
     app.add_observer(BndBuilderObserverRc::new_default());
+    if app.wants_progress() {
+        install_cli_progress_reporting(&mut app);
+    }
     let result = app.command().and_then(|command| command.execute());
     match result {
         Ok(_) => std::process::exit(0),
@@ -120,6 +123,126 @@ fn run_as_bndbuild(args: Vec<String>) -> ! {
             std::process::exit(1);
         }
     }
+}
+
+/// A single, unlikely-to-appear-in-real-output marker: real build/error text
+/// (basm's own messages, a task's own stdout/stderr) is never expected to
+/// contain a NUL byte, so a caller scanning line by line can tell a progress
+/// line apart from everything else with a plain prefix check, no ambiguity.
+const PROGRESS_LINE_MARKER: &str = "\u{0}CPCLIB_PROGRESS\u{0}";
+
+/// Wires `--progress` into this one CLI invocation: every rule-level and
+/// basm-internal (parse/load/pass/save) progress event becomes a single
+/// JSON line on stderr, `{PROGRESS_LINE_MARKER}{"message":...,"percentage":...}`,
+/// meant for a caller that *parses* progress (the VS Code extension's own
+/// terminal-task wrapper around the "▶ Run" CodeLens on a real `.bnd` file,
+/// which runs this exact `bndbuild` subcommand as a real subprocess and has
+/// no other channel to learn how far along a build is). basm's own
+/// human-facing indicatif terminal bars remain a separate, untouched
+/// concern (`basm ... --progress` on a task's own command line still works
+/// exactly as before) - this is additional, not a replacement.
+///
+/// Reuses the exact same [`cpclib_lsp::bndbuild::command::ProgressState`]/
+/// [`cpclib_lsp::bndbuild::command::ProgressUpdate`] types the LSP server's
+/// own `$/progress` reporting is built on (`cpclib-lsp/src/server/backend.rs`),
+/// so "what a build phase is worth in percent" is computed identically
+/// everywhere, not reimplemented a second time with its own quirks.
+///
+/// Broadcasts the sink onto this process's own global rayon pool - see
+/// `cpclib_asm::progress::AsmProgressSink`'s own doc for why a plain
+/// thread-local install alone would silently miss basm's `INCLUDE`-parsing
+/// work, which runs on rayon worker threads. Broadcasting onto the *global*
+/// pool (rather than a dedicated one, the way the long-lived LSP server
+/// needs to) is safe specifically because this is a short-lived,
+/// single-purpose CLI process: there is no second, concurrent build sharing
+/// it to contaminate.
+fn install_cli_progress_reporting(app: &mut cpclib_bndbuild::app::BndBuilderApp) {
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    use cpclib_bndbuild::event::{BndBuilderEvent, BndBuilderObserver, BndBuilderObserverRc};
+    use cpclib_common::event::EventObserver;
+    use cpclib_lsp::bndbuild::command::{ProgressState, ProgressUpdate};
+
+    fn print_progress_line(message: &str, percentage: Option<u32>) {
+        let payload = serde_json::json!({ "message": message, "percentage": percentage });
+        eprintln!("{PROGRESS_LINE_MARKER}{payload}");
+    }
+
+    // basm-internal events (parse/load/pass/save) can fire per-token, up to
+    // millions of times on a real project - printing one unconditionally on
+    // every single one, each an `eprintln!` (a write syscall) plus a
+    // downstream JSON.parse + UI update on the VS Code side, is what actually
+    // slowed builds down, not the (measured, ~365ns) cost of `apply()`
+    // itself. Mirrors `backend.rs`'s `start_build_progress` `$/progress`
+    // throttle exactly, for the same reason: a rule/task transition is rare
+    // and meaningful, so it's always sent immediately; the flood of
+    // basm-internal phase events is capped to one line per window.
+    const PROGRESS_THROTTLE: Duration = Duration::from_millis(200);
+
+    #[derive(Debug)]
+    struct ThrottledState {
+        state: ProgressState,
+        last_sent: Instant
+    }
+
+    let shared = Arc::new(Mutex::new(ThrottledState {
+        state: ProgressState::new(),
+        last_sent: Instant::now() - PROGRESS_THROTTLE
+    }));
+
+    struct CliProgressSink(Arc<Mutex<ThrottledState>>);
+    impl cpclib_asm::progress::AsmProgressSink for CliProgressSink {
+        fn on_progress(&self, event: cpclib_asm::progress::AsmProgressEvent) {
+            let mut guard = self.0.lock().unwrap();
+            let (message, percentage) = guard.state.apply(ProgressUpdate::Asm(event));
+            let now = Instant::now();
+            if now.duration_since(guard.last_sent) < PROGRESS_THROTTLE {
+                return;
+            }
+            guard.last_sent = now;
+            drop(guard);
+            print_progress_line(&message, percentage);
+        }
+    }
+
+    let sink: Arc<dyn cpclib_asm::progress::AsmProgressSink> =
+        Arc::new(CliProgressSink(Arc::clone(&shared)));
+    cpclib_asm::progress::install_progress_sink(Some(Arc::clone(&sink)));
+    cpclib_common::rayon::broadcast(|_| {
+        cpclib_asm::progress::install_progress_sink(Some(Arc::clone(&sink)));
+    });
+
+    #[derive(Debug)]
+    struct CliRuleProgressObserver(Arc<Mutex<ThrottledState>>);
+    impl EventObserver for CliRuleProgressObserver {
+        fn emit_stdout(&self, _s: &str) {}
+
+        fn emit_stderr(&self, _s: &str) {}
+    }
+    impl BndBuilderObserver for CliRuleProgressObserver {
+        fn update(&self, event: BndBuilderEvent) {
+            let update = match event {
+                BndBuilderEvent::StartRule { rule, nb, out_of } => Some(ProgressUpdate::Rule {
+                    rule: rule.to_string(),
+                    nb,
+                    out_of
+                }),
+                BndBuilderEvent::StartTask(_rule, task) => Some(ProgressUpdate::Task {
+                    command: task.to_string()
+                }),
+                _ => None
+            };
+            if let Some(update) = update {
+                let mut guard = self.0.lock().unwrap();
+                let (message, percentage) = guard.state.apply(update);
+                guard.last_sent = Instant::now();
+                drop(guard);
+                print_progress_line(&message, percentage);
+            }
+        }
+    }
+    app.add_observer(BndBuilderObserverRc::new(CliRuleProgressObserver(shared)));
 }
 
 /// A real, isolated clap subcommand for the same reason `run_as_bndbuild`'s

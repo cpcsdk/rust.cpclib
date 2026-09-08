@@ -1582,48 +1582,47 @@ mod test_super {
         assert!(ctx.options.quiet);
     }
 
-    /// Real proof that `quiet` suppresses `PRINT_PARSE`'s stdout write, using
-    /// an actual OS-level fd redirection (`gag`) — `#[ignore]`d because it
-    /// captures the real process stdout fd, which any *other* test running
-    /// concurrently (incl. cargo's own "test ... ok" progress lines) would
-    /// leak into, making this flaky under the default parallel test runner.
-    /// Run in isolation (also needs `--nocapture`, or the test harness's
-    /// own stdout capture intercepts the output before `gag` ever sees it):
-    /// `cargo test -p cpclib-asm --lib -- --ignored --test-threads=1
-    /// --nocapture quiet_parser_option_actually_suppresses_stdout`.
+    /// `PRINT_PARSE` no longer writes to the real process stdout at all, at
+    /// any point during parsing - see `ParserOptions::print_parse_buffer`'s
+    /// own doc for why a raw write here is unsafe for an embedding caller
+    /// (an LSP/DAP server's real stdout carries protocol traffic, not build
+    /// output). It's *recorded* into that buffer instead, for whichever
+    /// caller owns the top-level `ParserOptions` to drain and redeliver
+    /// safely once parsing has actually finished (`cpclib_basm::process`
+    /// does exactly that - see cpclib-basm's own
+    /// `print_parse_never_touches_the_real_stdout_but_still_reaches_the_
+    /// observer` test for the full round trip through a real embedded-build
+    /// call).
     #[test]
-    #[ignore = "captures the real process stdout fd; must run alone, see doc comment"]
-    fn quiet_parser_option_actually_suppresses_stdout() {
+    fn quiet_parser_option_controls_whether_print_parse_is_recorded_at_all() {
         let code = "ASMCONTROL PRINT_PARSE, \"hello\"\n";
 
-        // Baseline: without `quiet`, PRINT_PARSE really does write to
-        // stdout at parse time (this is the pre-existing, intentional CLI
-        // behavior `quiet` must not break).
+        // Without `quiet`, the message is recorded (available for a later
+        // caller to redeliver) - this is the pre-existing, intentional CLI
+        // behavior `quiet` must not break, just no longer delivered by a
+        // raw write at parse time.
         {
-            let stdout = gag::BufferRedirect::stdout().unwrap();
             let builder = crate::parser::context::ParserContextBuilder::default();
+            let buffer = builder.options().print_parse_buffer.clone();
             let _ = crate::parser::obtained::LocatedListing::new_complete_source(code, builder);
-            let mut buf = String::new();
-            let mut stdout = stdout.into_inner();
-            std::io::Read::read_to_string(&mut stdout, &mut buf).unwrap();
+            let recorded = buffer.lock().unwrap().join("\n");
             assert!(
-                buf.contains("[PARSE]"),
-                "expected PRINT_PARSE to print without quiet, got: {buf:?}"
+                recorded.contains("[PARSE]") && recorded.contains("hello"),
+                "expected PRINT_PARSE to be recorded without quiet, got: {recorded:?}"
             );
         }
 
-        // With `quiet`, nothing must reach the real stdout — this is what
-        // an LSP server (whose real stdout carries JSON-RPC traffic) needs.
+        // With `quiet`, nothing is recorded either - this is what an LSP
+        // server's diagnostics-only parse (which cares about neither a live
+        // print nor a deferred one) needs.
         {
-            let stdout = gag::BufferRedirect::stdout().unwrap();
             let builder = crate::parser::context::ParserContextBuilder::default().set_quiet(true);
+            let buffer = builder.options().print_parse_buffer.clone();
             let _ = crate::parser::obtained::LocatedListing::new_complete_source(code, builder);
-            let mut buf = String::new();
-            let mut stdout = stdout.into_inner();
-            std::io::Read::read_to_string(&mut stdout, &mut buf).unwrap();
             assert!(
-                buf.is_empty(),
-                "quiet must suppress PRINT_PARSE's stdout output, got: {buf:?}"
+                buffer.lock().unwrap().is_empty(),
+                "quiet must suppress PRINT_PARSE's recording entirely, got: {:?}",
+                buffer.lock().unwrap()
             );
         }
     }

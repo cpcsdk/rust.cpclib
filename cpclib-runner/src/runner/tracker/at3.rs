@@ -145,7 +145,7 @@ impl DownloadableInformation for At3Version {
         use crate::delegated::{DelegateApplicationDescription, PostInstallFn};
 
         let post_install: Box<PostInstallFn<E>> =
-            Box::new(|desc: &DelegateApplicationDescription<E>| {
+            Box::new(|desc: &DelegateApplicationDescription<E>, _o: &E| {
                 let folder = desc.cache_folder();
 
                 // Remove quarantine attributes recursively (no-op if not set, safe to run)

@@ -387,7 +387,7 @@ impl<E> Deref for Compiler<E> {
 
 /// A step run once installation has finished, given the description of what
 /// was just installed.
-pub type PostInstallFn<E> = dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>;
+pub type PostInstallFn<E> = dyn Fn(&DelegateApplicationDescription<E>, &E) -> Result<(), String>;
 
 #[derive(Clone)]
 pub struct PostInstall<E: EventObserver>(Rc<Box<PostInstallFn<E>>>);
@@ -558,7 +558,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
         if let Some(post_install) = &self.post_install {
             o.emit_stdout(">> Apply post-installation\n");
-            post_install(self)
+            post_install(self, o)
         }
         else {
             Ok(())

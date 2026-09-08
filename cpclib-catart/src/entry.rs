@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 use bon::Builder;
 use cpclib_basic::BasicProgram;
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 
@@ -138,7 +139,11 @@ impl Catalog {
     /// with the sequential cat art encoding (mode/enable/disable-VDU markers and dot-hiding
     /// removed), one BASIC line per catalogue file entry.
     // Here we want to obtain the basic program written by a human and injected in the catalaog.
-    pub fn extract_basic_from_sequential_catart(&self, _show_headers: bool) -> BasicProgram {
+    pub fn extract_basic_from_sequential_catart(
+        &self,
+        _show_headers: bool,
+        o: &dyn EventObserver
+    ) -> BasicProgram {
         let kind = CatalogType::Cat; // TODO handle this properly
         let mode = ScreenMode::Mode1; // TODO handle this properly
         let num_columns = 2; // kind.num_columns(mode);
@@ -230,7 +235,10 @@ impl Catalog {
         match BasicProgram::parse(&basic_str) {
             Ok(prog) => prog,
             Err(e) => {
-                eprintln!("Failed to parse generated BASIC program:\n{}", basic_str);
+                o.emit_stderr(&format!(
+                    "Failed to parse generated BASIC program:\n{}\n",
+                    basic_str
+                ));
                 panic!("Parsing error: {}", e);
             }
         }

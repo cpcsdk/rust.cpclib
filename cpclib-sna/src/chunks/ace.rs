@@ -228,13 +228,13 @@ impl AceSymbolChunk {
         res
     }
 
-    pub fn print_info(&self) {
+    pub fn print_info(&self, o: &dyn cpclib_common::event::EventObserver) {
         let s = self
             .get_symbols()
             .into_iter()
             .map(|s| format!("{} = 0x{:.4x}", s.name(), s.address()))
             .join("\n");
-        println!("{s}")
+        o.emit_stdout(&format!("{s}\n"))
     }
 }
 

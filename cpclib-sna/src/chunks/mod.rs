@@ -43,20 +43,20 @@ impl MemoryChunk {
         }
     }
 
-    pub fn print_info(&self) {
+    pub fn print_info(&self, o: &dyn cpclib_common::event::EventObserver) {
         match self.uncrunched_memory() {
             Ok(memory) => {
-                println!(
-                    "\t* Address: 0x{:X}\n\t* Size: 0x{:X}",
+                o.emit_stdout(&format!(
+                    "\t* Address: 0x{:X}\n\t* Size: 0x{:X}\n",
                     self.abstract_address(),
                     memory.len()
-                );
+                ));
             },
             Err(e) => {
-                println!(
-                    "\t* Address: 0x{:X}\n\t* Size: <corrupted RLE data: {e}>",
+                o.emit_stdout(&format!(
+                    "\t* Address: 0x{:X}\n\t* Size: <corrupted RLE data: {e}>\n",
                     self.abstract_address()
-                );
+                ));
             }
         }
     }
@@ -309,20 +309,20 @@ pub enum SnapshotChunk {
 
 #[allow(missing_docs)]
 impl SnapshotChunk {
-    pub fn print_info(&self) {
-        println!(
-            "- Chunk: {}{}{}{}",
+    pub fn print_info(&self, o: &dyn cpclib_common::event::EventObserver) {
+        o.emit_stdout(&format!(
+            "- Chunk: {}{}{}{}\n",
             self.code()[0] as char,
             self.code()[1] as char,
             self.code()[2] as char,
             self.code()[3] as char,
-        );
+        ));
 
         if let Some(chunk) = self.memory_chunk() {
-            chunk.print_info();
+            chunk.print_info(o);
         }
         else if let Some(chunk) = self.ace_symbol_chunk() {
-            chunk.print_info();
+            chunk.print_info(o);
         }
     }
 

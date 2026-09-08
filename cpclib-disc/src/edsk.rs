@@ -968,7 +968,13 @@ impl TrackInformationList {
                     list.push(TrackInformation::from_buffer(track_buffer)?);
                 }
                 else {
-                    eprintln!("Track {track_number} is unformatted");
+                    // An unformatted track is a normal, fully-handled EDSK
+                    // state (see `TrackInformation::unformatted`), not a
+                    // parse error - not worth a diagnostic. This function is
+                    // a deeply-nested pure `&[u8] -> Result<Self, String>`
+                    // parser (`ExtendedDsk::from_buffer`/`open`, reached from
+                    // cpclib-asm's file embedding among others) with no
+                    // `EventObserver` plausible without a broad refactor.
                     list.push(TrackInformation::unformatted());
                 }
                 consummed_bytes = end;

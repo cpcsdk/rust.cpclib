@@ -846,10 +846,6 @@ impl<C: AmstradColor> ColorMatrix<C> {
         missing_pen: Option<Pen>
     ) -> Sprite<C> {
 
-        println!("image\n{}\n", self.to_ansi_string());
-        println!("provided palette\n{}\n", palette.to_ansi_string());
-
-
         // Extract the palette is not provided as an argument
         let palette = if palette.is_locked() {
             palette.into_palette()
@@ -857,9 +853,6 @@ impl<C: AmstradColor> ColorMatrix<C> {
         else {
             self.extract_palette_with_hint(mode, palette).unwrap()
         };
-
-        println!("obtained palette in as_sprite\n{}\n", palette.to_ansi_string());
-
 
         // Really make the conversion
         let pens = colors_to_pens(&self.data, &palette);

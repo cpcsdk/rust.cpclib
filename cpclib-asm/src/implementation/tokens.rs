@@ -22,6 +22,12 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     fn disassemble_data(&self) -> Result<Listing, String>;
 
     fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, Box<AssemblerError>> {
+        // Not a real build phase - just probing one token's byte length
+        // (called per-instruction, e.g. for JR-range checks) - must not
+        // leak into a caller's progress stream. See
+        // `cpclib_asm::progress::suppress_progress_sink`'s own doc.
+        let _suppressed = crate::progress::suppress_progress_sink();
+
         let mut env = Env::new(option);
         // we need several passes in case the token is a directive that contains code
         loop {

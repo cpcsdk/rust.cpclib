@@ -2206,6 +2206,7 @@ dependencies = [
  "criterion",
  "enumflags2",
  "fs-err",
+ "gag",
  "glob",
  "globset",
  "parking_lot",
@@ -2544,6 +2545,7 @@ dependencies = [
  "image",
  "serde",
  "serde_json",
+ "serial_test",
  "thiserror 2.0.20",
 ]
 

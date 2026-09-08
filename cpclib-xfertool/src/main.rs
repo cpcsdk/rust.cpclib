@@ -35,5 +35,5 @@ fn main() -> anyhow::Result<()> {
 
     let matches = build_args_parser().before_help(desc_before).get_matches();
 
-    process(&matches)
+    process(&matches, &())
 }

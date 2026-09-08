@@ -31,6 +31,8 @@ import { showScreen, disposeScreen } from './webviews/screen';
 import { showBasicListing, registerBasicListingDoc, disposeBasicListing } from './basicListingDoc';
 import { showDisassembly, registerDisassemblyDoc, disposeDisassemblyDoc } from './disassemblyDoc';
 import { StopLocation } from './types';
+import { client } from '../lsp/client';
+import { withServerProgress } from '../lsp/serverProgress';
 
 /** The last stop, so it can be returned to on demand. */
 let lastStop: StopLocation | undefined;
@@ -144,7 +146,9 @@ export function registerDebugging(
             if (!fileName) { return; }
             const entry = await resolveEntry(fileName);
             if (!entry) { return; }
-            await vscode.commands.executeCommand('cpclib.runAssembly', entry);
+            await withServerProgress(client, 'Assembling…', async token => {
+                await vscode.commands.executeCommand('cpclib.runAssembly', entry, token);
+            });
         }),
         vscode.commands.registerCommand('cpclib.debugRule', (rule?: string, buildFile?: string) =>
             debugRule(rule, buildFile)),
