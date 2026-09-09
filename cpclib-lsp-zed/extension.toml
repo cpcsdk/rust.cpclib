@@ -1,6 +1,6 @@
 id = "cpclib-lsp-zed"
 name = "CPClib - Amstrad CPC Development"
-version = "0.0.1"
+version = "0.1.0"
 schema_version = 1
 authors = ["Krusty Benediction <krusty.benediction@gmail.com>"]
 description = "Language support for Amstrad CPC development: Z80 assembly (basm), bndbuild, Locomotive BASIC"
@@ -10,10 +10,13 @@ snippets = ["./snippets/basm.json", "./snippets/bndbuild.json"]
 
 [language_servers.cpclib-lsp]
 name = "CPClib LSP"
-languages = ["Basm", "Bndbuild", "Locomotive BASIC", "CatArt BASIC"]
+languages = ["Basm", "Bndbuild", "Locomotive BASIC", "CatArt BASIC", "CSL"]
 
 [language_servers.cpclib-lsp.language_ids]
 "Basm" = "basm"
 "Bndbuild" = "bndbuild"
 "Locomotive BASIC" = "locomotive-basic"
 "CatArt BASIC" = "catart-basic"
+"CSL" = "csl"
+
+[debug_adapters.cpclib-dap]

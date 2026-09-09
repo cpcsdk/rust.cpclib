@@ -1,0 +1,9 @@
+name = "CSL"
+path_suffixes = ["csl", "CSL"]
+line_comments = ["; "]
+tab_size = 2
+hard_tabs = false
+auto_indent = true
+brackets = [
+    { start = "(", end = ")", close = true, newline = false },
+]

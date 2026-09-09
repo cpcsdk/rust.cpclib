@@ -553,6 +553,32 @@ pub fn run_stdio() -> std::io::Result<()> {
                                 &mut output
                             )?;
 
+                            // A plain `output` event carrying the same URL,
+                            // for a client with no `cpclib/emulatorReady`
+                            // handler of its own (any DAP client other than
+                            // this extension's VS Code build - Zed's generic
+                            // debug console, most notably): every DAP client
+                            // renders a bare `http://...`/`https://...` URL
+                            // in its console as a clickable link with no
+                            // extension-specific code at all, so this alone
+                            // recovers "open the running demo" - the one
+                            // webview-panel capability worth having outside
+                            // VS Code - on any editor that just speaks DAP.
+                            if !url.is_empty() {
+                                seq += 1;
+                                emit(
+                                    &protocol::event(
+                                        "output",
+                                        json!({
+                                            "category": "console",
+                                            "output": format!("Emulator running at {url}\n")
+                                        }),
+                                        seq
+                                    ),
+                                    &mut output
+                                )?;
+                            }
+
                             // Always sent, even when there is nothing for the
                             // editor to show (`url` empty - the emulator has
                             // its own window): a client-side panel still

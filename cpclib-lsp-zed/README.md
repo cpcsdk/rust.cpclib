@@ -6,6 +6,7 @@
 - **Bndbuild** (declarative build system)
 - **Locomotive BASIC** (Amstrad CPC BASIC)
 - **CatArt BASIC** (ASCII-formatted BASIC)
+- **CSL** (CPC Script Language)
 
 This extension provides full **Language Server Protocol (LSP)** integration via `cpclib-lsp`, delivering:
 - 📝 Syntax highlighting
@@ -13,7 +14,8 @@ This extension provides full **Language Server Protocol (LSP)** integration via 
 - 💡 Intelligent completions
 - 📚 Hover documentation
 - 🔴 Real-time diagnostics
-- 🏗️ One-click build execution (CodeLens)
+- 🏗️ One-click build execution (▶ run triangles, no setup required)
+- 🐛 Source-level debugging (breakpoints, stepping, variables) via `cpclib-dap`
 
 ---
 
@@ -153,24 +155,10 @@ Full integration with the **bndbuild** project automation tool:
 
 #### Running Build Targets
 
-**One-time setup required:**
+No setup needed - the extension ships its own `tasks.json` bound to the
+`bndbuild-target` tag. Just click the ▶ triangle next to a target name.
 
-Create `~/.config/zed/tasks.json` with:
-
-```json
-[{
-  "label": "bndbuild: run target",
-  "command": "bndbuild",
-  "args": ["-f", "$ZED_FILE", "$ZED_CUSTOM_target"],
-  "tags": ["bndbuild-target"],
-  "cwd": "$ZED_WORKTREE_ROOT",
-  "reveal": "always"
-}]
-```
-
-Then restart Zed and click the ▶ triangle next to target names.
-
-📖 **See [RUNNABLES_SETUP.md](RUNNABLES_SETUP.md) for detailed setup instructions and customization.**
+📖 **See [RUNNABLES_SETUP.md](RUNNABLES_SETUP.md) if you want to customize the bundled task (a different `cwd`, `reveal`/`hide` behavior, a watch-mode variant, ...).**
 
 ---
 
@@ -199,6 +187,63 @@ Support for CatArt ASCII-formatted BASIC files:
 
 ---
 
+### 📜 CSL (CPC Script Language)
+
+Language support for `.csl` scripts (emulator scripting - disk/snapshot
+loading, key input, waits):
+
+- **Syntax highlighting** (via LSP semantic tokens)
+- **Diagnostics**
+- **Same LSP features as the other languages above**
+
+**Supported file extensions:** `.csl`, `.CSL`
+
+---
+
+## Debugging
+
+Source-level debugging - breakpoints, stepping, variables, call stack - is
+available through `cpclib-dap`, registered as a Zed debug adapter (adapter
+name `cpclib-dap`). Create a `.zed/debug.json` in your project, for example:
+
+```json
+[
+  {
+    "label": "Debug this .asm file",
+    "adapter": "cpclib-dap",
+    "request": "launch",
+    "program": "$ZED_FILE"
+  },
+  {
+    "label": "Debug the demo",
+    "adapter": "cpclib-dap",
+    "request": "launch",
+    "rule": "test_sna"
+  }
+]
+```
+
+Or use Zed's "New Process Debugger..." command and pick `cpclib-dap` -
+its generic program field maps onto `program` above; for anything using
+`rule`/`buildFile`/`emulator`/`watchLabels`/`topOfStack` instead, write the
+scenario directly as shown. The full set of fields is documented in
+`debug_adapter_schemas/cpclib-dap.json` and mirrors
+`cpclib-vscode`'s own launch config one-for-one, minus `openInWebview`
+(there's no Zed equivalent of a webview panel - see Limitations below).
+
+Once a session starts, the emulator's own address - when it serves one
+(1984js does; a native emulator window like SugarBox doesn't) - is printed
+as a plain, clickable link in the debug console, so you can open it to
+actually see/hear the demo run.
+
+Just want to *run* a `.sna`/`.dsk` in a specific emulator, no debugging?
+See [EMULATOR_TASKS.md](EMULATOR_TASKS.md) for ready-to-paste tasks (one
+per known emulator - these can't ship bundled the way `bndbuild`'s task
+does, since Zed only bundles tasks per-language and `.sna`/`.dsk` have none
+here).
+
+---
+
 ## Usage
 
 ### Opening Files
@@ -211,11 +256,11 @@ The extension activates automatically when you open supported file types:
 
 ### Running Builds
 
-**After [one-time setup](RUNNABLES_SETUP.md):**
-
 1. Open a `bndbuild.yml` file
 2. Click the ▶ triangle next to any target name
 3. Build output appears in the terminal panel
+
+No setup required - see [above](#running-build-targets).
 
 Or use the command palette:
 - Press `Cmd+Shift+P` / `Ctrl+Shift+P`
@@ -303,16 +348,10 @@ Due to Zed's extension architecture limitations, some features available in the 
 - **Alternative:** The LSP already provides this data via the `cpclib.cycleCountForSelection` command, but there's no way for extensions to display it in Zed's UI
 - **Workaround:** Use code actions (right-click → "Cycle count for selection") or the code lens "Show cycle count" action
 
-**Runnable Targets (Build Execution)**
-- ✅ **Implemented:** Run triangles (▶) appear next to build target names
-- ⚠️ **One-time setup required:** Must create `~/.config/zed/tasks.json` (see [RUNNABLES_SETUP.md](RUNNABLES_SETUP.md))
-- **Why not automatic?** Zed doesn't support code lens, and its WASM extension API can't provide default task bindings
-- **Architecture difference:** VS Code forwards to LSP; Zed invokes `bndbuild` CLI directly (see [ARCHITECTURE_COMPARISON.md](ARCHITECTURE_COMPARISON.md))
-- **Jinja2 template support:** ✅ Fully implemented via grammar injection
-  - The bndbuild language now uses tree-sitter-jinja2 as base grammar with YAML injection
-  - Both Jinja templates (`{{ }}`, `{% %}`) and YAML structure are fully supported
-  - Runnables, syntax highlighting, and outline work in templated files
-  - See [JINJA_TEMPLATE_SOLUTION.md](JINJA_TEMPLATE_SOLUTION.md) for technical details
+**Hardware-Inspection Panels (memory/CRTC/PSG/FDC/PPI/tape/screen/disassembly/BASIC-listing views, the embedded emulator tab, the `.sna`/`.cpr` hex viewer)**
+- The VSCode extension renders these as webview panels and custom editor tabs
+- **Zed limitation:** the WASM extension API has no panel/webview/custom-editor surface at all - several of these (memory view, disassembly view) are on *Zed core's own* roadmap as future built-in editor features, not something an extension could add
+- **Partial alternative:** once a debug session starts, the emulator's own address is printed as a clickable link in the debug console (see Debugging, above) when the emulator serves one (1984js does) - not the panels themselves, but enough to actually see/hear the demo run
 
 **Register Values Display**
 - The VSCode extension shows tracked register values in a status bar item
@@ -336,7 +375,8 @@ Everything else works identically (or should work with proper testing):
 - Completions
 - Snippets
 - Document symbols (LSP provides them - Zed display behavior TBD)
-- ⚠️ Runnable detection (runnables.scm added, needs testing - see [ZED_IMPLEMENTATION_STATUS.md](../ZED_IMPLEMENTATION_STATUS.md))
+- Runnable build targets (▶ triangles, zero setup - a `tasks.json` ships with the extension) and Jinja2-templated bndbuild files (full grammar-injection support - see [JINJA_TEMPLATE_SOLUTION.md](JINJA_TEMPLATE_SOLUTION.md))
+- Source-level debugging via `cpclib-dap` (see Debugging, above) - breakpoints, stepping, variables, call stack
 
 ---
 

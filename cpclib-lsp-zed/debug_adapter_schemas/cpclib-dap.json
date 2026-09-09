@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cpclib-dap Debug Adapter Configuration",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "string",
+      "enum": ["launch"],
+      "default": "launch",
+      "description": "cpclib-dap only supports launching a fresh session - there is no running process to attach to."
+    },
+    "program": {
+      "type": "string",
+      "default": "$ZED_FILE",
+      "description": "The .asm, .bas, .sna or .dsk file to debug. A .bas file is tokenised and loaded but not auto-run - type RUN in the emulator once it opens. A .sna is loaded exactly as saved, with no source map - breakpoints and stepping work at the address level only. A .dsk is mounted in drive A at a cold boot, landing at Ready - also not auto-run, and also with no source map."
+    },
+    "rule": {
+      "type": "string",
+      "description": "A bndbuild rule that launches the emulator; its 'emu ... run' command is re-issued as 'debug'. Set this instead of `program` to debug a full build."
+    },
+    "buildFile": {
+      "type": "string",
+      "description": "The build file `rule` lives in. Defaults to the nearest one."
+    },
+    "emulator": {
+      "type": "string",
+      "enum": ["1984js", "amspiritlite"],
+      "default": "1984js",
+      "description": "Which DAP-capable emulator to debug in. Any other value falls back to 1984js with a notice."
+    },
+    "watchLabels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Labels to report writes to, using the emulator's write-watch channels. The program's own `BREAKPOINT ... TYPE=MEM` directives are watched too, and come first when channels are scarce."
+    },
+    "stopOnEntry": {
+      "type": "boolean",
+      "default": false,
+      "description": "Break at the address the snapshot starts from, before it runs."
+    },
+    "topOfStack": {
+      "type": "string",
+      "description": "Where the program's stack starts - a label or an address. The call stack is walked no further than this. Defaults to a `stack_top`/`stack` label if the program has one."
+    }
+  }
+}

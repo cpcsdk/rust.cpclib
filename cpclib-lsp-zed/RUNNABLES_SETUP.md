@@ -1,11 +1,18 @@
 # Zed Runnables Setup
 
-The cpclib-lsp Zed extension provides runnable code detection for bndbuild files, but you need to configure how to execute them.
+The cpclib-lsp Zed extension provides runnable code detection for bndbuild
+files, bound to a task by default - `languages/bndbuild/tasks.json`, shipped
+with the extension, runs `cpclib-lsp bndbuild -f <file> <target>` (the same
+single-binary invocation VS Code's own task provider uses - no separate
+`bndbuild` install needed). Nothing below is required for the default case;
+it's kept for anyone who wants to override it.
 
-## Quick Setup
+## Quick Setup (only if you want to customize the default)
 
 1. **Create tasks configuration:**
-   Edit `~/.config/zed/tasks.json` (global) or `.zed/tasks.json` (project-specific):
+   Edit `~/.config/zed/tasks.json` (global) or `.zed/tasks.json`
+   (project-specific) - a task there with the same `bndbuild-target` tag
+   takes precedence over the bundled one:
 
 ```json
 [

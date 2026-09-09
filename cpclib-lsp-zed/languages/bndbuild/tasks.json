@@ -1,0 +1,16 @@
+[
+  {
+    "label": "bndbuild: run target",
+    "command": "cpclib-lsp",
+    "args": ["bndbuild", "-f", "$ZED_FILE", "$ZED_CUSTOM_target"],
+    "tags": ["bndbuild-target"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always"
+  },
+  {
+    "label": "bndbuild: build default target",
+    "command": "cpclib-lsp",
+    "args": ["bndbuild", "-f", "$ZED_FILE"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  }
+]
