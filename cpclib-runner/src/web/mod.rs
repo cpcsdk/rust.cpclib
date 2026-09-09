@@ -9,10 +9,9 @@
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
-pub mod dap_protocol;
 pub mod js1984;
 pub mod server;
-pub use server::{ServerHandle, serve};
+pub use server::{ServerHandle, decode_dap_frames, encode_dap_frame, serve};
 
 /// How an application is started once it is installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

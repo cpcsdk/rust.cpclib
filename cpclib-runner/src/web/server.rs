@@ -92,6 +92,62 @@ impl ServerHandle {
     }
 }
 
+/// Content-Length framing: the generic message-delimiting scheme the DAP
+/// wire format uses (the same one LSP uses), not itself DAP-specific
+/// business logic - so it lives here, next to the transport that carries
+/// framed messages in (`dap.js`'s own SSE output, decoded by whoever reads
+/// [`ServerHandle::try_recv`]), rather than in `cpclib-dap`, which builds
+/// the actual DAP message *shapes* on top of it (and, for the outgoing
+/// direction, doesn't even need it: [`ServerHandle::send`] hands the page
+/// unframed JSON, which rebuilds the Content-Length frame its own parser
+/// wants).
+pub fn encode_dap_frame(message: &serde_json::Value) -> String {
+    let body = serde_json::to_string(message).expect("a DAP message must serialise");
+    format!("Content-Length: {}\r\n\r\n{}", body.len(), body)
+}
+
+/// Pull whole messages out of an accumulating buffer, leaving any partial tail.
+///
+/// Returns the messages decoded and drains exactly the bytes they occupied -
+/// a socket hands over arbitrary chunks, so a message may arrive in pieces or
+/// several may arrive at once.
+pub fn decode_dap_frames(buffer: &mut Vec<u8>) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    while let Some(header_end) = find_subslice(buffer, b"\r\n\r\n") {
+        let header = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+        let Some(length) = content_length(&header)
+        else {
+            // A header we cannot read is not going to become readable; drop it
+            // rather than spin on it forever.
+            buffer.drain(..header_end + 4);
+            continue;
+        };
+        let body_start = header_end + 4;
+        if buffer.len() < body_start + length {
+            break; // the body has not all arrived yet
+        }
+        let body = &buffer[body_start..body_start + length];
+        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) {
+            out.push(value);
+        }
+        buffer.drain(..body_start + length);
+    }
+    out
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn content_length(header: &str) -> Option<usize> {
+    header
+        .lines()
+        .find_map(|line| line.strip_prefix("Content-Length:"))
+        .and_then(|value| value.trim().parse().ok())
+}
+
 struct Site {
     root: Utf8PathBuf,
     snapshot: Mutex<Option<Vec<u8>>>,
@@ -562,5 +618,55 @@ mod bare_style_exemption_tests {
             BARE_SCREEN_STYLE.contains(":not(#cpclib-audio)"),
             "the offer to fix the sound must not be hidden by the tidying"
         );
+    }
+}
+
+#[cfg(test)]
+mod dap_frame_tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn a_message_round_trips_through_the_framing() {
+        let message = json!({"seq": 1, "type": "request", "command": "initialize"});
+        let mut buffer = encode_dap_frame(&message).into_bytes();
+        let decoded = decode_dap_frames(&mut buffer);
+        assert_eq!(decoded, vec![message]);
+        assert!(buffer.is_empty(), "the buffer is drained");
+    }
+
+    /// A socket splits wherever it likes; a message must survive arriving one
+    /// byte at a time.
+    #[test]
+    fn a_message_split_across_reads_is_reassembled() {
+        let message = json!({"seq": 7, "type": "event", "event": "stopped"});
+        let encoded = encode_dap_frame(&message).into_bytes();
+        let mut buffer = Vec::new();
+        for byte in &encoded[..encoded.len() - 1] {
+            buffer.push(*byte);
+            assert!(decode_dap_frames(&mut buffer).is_empty(), "not yet complete");
+        }
+        buffer.push(*encoded.last().unwrap());
+        assert_eq!(decode_dap_frames(&mut buffer), vec![message]);
+    }
+
+    #[test]
+    fn several_messages_in_one_read_all_come_out() {
+        let a = json!({"seq": 1, "type": "request", "command": "a"});
+        let b = json!({"seq": 2, "type": "request", "command": "b"});
+        let mut buffer = format!("{}{}", encode_dap_frame(&a), encode_dap_frame(&b)).into_bytes();
+        assert_eq!(decode_dap_frames(&mut buffer), vec![a, b]);
+    }
+
+    /// Unknown fields survive the trip - the whole reason messages stay JSON.
+    #[test]
+    fn unknown_fields_are_preserved() {
+        let message = json!({
+            "seq": 1, "type": "request", "command": "somethingNew",
+            "arguments": {"aFieldWeDoNotModel": [1, 2, 3]}
+        });
+        let mut buffer = encode_dap_frame(&message).into_bytes();
+        assert_eq!(decode_dap_frames(&mut buffer), vec![message]);
     }
 }
