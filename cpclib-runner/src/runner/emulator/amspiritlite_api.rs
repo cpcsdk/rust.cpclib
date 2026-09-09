@@ -26,6 +26,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
+use cpclib_common::camino::Utf8Path;
 use serde_json::json;
 
 /// The base a session talks to. The emulator's own out-of-the-box default.
@@ -160,6 +161,34 @@ fn bytes_body_of(response: &[u8]) -> &[u8] {
     }
 }
 
+/// POST raw bytes (not JSON/text) - `/api/media`'s own request body, the
+/// one call shape here that doesn't fit `Call`/`perform` (whose body is
+/// always a `String`, always sent as `application/json`).
+fn upload(endpoint: &str, path: &str, query: &[(&str, String)], body: &[u8]) -> std::io::Result<String> {
+    let host = host_of(endpoint)?;
+    let mut full_path = path.to_string();
+    if !query.is_empty() {
+        full_path.push('?');
+        full_path.push_str(
+            &query.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&")
+        );
+    }
+
+    let mut stream = TcpStream::connect(&host)?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    let header = format!(
+        "POST {full_path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\
+         Content-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(header.as_bytes())?;
+    stream.write_all(body)?;
+
+    let mut raw = String::new();
+    stream.read_to_string(&mut raw)?;
+    Ok(body_of(&raw).to_string())
+}
+
 /// `"3E 00 C9"` or `"3E00C9"` into bytes.
 pub fn bytes_from_hex(hex: &str) -> Vec<u8> {
     let digits: Vec<u8> = hex.bytes().filter(|b| b.is_ascii_hexdigit()).collect();
@@ -233,6 +262,67 @@ pub fn get_screenshot_png(endpoint: &str) -> Result<Vec<u8>, String> {
 pub fn keytype(endpoint: &str, text: &str) -> Result<(), String> {
     let call = Call::post("/api/keytype").body(json!({ "text": text }).to_string());
     perform(endpoint, &call).map(|_| ()).map_err(|e| format!("AMSpiriT Lite keytype request failed: {e}"))
+}
+
+/// `POST /api/media?drive=<N>&name=<filename>` - loads a media file
+/// (SNA/DSK/HFE/IPF/CPR/CRO/BIN; `.cdt` unsupported) into a drive/slot, the
+/// emulator routing it by the bytes' own signature (the `name` hint mainly
+/// matters for headerless `.bin`/AMSDOS files). Confirmed live: loading a
+/// real `.dsk` this way and then reading it back via `keytype`+`/api/ram`
+/// showed its content correctly.
+///
+/// One call for both a disc and a snapshot - which drive parameter to pass
+/// (`Some(drive)` for a disc, `None` for an SNA snapshot, which has no
+/// drive) is the caller's job, matching what `load_disc`/`load_snapshot`
+/// below already do.
+fn load_media(endpoint: &str, drive: Option<u8>, path: &Utf8Path) -> Result<(), String> {
+    let bytes = fs_err::read(path).map_err(|e| format!("Failed to read {path}: {e}"))?;
+    let name = path.file_name().unwrap_or("");
+    let mut query = vec![("name", name.to_string())];
+    if let Some(drive) = drive {
+        query.push(("drive", drive.to_string()));
+    }
+    upload(endpoint, "/api/media", &query, &bytes)
+        .map(|_| ())
+        .map_err(|e| format!("AMSpiriT Lite media upload of {path} failed: {e}"))
+}
+
+/// `POST /api/media?drive=<N>` with a `.dsk`/`.hfe`/`.ipf` file's bytes.
+pub fn load_disc(endpoint: &str, drive: u8, path: &Utf8Path) -> Result<(), String> {
+    load_media(endpoint, Some(drive), path)
+}
+
+/// `POST /api/media` with an `.sna` file's bytes - no `drive` query param,
+/// a snapshot isn't drive-specific.
+pub fn load_snapshot(endpoint: &str, path: &Utf8Path) -> Result<(), String> {
+    load_media(endpoint, None, path)
+}
+
+/// `POST /api/disk {"action":"save","drive":<N>}` - documented to answer
+/// with a raw `.dsk` download. Not fully verified live: every attempt
+/// (both against a disk freshly created via `action:"create"` and one
+/// freshly loaded via `load_disc`) answered
+/// `{"error":"no disk or save failed"}` instead on the 1.14.3 build tested
+/// here - implemented against the documented contract regardless, since
+/// the failure may be specific to this build/environment (surfaces the
+/// emulator's own error text either way, rather than a silent wrong
+/// result).
+pub fn save_disc(endpoint: &str, drive: u8) -> Result<Vec<u8>, String> {
+    let call =
+        Call::post("/api/disk").body(json!({ "action": "save", "drive": drive }).to_string());
+    let response = perform_bytes(endpoint, &call)
+        .map_err(|e| format!("AMSpiriT Lite disk save request failed: {e}"))?;
+    // A successful save is a raw .dsk download; a failure is
+    // `{"error":".."}` JSON text - distinguish by whether it parses as
+    // that specific shape, not by content-type (this module doesn't keep
+    // response headers around once `perform_bytes` strips them).
+    if let Ok(text) = std::str::from_utf8(&response)
+        && let Ok(value) = serde_json::from_str::<serde_json::Value>(text)
+        && let Some(error) = value.get("error").and_then(|e| e.as_str())
+    {
+        return Err(format!("AMSpiriT Lite disk save failed: {error}"));
+    }
+    Ok(response)
 }
 
 #[cfg(test)]

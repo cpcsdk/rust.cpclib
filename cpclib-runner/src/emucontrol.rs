@@ -1229,6 +1229,35 @@ pub(crate) trait UsedEmulator: Sized {
     where Self: Sized {
         Err("This emulator has no memory-write facility reachable from Robot automation".to_owned())
     }
+
+    /// The default behavior is "not available" - most emulators expose no
+    /// way to load a snapshot file into an already-running instance from
+    /// outside a real debug session. Tailored where an emulator has its
+    /// own API for it.
+    #[cfg(feature = "screenshot")]
+    fn load_snapshot(_robot: &mut RobotImpl<Self>, _path: &Utf8Path) -> Result<(), String>
+    where Self: Sized {
+        Err("This emulator has no snapshot-load facility reachable from Robot automation".to_owned())
+    }
+
+    /// See `load_snapshot`'s own doc comment - same reasoning, for discs.
+    #[cfg(feature = "screenshot")]
+    fn load_disc(_robot: &mut RobotImpl<Self>, _drive: u8, _path: &Utf8Path) -> Result<(), String>
+    where Self: Sized {
+        Err("This emulator has no disc-load facility reachable from Robot automation".to_owned())
+    }
+
+    /// See `load_snapshot`'s own doc comment - same reasoning, exporting
+    /// the disc currently in a drive rather than inserting one. Returns
+    /// the raw `.dsk` bytes; writing them to a file is the caller's job
+    /// (mirrors `load_disc`/`load_snapshot` taking a path rather than
+    /// bytes only in the direction each emulator's own API actually wants
+    /// them).
+    #[cfg(feature = "screenshot")]
+    fn save_disc(_robot: &mut RobotImpl<Self>, _drive: u8) -> Result<Vec<u8>, String>
+    where Self: Sized {
+        Err("This emulator has no disc-save facility reachable from Robot automation".to_owned())
+    }
 }
 
 pub(crate) struct AceUsedEmulator {}
@@ -1383,6 +1412,47 @@ impl UsedEmulator for AmspiritUsedEmulator {
         Err("Full AMSpiriT (non-Lite) has no memory-write API reachable from Robot automation"
             .to_owned())
     }
+
+    // Deliberately no retry loop, same reasoning as SugarBoxV2UsedEmulator's
+    // own load_snapshot/load_disc below: a bad path or a file the emulator
+    // rejects is a real, non-transient failure the caller needs to see,
+    // not something to paper over by retrying for 5 seconds and then
+    // panicking.
+    #[cfg(feature = "screenshot")]
+    fn load_snapshot(robot: &mut RobotImpl<Self>, path: &Utf8Path) -> Result<(), String> {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            return amspiritlite_api::load_snapshot(amspiritlite_endpoint(), path);
+        }
+        Err("Full AMSpiriT (non-Lite) has no snapshot-load API reachable from Robot automation"
+            .to_owned())
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn load_disc(robot: &mut RobotImpl<Self>, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            return amspiritlite_api::load_disc(amspiritlite_endpoint(), drive, path);
+        }
+        Err("Full AMSpiriT (non-Lite) has no disc-load API reachable from Robot automation"
+            .to_owned())
+    }
+
+    // Deliberately no retry loop, unlike this impl's other native-API
+    // calls: `amspiritlite_api::save_disc`'s own doc comment explains that
+    // every attempt against a live 1.14.3 build answered
+    // `{"error":"no disk or save failed"}` regardless of a real disk being
+    // present - a functional error, not a "server not listening yet"
+    // startup race `retry_native_api_call`'s 5-second-then-panic behavior
+    // is meant for, so it would just retry a real failure for 5 seconds
+    // and then panic on it instead of returning the emulator's own error
+    // text to the caller.
+    #[cfg(feature = "screenshot")]
+    fn save_disc(robot: &mut RobotImpl<Self>, drive: u8) -> Result<Vec<u8>, String> {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            return amspiritlite_api::save_disc(amspiritlite_endpoint(), drive);
+        }
+        Err("Full AMSpiriT (non-Lite) has no disc-save API reachable from Robot automation"
+            .to_owned())
+    }
 }
 
 /// `AMSPIRIT_LITE_ROBOT_WEB_PORT` as the `http://host:port` shape
@@ -1430,6 +1500,23 @@ impl UsedEmulator for SugarBoxV2UsedEmulator {
             sugarbox_api::write_memory(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, address, data)
         });
         Ok(())
+    }
+
+    // Deliberately no retry loop here, unlike this impl's other native-API
+    // calls: an invalid path or a file the emulator rejects (confirmed
+    // live: a non-.sna file answers `{"status":"error","message":"snapshot
+    // load failed: .."}`) is a real, meaningful, non-transient failure a
+    // caller needs to see - `retry_native_api_call`'s 5-second-then-panic
+    // behavior is for the narrow "server not listening yet" startup race,
+    // not for "the emulator looked at this file and said no".
+    #[cfg(feature = "screenshot")]
+    fn load_snapshot(_robot: &mut RobotImpl<Self>, path: &Utf8Path) -> Result<(), String> {
+        sugarbox_api::load_snapshot(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn load_disc(_robot: &mut RobotImpl<Self>, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        sugarbox_api::load_disc(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, drive, path)
     }
 }
 
@@ -1653,6 +1740,12 @@ impl Robot {
             fn read_memory(&mut self, address: u16, count: u16) -> Result<Vec<u8>, String>;
             #[cfg(feature = "screenshot")]
             fn write_memory(&mut self, address: u16, data: &[u8]) -> Result<(), String>;
+            #[cfg(feature = "screenshot")]
+            fn load_snapshot(&mut self, path: &Utf8Path) -> Result<(), String>;
+            #[cfg(feature = "screenshot")]
+            fn load_disc(&mut self, drive: u8, path: &Utf8Path) -> Result<(), String>;
+            #[cfg(feature = "screenshot")]
+            fn save_disc(&mut self, drive: u8) -> Result<Vec<u8>, String>;
             fn close(&mut self);
         }
 
@@ -1735,6 +1828,21 @@ impl<E: UsedEmulator> RobotImpl<E> {
     #[cfg(feature = "screenshot")]
     pub fn write_memory(&mut self, address: u16, data: &[u8]) -> Result<(), String> {
         E::write_memory(self, address, data)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn load_snapshot(&mut self, path: &Utf8Path) -> Result<(), String> {
+        E::load_snapshot(self, path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn load_disc(&mut self, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        E::load_disc(self, drive, path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn save_disc(&mut self, drive: u8) -> Result<Vec<u8>, String> {
+        E::save_disc(self, drive)
     }
 }
 

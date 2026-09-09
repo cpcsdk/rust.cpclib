@@ -30,6 +30,7 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 use base64::Engine;
+use cpclib_common::camino::Utf8Path;
 use serde_json::{Value, json};
 
 /// Connects, sends `cmd`, returns the first non-`{"type":"event",...}`
@@ -118,4 +119,39 @@ pub fn write_memory(port: u16, address: u16, data: &[u8]) -> Result<(), String> 
     else {
         Err(format!("SugarBoxV2 writeMemory did not report ok: {response}"))
     }
+}
+
+/// Common shape shared by `loadSnapshot`/`insertDisk`'s answers, both
+/// confirmed live: success is `{"status":"ok"}` (after a `mediaChanged`
+/// event and, for a snapshot, a `stopped` event too - both already
+/// transparently skipped by `send_command`); failure is
+/// `{"status":"error","message":".."}`.
+fn check_media_response(response: &Value) -> Result<(), String> {
+    if response.get("status").and_then(|s| s.as_str()) == Some("ok") {
+        Ok(())
+    }
+    else {
+        let message =
+            response.get("message").and_then(|m| m.as_str()).unwrap_or("no error message given");
+        Err(message.to_owned())
+    }
+}
+
+/// `{"cmd":"loadSnapshot","path":".."}` - SugarBoxV2 is a native local
+/// process with its own filesystem access, so this (like `load_disc`
+/// below) takes a path the emulator reads itself, not uploaded bytes -
+/// unlike AMSpiriT Lite's HTTP API. Confirmed live both ways: a real `.sna`
+/// answers `{"status":"ok"}`; a non-SNA file answers
+/// `{"status":"error","message":"snapshot load failed: <path>"}`.
+pub fn load_snapshot(port: u16, path: &Utf8Path) -> Result<(), String> {
+    let response = send_command(port, json!({"cmd": "loadSnapshot", "path": path.as_str()}))?;
+    check_media_response(&response).map_err(|e| format!("SugarBoxV2 snapshot load failed: {e}"))
+}
+
+/// `{"cmd":"insertDisk","drive":<N>,"path":".."}` - confirmed live: a real
+/// `.dsk` answers `{"status":"ok"}` after a `mediaChanged` event.
+pub fn load_disc(port: u16, drive: u8, path: &Utf8Path) -> Result<(), String> {
+    let response =
+        send_command(port, json!({"cmd": "insertDisk", "drive": drive, "path": path.as_str()}))?;
+    check_media_response(&response).map_err(|e| format!("SugarBoxV2 disc load failed: {e}"))
 }
