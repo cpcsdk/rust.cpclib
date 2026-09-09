@@ -702,11 +702,6 @@ impl EmulatorConf {
         // is it really usefull ? seems it is really done by playing with the conf files
         if !self.roms_configuration.is_empty() {
             match emu {
-                Emulator::Ace(_) => todo!(),
-                Emulator::CpcEmu(_) => todo!(),
-                Emulator::Cpcec(_) => todo!(),
-                Emulator::Winape(_) => todo!(),
-                Emulator::Amspirit(_) => todo!(),
                 Emulator::AmspiritLite(_) => {
                     // `-R/--rom-path` points at a directory of ROMs rather than
                     // naming them one by one, so a per-slot configuration has
@@ -715,12 +710,21 @@ impl EmulatorConf {
                          individual ROM slots"
                         .to_owned());
                 },
-                Emulator::SugarBoxV2(_) => todo!(),
-                Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
-                Emulator::CapriceForever(_caprice_forever_version) => todo!(),
-                Emulator::RetroVm(_) => todo!(),
-                Emulator::Cadence(_) => todo!(),
-                Emulator::Emulator1984(_) => todo!()
+                Emulator::Ace(_)
+                | Emulator::CpcEmu(_)
+                | Emulator::Cpcec(_)
+                | Emulator::Winape(_)
+                | Emulator::Amspirit(_)
+                | Emulator::SugarBoxV2(_)
+                | Emulator::CpcEmuPower(_)
+                | Emulator::CapriceForever(_)
+                | Emulator::RetroVm(_)
+                | Emulator::Cadence(_)
+                | Emulator::Emulator1984(_) => {
+                    return Err(format!(
+                        "ROM configuration is not yet supported for {emu:?}"
+                    ));
+                }
             }
         }
 
@@ -773,7 +777,12 @@ impl EmulatorConf {
                 576 => "-k4",
                 1088 => "-k5",
                 2112 => "-k6",
-                _ => unimplemented!()
+                _ => {
+                    return Err(format!(
+                        "Unsupported memory size {memory}KB for CPCEC (expected one of \
+                         64/128/192/320/576/1088/2112)"
+                    ));
+                }
             };
             args.push(arg.to_owned());
         }
@@ -828,7 +837,9 @@ impl EmulatorConf {
                 Emulator::AmspiritLite(_) => {
                     args.push(format!("--run={run}"));
                 },
-                Emulator::SugarBoxV2(_) => unimplemented!(),
+                Emulator::SugarBoxV2(_) => {
+                    o.emit_stderr("auto_run is currently ignored for SugarBox v2\n");
+                },
                 Emulator::CpcEmuPower(_) => args.push(format!("--auto=RUN\"{run}")),
                 Emulator::CapriceForever(_v) => {
                     args.push(format!("/Command=RUN\"\"{run}"));
@@ -1185,10 +1196,22 @@ impl UsedEmulator for AceUsedEmulator {
     #[cfg(feature = "screenshot")]
     fn screenshot(robot: &mut RobotImpl<Self>) -> Screenshot {
         let folder = robot.emu.screenshots_folder();
-        let before_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
-            .unwrap()
-            .map(|p| p.unwrap().as_path().to_owned())
-            .collect();
+        let glob_pattern = folder.join("*.png");
+        // A malformed glob pattern would be a structural bug (the pattern is
+        // just a fixed "*.png" suffix), not a transient race - panicking
+        // with a clear message is appropriate here, unlike the per-entry
+        // races handled by `filter_map` below.
+        let list_screenshots = || {
+            glob::glob(glob_pattern.as_str())
+                .unwrap_or_else(|e| panic!("Invalid glob pattern `{glob_pattern}`: {e}"))
+                // Each entry can transiently fail to be read if the emulator
+                // is mid-write/rename to the same directory; skip those
+                // instead of crashing the whole capture over a race.
+                .filter_map(|p| p.ok())
+                .map(|p| p.as_path().to_owned())
+                .collect::<HashSet<_>>()
+        };
+        let before_screenshots = list_screenshots();
 
         // handlekey press
         robot.type_key(HostKey::F10);
@@ -1196,10 +1219,7 @@ impl UsedEmulator for AceUsedEmulator {
         let mut file = None;
         while file.is_none() {
             WindowEventsManager::wait_a_bit();
-            let after_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
-                .unwrap()
-                .map(|p| p.unwrap().as_path().to_owned())
-                .collect();
+            let after_screenshots = list_screenshots();
             let mut new_screenshots = after_screenshots
                 .difference(&before_screenshots)
                 .cloned()
@@ -1216,20 +1236,14 @@ impl UsedEmulator for AceUsedEmulator {
             im = xcap::image::open(file);
         }
         let im = im.unwrap().into_rgba8();
-        fs_err::remove_file(file).unwrap();
+        // Best-effort cleanup: the image is already decoded into `im` at
+        // this point, so a locked/already-gone file here (e.g. the emulator
+        // or an antivirus still holding it) shouldn't crash the capture -
+        // it just leaves a harmless leftover screenshot file behind.
+        let _ = fs_err::remove_file(file);
         im
     }
 }
-impl UsedEmulator for CpcecUsedEmulator {}
-impl UsedEmulator for WinapeUsedEmulator {}
-impl UsedEmulator for SugarBoxV2UsedEmulator {}
-impl UsedEmulator for AmspiritUsedEmulator {}
-impl UsedEmulator for CpcEmuPowerUsedEmulator {}
-impl UsedEmulator for CpcEmuUsedEmulator {}
-impl UsedEmulator for RetroVmUsedEmulator {}
-impl UsedEmulator for CapriceForeverUsedEmulator {}
-impl UsedEmulator for CadenceUsedEmulator {}
-impl UsedEmulator for Emulator1984UsedEmulator {}
 
 pub(crate) struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
@@ -1266,70 +1280,42 @@ pub(crate) enum Robot {
     Emulator1984(RobotImpl<Emulator1984UsedEmulator>)
 }
 
-impl From<RobotImpl<AceUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<AceUsedEmulator>) -> Self {
-        Self::Ace(value)
-    }
+/// Generates the `From<RobotImpl<_>> for Robot` boilerplate shared by every
+/// emulator variant. Optionally also generates the trivial `UsedEmulator`
+/// marker impl (default screenshot behavior) for emulators that need no
+/// per-emulator override - `AceUsedEmulator` is the one exception (a
+/// custom `screenshot` impl above) and keeps its own hand-written
+/// `UsedEmulator` impl, so it's listed with `robot_from_only`.
+macro_rules! used_emulators {
+    (robot_from_only: $($used:ident => $variant:ident),+ $(,)?) => {
+        $(
+            impl From<RobotImpl<$used>> for Robot {
+                fn from(value: RobotImpl<$used>) -> Self {
+                    Self::$variant(value)
+                }
+            }
+        )+
+    };
+    ($($used:ident => $variant:ident),+ $(,)?) => {
+        $(
+            impl UsedEmulator for $used {}
+        )+
+        used_emulators!(robot_from_only: $($used => $variant),+);
+    };
 }
 
-impl From<RobotImpl<CpcecUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<CpcecUsedEmulator>) -> Self {
-        Self::Cpcec(value)
-    }
-}
-
-impl From<RobotImpl<WinapeUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<WinapeUsedEmulator>) -> Self {
-        Self::Winape(value)
-    }
-}
-
-impl From<RobotImpl<AmspiritUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<AmspiritUsedEmulator>) -> Self {
-        Self::Amspirit(value)
-    }
-}
-
-impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
-    fn from(value: RobotImpl<SugarBoxV2UsedEmulator>) -> Self {
-        Self::SugarboxV2(value)
-    }
-}
-
-impl From<RobotImpl<CpcEmuPowerUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<CpcEmuPowerUsedEmulator>) -> Self {
-        Self::CpcEmuPower(value)
-    }
-}
-
-impl From<RobotImpl<CpcEmuUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<CpcEmuUsedEmulator>) -> Self {
-        Self::CpcEmu(value)
-    }
-}
-
-impl From<RobotImpl<RetroVmUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<RetroVmUsedEmulator>) -> Self {
-        Self::RetroVm(value)
-    }
-}
-
-impl From<RobotImpl<CapriceForeverUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<CapriceForeverUsedEmulator>) -> Self {
-        Self::CapriceForever(value)
-    }
-}
-
-impl From<RobotImpl<CadenceUsedEmulator>> for Robot {
-    fn from(value: RobotImpl<CadenceUsedEmulator>) -> Self {
-        Self::Cadence(value)
-    }
-}
-
-impl From<RobotImpl<Emulator1984UsedEmulator>> for Robot {
-    fn from(value: RobotImpl<Emulator1984UsedEmulator>) -> Self {
-        Self::Emulator1984(value)
-    }
+used_emulators!(robot_from_only: AceUsedEmulator => Ace);
+used_emulators! {
+    CpcecUsedEmulator => Cpcec,
+    WinapeUsedEmulator => Winape,
+    AmspiritUsedEmulator => Amspirit,
+    SugarBoxV2UsedEmulator => SugarboxV2,
+    CpcEmuPowerUsedEmulator => CpcEmuPower,
+    CpcEmuUsedEmulator => CpcEmu,
+    RetroVmUsedEmulator => RetroVm,
+    CapriceForeverUsedEmulator => CapriceForever,
+    CadenceUsedEmulator => Cadence,
+    Emulator1984UsedEmulator => Emulator1984,
 }
 
 impl<E: UsedEmulator> From<(Option<EmuWindow>, WindowEventsManager, &Emulator)> for RobotImpl<E> {
