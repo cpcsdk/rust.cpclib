@@ -25,56 +25,10 @@
 //! exposes none of it and the chip panes have to round-trip a whole snapshot.
 //! The cost is that it runs in its own window rather than in an editor tab.
 
+use cpclib_runner::runner::emulator::amspiritlite_api::{Call, bytes_from_hex, host_of, perform};
+#[cfg(test)]
+use cpclib_runner::runner::emulator::amspiritlite_api::{DEFAULT_ENDPOINT, Method, body_of};
 use serde_json::{Value, json};
-
-/// The base a session talks to. The emulator's own default.
-pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8765";
-
-/// One HTTP call, described rather than made.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Call {
-    pub method: Method,
-    pub path: &'static str,
-    /// `key=value` pairs, already in the order the emulator expects.
-    pub query: Vec<(String, String)>,
-    pub body: Option<String>
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Method {
-    Get,
-    Post
-}
-
-impl Call {
-    fn get(path: &'static str) -> Self {
-        Self {
-            method: Method::Get,
-            path,
-            query: Vec::new(),
-            body: None
-        }
-    }
-
-    fn post(path: &'static str) -> Self {
-        Self {
-            method: Method::Post,
-            path,
-            query: Vec::new(),
-            body: None
-        }
-    }
-
-    fn query(mut self, key: &str, value: impl std::fmt::Display) -> Self {
-        self.query.push((key.to_string(), value.to_string()));
-        self
-    }
-
-    fn body(mut self, body: impl Into<String>) -> Self {
-        self.body = Some(body.into());
-        self
-    }
-}
 
 /// What a DAP request asks of the emulator.
 ///
@@ -1252,16 +1206,6 @@ fn hex_from_base64(encoded: &str) -> String {
         .collect()
 }
 
-/// `"3E 00 C9"` or `"3E00C9"` into bytes.
-fn bytes_from_hex(hex: &str) -> Vec<u8> {
-    let digits: Vec<u8> = hex.bytes().filter(|b| b.is_ascii_hexdigit()).collect();
-    digits
-        .chunks(2)
-        .filter(|pair| pair.len() == 2)
-        .filter_map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
-        .collect()
-}
-
 /// A live connection to AMSpiriT Lite's debug server.
 ///
 /// Requests go out as ordinary HTTP on loopback and their answers come back
@@ -2154,62 +2098,6 @@ impl Drop for AmspiritLitePeer {
             let _ = child.kill();
             let _ = child.wait();
         }
-    }
-}
-
-/// `http://127.0.0.1:8765` into `127.0.0.1:8765`.
-fn host_of(endpoint: &str) -> std::io::Result<String> {
-    let rest = endpoint
-        .trim_end_matches('/')
-        .strip_prefix("http://")
-        .ok_or_else(|| std::io::Error::other(format!("{endpoint} is not an http:// address")))?;
-    Ok(rest.to_string())
-}
-
-/// Make one call and return its body.
-fn perform(endpoint: &str, call: &Call) -> std::io::Result<String> {
-    use std::io::{Read, Write};
-
-    let host = host_of(endpoint)?;
-    let mut path = call.path.to_string();
-    if !call.query.is_empty() {
-        let query: Vec<String> = call
-            .query
-            .iter()
-            .map(|(key, value)| format!("{key}={value}"))
-            .collect();
-        path.push('?');
-        path.push_str(&query.join("&"));
-    }
-
-    let mut stream = std::net::TcpStream::connect(&host)?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
-
-    let request = match (&call.method, &call.body) {
-        (Method::Get, _) => {
-            format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")
-        },
-        (Method::Post, body) => {
-            let body = body.clone().unwrap_or_default();
-            format!(
-                "POST {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\
-                 Content-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}",
-                body.len()
-            )
-        }
-    };
-    stream.write_all(request.as_bytes())?;
-
-    let mut raw = String::new();
-    stream.read_to_string(&mut raw)?;
-    Ok(body_of(&raw).to_string())
-}
-
-/// Everything after the blank line that ends the headers.
-fn body_of(response: &str) -> &str {
-    match response.find("\r\n\r\n") {
-        Some(at) => &response[at + 4..],
-        None => ""
     }
 }
 

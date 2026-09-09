@@ -24,6 +24,10 @@ use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
 use crate::runner::Runner;
 use crate::runner::emulator::Emulator;
+#[cfg(feature = "screenshot")]
+use crate::runner::emulator::amspiritlite_api;
+#[cfg(feature = "screenshot")]
+use crate::runner::emulator::sugarbox_api;
 use crate::runner::exec::RunnerWithClap;
 
 #[cfg(feature = "screenshot")]
@@ -1209,6 +1213,22 @@ pub(crate) trait UsedEmulator: Sized {
     where Self: Sized {
         robot.events_manager.type_text(s);
     }
+
+    /// The default behavior is "not available": most emulators expose no
+    /// way at all to peek at memory from outside a real debug session.
+    /// Tailored where an emulator has its own API for it.
+    #[cfg(feature = "screenshot")]
+    fn read_memory(_robot: &mut RobotImpl<Self>, _address: u16, _count: u16) -> Result<Vec<u8>, String>
+    where Self: Sized {
+        Err("This emulator has no memory-read facility reachable from Robot automation".to_owned())
+    }
+
+    /// See `read_memory`'s own doc comment - same reasoning, opposite direction.
+    #[cfg(feature = "screenshot")]
+    fn write_memory(_robot: &mut RobotImpl<Self>, _address: u16, _data: &[u8]) -> Result<(), String>
+    where Self: Sized {
+        Err("This emulator has no memory-write facility reachable from Robot automation".to_owned())
+    }
 }
 
 pub(crate) struct AceUsedEmulator {}
@@ -1281,79 +1301,47 @@ impl UsedEmulator for AceUsedEmulator {
 /// The port `args_for_emu` explicitly passes to a Robot-launched AMSpiriT
 /// Lite via `--web-port` (its own documented out-of-the-box default,
 /// deliberately not left to whatever `amspirit-lite.conf` the current user
-/// happens to have saved) - `screenshot()` below needs to know this port
+/// happens to have saved) - the functions below need to know this port
 /// with certainty, not guess at the user's own local configuration.
 #[cfg(feature = "screenshot")]
 const AMSPIRIT_LITE_ROBOT_WEB_PORT: u16 = 8765;
 
-/// `GET /api/screenshot` on AMSpiriT Lite's own HTTP debug server: `crop=1`
-/// asks for just the visible screen area (not the full emulated frame
-/// border/overscan), `full=1` asks for a plain settled frame rather than a
-/// partial in-progress composite. Confirmed live against a running 1.14.3
-/// instance's `GET /api/doc/screenshot` - response is a raw `image/png`
-/// body, decoded here the same way Ace's own screenshot file is.
+/// Retries `f` against AMSpiriT Lite/SugarBoxV2's own API for up to five
+/// seconds - both web/debug servers bind very early in their boot
+/// sequence, but a Robot method can in principle be called right after the
+/// process is spawned, before either has had a chance to start listening.
+/// Panics past the deadline: every caller here already has no better
+/// fallback (that's exactly why it reached this native-API path rather
+/// than the trait's own default behavior).
 #[cfg(feature = "screenshot")]
-fn fetch_amspiritlite_screenshot(port: u16) -> Result<Screenshot, String> {
-    let url = format!("http://127.0.0.1:{port}/api/screenshot?crop=1&full=1");
-    let mut response = cpclib_common::network::ureq::get(&url)
-        .call()
-        .map_err(|e| format!("AMSpiriT Lite screenshot request to {url} failed: {e}"))?;
-    let bytes = response
-        .body_mut()
-        .with_config()
-        .limit(64 * 1024 * 1024)
-        .read_to_vec()
-        .map_err(|e| format!("Failed to read AMSpiriT Lite screenshot body: {e}"))?;
-    xcap::image::load_from_memory(&bytes)
-        .map(|img| img.into_rgba8())
-        .map_err(|e| format!("Failed to decode AMSpiriT Lite screenshot PNG: {e}"))
-}
-
-/// `POST /api/keytype` on AMSpiriT Lite's own HTTP debug server - the same
-/// endpoint `cpclib-dap/src/amspiritlite.rs` already uses for its own
-/// `keytype` DAP request (`Call::post("/api/keytype").body(json!({"text":
-/// text}))`). Confirmed live against a running 1.14.3 instance: posting
-/// `PRINT "HELLO"\n` typed and executed it exactly as real keystrokes
-/// would, no window focus needed.
-#[cfg(feature = "screenshot")]
-fn send_amspiritlite_keytype(port: u16, text: &str) -> Result<(), String> {
-    let url = format!("http://127.0.0.1:{port}/api/keytype");
-    let body = serde_json::json!({ "text": text }).to_string();
-    cpclib_common::network::ureq::post(&url)
-        .header("Content-Type", "application/json")
-        .send(&body)
-        .map_err(|e| format!("AMSpiriT Lite keytype request to {url} failed: {e}"))?;
-    Ok(())
+fn retry_native_api_call<T>(what: &str, mut f: impl FnMut() -> Result<T, String>) -> T {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match f() {
+            Ok(v) => return v,
+            Err(e) if std::time::Instant::now() < deadline => {
+                WindowEventsManager::wait_a_bit();
+                let _ = e;
+            },
+            Err(e) => panic!("{what} failed: {e}. This is a bug, please report it")
+        }
+    }
 }
 
 impl UsedEmulator for AmspiritUsedEmulator {
     // Shared with full (non-Lite) AMSpiriT (see `Robot::new`'s comment on
-    // why), which has no HTTP API of its own - only AmspiritLite gets the
-    // native path below, the rest fall through to the trait's default
-    // window-capture behavior.
+    // why), which has no HTTP API of its own - only AmspiritLite gets each
+    // native path below, the rest fall through to the trait's own default
+    // behavior (window capture / Enigo keystrokes / "not available").
     #[cfg(feature = "screenshot")]
     fn screenshot(robot: &mut RobotImpl<Self>) -> Screenshot {
         if matches!(robot.emu, Emulator::AmspiritLite(_)) {
-            // Bounded retry: the web server binds very early in AMSpiriT
-            // Lite's boot sequence, but `screenshot()` can in principle be
-            // called right after the process is spawned, before it has had
-            // a chance to start listening.
-            let deadline = std::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                match fetch_amspiritlite_screenshot(AMSPIRIT_LITE_ROBOT_WEB_PORT) {
-                    Ok(img) => return img,
-                    Err(e) if std::time::Instant::now() < deadline => {
-                        WindowEventsManager::wait_a_bit();
-                        let _ = e;
-                    },
-                    Err(e) => {
-                        panic!(
-                            "AMSpiriT Lite screenshot via its own HTTP API failed: {e}. This \
-                             is a bug, please report it"
-                        )
-                    }
-                }
-            }
+            return retry_native_api_call("AMSpiriT Lite screenshot via its own HTTP API", || {
+                let png = amspiritlite_api::get_screenshot_png(amspiritlite_endpoint())?;
+                xcap::image::load_from_memory(&png)
+                    .map(|img| img.into_rgba8())
+                    .map_err(|e| format!("Failed to decode AMSpiriT Lite screenshot PNG: {e}"))
+            });
         }
 
         robot.window.as_ref().map(|w| w.capture_image()).unwrap_or_else(|| {
@@ -1361,37 +1349,55 @@ impl UsedEmulator for AmspiritUsedEmulator {
         })
     }
 
-    // Same split as `screenshot()` above: AmspiritLite gets the native
-    // HTTP path (no window focus needed, works headless), full AMSpiriT
-    // falls through to the default Enigo-based keystroke simulation.
     #[cfg(feature = "screenshot")]
     fn type_text(robot: &mut RobotImpl<Self>, s: &str) {
         if matches!(robot.emu, Emulator::AmspiritLite(_)) {
-            let deadline = std::time::Instant::now() + Duration::from_secs(5);
-            loop {
-                match send_amspiritlite_keytype(AMSPIRIT_LITE_ROBOT_WEB_PORT, s) {
-                    Ok(()) => return,
-                    Err(e) if std::time::Instant::now() < deadline => {
-                        WindowEventsManager::wait_a_bit();
-                        let _ = e;
-                    },
-                    Err(e) => {
-                        panic!(
-                            "AMSpiriT Lite keytype via its own HTTP API failed: {e}. This is \
-                             a bug, please report it"
-                        )
-                    }
-                }
-            }
+            return retry_native_api_call("AMSpiriT Lite keytype via its own HTTP API", || {
+                amspiritlite_api::keytype(amspiritlite_endpoint(), s)
+            });
         }
 
         robot.events_manager.type_text(s);
     }
+
+    #[cfg(feature = "screenshot")]
+    fn read_memory(robot: &mut RobotImpl<Self>, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            return Ok(retry_native_api_call(
+                "AMSpiriT Lite readMemory via its own HTTP API",
+                || amspiritlite_api::read_memory(amspiritlite_endpoint(), address, count)
+            ));
+        }
+        Err("Full AMSpiriT (non-Lite) has no memory-read API reachable from Robot automation"
+            .to_owned())
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn write_memory(robot: &mut RobotImpl<Self>, address: u16, data: &[u8]) -> Result<(), String> {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            retry_native_api_call("AMSpiriT Lite writeMemory via its own HTTP API", || {
+                amspiritlite_api::write_memory(amspiritlite_endpoint(), address, data)
+            });
+            return Ok(());
+        }
+        Err("Full AMSpiriT (non-Lite) has no memory-write API reachable from Robot automation"
+            .to_owned())
+    }
+}
+
+/// `AMSPIRIT_LITE_ROBOT_WEB_PORT` as the `http://host:port` shape
+/// `amspiritlite_api`'s functions take.
+#[cfg(feature = "screenshot")]
+fn amspiritlite_endpoint() -> &'static str {
+    // `AMSPIRIT_LITE_ROBOT_WEB_PORT` is fixed, so this is fixed too -
+    // leaked once rather than formatted on every single call.
+    static ENDPOINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ENDPOINT.get_or_init(|| format!("http://127.0.0.1:{AMSPIRIT_LITE_ROBOT_WEB_PORT}"))
 }
 
 /// The port `args_for_emu_amspirit_with_csl` explicitly passes to a
-/// Robot-launched SugarBoxV2 via `--ds` - `screenshot()` below needs a
-/// fixed, known port to connect its own debug-server client to, same
+/// Robot-launched SugarBoxV2 via `--ds` - the functions below need a
+/// fixed, known port to connect their own debug-server client to, same
 /// reasoning as `AMSPIRIT_LITE_ROBOT_WEB_PORT` above. A different number
 /// from that one: nothing stops a screenshot-capable Robot session and a
 /// live `cpclib-dap` debug session from existing on the same machine at
@@ -1399,89 +1405,31 @@ impl UsedEmulator for AmspiritUsedEmulator {
 #[cfg(feature = "screenshot")]
 const SUGARBOX_ROBOT_DEBUG_SERVER_PORT: u16 = 8766;
 
-/// `{"cmd":"getScreen"}` on SugarBoxV2's own JSON-over-TCP debug server
-/// (`Sugarbox/debugers/DebugServer.cpp` - the same protocol
-/// `cpclib-dap/src/sugarbox.rs` speaks for debugging, which already maps a
-/// `cpclib/screen` DAP request straight to this same passthrough command).
-/// Confirmed live against a running 2.1.1 instance (`--ds <port>`, sending
-/// the command by hand over a raw socket): the response is
-/// `{"data": "<base64 PNG>", "format": "png", "width": .., "height": ..}`.
-///
-/// There is no request id in this wire protocol (see that module's own doc
-/// comment for why) - the first line back that isn't itself a
-/// `{"type":"event",...}` push is always the answer to whatever was just
-/// sent, so any such lines are read and discarded first.
-#[cfg(feature = "screenshot")]
-fn fetch_sugarbox_screenshot(port: u16) -> Result<Screenshot, String> {
-    use std::io::{BufRead, BufReader, Write};
-    use std::net::TcpStream;
-
-    use base64::Engine;
-
-    let addr = format!("127.0.0.1:{port}");
-    let stream = TcpStream::connect(&addr)
-        .map_err(|e| format!("Failed to connect to SugarBoxV2's debug server at {addr}: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
-    let mut writer = stream.try_clone().map_err(|e| e.to_string())?;
-    let mut reader = BufReader::new(stream);
-
-    writer
-        .write_all(b"{\"cmd\":\"getScreen\"}\n")
-        .map_err(|e| format!("Failed to send getScreen to SugarBoxV2: {e}"))?;
-
-    loop {
-        let mut line = String::new();
-        let n = reader
-            .read_line(&mut line)
-            .map_err(|e| format!("Failed to read SugarBoxV2's getScreen response: {e}"))?;
-        if n == 0 {
-            return Err(
-                "SugarBoxV2 closed the debug-server connection without answering getScreen"
-                    .to_owned()
-            );
-        }
-
-        let value: serde_json::Value = serde_json::from_str(line.trim())
-            .map_err(|e| format!("Malformed JSON from SugarBoxV2: {e} (got {line:?})"))?;
-        if value.get("type").and_then(|t| t.as_str()) == Some("event") {
-            // An async event pushed ahead of the real answer - not it, keep reading.
-            continue;
-        }
-
-        let data = value
-            .get("data")
-            .and_then(|d| d.as_str())
-            .ok_or_else(|| format!("getScreen response has no `data` field: {value}"))?;
-        let png_bytes = base64::engine::general_purpose::STANDARD
-            .decode(data)
-            .map_err(|e| format!("Failed to base64-decode SugarBoxV2's screenshot: {e}"))?;
-        return xcap::image::load_from_memory(&png_bytes)
-            .map(|img| img.into_rgba8())
-            .map_err(|e| format!("Failed to decode SugarBoxV2 screenshot PNG: {e}"));
-    }
-}
-
 impl UsedEmulator for SugarBoxV2UsedEmulator {
     #[cfg(feature = "screenshot")]
     fn screenshot(_robot: &mut RobotImpl<Self>) -> Screenshot {
-        // Bounded retry: the debug server needs a moment to bind after the
-        // process is spawned, same reasoning as AMSpiriT Lite above.
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        loop {
-            match fetch_sugarbox_screenshot(SUGARBOX_ROBOT_DEBUG_SERVER_PORT) {
-                Ok(img) => return img,
-                Err(e) if std::time::Instant::now() < deadline => {
-                    WindowEventsManager::wait_a_bit();
-                    let _ = e;
-                },
-                Err(e) => {
-                    panic!(
-                        "SugarBoxV2 screenshot via its own debug-server API failed: {e}. This \
-                         is a bug, please report it"
-                    )
-                }
-            }
-        }
+        retry_native_api_call("SugarBoxV2 screenshot via its own debug-server API", || {
+            let png = sugarbox_api::get_screenshot_png(SUGARBOX_ROBOT_DEBUG_SERVER_PORT)?;
+            xcap::image::load_from_memory(&png)
+                .map(|img| img.into_rgba8())
+                .map_err(|e| format!("Failed to decode SugarBoxV2 screenshot PNG: {e}"))
+        })
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn read_memory(_robot: &mut RobotImpl<Self>, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        Ok(retry_native_api_call(
+            "SugarBoxV2 readMemory via its own debug-server API",
+            || sugarbox_api::read_memory(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, address, count)
+        ))
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn write_memory(_robot: &mut RobotImpl<Self>, address: u16, data: &[u8]) -> Result<(), String> {
+        retry_native_api_call("SugarBoxV2 writeMemory via its own debug-server API", || {
+            sugarbox_api::write_memory(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, address, data)
+        });
+        Ok(())
     }
 }
 
@@ -1701,6 +1649,10 @@ impl Robot {
                 o: &dyn EventObserver
             ) -> Result<(), String>;
             fn type_text(&mut self, s: &str);
+            #[cfg(feature = "screenshot")]
+            fn read_memory(&mut self, address: u16, count: u16) -> Result<Vec<u8>, String>;
+            #[cfg(feature = "screenshot")]
+            fn write_memory(&mut self, address: u16, data: &[u8]) -> Result<(), String>;
             fn close(&mut self);
         }
 
@@ -1773,6 +1725,16 @@ impl<E: UsedEmulator> RobotImpl<E> {
     /// Enigo-based behavior per emulator, same shape as `screenshot` above.
     pub fn type_text(&mut self, s: &str) {
         E::type_text(self, s);
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn read_memory(&mut self, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        E::read_memory(self, address, count)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn write_memory(&mut self, address: u16, data: &[u8]) -> Result<(), String> {
+        E::write_memory(self, address, data)
     }
 }
 
@@ -3456,3 +3418,4 @@ mod tests {
         }
     }
 }
+

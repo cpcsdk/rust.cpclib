@@ -1,6 +1,7 @@
 pub mod ace;
 pub mod amspirit;
 pub mod amspiritlite;
+pub mod amspiritlite_api;
 pub mod cadence;
 pub mod caprice_forever;
 pub mod cpcec;
@@ -9,6 +10,8 @@ pub mod cpcemupower;
 pub mod emulator1984;
 pub mod retrovm;
 pub mod sugarbox;
+#[cfg(feature = "screenshot")]
+pub mod sugarbox_api;
 pub mod winape;
 
 use std::path::absolute;
