@@ -1,4 +1,3 @@
-use cpclib_asm;
 
 #[test]
 fn assemble_simple_db() {

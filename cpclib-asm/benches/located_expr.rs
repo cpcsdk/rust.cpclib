@@ -1,7 +1,7 @@
 use cpclib_asm::parser::ctx_and_span;
 use cpclib_asm::parser::expression::located_expr;
 use cpclib_common::winnow::Parser;
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 const EXPR: &str = "A+B*C-(D<<2)/E%F|G^H";
 
@@ -10,10 +10,10 @@ fn bench_located_expr(c: &mut Criterion) {
     c.bench_with_input(
         BenchmarkId::new("located_expr", "complex"),
         &EXPR,
-        |b, &expr| {
+        |b, &_expr| {
             b.iter(|| {
                 let span: cpclib_asm::Z80Span = span.clone();
-                let mut span: cpclib_asm::InnerZ80Span = span.into();
+                let span: cpclib_asm::InnerZ80Span = span.into();
                 let _ = located_expr.parse(span).unwrap();
             });
         }

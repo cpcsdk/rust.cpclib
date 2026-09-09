@@ -68,7 +68,7 @@ impl<'source> LineColLookup<'source> {
 #[cfg(test)]
 mod tests {
     use crate::parser::line_col::LineColLookup;
-    use crate::*;
+    
 
     #[test]
     fn empty_str() {

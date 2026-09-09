@@ -42,10 +42,10 @@ pub mod test {
     use cpclib_common::winnow::combinator::{repeat, terminated};
     use cpclib_common::winnow::error::{ErrMode, ParseError};
     use cpclib_common::winnow::stream::AsBStr;
-    use cpclib_common::winnow::{ModalResult, Parser};
+    use cpclib_common::winnow::Parser;
     use cpclib_tokens::{
         BinaryOperation, DataAccess, Expr, ExprFormat, FormattedExpr, IndexRegister8,
-        IndexRegister16, LabelPrefix, ListingElement, MacroParam, Mnemonic, Register8, Register16,
+        IndexRegister16, LabelPrefix, ListingElement, MacroParam, Mnemonic, Register8,
         ToSimpleToken, Token
     };
 
@@ -385,7 +385,7 @@ endif"
     #[test]
     fn test_parse_run() {
         let res: TestResult<LocatedTokenInner> = parse_test(parse_run(RunEnt::Run), "0x50, 0xc0");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -576,7 +576,7 @@ endif"
         let code: &'static str = unsafe { std::mem::transmute(code.as_str()) };
         let mut vec = Vec::with_capacity(8);
         let res: TestResult<()> = parse_test(repeat(2, parse_z80_line_complete(&mut vec)), code);
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn parser_regression_1c() {
@@ -586,7 +586,7 @@ endif"
         .replace("\u{C2}\u{A0}", " ");
         let code: &'static str = unsafe { std::mem::transmute(code.as_str()) };
         let res = parse_z80_str(code);
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn parser_regression_1d() {
@@ -607,7 +607,7 @@ endif"
                         "
         ));
 
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         //   assert_eq!(res.clone().unwrap().0.trim().len(), 0, "{:?}", res);
     }
     #[test]
@@ -626,7 +626,7 @@ endif"
     jp .common_part_loading_in_main_memory
 "
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn parser_regression_1g() {
@@ -653,7 +653,7 @@ endif"
             parse_z80_line_complete(&mut Vec::new()),
             "assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)"
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -676,39 +676,39 @@ MEND";
     #[test]
     fn parser_sna() {
         let res = parse_test(parse_buildsna(false), "BUILDSNA");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_buildsna(false), "BUILDSNA V2");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_buildsna(false), "BUILDSNA V3");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_buildsna(false), "BUILDSNA V4");
-        assert!(res.is_err(), "{:?}", &res);
+        assert!(res.is_err(), "{:?}", res);
     }
 
     #[test]
     fn test_parse_snaset() {
         let res = parse_test(parse_snaset(false), "SNASET Z80_SP, 0x500");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_snaset(false), "SNASET GA_PAL:0, 30");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_snaset(false), "SNASET CRTC_REG:1, 48");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn test_parse_r16_to_r8() {
         let mut r#in = Vec::new();
         let res = parse_test(parse_z80_line_complete(&mut r#in), " ld a, hl.low");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         res.res.unwrap();
 
         let res = parse_test(parse_ld_normal(false), "ld bc.low, a");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         let res = res.res.unwrap().to_token().into_owned();
 
         assert_eq!(
@@ -722,7 +722,7 @@ MEND";
 
         r#in.clear();
         let res = parse_test(parse_z80_line_complete(&mut r#in), " ld bc.low, a");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         assert_eq!(
             r#in.iter()
@@ -740,7 +740,7 @@ MEND";
             repeat(2, parse_z80_line_complete(&mut r#in)),
             "\t\tld  bc.low, a\n\t"
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -748,53 +748,53 @@ MEND";
         let mut tokens = Vec::with_capacity(16);
 
         let res = parse_test(parse_line(&mut tokens), " hello   ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
 
         let res = parse_test(parse_line(&mut tokens), "  ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
         let res = parse_test(parse_line(&mut tokens), "  ; comment");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
 
         let res = parse_test(parse_line(&mut tokens), " : ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
 
         let res = parse_test(parse_line(&mut tokens), "hello:world");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
 
         let res = parse_test(parse_line(&mut tokens), " hello :  world");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
 
         let res = dbg!(parse_test(parse_line(&mut tokens), " hello /* :  world*/"));
         dbg!(&tokens);
 
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         assert!(!tokens[0].is_call_macro_or_build_struct());
         tokens.clear();
 
         let res = parse_test(parse_line(&mut tokens), " hello:  set world  ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
         tokens.clear();
 
         let res = parse_test(parse_line(&mut tokens), "data1 SETN data");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line(&mut tokens), "data1 SETN data ; comment");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn test_parse_multiline_comment() {
         let res = parse_test(parse_multiline_comment, "/* fdfsdfgd */");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_multiline_comment, "/* fdf\n*\n*\nsdfgd */");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     /// `parse_multiline_comment` above only exercises the primitive in
@@ -822,129 +822,129 @@ MEND";
     #[test]
     fn test_parse_ticker() {
         let res = parse_test(parse_stable_ticker_start, "start mc");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_stable_ticker_start, "start, mc");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn test_parse_line_component() {
         let res = parse_test(parse_line_component, "ticker start, mc");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "JP HL_div_2");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "ld      a,(2 - $b06e) and $ff");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " DJNZ CHECK");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "ld a, d");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "sbc h");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "data1 SETN data");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "data2 next data, 2");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(
             (parse_line_component, my_space1, parse_comment),
             "data1 SETN data ; comment"
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(
             (parse_line_component, my_space1, parse_comment),
             "data1 setn data ; comment"
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " IN a,(c)");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " IN (c)");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " IN (c)   ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " DJNZ label");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "label DJNZ label");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test((parse_line_component, parse_comment), " ; cxcx");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " \\\n");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test((parse_line_component, "\n"), " \n");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "hello");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, " hello ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "defb 5, 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "defb 5, 20 ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "xor a");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "xor a ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "hello xor a ");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR = 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR <<= 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR EQU 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR SET 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR FIELD 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR # 20");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR NEXT VAR2");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "VAR SETN VAR2");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "LET VAR = 5");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "LET 5");
-        assert!(res.is_err(), "{:?}", &res);
+        assert!(res.is_err(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "LET VAR");
-        assert!(res.is_err(), "{:?}", &res);
+        assert!(res.is_err(), "{:?}", res);
 
         let res = parse_test(
             parse_line_component,
@@ -952,16 +952,16 @@ MEND";
 		db {count}
 	endfor"
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(
             parse_line_component,
             "for count, 0, 10, 3 : db {count} : endfor"
         );
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = parse_test(parse_line_component, "FAIL");
-        assert!(res.is_ok(), "{:?}", &res);
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -970,7 +970,7 @@ MEND";
         assert!(
             res.as_ref().unwrap().1.as_ref().unwrap().is_assign(),
             "{:?}",
-            &res
+            res
         );
     }
 

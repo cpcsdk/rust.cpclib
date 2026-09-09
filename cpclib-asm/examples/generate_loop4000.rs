@@ -7,9 +7,9 @@ fn build_sna(code: &str) -> Snapshot {
         parse_z80_with_context_builder(code, Default::default()).expect("Unable to parse z80 code");
     let (_, env) = visit_tokens_all_passes_with_options(&listing, Default::default())
         .expect("Unable to assemble z80 code");
-    let sna = env.sna().clone();
+    
 
-    sna
+    env.sna().clone()
 }
 
 fn main() {

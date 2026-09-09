@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::fs;
 use std::path::PathBuf;
 
 use cpclib_asm::preamble::*;
@@ -32,7 +31,7 @@ fn timings_path() -> PathBuf {
 }
 
 fn parse_timings_file() -> Vec<TimingEntry> {
-    let content = fs::read_to_string(timings_path()).expect("Unable to read timings.txt");
+    let content = fs_err::read_to_string(timings_path()).expect("Unable to read timings.txt");
     let mut section = String::new();
     let mut entries = Vec::new();
 

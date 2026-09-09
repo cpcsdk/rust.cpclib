@@ -1,4 +1,3 @@
-use cpclib_asm;
 
 /// A near, forward JQ target must assemble exactly like the equivalent JR.
 #[test]

@@ -573,7 +573,7 @@ VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 2
 
     let listing = result.unwrap();
     // Should have parsed the horizontal branch with simple array assignments
-    assert!(listing.len() > 0, "Should parse at least some statements");
+    assert!(!listing.is_empty(), "Should parse at least some statements");
 }
 
 #[test]
@@ -779,7 +779,7 @@ lectpsg
 
     let listing = res.unwrap();
     assert!(
-        listing.len() > 0,
+        !listing.is_empty(),
         "Should parse at least some statements from complete vumeter file"
     );
 }
@@ -833,5 +833,5 @@ test_label
     );
 
     let listing = res.unwrap();
-    assert!(listing.len() > 0, "Should parse VERTICAL mode statements");
+    assert!(!listing.is_empty(), "Should parse VERTICAL mode statements");
 }

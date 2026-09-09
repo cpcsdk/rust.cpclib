@@ -217,7 +217,7 @@ impl ExprElement for LocatedExpr {
     }
 
     fn not(&self) -> Self::ResultExpr {
-        todo!()
+        Expr::UnaryOperation(UnaryOperation::Not, Box::new(self.to_expr().into_owned()))
     }
 
     fn is_value(&self) -> bool {

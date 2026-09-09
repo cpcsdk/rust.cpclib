@@ -379,7 +379,7 @@ fn an_unknown_embedded_snapshot_lists_the_real_ones() {
         )
     );
 
-    let (_, _, problem) = outcome.err().expect("refused");
+    let (_, _, problem) = outcome.expect_err("refused");
     let problem = problem.to_string();
     assert!(problem.contains("inner://cpc6128.sna"), "{problem}");
     assert!(problem.contains("inner://cpc6128_v2.sna"), "{problem}");
@@ -433,20 +433,20 @@ fn an_enum_claims_no_address() {
 #[test]
 fn an_enum_in_an_included_file_claims_no_address() {
     let directory = std::env::temp_dir().join(format!("cpclib-enum-probe-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&directory);
-    std::fs::write(
+    let _ = fs_err::create_dir_all(&directory);
+    fs_err::write(
         directory.join("states.asm"),
         "    enum WRITTER_STATE\n        CLEAR\n        DRAW\n        COPY\n    endenum\n"
     )
     .unwrap();
     let main = directory.join("main.asm");
-    std::fs::write(
+    fs_err::write(
         &main,
         "    include \"states.asm\"\n    org 0x4000\n    nop\n    ld a, WRITTER_STATE_COPY\n"
     )
     .unwrap();
 
-    let text = std::fs::read_to_string(&main).unwrap();
+    let text = fs_err::read_to_string(&main).unwrap();
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);
     let _ = parse.add_search_path(&directory);

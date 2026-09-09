@@ -1,7 +1,7 @@
 use cpclib_asm::parser::ctx_and_span;
 use cpclib_asm::parser::expression::parse_factor;
 use cpclib_common::winnow::Parser;
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 const EXPR: &str = "42";
 const LABEL_EXPR: &str = "my_label";

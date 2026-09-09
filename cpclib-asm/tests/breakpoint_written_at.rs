@@ -14,7 +14,7 @@ fn breakpoints(
     directory: &std::path::Path,
     entry: &std::path::Path
 ) -> Vec<cpclib_asm::assembler::delayed_command::AssembledBreakpoint> {
-    let text = std::fs::read_to_string(entry).unwrap();
+    let text = fs_err::read_to_string(entry).unwrap();
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);
     let _ = parse.add_search_path(directory);
@@ -38,14 +38,14 @@ fn breakpoints(
 /// macro used from another file.
 fn a_macro_and_its_caller(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     let directory = std::env::temp_dir().join(format!("cpclib-brk-{name}-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&directory);
-    std::fs::write(
+    let _ = fs_err::create_dir_all(&directory);
+    fs_err::write(
         directory.join("macros.asm"),
         "\tmacro DEBUG col\n\tbreakpoint\n\tld bc,0x7f00 + {col}\n\tendm\n"
     )
     .unwrap();
     let main = directory.join("main.asm");
-    std::fs::write(
+    fs_err::write(
         &main,
         "\tinclude \"macros.asm\"\n\torg 0x4000\n\tnop\n\tDEBUG(4)\n\tnop\n\tbreakpoint\n\tnop\n"
     )

@@ -63,6 +63,7 @@ memchr.workspace = true
 minijinja = { workspace = true, features = ["loader", "debug"] }
 paste.workspace = true
 rtzx = { workspace = true, optional = true }
+self-replace = { workspace = true, optional = true }
 self_cell.workspace = true
 self_update = {workspace = true, optional = true}
 serde_yaml.workspace = true
@@ -114,7 +115,7 @@ hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon", "cpclib-imgconverter/rayon"]
 sna-interactive = ["cpclib-sna/interactive"]
-self-update =["self_update"]
+self-update =["self_update", "dep:self-replace"]
 
 
 apultra = ["cpclib-crunch/apultra", "cpclib-asm/apultra", "cpclib-basm/apultra"]

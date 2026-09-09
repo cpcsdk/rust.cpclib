@@ -315,7 +315,7 @@ mod test {
     // fn disass_unknwon_opcode(){
     // assert!(disassemble(&[0xfd, 0x00]).is_err());
     // }
-    //   #[test] // disable because incorrect test due to the several possible views of instructions
+    #[test]
     fn disass_check_representation_equality() {
         disass_for_table_and_prefix(&TABINSTR, &[]);
         disass_for_table_and_prefix(&TABINSTRCB, &[0xCB]);
@@ -355,17 +355,17 @@ mod test {
                     .to_uppercase()
             );
 
-            let mut env = Env::default();
-            if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {
-                let obtained_bytes = env
-                    .assemble_opcode_impl(*mnemonic, arg1, arg2, arg3)
-                    .unwrap();
-                assert_eq!(&expected_bytes[..], &obtained_bytes[..]);
-            }
-            else {
-                println!("ERROR, this is not a Token {:?}", obtained);
-                assert!(false);
-            }
+            // The re-assembly/byte-comparison check below stays deactivated
+            // for the same reason as in `disass_for_table_and_prefix`:
+            // several DDCB/FDCB bit-instruction sub-opcodes are undocumented
+            // duplicate encodings of the same instruction text (e.g. FDCB
+            // 0x40 and 0x46 both disassemble to "BIT 0,(IY+d)"), so
+            // re-assembling the disassembled text can legitimately choose a
+            // different, equally-valid encoding than the one disassembled.
+            assert!(
+                matches!(&obtained.listing()[0], Token::OpCode(..)),
+                "ERROR, this is not a Token {obtained:?}"
+            );
         }
     }
     fn disass_for_table_and_prefix(tab: &[&'static str; 256], prefix: &[u8]) {
@@ -428,8 +428,16 @@ mod test {
                 );
             }
 
-            return; // the following code is deactivated as several instructions can be assembled with several bytecodes
-                    // check if it is possible to assemble it
+            // The re-assembly/byte-comparison check below stays deactivated:
+            // several instructions can be assembled with several distinct
+            // bytecodes (undocumented duplicate encodings), so re-assembling
+            // the disassembled *text* can legitimately choose a different,
+            // equally-valid encoding than the one that was disassembled.
+            // This was previously a bare `return`, which - being inside the
+            // `for code in 0..=255` loop - silently stopped the whole
+            // function after checking only the *first* non-empty table
+            // entry, never reaching codes 1..=255 at all.
+            continue;
         /*            
             let mut env = Env::default();
             if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {

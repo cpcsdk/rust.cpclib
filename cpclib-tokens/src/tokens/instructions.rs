@@ -1389,8 +1389,14 @@ impl fmt::Display for Token {
                     }
             },
 
-
-
+            // The warning text is a diagnostic, not part of the canonical
+            // textual representation - a caller that wants the warning
+            // reads it via `unwrapped()`'s own token plus whatever surfaced
+            // the wrapper in the first place (e.g. `Env::add_warning`), not
+            // by `Display`-formatting this wrapper. Rendering just delegates
+            // straight to the wrapped token, the same text it would have
+            // printed unwrapped.
+            Token::WarningWrapper(inner, _) => write!(f, "{inner}"),
 
             _ => unimplemented!("{:?}", self)
 

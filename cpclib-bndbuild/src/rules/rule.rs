@@ -408,9 +408,7 @@ impl Rule {
 #[cfg(test)]
 mod tests {
     use camino::Utf8PathBuf;
-    use serde::de::IntoDeserializer;
     use serde::de::value::StrDeserializer;
-    use serde_yaml;
 
     use super::*;
 

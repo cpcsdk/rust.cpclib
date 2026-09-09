@@ -400,7 +400,7 @@ is_some_cmd!(
 is_some_cmd!(fap);
 
 #[cfg(not(feature = "fap"))]
-pub fn is_fap_cmd(code: &str) -> bool {
+pub fn is_fap_cmd(_code: &str) -> bool {
     false
 }
 

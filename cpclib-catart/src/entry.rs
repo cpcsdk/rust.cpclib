@@ -1926,7 +1926,6 @@ impl SerialCatalogBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interpret::Mode;
 
     fn create_test_entries() -> [PrintableEntry; 64] {
         let mut entries = Vec::new();
@@ -2696,8 +2695,6 @@ mod tests {
 
     #[test]
     fn test_serial_catalog_builder_empty() {
-        use crate::interpret;
-
         // Empty commands
         let commands = CharCommandList::from(vec![]);
 

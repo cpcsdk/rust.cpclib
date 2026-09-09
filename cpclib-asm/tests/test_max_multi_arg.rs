@@ -20,7 +20,7 @@ fn test_max_multi_arg_missing_data() {
     );
 
     let msg = result.err().unwrap().to_string();
-    eprintln!("Error: {}", &msg);
+    eprintln!("Error: {}", msg);
     assert!(
         msg.contains("not found"),
         "Error message does not mention missing file"

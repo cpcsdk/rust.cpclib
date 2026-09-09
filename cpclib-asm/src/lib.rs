@@ -1128,16 +1128,16 @@ mod test_super {
             "cpclib-equ-in-include-probe-{}",
             std::process::id()
         ));
-        let _ = std::fs::create_dir_all(&directory);
-        std::fs::write(directory.join("included.asm"), "\tFOO equ 2\n").unwrap();
+        let _ = fs_err::create_dir_all(&directory);
+        fs_err::write(directory.join("included.asm"), "\tFOO equ 2\n").unwrap();
         let main = directory.join("main.asm");
-        std::fs::write(
+        fs_err::write(
             &main,
             "\torg 0x4000\n\tFOO equ 1\n\tinclude \"included.asm\"\n\tret\n"
         )
         .unwrap();
 
-        let text = std::fs::read_to_string(&main).unwrap();
+        let text = fs_err::read_to_string(&main).unwrap();
         let mut parse = crate::parser::context::ParserOptions::default();
         parse.set_quiet(true);
         let _ = parse.add_search_path(&directory);
@@ -1178,7 +1178,7 @@ mod test_super {
             "missing the compact include-chain note: {rendered}"
         );
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = fs_err::remove_dir_all(&directory);
     }
 
     #[test]
@@ -1193,17 +1193,17 @@ mod test_super {
             "cpclib-double-include-chain-probe-{}",
             std::process::id()
         ));
-        let _ = std::fs::create_dir_all(&directory);
-        std::fs::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
-        std::fs::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
+        let _ = fs_err::create_dir_all(&directory);
+        fs_err::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
+        fs_err::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
         let main = directory.join("main.asm");
-        std::fs::write(
+        fs_err::write(
             &main,
             "\torg 0x4000\n\tinclude \"original.asm\"\n\tinclude \"bad.asm\"\n\tret\n"
         )
         .unwrap();
 
-        let text = std::fs::read_to_string(&main).unwrap();
+        let text = fs_err::read_to_string(&main).unwrap();
         let mut parse = crate::parser::context::ParserOptions::default();
         parse.set_quiet(true);
         let _ = parse.add_search_path(&directory);
@@ -1251,7 +1251,7 @@ mod test_super {
             "missing the failing redefinition's own include line (main.asm:3): {rendered}"
         );
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = fs_err::remove_dir_all(&directory);
     }
 
     #[test]
@@ -1275,17 +1275,17 @@ mod test_super {
             "cpclib-vscode-matcher-probe-{}",
             std::process::id()
         ));
-        let _ = std::fs::create_dir_all(&directory);
-        std::fs::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
-        std::fs::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
+        let _ = fs_err::create_dir_all(&directory);
+        fs_err::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
+        fs_err::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
         let main = directory.join("main.asm");
-        std::fs::write(
+        fs_err::write(
             &main,
             "\torg 0x4000\n\tinclude \"original.asm\"\n\tinclude \"bad.asm\"\n\tret\n"
         )
         .unwrap();
 
-        let text = std::fs::read_to_string(&main).unwrap();
+        let text = fs_err::read_to_string(&main).unwrap();
         let mut parse = crate::parser::context::ParserOptions::default();
         parse.set_quiet(true);
         let _ = parse.add_search_path(&directory);
@@ -1323,7 +1323,7 @@ mod test_super {
              diagnostic entirely: next line was {next_line:?} in: {rendered}"
         );
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = fs_err::remove_dir_all(&directory);
     }
 
     #[test]
@@ -1341,16 +1341,16 @@ mod test_super {
         // a macro call (see `WithChainNotes`).
         let directory =
             std::env::temp_dir().join(format!("cpclib-include-chain-probe-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&directory);
-        std::fs::write(
+        let _ = fs_err::create_dir_all(&directory);
+        fs_err::write(
             directory.join("included.asm"),
             "\tassert 1 == 2, \"boom\"\n"
         )
         .unwrap();
         let main = directory.join("main.asm");
-        std::fs::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
+        fs_err::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
 
-        let text = std::fs::read_to_string(&main).unwrap();
+        let text = fs_err::read_to_string(&main).unwrap();
         let mut parse = crate::parser::context::ParserOptions::default();
         parse.set_quiet(true);
         let _ = parse.add_search_path(&directory);
@@ -1397,7 +1397,7 @@ mod test_super {
             "the assert's own message should come before the include note: {rendered}"
         );
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = fs_err::remove_dir_all(&directory);
     }
 
     #[test]
@@ -1412,16 +1412,16 @@ mod test_super {
             "cpclib-include-macro-chain-probe-{}",
             std::process::id()
         ));
-        let _ = std::fs::create_dir_all(&directory);
-        std::fs::write(
+        let _ = fs_err::create_dir_all(&directory);
+        fs_err::write(
             directory.join("included.asm"),
             "\tMACRO CHECKLEN(a)\n\t\tassert string_len({a}) == 3, \"wrong length\"\n\tENDM\n\tCHECKLEN(\"ab\")\n"
         )
         .unwrap();
         let main = directory.join("main.asm");
-        std::fs::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
+        fs_err::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
 
-        let text = std::fs::read_to_string(&main).unwrap();
+        let text = fs_err::read_to_string(&main).unwrap();
         let mut parse = crate::parser::context::ParserOptions::default();
         parse.set_quiet(true);
         let _ = parse.add_search_path(&directory);
@@ -1459,7 +1459,7 @@ mod test_super {
             "expected order: assert, then macro call site, then include note: {rendered}"
         );
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = fs_err::remove_dir_all(&directory);
     }
 
     #[test]
@@ -1533,7 +1533,7 @@ mod test_super {
             "cpclib_asm_dry_run_test_{}_should_not_exist.bin",
             std::process::id()
         ));
-        let _ = std::fs::remove_file(&target); // in case a previous failed run left it behind
+        let _ = fs_err::remove_file(&target); // in case a previous failed run left it behind
         let code = format!("org 0\ndb 1,2,3,4\nsave \"{}\", 0, 4\n", target.display());
 
         let mut options = AssemblingOptions::default();

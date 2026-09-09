@@ -615,7 +615,7 @@ impl ExprElement for Expr {
     }
 
     fn not(&self) -> Self::ResultExpr {
-        todo!()
+        Expr::UnaryOperation(UnaryOperation::Not, Box::new(self.clone()))
     }
 
     fn is_value(&self) -> bool {

@@ -770,7 +770,7 @@ Usage: 2CDT [arguments] <input filename> <.cdt image>
             let tmp_exec = tmp_exec_path.as_file_mut();
 
             self_update::Download::from_url(&asset_url).download_to(tmp_exec)?;
-            self_update::self_replace::self_replace(tmp_exec_path).map_err(|e| {
+            self_replace::self_replace(tmp_exec_path).map_err(|e| {
                 BndBuilderError::UpdateError(format!("Failed to replace binary: {e}"))
             })?;
             Ok(())

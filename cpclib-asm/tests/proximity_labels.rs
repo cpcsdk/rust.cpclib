@@ -1,7 +1,6 @@
 /// Tests for proximity labels (inspired by spasm-ng/rasm)
 /// Proximity labels allow using _ as an anonymous label
 /// with _+ referring to the next _ and _- referring to the previous _
-use cpclib_asm;
 
 #[test]
 fn test_proximity_label_forward() {
@@ -74,7 +73,7 @@ _       push hl
     // First jr _+ should jump to first _ (nop)
     // Second jr _+ should jump to second _ (push hl)
     // djnz _- should loop back to second _ (push hl)
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
 }
 
 #[test]
