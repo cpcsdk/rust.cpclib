@@ -9,6 +9,7 @@
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
+pub mod dap_protocol;
 pub mod js1984;
 pub mod server;
 pub use server::{ServerHandle, serve};
