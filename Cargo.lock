@@ -2845,6 +2845,7 @@ dependencies = [
 name = "cpclib-runner"
 version = "0.11.0"
 dependencies = [
+ "base64 0.22.1",
  "bon",
  "camino-tempfile",
  "clap",
@@ -2863,6 +2864,7 @@ dependencies = [
  "rust-embed",
  "rust-ini",
  "scraper",
+ "serde_json",
  "sevenz-rust2",
  "shlex 1.3.0",
  "tar",

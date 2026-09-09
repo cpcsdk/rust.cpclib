@@ -877,7 +877,22 @@ impl EmulatorConf {
 
         // Get wine-compatible absolute path if needed
         let csl_path = emu.wine_compatible_fname(&absolute_path)?;
-        Ok(native_csl_args(emu, &csl_path))
+        let mut args = native_csl_args(emu, &csl_path);
+
+        // SugarBoxV2::screenshot() (below, on SugarBoxV2UsedEmulator) talks
+        // to the same JSON-over-TCP debug server the DAP backend uses
+        // (`cpclib-dap/src/sugarbox.rs`) to fetch a real screen capture -
+        // it needs a debug server actually running to connect to. Only
+        // matters for this Robot-driven synthesis path, not for a user's
+        // own pre-existing `.csl` file run via `run_csl_file` (which
+        // reuses `native_csl_args` directly, unmodified).
+        #[cfg(feature = "screenshot")]
+        if let Emulator::SugarBoxV2(_) = emu {
+            args.push("--ds".to_owned());
+            args.push(SUGARBOX_ROBOT_DEBUG_SERVER_PORT.to_string());
+        }
+
+        Ok(args)
     }
 }
 
@@ -1322,6 +1337,102 @@ impl UsedEmulator for AmspiritUsedEmulator {
     }
 }
 
+/// The port `args_for_emu_amspirit_with_csl` explicitly passes to a
+/// Robot-launched SugarBoxV2 via `--ds` - `screenshot()` below needs a
+/// fixed, known port to connect its own debug-server client to, same
+/// reasoning as `AMSPIRIT_LITE_ROBOT_WEB_PORT` above. A different number
+/// from that one: nothing stops a screenshot-capable Robot session and a
+/// live `cpclib-dap` debug session from existing on the same machine at
+/// once, and each needs its own port.
+#[cfg(feature = "screenshot")]
+const SUGARBOX_ROBOT_DEBUG_SERVER_PORT: u16 = 8766;
+
+/// `{"cmd":"getScreen"}` on SugarBoxV2's own JSON-over-TCP debug server
+/// (`Sugarbox/debugers/DebugServer.cpp` - the same protocol
+/// `cpclib-dap/src/sugarbox.rs` speaks for debugging, which already maps a
+/// `cpclib/screen` DAP request straight to this same passthrough command).
+/// Confirmed live against a running 2.1.1 instance (`--ds <port>`, sending
+/// the command by hand over a raw socket): the response is
+/// `{"data": "<base64 PNG>", "format": "png", "width": .., "height": ..}`.
+///
+/// There is no request id in this wire protocol (see that module's own doc
+/// comment for why) - the first line back that isn't itself a
+/// `{"type":"event",...}` push is always the answer to whatever was just
+/// sent, so any such lines are read and discarded first.
+#[cfg(feature = "screenshot")]
+fn fetch_sugarbox_screenshot(port: u16) -> Result<Screenshot, String> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpStream;
+
+    use base64::Engine;
+
+    let addr = format!("127.0.0.1:{port}");
+    let stream = TcpStream::connect(&addr)
+        .map_err(|e| format!("Failed to connect to SugarBoxV2's debug server at {addr}: {e}"))?;
+    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
+    let mut writer = stream.try_clone().map_err(|e| e.to_string())?;
+    let mut reader = BufReader::new(stream);
+
+    writer
+        .write_all(b"{\"cmd\":\"getScreen\"}\n")
+        .map_err(|e| format!("Failed to send getScreen to SugarBoxV2: {e}"))?;
+
+    loop {
+        let mut line = String::new();
+        let n = reader
+            .read_line(&mut line)
+            .map_err(|e| format!("Failed to read SugarBoxV2's getScreen response: {e}"))?;
+        if n == 0 {
+            return Err(
+                "SugarBoxV2 closed the debug-server connection without answering getScreen"
+                    .to_owned()
+            );
+        }
+
+        let value: serde_json::Value = serde_json::from_str(line.trim())
+            .map_err(|e| format!("Malformed JSON from SugarBoxV2: {e} (got {line:?})"))?;
+        if value.get("type").and_then(|t| t.as_str()) == Some("event") {
+            // An async event pushed ahead of the real answer - not it, keep reading.
+            continue;
+        }
+
+        let data = value
+            .get("data")
+            .and_then(|d| d.as_str())
+            .ok_or_else(|| format!("getScreen response has no `data` field: {value}"))?;
+        let png_bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|e| format!("Failed to base64-decode SugarBoxV2's screenshot: {e}"))?;
+        return xcap::image::load_from_memory(&png_bytes)
+            .map(|img| img.into_rgba8())
+            .map_err(|e| format!("Failed to decode SugarBoxV2 screenshot PNG: {e}"));
+    }
+}
+
+impl UsedEmulator for SugarBoxV2UsedEmulator {
+    #[cfg(feature = "screenshot")]
+    fn screenshot(_robot: &mut RobotImpl<Self>) -> Screenshot {
+        // Bounded retry: the debug server needs a moment to bind after the
+        // process is spawned, same reasoning as AMSpiriT Lite above.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match fetch_sugarbox_screenshot(SUGARBOX_ROBOT_DEBUG_SERVER_PORT) {
+                Ok(img) => return img,
+                Err(e) if std::time::Instant::now() < deadline => {
+                    WindowEventsManager::wait_a_bit();
+                    let _ = e;
+                },
+                Err(e) => {
+                    panic!(
+                        "SugarBoxV2 screenshot via its own debug-server API failed: {e}. This \
+                         is a bug, please report it"
+                    )
+                }
+            }
+        }
+    }
+}
+
 pub(crate) struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
     pub(crate) events_manager: WindowEventsManager,
@@ -1360,10 +1471,10 @@ pub(crate) enum Robot {
 /// Generates the `From<RobotImpl<_>> for Robot` boilerplate shared by every
 /// emulator variant. Optionally also generates the trivial `UsedEmulator`
 /// marker impl (default screenshot behavior) for emulators that need no
-/// per-emulator override - `AceUsedEmulator` and `AmspiritUsedEmulator`
-/// are the exceptions (each has a custom `screenshot` impl above) and keep
-/// their own hand-written `UsedEmulator` impl, so both are listed with
-/// `robot_from_only`.
+/// per-emulator override - `AceUsedEmulator`, `AmspiritUsedEmulator` and
+/// `SugarBoxV2UsedEmulator` are the exceptions (each has a custom
+/// `screenshot` impl above) and keep their own hand-written `UsedEmulator`
+/// impl, so all three are listed with `robot_from_only`.
 macro_rules! used_emulators {
     (robot_from_only: $($used:ident => $variant:ident),+ $(,)?) => {
         $(
@@ -1382,11 +1493,15 @@ macro_rules! used_emulators {
     };
 }
 
-used_emulators!(robot_from_only: AceUsedEmulator => Ace, AmspiritUsedEmulator => Amspirit);
+used_emulators!(
+    robot_from_only:
+    AceUsedEmulator => Ace,
+    AmspiritUsedEmulator => Amspirit,
+    SugarBoxV2UsedEmulator => SugarboxV2,
+);
 used_emulators! {
     CpcecUsedEmulator => Cpcec,
     WinapeUsedEmulator => Winape,
-    SugarBoxV2UsedEmulator => SugarboxV2,
     CpcEmuPowerUsedEmulator => CpcEmuPower,
     CpcEmuUsedEmulator => CpcEmu,
     RetroVmUsedEmulator => RetroVm,
