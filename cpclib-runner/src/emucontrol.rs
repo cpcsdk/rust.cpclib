@@ -617,6 +617,16 @@ impl EmulatorConf {
 
         let mut args = Vec::default();
 
+        // AMSpiriT Lite's screenshot() (below, on AmspiritUsedEmulator)
+        // needs to know the exact port its HTTP debug server is listening
+        // on - pin it explicitly rather than trusting whatever
+        // `amspirit-lite.conf` the current user happens to have saved.
+        #[cfg(feature = "screenshot")]
+        if let Emulator::AmspiritLite(_) = emu {
+            args.push("--web-port".to_owned());
+            args.push(AMSPIRIT_LITE_ROBOT_WEB_PORT.to_string());
+        }
+
         if let Some(drive_a) = &drive_a {
             match emu {
                 Emulator::Ace(_)
@@ -1245,6 +1255,73 @@ impl UsedEmulator for AceUsedEmulator {
     }
 }
 
+/// The port `args_for_emu` explicitly passes to a Robot-launched AMSpiriT
+/// Lite via `--web-port` (its own documented out-of-the-box default,
+/// deliberately not left to whatever `amspirit-lite.conf` the current user
+/// happens to have saved) - `screenshot()` below needs to know this port
+/// with certainty, not guess at the user's own local configuration.
+#[cfg(feature = "screenshot")]
+const AMSPIRIT_LITE_ROBOT_WEB_PORT: u16 = 8765;
+
+/// `GET /api/screenshot` on AMSpiriT Lite's own HTTP debug server: `crop=1`
+/// asks for just the visible screen area (not the full emulated frame
+/// border/overscan), `full=1` asks for a plain settled frame rather than a
+/// partial in-progress composite. Confirmed live against a running 1.14.3
+/// instance's `GET /api/doc/screenshot` - response is a raw `image/png`
+/// body, decoded here the same way Ace's own screenshot file is.
+#[cfg(feature = "screenshot")]
+fn fetch_amspiritlite_screenshot(port: u16) -> Result<Screenshot, String> {
+    let url = format!("http://127.0.0.1:{port}/api/screenshot?crop=1&full=1");
+    let mut response = cpclib_common::network::ureq::get(&url)
+        .call()
+        .map_err(|e| format!("AMSpiriT Lite screenshot request to {url} failed: {e}"))?;
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(64 * 1024 * 1024)
+        .read_to_vec()
+        .map_err(|e| format!("Failed to read AMSpiriT Lite screenshot body: {e}"))?;
+    xcap::image::load_from_memory(&bytes)
+        .map(|img| img.into_rgba8())
+        .map_err(|e| format!("Failed to decode AMSpiriT Lite screenshot PNG: {e}"))
+}
+
+impl UsedEmulator for AmspiritUsedEmulator {
+    // Shared with full (non-Lite) AMSpiriT (see `Robot::new`'s comment on
+    // why), which has no HTTP API of its own - only AmspiritLite gets the
+    // native path below, the rest fall through to the trait's default
+    // window-capture behavior.
+    #[cfg(feature = "screenshot")]
+    fn screenshot(robot: &mut RobotImpl<Self>) -> Screenshot {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            // Bounded retry: the web server binds very early in AMSpiriT
+            // Lite's boot sequence, but `screenshot()` can in principle be
+            // called right after the process is spawned, before it has had
+            // a chance to start listening.
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                match fetch_amspiritlite_screenshot(AMSPIRIT_LITE_ROBOT_WEB_PORT) {
+                    Ok(img) => return img,
+                    Err(e) if std::time::Instant::now() < deadline => {
+                        WindowEventsManager::wait_a_bit();
+                        let _ = e;
+                    },
+                    Err(e) => {
+                        panic!(
+                            "AMSpiriT Lite screenshot via its own HTTP API failed: {e}. This \
+                             is a bug, please report it"
+                        )
+                    }
+                }
+            }
+        }
+
+        robot.window.as_ref().map(|w| w.capture_image()).unwrap_or_else(|| {
+            panic!("Emulator screenshot is not available for this emulator. This is a bug, please report it")
+        })
+    }
+}
+
 pub(crate) struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
     pub(crate) events_manager: WindowEventsManager,
@@ -1283,9 +1360,10 @@ pub(crate) enum Robot {
 /// Generates the `From<RobotImpl<_>> for Robot` boilerplate shared by every
 /// emulator variant. Optionally also generates the trivial `UsedEmulator`
 /// marker impl (default screenshot behavior) for emulators that need no
-/// per-emulator override - `AceUsedEmulator` is the one exception (a
-/// custom `screenshot` impl above) and keeps its own hand-written
-/// `UsedEmulator` impl, so it's listed with `robot_from_only`.
+/// per-emulator override - `AceUsedEmulator` and `AmspiritUsedEmulator`
+/// are the exceptions (each has a custom `screenshot` impl above) and keep
+/// their own hand-written `UsedEmulator` impl, so both are listed with
+/// `robot_from_only`.
 macro_rules! used_emulators {
     (robot_from_only: $($used:ident => $variant:ident),+ $(,)?) => {
         $(
@@ -1304,11 +1382,10 @@ macro_rules! used_emulators {
     };
 }
 
-used_emulators!(robot_from_only: AceUsedEmulator => Ace);
+used_emulators!(robot_from_only: AceUsedEmulator => Ace, AmspiritUsedEmulator => Amspirit);
 used_emulators! {
     CpcecUsedEmulator => Cpcec,
     WinapeUsedEmulator => Winape,
-    AmspiritUsedEmulator => Amspirit,
     SugarBoxV2UsedEmulator => SugarboxV2,
     CpcEmuPowerUsedEmulator => CpcEmuPower,
     CpcEmuUsedEmulator => CpcEmu,
