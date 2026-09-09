@@ -1201,6 +1201,14 @@ pub(crate) trait UsedEmulator: Sized {
             panic!("Emulator screenshot is not available for this emulator. This is a bug, please report it")
         })
     }
+
+    /// The default behavior simulates host-level keystrokes (Enigo) into
+    /// whichever window this Robot is driving. Tailored where an emulator
+    /// has its own, more direct way to inject text.
+    fn type_text(robot: &mut RobotImpl<Self>, s: &str)
+    where Self: Sized {
+        robot.events_manager.type_text(s);
+    }
 }
 
 pub(crate) struct AceUsedEmulator {}
@@ -1301,6 +1309,23 @@ fn fetch_amspiritlite_screenshot(port: u16) -> Result<Screenshot, String> {
         .map_err(|e| format!("Failed to decode AMSpiriT Lite screenshot PNG: {e}"))
 }
 
+/// `POST /api/keytype` on AMSpiriT Lite's own HTTP debug server - the same
+/// endpoint `cpclib-dap/src/amspiritlite.rs` already uses for its own
+/// `keytype` DAP request (`Call::post("/api/keytype").body(json!({"text":
+/// text}))`). Confirmed live against a running 1.14.3 instance: posting
+/// `PRINT "HELLO"\n` typed and executed it exactly as real keystrokes
+/// would, no window focus needed.
+#[cfg(feature = "screenshot")]
+fn send_amspiritlite_keytype(port: u16, text: &str) -> Result<(), String> {
+    let url = format!("http://127.0.0.1:{port}/api/keytype");
+    let body = serde_json::json!({ "text": text }).to_string();
+    cpclib_common::network::ureq::post(&url)
+        .header("Content-Type", "application/json")
+        .send(&body)
+        .map_err(|e| format!("AMSpiriT Lite keytype request to {url} failed: {e}"))?;
+    Ok(())
+}
+
 impl UsedEmulator for AmspiritUsedEmulator {
     // Shared with full (non-Lite) AMSpiriT (see `Robot::new`'s comment on
     // why), which has no HTTP API of its own - only AmspiritLite gets the
@@ -1334,6 +1359,33 @@ impl UsedEmulator for AmspiritUsedEmulator {
         robot.window.as_ref().map(|w| w.capture_image()).unwrap_or_else(|| {
             panic!("Emulator screenshot is not available for this emulator. This is a bug, please report it")
         })
+    }
+
+    // Same split as `screenshot()` above: AmspiritLite gets the native
+    // HTTP path (no window focus needed, works headless), full AMSpiriT
+    // falls through to the default Enigo-based keystroke simulation.
+    #[cfg(feature = "screenshot")]
+    fn type_text(robot: &mut RobotImpl<Self>, s: &str) {
+        if matches!(robot.emu, Emulator::AmspiritLite(_)) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                match send_amspiritlite_keytype(AMSPIRIT_LITE_ROBOT_WEB_PORT, s) {
+                    Ok(()) => return,
+                    Err(e) if std::time::Instant::now() < deadline => {
+                        WindowEventsManager::wait_a_bit();
+                        let _ = e;
+                    },
+                    Err(e) => {
+                        panic!(
+                            "AMSpiriT Lite keytype via its own HTTP API failed: {e}. This is \
+                             a bug, please report it"
+                        )
+                    }
+                }
+            }
+        }
+
+        robot.events_manager.type_text(s);
     }
 }
 
@@ -1714,6 +1766,13 @@ impl<E: UsedEmulator> RobotImpl<E> {
     #[cfg(feature = "screenshot")]
     pub fn screenshot(&mut self) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
         E::screenshot(self)
+    }
+
+    /// Inherent method, so it's picked over the `Deref`-to-`WindowEventsManager`
+    /// one of the same name - lets `E::type_text` override the default
+    /// Enigo-based behavior per emulator, same shape as `screenshot` above.
+    pub fn type_text(&mut self, s: &str) {
+        E::type_text(self, s);
     }
 }
 
