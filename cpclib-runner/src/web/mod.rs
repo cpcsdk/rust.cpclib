@@ -15,8 +15,11 @@
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
 pub mod js1984;
+pub mod robot_bridge;
 pub mod server;
-pub use server::{ServerHandle, decode_content_length_messages, encode_content_length_message, serve};
+pub use server::{
+    ServerHandle, decode_content_length_messages, encode_content_length_message, serve, serve_on
+};
 
 /// How an application is started once it is installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

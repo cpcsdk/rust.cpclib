@@ -27,6 +27,8 @@ use crate::runner::emulator::Emulator;
 #[cfg(feature = "screenshot")]
 use crate::runner::emulator::amspiritlite_api;
 #[cfg(feature = "screenshot")]
+use crate::runner::emulator::js1984_robot_api;
+#[cfg(feature = "screenshot")]
 use crate::runner::emulator::sugarbox_api;
 use crate::runner::exec::RunnerWithClap;
 
@@ -1521,6 +1523,107 @@ impl UsedEmulator for SugarBoxV2UsedEmulator {
     }
 }
 
+/// A Robot session driving 1984js through its own robot bridge (see
+/// `crate::web::robot_bridge`) instead of the `UsedEmulator`/`RobotImpl`
+/// machinery every other emulator above uses.
+///
+/// Deliberately not another `RobotImpl<SomeUsedEmulator>`: that framework is
+/// built entirely around a real OS window and Enigo keystrokes as the
+/// fallback behind each native-API override, and 1984js has neither - there
+/// is no window to fall back to (the whole reason it exists here is to
+/// *avoid* window automation), so every method below either has a real
+/// native answer or none at all, with nothing in between to inherit from a
+/// shared default. Keeping it a separate type costs one more
+/// `Robot`/`delegate!` arm and touches none of the existing ten emulators'
+/// working code.
+#[cfg(feature = "screenshot")]
+pub(crate) struct Js1984Robot {
+    server: crate::web::ServerHandle
+}
+
+/// The port a Robot-launched 1984js robot bridge always serves on - fixed
+/// for the same reason `AMSPIRIT_LITE_ROBOT_WEB_PORT`/
+/// `SUGARBOX_ROBOT_DEBUG_SERVER_PORT` are: nothing here keeps the
+/// `ServerHandle` reachable from anywhere but the `Js1984Robot` that owns
+/// it, so a fixed, known port is what lets a fresh call find it again.
+#[cfg(feature = "screenshot")]
+const JS1984_ROBOT_PORT: u16 = 8767;
+
+#[cfg(feature = "screenshot")]
+impl Js1984Robot {
+    /// Installs the robot-patched distribution if needed, serves it, and
+    /// opens a browser on it - there is no process to spawn, and no window
+    /// to go looking for afterwards the way every other emulator's launch
+    /// path does.
+    pub(crate) fn launch() -> Result<Robot, String> {
+        let root = crate::web::robot_bridge::install()?;
+        let server = crate::web::serve_on(&root, None, JS1984_ROBOT_PORT)
+            .map_err(|e| format!("cannot serve 1984js for Robot automation: {e}"))?;
+        let url = server.debug_url();
+        webbrowser::open(&url).map_err(|e| format!("could not open a browser on {url}: {e}"))?;
+        Ok(Robot::Js1984(Self { server }))
+    }
+
+    pub fn screenshot(&mut self) -> Screenshot {
+        let png = retry_native_api_call("1984js screenshot via its own robot bridge", || {
+            js1984_robot_api::screenshot_png(&self.server)
+        });
+        xcap::image::load_from_memory(&png)
+            .map(|img| img.into_rgba8())
+            .unwrap_or_else(|e| panic!("Failed to decode 1984js screenshot PNG: {e}"))
+    }
+
+    pub fn type_text(&mut self, s: &str) {
+        retry_native_api_call("1984js keytype via its own robot bridge", || {
+            js1984_robot_api::keytype(&self.server, s)
+        })
+    }
+
+    pub fn read_memory(&mut self, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        Ok(retry_native_api_call(
+            "1984js readMemory via its own robot bridge",
+            || js1984_robot_api::read_memory(&self.server, address, count)
+        ))
+    }
+
+    pub fn write_memory(&mut self, address: u16, data: &[u8]) -> Result<(), String> {
+        retry_native_api_call("1984js writeMemory via its own robot bridge", || {
+            js1984_robot_api::write_memory(&self.server, address, data)
+        });
+        Ok(())
+    }
+
+    pub fn load_snapshot(&mut self, _path: &Utf8Path) -> Result<(), String> {
+        Err("1984js has no snapshot-load facility reachable from Robot automation yet".to_owned())
+    }
+
+    pub fn load_disc(&mut self, _drive: u8, _path: &Utf8Path) -> Result<(), String> {
+        Err("1984js has no disc-load facility reachable from Robot automation yet".to_owned())
+    }
+
+    pub fn save_disc(&mut self, _drive: u8) -> Result<Vec<u8>, String> {
+        Err("1984js has no disc-save facility reachable from Robot automation yet".to_owned())
+    }
+
+    pub fn handle_orgams(
+        &mut self,
+        _drivea: Option<&str>,
+        _albireo: Option<&str>,
+        _action: OrgamsRobotAction<'_, '_>,
+        _o: &dyn EventObserver
+    ) -> Result<(), String> {
+        Err("Orgams automation is not yet implemented for 1984js".to_owned())
+    }
+
+    /// Best effort only: unlike every other backend, there is no tracked
+    /// process or OS window here to close - the served instance and its
+    /// background listener thread simply outlive the session. Left for a
+    /// caller that ends up needing it (killing the browser process this
+    /// crate itself launched would need tracking its pid, which `webbrowser`
+    /// does not hand back).
+    pub fn close(&mut self) {}
+}
+
 pub(crate) struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
     pub(crate) events_manager: WindowEventsManager,
@@ -1553,7 +1656,9 @@ pub(crate) enum Robot {
     RetroVm(RobotImpl<RetroVmUsedEmulator>),
     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>),
     Cadence(RobotImpl<CadenceUsedEmulator>),
-    Emulator1984(RobotImpl<Emulator1984UsedEmulator>)
+    Emulator1984(RobotImpl<Emulator1984UsedEmulator>),
+    #[cfg(feature = "screenshot")]
+    Js1984(Js1984Robot)
 }
 
 /// Generates the `From<RobotImpl<_>> for Robot` boilerplate shared by every
@@ -1727,6 +1832,8 @@ impl Robot {
             Robot::CapriceForever(r) => r,
             Robot::Cadence(r) => r,
             Robot::Emulator1984(r) => r,
+            #[cfg(feature = "screenshot")]
+            Robot::Js1984(r) => r,
         } {
             #[cfg(feature = "screenshot")]
             fn handle_orgams(
@@ -3431,6 +3538,44 @@ mod tests {
         ] {
             assert!(emulator_from_choice(choice).is_ok(), "{choice:?}");
         }
+    }
+
+    /// The whole robot bridge, live: launch, screenshot, type, read/write
+    /// memory. Ignored by default - it opens a real browser window and
+    /// needs the network for the first install.
+    #[cfg(feature = "screenshot")]
+    #[test]
+    #[ignore = "opens a real browser; downloads 1984js on first run"]
+    fn the_js1984_robot_bridge_works_end_to_end() {
+        let Robot::Js1984(mut robot) = Js1984Robot::launch().expect("launches")
+        else {
+            unreachable!("Js1984Robot::launch always returns Robot::Js1984")
+        };
+
+        // Give the WASM build time to boot before the first native-API call
+        // - `retry_native_api_call`'s own 5s window is for a process already
+        // listening, not a cold browser+WASM startup.
+        std::thread::sleep(Duration::from_secs(5));
+
+        let before = robot.screenshot();
+        assert!(before.width() > 0 && before.height() > 0);
+
+        // BASIC's default RAM is zeroed above the interpreter; write a known
+        // byte, read it back, exercise both directions against the same
+        // address.
+        let address = 0x4000u16;
+        robot.write_memory(address, &[0x2a]).expect("write");
+        let read_back = robot.read_memory(address, 1).expect("read");
+        assert_eq!(read_back, vec![0x2a], "the byte just written reads back");
+
+        robot.type_text("PRINT \"HELLO FROM ROBOT\"\n");
+        std::thread::sleep(Duration::from_secs(1));
+        let after = robot.screenshot();
+        assert_ne!(
+            before.as_raw(),
+            after.as_raw(),
+            "the screen must have changed after typing and pressing return"
+        );
     }
 }
 

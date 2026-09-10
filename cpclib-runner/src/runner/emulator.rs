@@ -8,6 +8,8 @@ pub mod cpcec;
 pub mod cpcemu;
 pub mod cpcemupower;
 pub mod emulator1984;
+#[cfg(feature = "screenshot")]
+pub mod js1984_robot_api;
 pub mod retrovm;
 pub mod sugarbox;
 #[cfg(feature = "screenshot")]

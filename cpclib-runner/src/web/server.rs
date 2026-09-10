@@ -165,7 +165,17 @@ struct Site {
 /// reach `127.0.0.1` - and without the token one of them could drive the
 /// debugger and read the snapshot.
 pub fn serve(root: &Utf8Path, snapshot: Option<Vec<u8>>) -> std::io::Result<ServerHandle> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
+    serve_on(root, snapshot, 0)
+}
+
+/// [`serve`], on a caller-chosen port instead of one the OS picks.
+///
+/// For a caller that needs to reach this same instance again later without
+/// having kept the [`ServerHandle`] around to ask - the same reason
+/// AMSpiriT Lite/SugarBoxV2's own Robot automation binds each to one fixed,
+/// known port rather than a discovered one.
+pub fn serve_on(root: &Utf8Path, snapshot: Option<Vec<u8>>, port: u16) -> std::io::Result<ServerHandle> {
+    let listener = TcpListener::bind(("127.0.0.1", port))?;
     let address = listener.local_addr()?;
     let token = random_token();
 
