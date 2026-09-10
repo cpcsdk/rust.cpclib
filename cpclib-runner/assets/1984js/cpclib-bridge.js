@@ -1,6 +1,7 @@
-// Connects 1984js's in-page DAP server to an external debugger.
+// Connects 1984js's in-page debug server to an external debugger.
 //
-// Upstream ships a complete DAP 1.71 implementation (`dap.js`, exported as
+// Upstream ships a complete debug-protocol implementation, version 1.71
+// (`dap.js`, exported as
 // `globalThis.JS1984DAP`) but drives it only from its own on-page monitor:
 // "the browser UI currently uses the same protocol engine in process; it does
 // not yet expose a WebSocket, TCP, or stdio endpoint to an external IDE".
@@ -15,8 +16,9 @@
 //  * It expects Content-Length framing, so we keep that over the wire rather
 //    than reframing: upstream's parser stays the only parser.
 //
-// Activated only when the page is opened with `?dap=1&token=...`, so the plain
-// browser UI is completely unaffected.
+// Activated only when the page carries a session token (injected by the
+// server, never read from the URL - see below), so the plain browser UI
+// is completely unaffected.
 
 (function () {
   "use strict";
@@ -41,7 +43,7 @@
   CHAR_TO_SCANCODE["0"] = 39;
 
   // `__cpclib_attach` is called by the one line the install step adds to
-  // app.js, handing us the emscripten module and the DAP session it built.
+  // app.js, handing us the emscripten module and the debug session it built.
   let handle = null;
   const pending = [];
 
@@ -58,7 +60,7 @@
   globalThis.__cpclib_attach = function (attached) {
     handle = attached;
 
-    // A *separate* DAP session over the same emulator backend, rather than the
+    // A *separate* debug session over the same emulator backend, rather than the
     // one the page's own ML monitor uses.
     //
     // `takeEvents()` empties the queue it reads, and the monitor drains its
@@ -114,8 +116,9 @@
 
   function deliver(chunk) {
     if (!ownConnection) { pending.push(chunk); return; }
-    // Watches are not a DAP request: the emulator's write-watch channels sit on
-    // the emscripten module, not on its DAP session, and `dap.js` refuses any
+    // Watches are not a request the debug protocol itself defines: the
+    // emulator's write-watch channels sit on the emscripten module, not on
+    // its debug session, and the unmodified upstream script refuses any
     // command it does not know. So `cpclib/setWatches` is answered here and
     // never reaches upstream's parser.
     const intercepted = interceptWatchRequest(chunk);
@@ -125,7 +128,7 @@
       out = ownConnection.push(chunk);
     } catch (error) {
       // A malformed frame must not take the emulator down with it.
-      console.error("[cpclib] DAP dispatch failed", error);
+      console.error("[cpclib] debug dispatch failed", error);
       return;
     }
     send(out);
@@ -133,10 +136,10 @@
 
   function send(text) {
     if (!text) { return; }
-    fetch(window.location.origin + "/session/dap?token=" + encodeURIComponent(token), {
+    fetch(window.location.origin + "/session/upstream?token=" + encodeURIComponent(token), {
       method: "POST",
       body: text
-    }).catch((error) => console.error("[cpclib] DAP send failed", error));
+    }).catch((error) => console.error("[cpclib] debug send failed", error));
   }
 
   // Write watches: labelled addresses the debugger wants to be told about.
@@ -378,7 +381,7 @@
   // Hand every breakpoint channel back to the debugger.
   //
   // Loading a snapshot makes the page arm the breakpoints its chunks carry,
-  // through *its own* DAP session. Two sessions over one backend each own the
+  // through *its own* debug session. Two sessions over one backend each own the
   // slots they set, so those channels are ones this bridge's session cannot
   // clear - and an editor asking to remove such a breakpoint would be answered
   // "done" while the program went on stopping there.
@@ -390,7 +393,7 @@
   // The CPU is *not* paused from here.
   //
   // It was, briefly, and it broke stepping: `_poc_debug_pause()` halts the core
-  // directly, while the emulator's DAP session tracks a `running` flag of its
+  // directly, while the emulator's debug session tracks a `running` flag of its
   // own. Pausing behind its back left the two disagreeing - it refused
   // `continue` as "notStopped", and answered every `stepIn` with success and a
   // `stopped` event while the program counter never moved. The debugger has to

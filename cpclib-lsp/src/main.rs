@@ -284,7 +284,7 @@ fn run_as_emu_list() -> ! {
                 "label": e.label,
                 "debuggable": e.debuggable,
                 "installed": e.installed,
-                "dapId": e.dap_id
+                "dapId": e.debugger_launch_id
             }))
             .collect::<Vec<_>>()
     );

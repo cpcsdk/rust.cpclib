@@ -1,13 +1,13 @@
 //! Talking to AMSpiriT Lite's own embedded HTTP debug server.
 //!
-//! Shared transport for two very different callers: `cpclib-dap` (a live
-//! debug session, `cpclib-dap/src/amspiritlite.rs`) and this crate's own
-//! `Robot` automation (`emucontrol.rs`, screenshots/keytype/memory peeking
-//! outside a debug session). Both used to speak this exact same HTTP API
-//! with two separate hand-rolled clients - this module is the single one
-//! both now use, so the request/response shapes are verified once, in one
-//! place, against a live emulator (see this crate's own tests and
-//! `cpclib-dap`'s `live_tests` module).
+//! Shared transport for two very different callers: an external debugger
+//! integration elsewhere in this workspace (a live debug session) and this
+//! crate's own `Robot` automation (`emucontrol.rs`, screenshots/keytype/
+//! memory peeking outside a debug session). Both used to speak this exact
+//! same HTTP API with two separate hand-rolled clients - this module is the
+//! single one both now use, so the request/response shapes are verified
+//! once, in one place, against a live emulator (see this crate's own tests
+//! and that other integration's own `live_tests` module).
 //!
 //! Raw HTTP over a plain `TcpStream` rather than a client crate: this is
 //! loopback-only, the requests are a handful of fixed shapes, and pulling
@@ -19,8 +19,8 @@
 //! against a running 1.14.3 instance's own `GET /api/doc`/`GET
 //! /api/doc/<name>` - the emulator's authoritative, self-generated
 //! documentation - not against the older, occasionally-inaccurate published
-//! docs (see `cpclib-dap/src/amspiritlite.rs`'s own doc comment for the
-//! history there).
+//! docs (see that other debugger integration's own module for this
+//! emulator, and its doc comment for the history there).
 
 use std::io::{Read, Write};
 use std::net::TcpStream;

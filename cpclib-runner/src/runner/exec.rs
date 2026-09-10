@@ -50,8 +50,9 @@ use crate::runner::arguments::get_all_args;
 /// meant for snap-confinement GPU passthrough, and stripping it is exactly
 /// as safe as the GTK ones above.
 /// `pub` so callers that spawn a GUI emulator directly rather than through
-/// `Runner`/`ExternRunner` (`cpclib-dap`'s own `std::process::Command` spawns
-/// for SugarboxV2/AMSpiriT Lite) can strip the same variables - the leak and
+/// `Runner`/`ExternRunner` (an external debugger integration elsewhere in
+/// this workspace spawns SugarboxV2/AMSpiriT Lite with its own
+/// `std::process::Command`) can strip the same variables - the leak and
 /// its fix are about the *child process*, not about which of this crate's
 /// APIs happened to spawn it, so both paths need the same list.
 #[cfg(target_os = "linux")]

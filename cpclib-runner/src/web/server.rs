@@ -1,13 +1,13 @@
-//! Serving the emulator, and carrying DAP to and from it.
+//! Serving the emulator, and carrying its debug protocol to and from it.
 //!
 //! The page needs three things from us: its own files, the snapshot to run, and
-//! a two-way channel for the Debug Adapter Protocol. That is a small enough
-//! surface to serve directly over `std::net`, which is why there is no web
-//! framework here and no cargo feature to gate one - `cpclib-runner` is
-//! depended on by nearly everything in the workspace, and adding an async
-//! runtime to all of it for four routes would be a poor trade.
+//! a two-way channel to whatever debug protocol the served page speaks. That
+//! is a small enough surface to serve directly over `std::net`, which is why
+//! there is no web framework here and no cargo feature to gate one -
+//! `cpclib-runner` is depended on by nearly everything in the workspace, and
+//! adding an async runtime to all of it for four routes would be a poor trade.
 //!
-//! The DAP channel is **Server-Sent Events downstream and POST upstream**
+//! That channel is **Server-Sent Events downstream and POST upstream**
 //! rather than a WebSocket. Both directions are then plain HTTP, so the whole
 //! transport is a few lines of framing instead of a handshake with a SHA-1
 //! digest and a masked binary frame format. For a request/response protocol
@@ -43,7 +43,7 @@ impl ServerHandle {
     /// A distinct *path* rather than a query string, and deliberately so: this
     /// URL travels through an editor before it reaches a browser - VS Code
     /// parses it into a `Uri` and re-serialises it for a webview - and a
-    /// percent-encoded `?dap=1&token=...` arrives as something the page cannot
+    /// percent-encoded `?x=1&token=...` arrives as something the page cannot
     /// read. With no `?` and no `&` there is nothing to mangle, and the token
     /// is injected into the page by the server instead of carried in the URL.
     pub fn debug_url(&self) -> String {
@@ -63,7 +63,7 @@ impl ServerHandle {
         &self.token
     }
 
-    /// Send a DAP frame to the emulator.
+    /// Send a framed message to the emulator.
     pub fn send(&self, frame: String) -> Result<(), String> {
         self.outgoing.send(frame).map_err(|e| e.to_string())
     }
@@ -239,7 +239,7 @@ fn handle(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
     match (request.method.as_str(), request.path.as_str()) {
         ("GET", "/debug") => serve_debug_page(&mut stream, site),
         ("GET", "/session/events") if authorised => event_stream(stream, site),
-        ("POST", "/session/dap") if authorised => {
+        ("POST", "/session/upstream") if authorised => {
             let frame = String::from_utf8_lossy(&request.body).to_string();
             let _ = site.from_page.send(frame);
             respond(&mut stream, 204, "text/plain", b"")
@@ -437,7 +437,7 @@ fn serve_file(stream: &mut TcpStream, site: &Site, path: &str) -> std::io::Resul
     }
 }
 
-/// The downstream half of the DAP channel.
+/// The downstream half of the debug-message channel.
 ///
 /// Held open for the life of the session. Each message is sent as **one SSE
 /// `data:` line carrying the JSON body alone**, deliberately *not* the

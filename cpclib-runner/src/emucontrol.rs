@@ -884,9 +884,10 @@ impl EmulatorConf {
         let mut args = native_csl_args(emu, &csl_path);
 
         // SugarBoxV2::screenshot() (below, on SugarBoxV2UsedEmulator) talks
-        // to the same JSON-over-TCP debug server the DAP backend uses
-        // (`cpclib-dap/src/sugarbox.rs`) to fetch a real screen capture -
-        // it needs a debug server actually running to connect to. Only
+        // to the same JSON-over-TCP debug server an external debugger
+        // integration elsewhere in this workspace uses to fetch a real
+        // screen capture - it needs a debug server actually running to
+        // connect to. Only
         // matters for this Robot-driven synthesis path, not for a user's
         // own pre-existing `.csl` file run via `run_csl_file` (which
         // reuses `native_csl_args` directly, unmodified).
@@ -1470,8 +1471,8 @@ fn amspiritlite_endpoint() -> &'static str {
 /// fixed, known port to connect their own debug-server client to, same
 /// reasoning as `AMSPIRIT_LITE_ROBOT_WEB_PORT` above. A different number
 /// from that one: nothing stops a screenshot-capable Robot session and a
-/// live `cpclib-dap` debug session from existing on the same machine at
-/// once, and each needs its own port.
+/// live external debug session from existing on the same machine at once,
+/// and each needs its own port.
 #[cfg(feature = "screenshot")]
 const SUGARBOX_ROBOT_DEBUG_SERVER_PORT: u16 = 8766;
 
@@ -2308,34 +2309,33 @@ pub enum Emu {
 /// picker: the exact CLI string this crate's own `--emulator` flag accepts
 /// (via [`clap::ValueEnum`], never hand-derived, so it can't drift from
 /// what `EmuCli` actually parses), a display label, whether it is one of
-/// the two the Debug Adapter Protocol layer (`cpclib-dap`) can debug, and
-/// whether it is already installed - so a caller can show a "needs
-/// installing" hint before spending the time to fetch it.
+/// the two an external debugger integration elsewhere in this workspace can
+/// debug, and whether it is already installed - so a caller can show a
+/// "needs installing" hint before spending the time to fetch it.
 pub struct EmulatorListEntry {
     pub id: String,
     pub label: &'static str,
     pub debuggable: bool,
     pub installed: bool,
-    /// The exact string `cpclib-dap`'s own launch-time `emulator` property
-    /// wants (`lib.rs`'s `chosen_emulator.eq_ignore_ascii_case(...)` checks) -
-    /// a *different* naming scheme from `id` above (this crate's own
-    /// `--emulator` flag), so a caller driving the DAP layer directly (an
-    /// editor's debug launch) needs this instead of `id`. `None` for every
-    /// non-`debuggable` entry, since the DAP layer has no name for those at
-    /// all.
-    pub dap_id: Option<&'static str>
+    /// The exact string that debugger integration's own launch-time
+    /// `emulator` property wants - a *different* naming scheme from `id`
+    /// above (this crate's own `--emulator` flag), so a caller driving that
+    /// integration directly (an editor's debug launch) needs this instead
+    /// of `id`. `None` for every non-`debuggable` entry, since that
+    /// integration has no name for those at all.
+    pub debugger_launch_id: Option<&'static str>
 }
 
 /// Every emulator this crate knows how to run, for an editor integration to
 /// list (e.g. a "run/debug with..." picker) - see [`EmulatorListEntry`].
 ///
-/// `debuggable` here means "the DAP layer (`cpclib-dap`) can debug it" -
-/// 1984js and AMSpiriT Lite, same set `cpclib-dap/src/lib.rs`'s own launch
-/// path checks against. That is a *different* question from what this
-/// crate's own `emu ... debug` CLI command accepts (only 1984js, served as
-/// a debug-armed web page - see [`Dispatch::of`]) - this list is for an
-/// editor driving `cpclib-dap` directly, not for this CLI's own `debug`
-/// subcommand.
+/// `debuggable` here means "an external debugger integration elsewhere in
+/// this workspace can debug it" - 1984js and AMSpiriT Lite, the same set
+/// that integration's own launch path checks against. That is a *different*
+/// question from what this crate's own `emu ... debug` CLI command accepts
+/// (only 1984js, served as a debug-armed web page - see [`Dispatch::of`]) -
+/// this list is for an editor driving that debugger integration directly,
+/// not for this CLI's own `debug` subcommand.
 pub fn list_emulators() -> Vec<EmulatorListEntry> {
     fn id(value: Emu) -> String {
         value
@@ -2350,7 +2350,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Ace),
             label: "ACE-DL",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::Ace(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2359,7 +2359,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Amspirit),
             label: "AMSpiriT",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::Amspirit(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2368,7 +2368,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Amspiritlite),
             label: "AMSpiriT Lite",
             debuggable: true,
-            dap_id: Some("amspiritlite"),
+            debugger_launch_id: Some("amspiritlite"),
             installed: Emulator::AmspiritLite(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2377,7 +2377,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Winape),
             label: "WinAPE",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::Winape(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2386,7 +2386,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Cpcec),
             label: "CPCEC",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::Cpcec(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2395,7 +2395,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Sugarbox),
             label: "SugarBox v2",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::SugarBoxV2(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2404,7 +2404,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Cpcemupower),
             label: "CPCEmuPower",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::CpcEmuPower(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2413,7 +2413,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Cpcemu),
             label: "CPCEmu",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::CpcEmu(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2422,7 +2422,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Caprice),
             label: "CaPriCe Forever",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::CapriceForever(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2431,7 +2431,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Cadence),
             label: "Cadence",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::Cadence(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2440,7 +2440,7 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Emulator1984),
             label: "1984 (native)",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::Emulator1984(Default::default())
                 .configuration::<()>()
                 .is_cached()
@@ -2449,14 +2449,14 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             id: id(Emu::Emulator1984Js),
             label: "1984js (browser)",
             debuggable: true,
-            dap_id: Some("1984js"),
+            debugger_launch_id: Some("1984js"),
             installed: crate::web::js1984::is_installed()
         },
         EmulatorListEntry {
             id: id(Emu::Rvm),
             label: "Retro Virtual Machine",
             debuggable: false,
-            dap_id: None,
+            debugger_launch_id: None,
             installed: Emulator::RetroVm(Default::default())
                 .configuration::<()>()
                 .is_cached()

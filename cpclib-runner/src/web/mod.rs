@@ -47,11 +47,11 @@ pub const BRIDGE_FILENAME: &str = "cpclib-bridge.js";
 /// makes a `BREAKPOINT` directive written into the source actually stop the
 /// program.
 ///
-/// `createMlDapSession()` keeps the emscripten module and the DAP session as
-/// function locals and `app.js` exposes no global at all, so *some* edit is
-/// unavoidable. This is the smallest one that works: it publishes what already
-/// exists and changes no behaviour.
-const APP_HOOK: &str = "\n// added by cpclib: hand the DAP session to the bridge, if one is loaded\n\
+/// Upstream's own session-creation call keeps the emscripten module and the
+/// debug session as function locals and `app.js` exposes no global at all,
+/// so *some* edit is unavoidable. This is the smallest one that works: it
+/// publishes what already exists and changes no behaviour.
+const APP_HOOK: &str = "\n// added by cpclib: hand the debug session to the bridge, if one is loaded\n\
                         if (typeof globalThis.__cpclib_attach === 'function') {\n\
                         \x20 globalThis.__cpclib_attach({ module: m, session: mlDap, connection: new JS1984DAP.Connection(mlDap), loadSnapshot: loadSnapshotFile, startAudio: startAudio, audioContext: () => audioCtx });\n\
                         }\n";
@@ -86,7 +86,8 @@ const STEP_HOOK: &str = "\n// added by cpclib: let the bridge keep stepping the 
                          };\n";
 
 /// The `<script>` added to `index.html`, immediately before `</body>` so the
-/// bridge loads after `dap.js` and `app.js`.
+/// bridge loads only after every one of the emulator's own scripts has
+/// already run.
 const INDEX_HOOK: &str = "<script src=\"cpclib-bridge.js\"></script>\n</body>";
 
 #[derive(Debug)]
@@ -337,11 +338,11 @@ mod tests {
                 "the token is injected into the page, not the URL"
             ),
             ("loadSnapshot", "the program under test has to be loaded"),
-            ("/session/events", "the downstream half of the DAP channel"),
-            ("/session/dap", "the upstream half"),
+            ("/session/events", "the downstream half of the debug-message channel"),
+            ("/session/upstream", "the upstream half"),
             (
                 "cpclib/setWatches",
-                "watches are armed through the module, not through dap.js"
+                "watches are armed through the module, not through the unmodified upstream script"
             ),
             (
                 "cpclib/autotype",

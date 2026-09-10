@@ -1,5 +1,5 @@
 //! Installing 1984js: the emscripten build of the 1984 emulator, patched so an
-//! external debugger can reach the DAP engine it already contains.
+//! external debugger can reach the debug engine it already contains.
 //!
 //! Pinned to a commit rather than tracking `main`. The patch below inserts at
 //! two anchors in upstream's files, so "which upstream" is part of the

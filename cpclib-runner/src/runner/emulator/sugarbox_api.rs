@@ -2,9 +2,10 @@
 //! (`Sugarbox/debugers/DebugServer.cpp`).
 //!
 //! One-shot only: connects, sends exactly one real command, reads its
-//! answer, and disconnects. `cpclib-dap`'s own `SugarBoxPeer`
-//! (`cpclib-dap/src/sugarbox.rs`) keeps ONE persistent connection open for
-//! an entire live debug session instead, since it needs to receive
+//! answer, and disconnects. The peer an external debugger integration
+//! elsewhere in this workspace uses for this same emulator keeps ONE
+//! persistent connection open for an entire live debug session instead,
+//! since it needs to receive
 //! breakpoint/stop events asynchronously while stepping - a materially
 //! different connection-lifetime model this module deliberately does not
 //! try to unify with (forcing a debug session through one-shot connections

@@ -16,7 +16,7 @@ pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum SugarBoxV2Version {
-    /// v2.1.1 - the first release with a bridgeable DAP debug server
+    /// v2.1.1 - the first release with a bridgeable debug server
     /// (`Sugarbox/debugers/`, JSON-over-TCP) and, on Linux, a single
     /// `.AppImage` instead of a `tar.gz` (see `target_os_postinstall`'s own
     /// doc comment for why that matters beyond just packaging).
