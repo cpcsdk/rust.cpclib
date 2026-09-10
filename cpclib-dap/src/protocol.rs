@@ -16,7 +16,9 @@
 
 use serde_json::{Value, json};
 
-pub use cpclib_runner::web::{decode_dap_frames as decode, encode_dap_frame as encode};
+pub use cpclib_runner::web::{
+    decode_content_length_messages as decode, encode_content_length_message as encode
+};
 
 /// A response to `request`.
 pub fn response(request: &Value, body: Value, seq: i64) -> Value {
