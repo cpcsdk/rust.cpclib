@@ -1,4 +1,5 @@
-//! The DAP channel, exercised the way the page really uses it.
+//! The generic framed-message channel, exercised the way the page really
+//! uses it.
 //!
 //! This exists because of a bug no unit test could see: the downstream half is
 //! Server-Sent Events, which strips carriage returns, while the emulator's
@@ -136,7 +137,7 @@ fn a_framed_reply_from_the_page_reaches_the_adapter() {
     let mut stream = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
     write!(
         stream,
-        "POST /session/dap?token={} HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\n\r\n{frame}",
+        "POST /session/upstream?token={} HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\n\r\n{frame}",
         server.token(),
         frame.len()
     )

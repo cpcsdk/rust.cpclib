@@ -7,11 +7,11 @@
 //!
 //! ```text
 //! CPCLIB_1984JS_DIST=/path/to/web/dist \
-//!   cargo test -p cpclib-runner --test bridge_patch_against_upstream -- --ignored
+//!   cargo test -p cpclib-dap --test bridge_patch_against_upstream -- --ignored
 //! ```
 
 use cpclib_common::camino::Utf8PathBuf;
-use cpclib_runner::web::{BRIDGE_FILENAME, apply_bridge_patch};
+use cpclib_dap::js1984_bridge::{BRIDGE_FILENAME, apply_bridge_patch};
 
 #[test]
 #[ignore = "needs an unpacked web/dist; set CPCLIB_1984JS_DIST"]
