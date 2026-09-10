@@ -1,27 +1,28 @@
-//! The real install: download the pinned distribution, plain and unmodified.
+//! The real install: download the pinned distribution and apply the bridge
+//! patch on top.
 //!
 //! Ignored by default because it hits the network and writes to the shared
-//! cache. Run it when the pin moves - it is what proves the pin and the file
-//! list still agree with upstream.
+//! cache. Run it when the pin moves - it is what proves the pin, the file
+//! list and the patch still agree with upstream.
 //!
 //! ```text
-//! cargo test -p cpclib-runner --test js1984_install -- --ignored --nocapture
+//! cargo test -p cpclib-dap --test js1984_bridge_install -- --ignored --nocapture
 //! ```
 
 #[test]
 #[ignore = "downloads the pinned 1984js distribution"]
-fn the_pinned_distribution_installs_and_serves() {
+fn the_pinned_distribution_installs_patched_and_serves() {
+    use cpclib_dap::js1984_bridge;
     use cpclib_runner::web::{js1984, serve};
 
-    let root = js1984::install().expect("the pinned distribution must install");
+    let root = js1984_bridge::install().expect("the patched distribution must install");
     for name in js1984::DIST_FILES {
         assert!(root.join(name).exists(), "{name} was not downloaded");
     }
-    assert!(js1984::is_installed(), "and it reports itself installed");
 
-    // Plain and unmodified - no bridge, no patch.
+    // The patch went in.
     let app = std::fs::read_to_string(root.join("app.js")).unwrap();
-    assert!(!app.contains("__cpclib_attach"));
+    assert!(app.contains("__cpclib_attach"));
 
     // ...and the result is servable, with the wasm typed correctly.
     let server = serve(&root, None).expect("serves");
@@ -32,7 +33,7 @@ fn the_pinned_distribution_installs_and_serves() {
     );
 
     // A second install is a no-op rather than a re-download.
-    let again = js1984::install().expect("idempotent");
+    let again = js1984_bridge::install().expect("idempotent");
     assert_eq!(again, root);
 }
 

@@ -117,7 +117,7 @@ fn a_posted_frame_reaches_the_adapter() {
     let response = request(
         server.port(),
         &format!(
-            "POST /session/dap?token={} HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\n\r\n{frame}",
+            "POST /session/upstream?token={} HTTP/1.1\r\nHost: x\r\nContent-Length: {}\r\n\r\n{frame}",
             server.token(),
             frame.len()
         )

@@ -25,6 +25,7 @@ pub mod basic_session;
 pub mod callstack;
 pub mod disassemble;
 pub mod inspect;
+pub mod js1984_bridge;
 pub mod launch;
 pub mod peer;
 pub mod protocol;
@@ -706,7 +707,7 @@ fn start_session(
             }
         }
         else {
-            let _ = cpclib_runner::web::js1984::install();
+            let _ = crate::js1984_bridge::install();
         }
     });
 
@@ -1252,7 +1253,7 @@ fn connect_backend(
                     .to_string()
             );
         }
-        let web_root = cpclib_runner::web::js1984::install()?;
+        let web_root = crate::js1984_bridge::install()?;
         let server = cpclib_runner::web::serve(&web_root, Some(snapshot))
             .map_err(|e| format!("cannot serve the emulator: {e}"))?;
         let url = server.debug_url();
