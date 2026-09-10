@@ -19,7 +19,7 @@ pub const BRIDGE_SCRIPT: &str = include_str!("../../assets/1984js-robot/robot-br
 pub const BRIDGE_FILENAME: &str = "cpclib-robot-bridge.js";
 
 /// Bumped whenever the bridge changes.
-pub const PATCH_REVISION: u32 = 1;
+pub const PATCH_REVISION: u32 = 8;
 
 /// The one line appended right after the emscripten module is done
 /// initialising, handing the bridge the module object it needs to call the

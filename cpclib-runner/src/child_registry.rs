@@ -23,7 +23,7 @@ pub fn kill_all_children() {
     }
 }
 
-fn kill_pid(pid: u32) {
+pub(crate) fn kill_pid(pid: u32) {
     #[cfg(unix)]
     {
         let _ = std::process::Command::new("kill")

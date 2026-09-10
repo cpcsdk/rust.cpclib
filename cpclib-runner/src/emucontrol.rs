@@ -12,7 +12,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
 use cpclib_csl::ResetType;
 use delegate;
-use enigo::{Enigo, Key, Keyboard, Settings};
+use enigo::{Enigo, Key, Keyboard, Mouse, Settings};
 #[cfg(windows)]
 use fs_extra;
 #[cfg(feature = "screenshot")]
@@ -1527,18 +1527,34 @@ impl UsedEmulator for SugarBoxV2UsedEmulator {
 /// `crate::web::robot_bridge`) instead of the `UsedEmulator`/`RobotImpl`
 /// machinery every other emulator above uses.
 ///
-/// Deliberately not another `RobotImpl<SomeUsedEmulator>`: that framework is
-/// built entirely around a real OS window and Enigo keystrokes as the
-/// fallback behind each native-API override, and 1984js has neither - there
-/// is no window to fall back to (the whole reason it exists here is to
-/// *avoid* window automation), so every method below either has a real
-/// native answer or none at all, with nothing in between to inherit from a
-/// shared default. Keeping it a separate type costs one more
-/// `Robot`/`delegate!` arm and touches none of the existing ten emulators'
-/// working code.
+/// Deliberately not another `RobotImpl<SomeUsedEmulator>`: that framework
+/// assumes the window and events manager are handed in by a caller that
+/// already found/spawned them (`Robot::new`), while this backend has to do
+/// both itself - there is no native process for a caller to spawn first.
+/// Keeping it a separate type costs one more `Robot`/`delegate!` arm and
+/// touches none of the existing ten emulators' working code.
+///
+/// The window is real, not a fiction: launched in `--app=` mode (no tabs,
+/// no address bar) under its own disposable Chrome profile so it is always a
+/// genuinely new, trackable process - never a window handed off to a
+/// browser already running - and found again afterwards by its page title.
+/// Every native-bridge action above (screenshot/keytype/memory) never needed
+/// it, but a native file dialog is a *native OS* dialog: nothing reachable
+/// from page script is allowed to open one without a real, OS-level click
+/// first, so the two load actions below go through the window and Enigo
+/// after all - the same tools every other emulator here already uses, for
+/// the one thing the bridge genuinely cannot do itself.
 #[cfg(feature = "screenshot")]
 pub(crate) struct Js1984Robot {
-    server: crate::web::ServerHandle
+    server: crate::web::ServerHandle,
+    window: Option<EmuWindow>,
+    events_manager: WindowEventsManager,
+    browser_pid: u32,
+    // Kept alive for the session's whole lifetime and removed on drop, once
+    // the browser holding it is gone - see `launch`'s own comment on why
+    // this cannot be a stable, reused path. Also `close`'s own handle on
+    // the whole process tree - see there.
+    profile: camino_tempfile::Utf8TempDir
 }
 
 /// The port a Robot-launched 1984js robot bridge always serves on - fixed
@@ -1549,19 +1565,87 @@ pub(crate) struct Js1984Robot {
 #[cfg(feature = "screenshot")]
 const JS1984_ROBOT_PORT: u16 = 8767;
 
+/// The page's own `<title>` - stable across upstream releases far more
+/// reliably than anything about window decoration or process name, and the
+/// same string an `--app=` window's OS title bar (if any) shows verbatim.
+#[cfg(feature = "screenshot")]
+const JS1984_WINDOW_TITLE: &str = "Javascript 1984";
+
+/// Browsers tried, in order, for a real, trackable `--app=` window - the
+/// first one found on this `PATH` wins.
+#[cfg(feature = "screenshot")]
+const APP_MODE_BROWSERS: &[&str] = &["google-chrome", "chromium", "chromium-browser"];
+
 #[cfg(feature = "screenshot")]
 impl Js1984Robot {
     /// Installs the robot-patched distribution if needed, serves it, and
-    /// opens a browser on it - there is no process to spawn, and no window
-    /// to go looking for afterwards the way every other emulator's launch
-    /// path does.
+    /// launches a browser on it in `--app=` mode - tracked by pid (so
+    /// `close` can actually end the session) and found again by window
+    /// title (so the two load actions can click into it).
     pub(crate) fn launch() -> Result<Robot, String> {
         let root = crate::web::robot_bridge::install()?;
         let server = crate::web::serve_on(&root, None, JS1984_ROBOT_PORT)
             .map_err(|e| format!("cannot serve 1984js for Robot automation: {e}"))?;
         let url = server.debug_url();
-        webbrowser::open(&url).map_err(|e| format!("could not open a browser on {url}: {e}"))?;
-        Ok(Robot::Js1984(Self { server }))
+
+        // A fresh directory every launch, not a stable/reused one: Chromium
+        // takes an exclusive `SingletonLock` inside its profile directory
+        // for as long as it runs there, and refuses outright to start a
+        // second time against a directory still holding one (confirmed
+        // live: a reused profile directory from an earlier session made
+        // every subsequent launch fail before the page ever loaded).
+        let profile = camino_tempfile::tempdir()
+            .map_err(|e| format!("cannot create a browser profile directory: {e}"))?;
+
+        let mut child = None;
+        for name in APP_MODE_BROWSERS {
+            match std::process::Command::new(name)
+                .arg(format!("--app={url}"))
+                .arg(format!("--user-data-dir={}", profile.path()))
+                .arg("--no-first-run")
+                // Explicitly detached from whatever stdin/stdout/stderr this
+                // process happens to have: a browser (and every subprocess
+                // it forks - a renderer, a GPU process, a crash handler, ...)
+                // otherwise inherits them and keeps them open for as long as
+                // it runs, which is far longer than this process's own work
+                // here - confirmed live: a caller piping this process's
+                // output through anything that waits for EOF (`| tail`,
+                // command substitution, ...) hangs forever once the actual
+                // work is done, because the pipe itself never closes.
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                Ok(c) => {
+                    child = Some(c);
+                    break;
+                },
+                Err(_) => continue
+            }
+        }
+        let child = child.ok_or_else(|| {
+            format!(
+                "no browser found to run 1984js in (tried {})",
+                APP_MODE_BROWSERS.join(", ")
+            )
+        })?;
+        let browser_pid = child.id();
+        crate::child_registry::register_child_pid(browser_pid);
+
+        let window = get_emulator_window_by_title(JS1984_WINDOW_TITLE, Duration::from_secs(30));
+
+        let events_manager = Enigo::new(&Settings::default())
+            .map_err(|e| format!("cannot create the input-injection backend: {e}"))?
+            .into();
+
+        Ok(Robot::Js1984(Self {
+            server,
+            window,
+            events_manager,
+            browser_pid,
+            profile
+        }))
     }
 
     pub fn screenshot(&mut self) -> Screenshot {
@@ -1593,16 +1677,137 @@ impl Js1984Robot {
         Ok(())
     }
 
-    pub fn load_snapshot(&mut self, _path: &Utf8Path) -> Result<(), String> {
-        Err("1984js has no snapshot-load facility reachable from Robot automation yet".to_owned())
+    pub fn load_snapshot(&mut self, path: &Utf8Path) -> Result<(), String> {
+        self.click_file_input("label[for=snapshotfile]", path)
     }
 
-    pub fn load_disc(&mut self, _drive: u8, _path: &Utf8Path) -> Result<(), String> {
-        Err("1984js has no disc-load facility reachable from Robot automation yet".to_owned())
+    pub fn load_disc(&mut self, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        let selector = match drive {
+            0 => "label[for=diskAfile]",
+            1 => "label[for=diskBfile]",
+            _ => return Err(format!("1984js only has drives A and B, not drive {drive}"))
+        };
+        self.click_file_input(selector, path)
+    }
+
+    /// Clicks the visible label for a hidden `<input type=file>` - browsers
+    /// treat that exactly like a real click on the input itself, the only
+    /// way to open a native file dialog (see this struct's own doc comment).
+    /// Then types the absolute path into it and confirms.
+    ///
+    /// Built and verified against a GTK file chooser (this workspace's own
+    /// dev/CI environment): Ctrl+L turns it into a plain text field that
+    /// accepts a full path directly, sidestepping the need to click through
+    /// a folder tree, which would need knowing the dialog's own layout.
+    fn click_file_input(&mut self, label_selector: &str, path: &Utf8Path) -> Result<(), String> {
+        if !path.is_absolute() {
+            return Err(format!(
+                "{path} must be an absolute path - the file dialog's own starting folder is not \
+                 something Robot automation controls"
+            ));
+        }
+
+        let point = retry_native_api_call(
+            "1984js file-input position via its own robot bridge",
+            || js1984_robot_api::click_point(&self.server, label_selector)
+        );
+
+        // The bridge only knows the point within its own page - the OS
+        // window's outer rectangle (this workspace's own, found once at
+        // launch) is what turns that into a real screen position. All the
+        // window-manager chrome here is assumed to be a title bar sitting
+        // above the viewport, none of it to the side: true for the plain
+        // X11 window manager this was verified against, and `--app=` mode
+        // removes every other candidate (tabs, address bar, bookmarks) that
+        // could otherwise add width.
+        let EmuWindow::Xcap(window) = self
+            .window
+            .as_ref()
+            .ok_or_else(|| "1984js's own window was never found; cannot click into it".to_owned())?
+        else {
+            return Err("1984js's window is not the kind this can click into".to_owned());
+        };
+        let win_x = window.x().map_err(|e| format!("cannot read the window's position: {e}"))?;
+        let win_y = window.y().map_err(|e| format!("cannot read the window's position: {e}"))?;
+        let win_height =
+            window.height().map_err(|e| format!("cannot read the window's size: {e}"))? as i32;
+        let chrome_top = win_height - point.inner_height;
+        let x = win_x + point.x;
+        let y = win_y + chrome_top + point.y;
+
+        let WindowEventsManager::Enigo(enigo) = &mut self.events_manager;
+        enigo
+            .move_mouse(x, y, enigo::Coordinate::Abs)
+            .map_err(|e| format!("cannot move the mouse to ({x}, {y}): {e}"))?;
+        enigo
+            .button(enigo::Button::Left, enigo::Direction::Click)
+            .map_err(|e| format!("cannot click at ({x}, {y}): {e}"))?;
+
+        // The native dialog is a separate OS window, outside both the
+        // browser and the bridge's own reach - there is nothing to poll for
+        // here, only a wait for it to actually appear before typing into it.
+        std::thread::sleep(Duration::from_millis(800));
+
+        self.events_manager.ctrl_char('l');
+        WindowEventsManager::wait_a_bit();
+
+        {
+            let WindowEventsManager::Enigo(enigo) = &mut self.events_manager;
+            // Character by character with a real wait between each, not
+            // Enigo's own bulk `text()`: confirmed live that `text()` fires
+            // fast enough to race the dialog's own live completion,
+            // producing a corrupted path (a real character dropped mid-
+            // string). Each one goes in as a plain Unicode key, not through
+            // `type_text`/`HostKey::enigo()`: that mapping exists to
+            // compensate a French/AZERTY physical keyboard against the
+            // CPC's own emulated scancode matrix, for typing into the
+            // *emulator* - this dialog is an ordinary native application
+            // with no such matrix to compensate for, and reusing that
+            // mapping here corrupted the path a different way (`.` arriving
+            // as a literal `;`).
+            for ch in path.as_str().chars() {
+                enigo
+                    .key(enigo::Key::Unicode(ch), enigo::Direction::Press)
+                    .map_err(|e| format!("cannot type '{ch}': {e}"))?;
+                WindowEventsManager::wait_a_bit();
+                enigo
+                    .key(enigo::Key::Unicode(ch), enigo::Direction::Release)
+                    .map_err(|e| format!("cannot type '{ch}': {e}"))?;
+                WindowEventsManager::wait_a_bit();
+            }
+            // This dialog is a long-lived desktop-portal service, not a
+            // fresh process per launch, so its own recent-locations
+            // completion accumulates across every Robot session that has
+            // ever used it - confirmed live to append a leftover suggested
+            // tail after typing, different every time depending on what
+            // history happened to match. Select from the cursor to the end
+            // of the field and delete it, clearing anything typing alone
+            // left behind, before confirming.
+            enigo.key(enigo::Key::Shift, enigo::Direction::Press).map_err(|e| e.to_string())?;
+            enigo.key(enigo::Key::End, enigo::Direction::Click).map_err(|e| e.to_string())?;
+            enigo.key(enigo::Key::Shift, enigo::Direction::Release).map_err(|e| e.to_string())?;
+            WindowEventsManager::wait_a_bit();
+            enigo.key(enigo::Key::Delete, enigo::Direction::Click).map_err(|e| e.to_string())?;
+        }
+        WindowEventsManager::wait_a_bit();
+        // Two, not one: confirmed live that a single Return here only
+        // resolves the typed text into a highlighted match, the same way
+        // Tab-completion would - it takes a second one to actually activate
+        // it and close the dialog. A generous wait in between, since this
+        // second one has to reach a dialog that just finished resolving a
+        // location, not one already idle and waiting for input.
+        self.events_manager.type_key(HostKey::Return);
+        std::thread::sleep(Duration::from_millis(500));
+        self.events_manager.type_key(HostKey::Return);
+
+        Ok(())
     }
 
     pub fn save_disc(&mut self, _drive: u8) -> Result<Vec<u8>, String> {
-        Err("1984js has no disc-save facility reachable from Robot automation yet".to_owned())
+        // 1984js's own UI has no disc-save affordance at all (only "Save
+        // SNA" for a full snapshot, and "Eject" for a disc) - confirmed by
+        // reading its index.html, not assumed.
+        Err("1984js has no disc-save facility reachable from Robot automation".to_owned())
     }
 
     pub fn handle_orgams(
@@ -1615,13 +1820,46 @@ impl Js1984Robot {
         Err("Orgams automation is not yet implemented for 1984js".to_owned())
     }
 
-    /// Best effort only: unlike every other backend, there is no tracked
-    /// process or OS window here to close - the served instance and its
-    /// background listener thread simply outlive the session. Left for a
-    /// caller that ends up needing it (killing the browser process this
-    /// crate itself launched would need tracking its pid, which `webbrowser`
-    /// does not hand back).
-    pub fn close(&mut self) {}
+    pub fn close(&mut self) {
+        crate::child_registry::deregister_child_pid(self.browser_pid);
+        // Not just `kill_pid(self.browser_pid)`: confirmed live that killing
+        // only the process this crate itself spawned leaves every one of
+        // its own children running (a renderer, a GPU process, a zygote, a
+        // crash handler, ...) - Chromium moves them into process groups of
+        // their own, so killing the one pid this crate tracked does not
+        // cascade to them the way it would for an ordinary child. Every one
+        // of them carries this session's own, unique profile directory on
+        // its command line (confirmed the same way), so matching on that
+        // reaches the whole tree regardless of how it is grouped.
+        #[cfg(unix)]
+        let _ = std::process::Command::new("pkill")
+            .args(["-9", "-f", self.profile.path().as_str()])
+            .status();
+        #[cfg(windows)]
+        crate::child_registry::kill_pid(self.browser_pid);
+    }
+}
+
+/// Retry-loop window lookup by title substring, matching
+/// `get_emulator_window_xcap`'s own shape but for a window with no
+/// corresponding `Emulator` value to match against.
+#[cfg(feature = "screenshot")]
+fn get_emulator_window_by_title(title: &str, timeout: Duration) -> Option<EmuWindow> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if let Ok(windows) = xcap::Window::all() {
+            let found = windows
+                .into_iter()
+                .find(|w| w.title().map(|t| t.contains(title)).unwrap_or(false));
+            if let Some(window) = found {
+                return Some(EmuWindow::Xcap(window));
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }
 
 pub(crate) struct RobotImpl<E: UsedEmulator> {
@@ -3567,6 +3805,29 @@ mod tests {
         robot.write_memory(address, &[0x2a]).expect("write");
         let read_back = robot.read_memory(address, 1).expect("read");
         assert_eq!(read_back, vec![0x2a], "the byte just written reads back");
+
+        // The real UI-automation path: click the hidden file input's label,
+        // type the absolute path into the native GTK dialog, confirm. Then
+        // check not "it didn't error" but that the page's own UI - which
+        // app.js updates only on a real, successful load - names this exact
+        // file. Not a memory comparison: confirmed live that the loaded
+        // program starts running, and altering its own low memory,
+        // immediately - there is no wait short enough to catch it
+        // unchanged and long enough for the (asynchronous) load to have
+        // finished, because those two windows do not overlap.
+        let snapshot = Utf8PathBuf::from_path_buf(
+            std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../cpclib-basm/test.sna"))
+                .expect("test.sna must exist")
+        )
+        .unwrap();
+        robot.load_snapshot(&snapshot).expect("load_snapshot");
+        std::thread::sleep(Duration::from_millis(500));
+        let snapshot_name = js1984_robot_api::text(&robot.server, "#snapshotname").unwrap();
+        assert_eq!(
+            snapshot_name.as_deref(),
+            Some("test.sna"),
+            "the page's own snapshot-name label must show the file just loaded through the UI"
+        );
 
         robot.type_text("PRINT \"HELLO FROM ROBOT\"\n");
         std::thread::sleep(Duration::from_secs(1));

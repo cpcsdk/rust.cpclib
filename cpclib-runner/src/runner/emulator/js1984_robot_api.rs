@@ -107,3 +107,59 @@ pub fn write_memory(server: &ServerHandle, address: u16, data: &[u8]) -> Result<
     )
     .map(|_| ())
 }
+
+/// Where an element sits in the page's own viewport, plus the viewport's own
+/// size - enough for a caller that separately knows the OS window's outer
+/// rectangle (which the bridge itself cannot see) to work out the real
+/// screen position. See [`click_point`]'s own doc comment for why that
+/// combining happens on the caller's side rather than here.
+pub struct ViewportPoint {
+    pub x: i32,
+    pub y: i32,
+    pub inner_width: i32,
+    pub inner_height: i32
+}
+
+/// `{"cmd":"clickPoint","selector":..}`.
+///
+/// Deliberately viewport-relative, not screen-absolute: `window.screenX`/
+/// `screenY` would normally fold in whatever window-manager chrome sits
+/// around the page and save the caller this step, but confirmed live in
+/// this workspace's own dev/CI browser (a snap-packaged Chromium under a
+/// plain X11 window manager) to read back as 0 regardless of the window's
+/// real position - not usable. The caller combines this with the OS
+/// window's own rectangle instead.
+pub fn click_point(server: &ServerHandle, selector: &str) -> Result<ViewportPoint, String> {
+    let reply = call(
+        server,
+        json!({"cmd": "clickPoint", "selector": selector}),
+        Duration::from_secs(5)
+    )?;
+    let field = |name: &str| {
+        reply
+            .get(name)
+            .and_then(Value::as_i64)
+            .map(|v| v as i32)
+            .ok_or_else(|| format!("clickPoint reply has no `{name}` field: {reply}"))
+    };
+    Ok(ViewportPoint {
+        x: field("viewportX")?,
+        y: field("viewportY")?,
+        inner_width: field("innerWidth")?,
+        inner_height: field("innerHeight")?
+    })
+}
+
+/// `{"cmd":"text","selector":..}` - not used by any real Robot action, only
+/// by this crate's own tests: the text content of the first element
+/// matching `selector`, or `None` if nothing matches. Useful for verifying
+/// a UI action actually took effect (e.g. `#snapshotname`, which app.js
+/// itself updates once a snapshot has genuinely loaded) without racing a
+/// live CPU the way reading memory does - confirmed live that memory right
+/// after a snapshot load is not a stable thing to assert on, since the
+/// loaded program starts running, and altering its own memory, immediately.
+#[cfg(test)]
+pub fn text(server: &ServerHandle, selector: &str) -> Result<Option<String>, String> {
+    let reply = call(server, json!({"cmd": "text", "selector": selector}), Duration::from_secs(5))?;
+    Ok(reply.get("text").and_then(Value::as_str).map(str::to_owned))
+}

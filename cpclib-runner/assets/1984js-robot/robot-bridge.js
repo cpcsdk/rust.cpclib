@@ -31,6 +31,15 @@
 
   let module = null;
 
+  // The `/debug` route (the only one that injects the session token this
+  // bridge needs to activate at all - see the top of this file) also
+  // injects a `<style id="cpclib-bare">` that hides everything but the
+  // screen itself, `!important` and all: built for an editor embedding just
+  // the picture in its own webview, which is the opposite of what Robot
+  // automation needs here - the file-picker inputs' own visible labels,
+  // which is the one thing on this page a click has to be able to reach.
+  document.getElementById("cpclib-bare")?.remove();
+
   globalThis.__cpclib_robot_attach = function (m) {
     module = m;
     if (!connected) {
@@ -85,9 +94,55 @@
       case "keytype": return doKeytype(message);
       case "readMemory": return doReadMemory(message);
       case "writeMemory": return doWriteMemory(message);
+      case "clickPoint": return doClickPoint(message);
+      case "text": return doText(message);
       default:
         reply(message.id, { ok: false, error: "unknown command: " + message.cmd });
     }
+  }
+
+  // Where a real click on `selector` would need to land, in *viewport*
+  // coordinates - plus the viewport's own size, so the caller can add
+  // whatever window-manager chrome (title bar, borders) sits around it from
+  // the OS window's own outer rectangle, which it already has and this page
+  // cannot see. `window.screenX`/`screenY` would normally fold that chrome
+  // in on their own and save the caller that step, but confirmed live in
+  // this workspace's own dev/CI browser (a snap-packaged Chromium under a
+  // plain X11 window manager) to read back as 0 regardless of the window's
+  // real position - not usable here. Used for the file-picker inputs, which
+  // browsers refuse to open except from a real, OS-level click - nothing
+  // reachable from script alone opens a native file dialog.
+  function doClickPoint(message) {
+    const element = document.querySelector(message.selector);
+    if (!element) {
+      reply(message.id, { ok: false, error: "no element matches " + message.selector });
+      return;
+    }
+    // The page can be taller than the viewport (confirmed live: the media
+    // controls sit below the fold at this window's default size) - a rect
+    // computed without this would name a point outside the window
+    // altogether, missing everything, rather than the element itself.
+    // Instant, not smooth: the caller reads the rect the moment this
+    // returns, and a smooth scroll would still be animating then.
+    element.scrollIntoView({ block: "center", behavior: "instant" });
+    const rect = element.getBoundingClientRect();
+    reply(message.id, {
+      ok: true,
+      viewportX: Math.round(rect.left + rect.width / 2),
+      viewportY: Math.round(rect.top + rect.height / 2),
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight
+    });
+  }
+
+  // Not used by any real Robot action, only cpclib-runner's own tests: a
+  // way to check what the page's own UI believes happened (e.g.
+  // `#snapshotname`, which app.js itself updates once a snapshot has really
+  // loaded) - decoupled from reading memory, which a live CPU keeps
+  // changing.
+  function doText(message) {
+    const element = document.querySelector(message.selector);
+    reply(message.id, { ok: true, text: element ? element.textContent : null });
   }
 
   function doScreenshot(message) {
