@@ -15,6 +15,7 @@ use delegate;
 use enigo::{Enigo, Key, Keyboard, Mouse, Settings};
 #[cfg(windows)]
 use fs_extra;
+use ini::Ini;
 #[cfg(feature = "screenshot")]
 use xcap::image::{ImageBuffer, Rgba, open};
 
@@ -41,6 +42,41 @@ type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 pub enum AmstradRom {
     Orgams,
     Unidos
+}
+
+/// The (embedded resource name, upper ROM slot) pairs needed to fully
+/// provision `rom` - shared across every emulator with its own per-slot
+/// ROM loading (native 1984's `--rom-slot=`, CPCEC's profile `highXX=`,
+/// WinAPE's `[ROMS] Upper(N)=`). Orgams needs all four of its own ROMs
+/// present together (confirmed live: a lone `ORGAMS.ROM` boots and its RSX
+/// is recognized, but refuses to start - "Missing ROMs" - until
+/// `ORGEXT`/`MONOGAMS`/`BRICBRAC` are there too). Every slot kept within
+/// 1-15, satisfying Orgams' own tightest documented constraint
+/// (`BRICBRAC.ROM` needs 1-15 specifically for its `|BURN` RSX) even
+/// though `ORGEXT`/`MONOGAMS` would each tolerate up to 127.
+fn amstrad_rom_slot_files(rom: AmstradRom) -> &'static [(&'static str, u8)] {
+    match rom {
+        AmstradRom::Orgams => &[
+            ("BRICBRAC.ROM", 12),
+            ("MONOGAMS.ROM", 13),
+            ("ORGEXT.ROM", 14),
+            ("ORGAMS.ROM", 15)
+        ],
+        AmstradRom::Unidos => &[("unidos.rom", 7)]
+    }
+}
+
+/// Writes the embedded ROM resource `roms://{embedded_name}` to `dst` if
+/// it is not already there - shared by every emulator's own ROM
+/// provisioning below, so the "only write if missing" idempotency (don't
+/// re-write a large binary on every single launch) lives in one place.
+fn ensure_embedded_rom_written(dst: &Utf8Path, embedded_name: &str) -> Result<(), String> {
+    if dst.exists() {
+        return Ok(());
+    }
+    let src = format!("roms://{embedded_name}");
+    let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
+    fs_err::write(dst, data.data).map_err(|e| format!("cannot write {dst}: {e}"))
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -751,32 +787,63 @@ impl EmulatorConf {
                 // for that, so it needs the four plain images individually.
                 Emulator::Emulator1984(_) => {
                     for rom in &self.roms_configuration {
-                        let slotted_files: &[(&str, u8)] = match rom {
-                            AmstradRom::Orgams => &[
-                                ("BRICBRAC.ROM", 12),
-                                ("MONOGAMS.ROM", 13),
-                                ("ORGEXT.ROM", 14),
-                                ("ORGAMS.ROM", 15)
-                            ],
-                            AmstradRom::Unidos => &[("unidos.rom", 7)]
-                        };
-                        for (embedded_name, slot) in slotted_files {
+                        for (embedded_name, slot) in amstrad_rom_slot_files(*rom) {
                             let dst = emu.roms_folder().join(embedded_name);
-                            if !dst.exists() {
-                                let src = format!("roms://{embedded_name}");
-                                let data = EmbeddedRoms::get(&src)
-                                    .unwrap_or_else(|| panic!("{src} not embedded"));
-                                fs_err::write(&dst, data.data)
-                                    .map_err(|e| format!("cannot write {dst}: {e}"))?;
-                            }
+                            ensure_embedded_rom_written(&dst, embedded_name)?;
                             args.push(format!("--rom-slot={slot}:{dst}"));
                         }
                     }
                 },
+                // CPCEC's own "profile" INI files (`highXX=filename`, XX in
+                // hex, `filename` resolved relative to the profile's own
+                // directory per CPCEC.TXT) are a disposable file passed as
+                // a plain positional argument - unlike Ace/WinAPE's shared,
+                // persistent config, nothing here survives between runs or
+                // risks corrupting a real user setting.
+                Emulator::Cpcec(_) => {
+                    let roms_folder = emu.roms_folder();
+                    let mut profile = String::new();
+                    for rom in &self.roms_configuration {
+                        for (embedded_name, slot) in amstrad_rom_slot_files(*rom) {
+                            let dst = roms_folder.join(embedded_name);
+                            ensure_embedded_rom_written(&dst, embedded_name)?;
+                            profile.push_str(&format!("high{slot:02X}={embedded_name}\n"));
+                        }
+                    }
+                    let profile_path = roms_folder.join("cpclib_orgams_profile.ini");
+                    fs_err::write(&profile_path, profile)
+                        .map_err(|e| format!("cannot write {profile_path}: {e}"))?;
+                    args.push(profile_path.to_string());
+                },
+                // WinAPE's own `[ROMS]` section (`Upper(N)=name`, `.ROM`
+                // implied, resolved relative to the `ROM` subfolder -
+                // confirmed against a real `WinAPE.ini` already using
+                // `Upper(7)=ParaDOS 1-2+` for `ROM/ParaDOS 1-2+.ROM`) is a
+                // persistent, shared config file, same shape as Ace's own
+                // `ace_conf` - written here with the plain `ini` crate
+                // directly (no `AceConfig`-style wrapper needed just for
+                // one section).
+                Emulator::Winape(_) => {
+                    let roms_folder = emu.roms_folder();
+                    let ini_path = roms_folder
+                        .parent()
+                        .expect("the ROM subfolder always has a parent - the install root")
+                        .join("WinAPE.ini");
+                    let mut ini = Ini::load_from_file(&ini_path).unwrap_or_else(|_| Ini::new());
+                    for rom in &self.roms_configuration {
+                        for (embedded_name, slot) in amstrad_rom_slot_files(*rom) {
+                            let basename =
+                                embedded_name.trim_end_matches(".ROM").trim_end_matches(".rom");
+                            let dst = roms_folder.join(format!("{basename}.ROM"));
+                            ensure_embedded_rom_written(&dst, embedded_name)?;
+                            ini.set_to(Some("ROMS".to_owned()), format!("Upper({slot})"), basename.to_owned());
+                        }
+                    }
+                    ini.write_to_file(&ini_path)
+                        .map_err(|e| format!("cannot save {ini_path}: {e}"))?;
+                },
                 Emulator::Ace(_)
                 | Emulator::CpcEmu(_)
-                | Emulator::Cpcec(_)
-                | Emulator::Winape(_)
                 | Emulator::Amspirit(_)
                 | Emulator::SugarBoxV2(_)
                 | Emulator::CpcEmuPower(_)
@@ -3424,16 +3491,39 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         return run_csl_file(&cli, &csl_path, o);
     }
 
+    // Running the `orgams` subcommand obviously implies wanting the Orgams
+    // (and its required Unidos) ROM active - making the user also spell out
+    // `--enable-rom orgams --enable-rom unidos` on top of the subcommand's
+    // own name would be pure friction. Only fills in what the user didn't
+    // already decide themselves: an explicit `--enable-rom`/`--disable-rom`
+    // for either still wins, same as everywhere else `enable_rom` is
+    // consulted below.
+    #[cfg(feature = "screenshot")]
+    if matches!(cli.command, Commands::Orgams(_)) {
+        for rom in [AmstradRom::Orgams, AmstradRom::Unidos] {
+            if !cli.disable_rom.contains(&rom) && !cli.enable_rom.contains(&rom) {
+                cli.enable_rom.push(rom);
+            }
+        }
+    }
+
     // Ace's own Orgams ROM provisioning (below) is a side channel - it
     // writes straight into `ace_conf`, a file the Ace process reads
     // independently at startup, so it needs no `EmulatorConf` involvement
-    // at all. Native 1984 has no such file: `--rom-slot=N:PATH` only ever
-    // reaches it as a real CLI argument (`args_for_emu`'s own
-    // `roms_configuration` handling), so it has to be threaded through here
-    // instead - scoped to `Emulator1984` only, so every other emulator's
+    // at all. Every other emulator that can provision ROMs (native 1984's
+    // `--rom-slot=`, CPCEC's profile `highXX=`, WinAPE's `[ROMS]
+    // Upper(N)=`) only ever gets them through `args_for_emu`'s own
+    // `roms_configuration` handling, so it has to be threaded through here
+    // instead - scoped to just those three, so every other emulator's
     // `--enable-rom` handling (or lack of it) is completely unchanged.
-    let emulator1984_orgams_requested =
-        cli.emulator == Emu::Emulator1984 && cli.enable_rom.contains(&AmstradRom::Orgams);
+    let slotted_rom_emu =
+        matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec | Emu::Winape);
+    // CPCEC shares `EmulatorConf.memory` with the same 576KB-for-Orgams
+    // reasoning as native 1984 (both turn it into a real launch arg below);
+    // WinAPE's own RAM setting lives in its persistent INI instead, out of
+    // scope here.
+    let memory_bump_emu = matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec);
+    let orgams_requested = slotted_rom_emu && cli.enable_rom.contains(&AmstradRom::Orgams);
     let builder = EmulatorConf::builder()
         .transparent(cli.transparent)
         .maybe_drive_a(cli.drive_a.clone().map(|a| a.into()))
@@ -3446,11 +3536,11 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()).or_else(|| {
             // Same 576KB bump Ace's own provisioning applies below, for the
             // same reason - Orgams needs more than the default 64K.
-            emulator1984_orgams_requested.then_some(576)
+            (memory_bump_emu && orgams_requested).then_some(576)
         }))
         .break_on_bad_hbl(cli.break_on_bad_hbl)
         .break_on_bad_vbl(cli.break_on_bad_vbl)
-        .roms_configuration(if cli.emulator == Emu::Emulator1984 {
+        .roms_configuration(if slotted_rom_emu {
             cli.enable_rom.iter().copied().collect()
         }
         else {
@@ -3878,9 +3968,15 @@ mod tests {
             .roms_configuration(HashSet::from([AmstradRom::Orgams, AmstradRom::Unidos]))
             .build();
 
+        let roms_folder = emu.roms_folder();
+        let rom_fnames =
+            ["BRICBRAC.ROM", "MONOGAMS.ROM", "ORGEXT.ROM", "ORGAMS.ROM", "unidos.rom"];
+        let _cleanup = CleanUpEmulatorCacheOnDrop::new(
+            rom_fnames.iter().map(|f| roms_folder.join(f)).collect()
+        );
+
         let args = conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
 
-        let roms_folder = emu.roms_folder();
         let unidos_path = roms_folder.join("unidos.rom");
         assert!(unidos_path.exists(), "unidos.rom must have been written to {roms_folder}");
         assert!(
@@ -3902,6 +3998,144 @@ mod tests {
             );
         }
         assert!(args.contains(&"--memory=576".to_owned()), "expected --memory=576, got {args:?}");
+    }
+
+    /// `args_for_emu`'s ROM provisioning writes into each emulator's own
+    /// real, shared install/cache directory (there is no test seam in
+    /// `base_cache_folder()` to redirect that) - for CPCEC that is only
+    /// ever new files nothing else could already be using, but for WinAPE
+    /// it is a live edit of the user's own real, persistent `WinAPE.ini`.
+    /// Deletes `paths` and restores `restore` to its original content (or
+    /// removes it, if it did not exist yet) when dropped, panic or not, so
+    /// running these tests can never leave real shared state behind.
+    struct CleanUpEmulatorCacheOnDrop {
+        paths: Vec<Utf8PathBuf>,
+        restore: Option<(Utf8PathBuf, Option<String>)>
+    }
+
+    impl CleanUpEmulatorCacheOnDrop {
+        fn new(paths: Vec<Utf8PathBuf>) -> Self {
+            Self { paths, restore: None }
+        }
+
+        fn snapshotting(mut self, path: Utf8PathBuf) -> Self {
+            let original = fs_err::read_to_string(&path).ok();
+            self.restore = Some((path, original));
+            self
+        }
+    }
+
+    impl Drop for CleanUpEmulatorCacheOnDrop {
+        fn drop(&mut self) {
+            for path in &self.paths {
+                let _ = fs_err::remove_file(path);
+            }
+            if let Some((path, original)) = &self.restore {
+                match original {
+                    Some(content) => {
+                        let _ = fs_err::write(path, content);
+                    },
+                    None => {
+                        let _ = fs_err::remove_file(path);
+                    }
+                }
+            }
+        }
+    }
+
+    /// CPCEC's own "profile" mechanism (`highXX=filename`, hex slot,
+    /// `filename` resolved relative to the profile's own directory - see
+    /// `CPCEC.TXT`) must become a real, disposable `.ini` file passed as a
+    /// plain positional arg, with the embedded ROM images written
+    /// alongside it in the same folder so the relative names resolve.
+    #[test]
+    fn cpcec_orgams_roms_become_a_profile_ini() {
+        let emu = Emulator::Cpcec(Default::default());
+        let conf = EmulatorConf::builder()
+            .transparent(false)
+            .break_on_bad_hbl(false)
+            .break_on_bad_vbl(false)
+            .roms_configuration(HashSet::from([AmstradRom::Orgams, AmstradRom::Unidos]))
+            .build();
+
+        let roms_folder = emu.roms_folder();
+        let profile_path = roms_folder.join("cpclib_orgams_profile.ini");
+        let rom_fnames =
+            ["BRICBRAC.ROM", "MONOGAMS.ROM", "ORGEXT.ROM", "ORGAMS.ROM", "unidos.rom"];
+        let _cleanup = CleanUpEmulatorCacheOnDrop::new(
+            std::iter::once(profile_path.clone())
+                .chain(rom_fnames.iter().map(|f| roms_folder.join(f)))
+                .collect()
+        );
+
+        let args = conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
+
+        assert!(
+            args.contains(&profile_path.to_string()),
+            "expected the profile .ini path as an arg, got {args:?}"
+        );
+        let profile =
+            fs_err::read_to_string(&profile_path).expect("the profile .ini must have been written");
+
+        for (fname, slot) in [
+            ("BRICBRAC.ROM", "0C"),
+            ("MONOGAMS.ROM", "0D"),
+            ("ORGEXT.ROM", "0E"),
+            ("ORGAMS.ROM", "0F"),
+            ("unidos.rom", "07")
+        ] {
+            assert!(
+                roms_folder.join(fname).exists(),
+                "{fname} must have been written to {roms_folder}"
+            );
+            let line = format!("high{slot}={fname}\n");
+            assert!(profile.contains(&line), "expected {line:?} in the profile, got {profile:?}");
+        }
+    }
+
+    /// WinAPE's own persistent `[ROMS]` section (`Upper(N)=name`, `.ROM`
+    /// implied, resolved relative to the `ROM` subfolder - confirmed
+    /// against a real `WinAPE.ini` already using `Upper(7)=ParaDOS 1-2+`
+    /// for `ROM/ParaDOS 1-2+.ROM`) must get the same slots written into it,
+    /// with the embedded ROM images placed in the `ROM` subfolder using
+    /// that exact naming convention. `WinAPE.ini` is the user's own real,
+    /// persistent config (already holding real settings, e.g. `Upper(7)=
+    /// ParaDOS 1-2+`) - snapshotted and restored via
+    /// `CleanUpEmulatorCacheOnDrop`, not left mutated by this test.
+    #[test]
+    fn winape_orgams_roms_become_ini_rom_entries() {
+        let emu = Emulator::Winape(Default::default());
+        let conf = EmulatorConf::builder()
+            .transparent(false)
+            .break_on_bad_hbl(false)
+            .break_on_bad_vbl(false)
+            .roms_configuration(HashSet::from([AmstradRom::Orgams, AmstradRom::Unidos]))
+            .build();
+
+        let roms_folder = emu.roms_folder();
+        let ini_path = roms_folder.parent().unwrap().join("WinAPE.ini");
+        let rom_fnames = ["BRICBRAC.ROM", "MONOGAMS.ROM", "ORGEXT.ROM", "ORGAMS.ROM", "unidos.ROM"];
+        let _cleanup = CleanUpEmulatorCacheOnDrop::new(
+            rom_fnames.iter().map(|f| roms_folder.join(f)).collect()
+        )
+        .snapshotting(ini_path.clone());
+
+        conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
+
+        let ini = Ini::load_from_file(&ini_path).expect("WinAPE.ini must have been written");
+        for (basename, slot) in
+            [("BRICBRAC", 12), ("MONOGAMS", 13), ("ORGEXT", 14), ("ORGAMS", 15), ("unidos", 7)]
+        {
+            assert!(
+                roms_folder.join(format!("{basename}.ROM")).exists(),
+                "{basename}.ROM must have been written to {roms_folder}"
+            );
+            assert_eq!(
+                ini.get_from(Some("ROMS"), &format!("Upper({slot})")),
+                Some(basename),
+                "expected Upper({slot})={basename} in WinAPE.ini"
+            );
+        }
     }
 
     /// The native 1984 robot bridge, live: launch, read memory, load a
