@@ -28,6 +28,8 @@ use crate::runner::emulator::Emulator;
 use crate::runner::emulator::amspiritlite_api;
 #[cfg(feature = "screenshot")]
 use crate::runner::emulator::js1984_robot_api;
+#[cfg(all(feature = "screenshot", unix))]
+use crate::runner::emulator::native1984_monitor;
 #[cfg(feature = "screenshot")]
 use crate::runner::emulator::sugarbox_api;
 use crate::runner::exec::RunnerWithClap;
@@ -1862,6 +1864,201 @@ fn get_emulator_window_by_title(title: &str, timeout: Duration) -> Option<EmuWin
     }
 }
 
+/// A Robot session driving the native `1984` binary through its own
+/// `--monitor-pty` debug monitor, for `read_memory` - a plain-text,
+/// minicom-compatible line protocol printed once to stdout at startup
+/// (`1984: monitor PTY: /dev/pts/N`), independent of the emulator's own
+/// window entirely. Unix-only: the flag's implementation is a real PTY, a
+/// POSIX concept this crate does not try to emulate on Windows.
+///
+/// Screenshot and type_text fall back to the same window/Enigo automation
+/// every other native emulator here already uses - genuinely unverified in
+/// this workspace's own sandboxed desktop, where a real, live test found
+/// that keyboard input does not reach this specific window at all (confirmed
+/// three ways: a plain click, an explicit press/release pair, and `wmctrl
+/// -a`'s own EWMH focus request - `_NET_ACTIVE_WINDOW` stayed 0x0 throughout).
+/// That is an existing, pre-existing limitation class shared with every
+/// other window-driven emulator here, not something this backend makes
+/// worse, and not something fixable from this crate's side - screenshot
+/// (pure pixel capture, no input needed) is unaffected either way.
+///
+/// `load_snapshot`/`load_disc` are a kill-and-respawn, not a live reload:
+/// native 1984 has no such command in its own monitor, and the man page
+/// lists `--load-sna`/`--disk-a`/`--disk-b` as startup-only flags. The
+/// original launch's own extra arguments are remembered and replayed on
+/// every respawn, so a Robot-launched session configured with ROM slots or
+/// a specific model does not lose that configuration the first time a
+/// snapshot loads.
+#[cfg(all(feature = "screenshot", unix))]
+pub(crate) struct Native1984Robot {
+    child: std::process::Child,
+    monitor: native1984_monitor::Monitor,
+    window: Option<EmuWindow>,
+    events_manager: WindowEventsManager,
+    base_args: Vec<String>
+}
+
+#[cfg(all(feature = "screenshot", unix))]
+const NATIVE_1984_WINDOW_TITLE: &str = "CPC";
+
+#[cfg(all(feature = "screenshot", unix))]
+impl Native1984Robot {
+    /// `base_args` is whatever the caller wants every respawn to keep
+    /// carrying (ROM slots, model, memory size, ...) - `--monitor-pty` and
+    /// the disk/snapshot flags `load_snapshot`/`load_disc` set are added on
+    /// top of it, never baked into it.
+    pub(crate) fn launch(base_args: Vec<String>) -> Result<Robot, String> {
+        let (child, monitor) = Self::spawn(&base_args)?;
+        let window =
+            get_emulator_window_by_title(NATIVE_1984_WINDOW_TITLE, Duration::from_secs(10));
+        let events_manager = Enigo::new(&Settings::default())
+            .map_err(|e| format!("cannot create the input-injection backend: {e}"))?
+            .into();
+        Ok(Robot::Native1984(Self {
+            child,
+            monitor,
+            window,
+            events_manager,
+            base_args
+        }))
+    }
+
+    fn spawn(args: &[String]) -> Result<(std::process::Child, native1984_monitor::Monitor), String> {
+        let app = Emulator::Emulator1984(Default::default())
+            .configuration::<cpclib_common::event::DiscardObserver>();
+        if !app.is_cached() {
+            app.install(&cpclib_common::event::DiscardObserver)?;
+        }
+        let exe = app.exec_fname();
+
+        let mut child = std::process::Command::new(exe.as_std_path())
+            .args(args)
+            .arg("--monitor-pty")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("cannot launch native 1984 ({exe}): {e}"))?;
+
+        // Confirmed live: the monitor-PTY announcement goes to *stderr*, not
+        // stdout, despite `1984:` looking like an ordinary log prefix - a
+        // first attempt piping stdout instead just hung forever waiting for
+        // a line that was never going to arrive there.
+        let stderr = child.stderr.take().expect("just set to piped");
+        let mut reader = std::io::BufReader::new(stderr);
+        let pty_path = {
+            use std::io::BufRead;
+            let mut found = None;
+            for _ in 0..20 {
+                let mut line = String::new();
+                let n = reader
+                    .read_line(&mut line)
+                    .map_err(|e| format!("cannot read native 1984's startup output: {e}"))?;
+                if n == 0 {
+                    break;
+                }
+                if let Some(rest) = line.trim().strip_prefix("1984: monitor PTY: ") {
+                    found = Some(rest.split_whitespace().next().unwrap_or(rest).to_owned());
+                    break;
+                }
+            }
+            found.ok_or_else(|| {
+                let _ = child.kill();
+                "native 1984 never printed its monitor PTY path - did --monitor-pty fail, or has \
+                 this build's startup banner changed?"
+                    .to_owned()
+            })?
+        };
+
+        // Kept draining for the process's whole remaining life, on its own
+        // thread: dropping this reader instead would close the pipe's read
+        // end while the child still holds the write end open, and once its
+        // kernel buffer fills up (nothing here reading it anymore), any
+        // further stderr write blocks the emulator itself indefinitely -
+        // the same class of hang this crate's own 1984js work found and
+        // fixed by never piping a spawned browser's stdout unread in the
+        // first place. Piped is unavoidable here (the PTY path is only
+        // ever announced on stderr), so drained-forever is the fix instead.
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let mut sink = String::new();
+            while reader.read_line(&mut sink).unwrap_or(0) > 0 {
+                sink.clear();
+            }
+        });
+
+        let monitor = native1984_monitor::connect(Utf8Path::new(&pty_path))?;
+        Ok((child, monitor))
+    }
+
+    pub fn screenshot(&mut self) -> Screenshot {
+        self.window
+            .as_ref()
+            .unwrap_or_else(|| panic!("native 1984's own window was never found"))
+            .capture_image()
+    }
+
+    pub fn type_text(&mut self, s: &str) {
+        self.events_manager.type_text(s);
+    }
+
+    pub fn read_memory(&mut self, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        self.monitor.read_memory(address, count)
+    }
+
+    pub fn write_memory(&mut self, _address: u16, _data: &[u8]) -> Result<(), String> {
+        Err("native 1984's own debug monitor has no memory-write command".to_owned())
+    }
+
+    pub fn load_snapshot(&mut self, path: &Utf8Path) -> Result<(), String> {
+        self.respawn_with(&[format!("--load-sna={path}")])
+    }
+
+    pub fn load_disc(&mut self, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        let flag = match drive {
+            0 => format!("--disk-a={path}"),
+            1 => format!("--disk-b={path}"),
+            _ => return Err(format!("native 1984 only has drives A and B, not drive {drive}"))
+        };
+        self.respawn_with(&[flag])
+    }
+
+    fn respawn_with(&mut self, extra: &[String]) -> Result<(), String> {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+
+        let mut args = self.base_args.clone();
+        args.extend(extra.iter().cloned());
+        let (child, monitor) = Self::spawn(&args)?;
+        self.child = child;
+        self.monitor = monitor;
+        // The old window died with the old process; find the new one.
+        self.window =
+            get_emulator_window_by_title(NATIVE_1984_WINDOW_TITLE, Duration::from_secs(10));
+        Ok(())
+    }
+
+    pub fn save_disc(&mut self, _drive: u8) -> Result<Vec<u8>, String> {
+        Err("native 1984 has no disc-save facility reachable from Robot automation".to_owned())
+    }
+
+    pub fn handle_orgams(
+        &mut self,
+        _drivea: Option<&str>,
+        _albireo: Option<&str>,
+        _action: OrgamsRobotAction<'_, '_>,
+        _o: &dyn EventObserver
+    ) -> Result<(), String> {
+        Err("Orgams automation is not yet implemented for this native-1984 Robot backend"
+            .to_owned())
+    }
+
+    pub fn close(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 pub(crate) struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
     pub(crate) events_manager: WindowEventsManager,
@@ -1896,7 +2093,9 @@ pub(crate) enum Robot {
     Cadence(RobotImpl<CadenceUsedEmulator>),
     Emulator1984(RobotImpl<Emulator1984UsedEmulator>),
     #[cfg(feature = "screenshot")]
-    Js1984(Js1984Robot)
+    Js1984(Js1984Robot),
+    #[cfg(all(feature = "screenshot", unix))]
+    Native1984(Native1984Robot)
 }
 
 /// Generates the `From<RobotImpl<_>> for Robot` boilerplate shared by every
@@ -2072,6 +2271,8 @@ impl Robot {
             Robot::Emulator1984(r) => r,
             #[cfg(feature = "screenshot")]
             Robot::Js1984(r) => r,
+            #[cfg(all(feature = "screenshot", unix))]
+            Robot::Native1984(r) => r,
         } {
             #[cfg(feature = "screenshot")]
             fn handle_orgams(
@@ -3576,6 +3777,48 @@ mod tests {
     use cpclib_common::camino::Utf8PathBuf;
 
     use super::*;
+
+    /// The native 1984 robot bridge, live: launch, read memory, load a
+    /// snapshot through a kill-and-respawn, confirm the reloaded memory
+    /// matches it.
+    #[cfg(all(feature = "screenshot", unix))]
+    #[test]
+    #[ignore = "launches a real native 1984 process"]
+    fn the_native_1984_robot_works_end_to_end() {
+        let Robot::Native1984(mut robot) = Native1984Robot::launch(Vec::new()).expect("launches")
+        else {
+            unreachable!("Native1984Robot::launch always returns Robot::Native1984")
+        };
+
+        // Give the process a moment to finish booting before the first
+        // monitor command.
+        std::thread::sleep(Duration::from_millis(500));
+
+        let before = robot.read_memory(0, 8).expect("read_memory");
+        assert_eq!(before.len(), 8);
+
+        let snapshot = Utf8PathBuf::from_path_buf(
+            std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../cpclib-basm/test.sna"))
+                .expect("test.sna must exist")
+        )
+        .unwrap();
+        let expected_bytes = {
+            let raw = std::fs::read(&snapshot).unwrap();
+            raw[0x100..0x108].to_vec()
+        };
+
+        robot.load_snapshot(&snapshot).expect("load_snapshot");
+        // Immediately, not after a wait: same reasoning as the 1984js test -
+        // a live CPU starts altering its own low memory the instant it
+        // resumes, so the read has to land before that, not after.
+        let after = robot.read_memory(0, 8).expect("read_memory after load");
+        assert_eq!(
+            after, expected_bytes,
+            "memory must carry the snapshot's own bytes right after loading it"
+        );
+
+        robot.close();
+    }
 
     #[test]
     fn test_from_emulator_conf() {
