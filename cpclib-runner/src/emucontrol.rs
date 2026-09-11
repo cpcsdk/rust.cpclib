@@ -37,7 +37,7 @@ use crate::runner::exec::RunnerWithClap;
 #[cfg(feature = "screenshot")]
 type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
-#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq, Hash)]
 pub enum AmstradRom {
     Orgams,
     Unidos
@@ -728,6 +728,36 @@ impl EmulatorConf {
                          individual ROM slots"
                         .to_owned());
                 },
+                // `--rom-slot=N:PATH` (see `1984 --help`) loads a raw upper-
+                // ROM image into a slot at launch - unlike Ace's own
+                // `ace_conf` INI file (a side channel its own process reads
+                // independently at startup), this only ever reaches 1984 as
+                // a real CLI argument, so it has to be built here rather
+                // than in `handle_arguments`'s Ace-only ROM-provisioning
+                // block. `ORGAMS.ROM`/`unidos.rom` (not Ace's own
+                // `Orgams_FF240128.e0f`, a bigger multi-page image Ace's
+                // flash-ROM plugin machinery expects) are confirmed, by
+                // their own on-disk header (`.ORGAMS  ROM`/`.UNIDOS  ROM`),
+                // to be plain, single-page 16KB CPC ROM images - the
+                // portable format every other emulator's own slot-loading
+                // expects.
+                Emulator::Emulator1984(_) => {
+                    for rom in &self.roms_configuration {
+                        let (embedded_name, slot) = match rom {
+                            AmstradRom::Orgams => ("ORGAMS.ROM", 15),
+                            AmstradRom::Unidos => ("unidos.rom", 7)
+                        };
+                        let dst = emu.roms_folder().join(embedded_name);
+                        if !dst.exists() {
+                            let src = format!("roms://{embedded_name}");
+                            let data = EmbeddedRoms::get(&src)
+                                .unwrap_or_else(|| panic!("{src} not embedded"));
+                            fs_err::write(&dst, data.data)
+                                .map_err(|e| format!("cannot write {dst}: {e}"))?;
+                        }
+                        args.push(format!("--rom-slot={slot}:{dst}"));
+                    }
+                },
                 Emulator::Ace(_)
                 | Emulator::CpcEmu(_)
                 | Emulator::Cpcec(_)
@@ -737,8 +767,7 @@ impl EmulatorConf {
                 | Emulator::CpcEmuPower(_)
                 | Emulator::CapriceForever(_)
                 | Emulator::RetroVm(_)
-                | Emulator::Cadence(_)
-                | Emulator::Emulator1984(_) => {
+                | Emulator::Cadence(_) => {
                     return Err(format!(
                         "ROM configuration is not yet supported for {emu:?}"
                     ));
@@ -803,6 +832,20 @@ impl EmulatorConf {
                 }
             };
             args.push(arg.to_owned());
+        }
+
+        // `--memory=KB` (see `1984 --help`): only 64/128/256/512/576 are
+        // accepted - a different set from CPCEC's own above, confirmed live
+        // against the real `--help` text, not assumed to match.
+        if let Some(memory) = &self.memory
+            && let Emulator::Emulator1984(_) = emu
+        {
+            if ![64, 128, 256, 512, 576].contains(memory) {
+                return Err(format!(
+                    "Unsupported memory size {memory}KB for 1984 (expected one of 64/128/256/512/576)"
+                ));
+            }
+            args.push(format!("--memory={memory}"));
         }
 
         if let Some(ftype) = &self.auto_type {
@@ -3366,6 +3409,16 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         return run_csl_file(&cli, &csl_path, o);
     }
 
+    // Ace's own Orgams ROM provisioning (below) is a side channel - it
+    // writes straight into `ace_conf`, a file the Ace process reads
+    // independently at startup, so it needs no `EmulatorConf` involvement
+    // at all. Native 1984 has no such file: `--rom-slot=N:PATH` only ever
+    // reaches it as a real CLI argument (`args_for_emu`'s own
+    // `roms_configuration` handling), so it has to be threaded through here
+    // instead - scoped to `Emulator1984` only, so every other emulator's
+    // `--enable-rom` handling (or lack of it) is completely unchanged.
+    let emulator1984_orgams_requested =
+        cli.emulator == Emu::Emulator1984 && cli.enable_rom.contains(&AmstradRom::Orgams);
     let builder = EmulatorConf::builder()
         .transparent(cli.transparent)
         .maybe_drive_a(cli.drive_a.clone().map(|a| a.into()))
@@ -3375,9 +3428,19 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
         .maybe_auto_type(cli.auto_type_file.clone())
-        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
+        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()).or_else(|| {
+            // Same 576KB bump Ace's own provisioning applies below, for the
+            // same reason - Orgams needs more than the default 64K.
+            emulator1984_orgams_requested.then_some(576)
+        }))
         .break_on_bad_hbl(cli.break_on_bad_hbl)
-        .break_on_bad_vbl(cli.break_on_bad_vbl);
+        .break_on_bad_vbl(cli.break_on_bad_vbl)
+        .roms_configuration(if cli.emulator == Emu::Emulator1984 {
+            cli.enable_rom.iter().copied().collect()
+        }
+        else {
+            Default::default()
+        });
     let conf = builder.build();
 
     // Answered before anything native happens: a web emulator is *served*, not
@@ -3777,6 +3840,40 @@ mod tests {
     use cpclib_common::camino::Utf8PathBuf;
 
     use super::*;
+
+    /// `--enable-rom orgams --enable-rom unidos` on native 1984 must turn
+    /// into real `--rom-slot=N:PATH` launch args (slot 15/7, matching
+    /// `1984 --help`), with the embedded ROM images actually written to
+    /// disk - no live process needed, `args_for_emu` is pure arg synthesis.
+    #[test]
+    fn emulator1984_orgams_roms_become_rom_slot_args() {
+        let emu = Emulator::Emulator1984(Default::default());
+        let conf = EmulatorConf::builder()
+            .transparent(false)
+            .break_on_bad_hbl(false)
+            .break_on_bad_vbl(false)
+            .memory(576u32)
+            .roms_configuration(HashSet::from([AmstradRom::Orgams, AmstradRom::Unidos]))
+            .build();
+
+        let args = conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
+
+        let roms_folder = emu.roms_folder();
+        let orgams_path = roms_folder.join("ORGAMS.ROM");
+        let unidos_path = roms_folder.join("unidos.rom");
+        assert!(orgams_path.exists(), "ORGAMS.ROM must have been written to {roms_folder}");
+        assert!(unidos_path.exists(), "unidos.rom must have been written to {roms_folder}");
+
+        assert!(
+            args.contains(&format!("--rom-slot=15:{orgams_path}")),
+            "expected a slot-15 rom-slot arg for Orgams, got {args:?}"
+        );
+        assert!(
+            args.contains(&format!("--rom-slot=7:{unidos_path}")),
+            "expected a slot-7 rom-slot arg for Unidos, got {args:?}"
+        );
+        assert!(args.contains(&"--memory=576".to_owned()), "expected --memory=576, got {args:?}");
+    }
 
     /// The native 1984 robot bridge, live: launch, read memory, load a
     /// snapshot through a kill-and-respawn, confirm the reloaded memory

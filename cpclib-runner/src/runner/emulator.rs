@@ -146,6 +146,7 @@ impl Emulator {
             Emulator::Ace(v) => v.roms_folder(),
             Emulator::Cpcec(v) => v.roms_folder(),
             Emulator::Winape(v) => v.roms_folder(),
+            Emulator::Emulator1984(v) => v.roms_folder(),
             _ => unimplemented!()
         }
     }

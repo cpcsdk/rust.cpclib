@@ -1,8 +1,6 @@
 use std::process::Command;
 
-use cpclib_common::camino::Utf8Path;
-#[cfg(any(target_os = "macos", target_os = "openbsd"))]
-use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
 use crate::delegated::{
     ArchiveFormat, DelegateApplicationDescription, MutiplatformUrls, PostInstallFn
@@ -214,6 +212,15 @@ impl Emulator1984Version {
         };
 
         builder.build()
+    }
+
+    /// The same directory `configuration`'s own `post_install` already
+    /// downloads `ROM_FILES` (the OS/BASIC/AMSDOS ROMs) into - a natural,
+    /// already-existing place to also drop extra upper-ROM images (Orgams,
+    /// Unidos, ...) for `--rom-slot=N:PATH`, mirroring `CpcecVersion`'s own
+    /// `roms_folder`.
+    pub fn roms_folder(&self) -> Utf8PathBuf {
+        self.configuration::<()>().cache_folder()
     }
 }
 
