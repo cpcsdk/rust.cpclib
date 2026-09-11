@@ -1,6 +1,6 @@
 //! Talking to native 1984's own `--monitor-pty` debug monitor: a plain-text,
 //! minicom-compatible line protocol over a PTY, printed once to the
-//! process's own stdout at startup (`1984: monitor PTY: /dev/pts/N`).
+//! process's own stderr at startup (`1984: monitor PTY: /dev/pts/N`).
 //!
 //! Read-only: confirmed live against a real 2.1.1-era build that its
 //! command set (`D`/`M`/`B`/`BC`/`N`/`G`/`GA`/`CRTC`/`X`/`Q`) has no memory
@@ -67,9 +67,15 @@ impl Monitor {
         // greeting, despite the process being very much alive underneath.
         // Whatever non-canonical/timed-read termios mode this PTY inherits
         // is producing timeouts shaped exactly like EOF, not real hangups.
+        //
+        // Bounded by wall-clock time, not by a retry count: a fixed count *
+        // fixed sleep (previously 50 * 20ms = 1s total) turned out to be
+        // flaky live - on a loaded machine (this box also builds/runs other
+        // things concurrently) the emulator can take longer than that just
+        // to finish booting before its monitor loop is truly pumping, which
+        // a retry-count budget has no way to account for.
         let max_lines = 32 + (count as usize / 8);
-        let max_zero_reads = 50;
-        let mut zero_reads = 0;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut lines_seen = 0;
         while lines_seen < max_lines {
             let mut line = String::new();
@@ -78,8 +84,7 @@ impl Monitor {
                 .read_line(&mut line)
                 .map_err(|e| format!("cannot read from the monitor: {e}"))?;
             if n == 0 {
-                zero_reads += 1;
-                if zero_reads > max_zero_reads {
+                if std::time::Instant::now() >= deadline {
                     return Err("the monitor PTY closed while reading a reply".to_owned());
                 }
                 std::thread::sleep(std::time::Duration::from_millis(20));
