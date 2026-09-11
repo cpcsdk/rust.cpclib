@@ -54,6 +54,20 @@ pub enum AmstradRom {
 /// 1-15, satisfying Orgams' own tightest documented constraint
 /// (`BRICBRAC.ROM` needs 1-15 specifically for its `|BURN` RSX) even
 /// though `ORGEXT`/`MONOGAMS` would each tolerate up to 127.
+///
+/// Unidos at slot 6, not 7: confirmed live, the hard way, that slot 7 is
+/// where every one of these emulators already defaults its own AMSDOS-
+/// compatible disc ROM to (native 1984's built-in AMSDOS; WinAPE's own
+/// real config already had `Upper(7)=ParaDOS 1-2+`) - and Unidos' own
+/// documentation says outright it does not talk to floppy drives itself,
+/// it *chains onto* AMSDOS/ParaDOS for that. Slot 7 first (matching Ace's
+/// own table below) silently evicted that companion ROM instead of
+/// layering on top of it: Unidos still booted (`UniDOS (standalone)`) but
+/// `cat`/`load"dfa:` answered "Bad command"/"Device ???: [ROOT]" - no
+/// disc access at all, nothing to do with Albireo. Moving Unidos to slot
+/// 6 leaves slot 7's own AMSDOS/ParaDOS in place: the exact same session
+/// then booted `UniDOS (integrated)` and `cat` listed the disc's real
+/// files.
 fn amstrad_rom_slot_files(rom: AmstradRom) -> &'static [(&'static str, u8)] {
     match rom {
         AmstradRom::Orgams => &[
@@ -62,7 +76,7 @@ fn amstrad_rom_slot_files(rom: AmstradRom) -> &'static [(&'static str, u8)] {
             ("ORGEXT.ROM", 14),
             ("ORGAMS.ROM", 15)
         ],
-        AmstradRom::Unidos => &[("unidos.rom", 7)]
+        AmstradRom::Unidos => &[("unidos.rom", 6)]
     }
 }
 
@@ -3980,8 +3994,8 @@ mod tests {
         let unidos_path = roms_folder.join("unidos.rom");
         assert!(unidos_path.exists(), "unidos.rom must have been written to {roms_folder}");
         assert!(
-            args.contains(&format!("--rom-slot=7:{unidos_path}")),
-            "expected a slot-7 rom-slot arg for Unidos, got {args:?}"
+            args.contains(&format!("--rom-slot=6:{unidos_path}")),
+            "expected a slot-6 rom-slot arg for Unidos, got {args:?}"
         );
 
         for (fname, slot) in [
@@ -4082,7 +4096,7 @@ mod tests {
             ("MONOGAMS.ROM", "0D"),
             ("ORGEXT.ROM", "0E"),
             ("ORGAMS.ROM", "0F"),
-            ("unidos.rom", "07")
+            ("unidos.rom", "06")
         ] {
             assert!(
                 roms_folder.join(fname).exists(),
@@ -4124,7 +4138,7 @@ mod tests {
 
         let ini = Ini::load_from_file(&ini_path).expect("WinAPE.ini must have been written");
         for (basename, slot) in
-            [("BRICBRAC", 12), ("MONOGAMS", 13), ("ORGEXT", 14), ("ORGAMS", 15), ("unidos", 7)]
+            [("BRICBRAC", 12), ("MONOGAMS", 13), ("ORGEXT", 14), ("ORGAMS", 15), ("unidos", 6)]
         {
             assert!(
                 roms_folder.join(format!("{basename}.ROM")).exists(),
