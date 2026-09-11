@@ -734,28 +734,43 @@ impl EmulatorConf {
                 // independently at startup), this only ever reaches 1984 as
                 // a real CLI argument, so it has to be built here rather
                 // than in `handle_arguments`'s Ace-only ROM-provisioning
-                // block. `ORGAMS.ROM`/`unidos.rom` (not Ace's own
-                // `Orgams_FF240128.e0f`, a bigger multi-page image Ace's
-                // flash-ROM plugin machinery expects) are confirmed, by
-                // their own on-disk header (`.ORGAMS  ROM`/`.UNIDOS  ROM`),
-                // to be plain, single-page 16KB CPC ROM images - the
-                // portable format every other emulator's own slot-loading
-                // expects.
+                // block.
+                //
+                // Confirmed live, the hard way: a lone `ORGAMS.ROM` boots
+                // and its `|O` RSX is recognized, but it answers "Missing
+                // ROMs" - Orgams needs its `ORGEXT`/`MONOGAMS`/`BRICBRAC`
+                // companions actually present too (all four together,
+                // loaded straight from the official orgams-gg.zip release,
+                // is what actually got the real editor on screen; the
+                // versions this repo had bundled before were a different,
+                // incompatible build that never worked here). Not Ace's own
+                // `Orgams_FF240128.e0f`: that turned out, on inspection, to
+                // be a 5-page flash/EEPROM container bundling these same
+                // four ROMs behind Ace's own flash-chip emulation - native
+                // 1984's flat, one-image-per-slot loading has no equivalent
+                // for that, so it needs the four plain images individually.
                 Emulator::Emulator1984(_) => {
                     for rom in &self.roms_configuration {
-                        let (embedded_name, slot) = match rom {
-                            AmstradRom::Orgams => ("ORGAMS.ROM", 15),
-                            AmstradRom::Unidos => ("unidos.rom", 7)
+                        let slotted_files: &[(&str, u8)] = match rom {
+                            AmstradRom::Orgams => &[
+                                ("BRICBRAC.ROM", 12),
+                                ("MONOGAMS.ROM", 13),
+                                ("ORGEXT.ROM", 14),
+                                ("ORGAMS.ROM", 15)
+                            ],
+                            AmstradRom::Unidos => &[("unidos.rom", 7)]
                         };
-                        let dst = emu.roms_folder().join(embedded_name);
-                        if !dst.exists() {
-                            let src = format!("roms://{embedded_name}");
-                            let data = EmbeddedRoms::get(&src)
-                                .unwrap_or_else(|| panic!("{src} not embedded"));
-                            fs_err::write(&dst, data.data)
-                                .map_err(|e| format!("cannot write {dst}: {e}"))?;
+                        for (embedded_name, slot) in slotted_files {
+                            let dst = emu.roms_folder().join(embedded_name);
+                            if !dst.exists() {
+                                let src = format!("roms://{embedded_name}");
+                                let data = EmbeddedRoms::get(&src)
+                                    .unwrap_or_else(|| panic!("{src} not embedded"));
+                                fs_err::write(&dst, data.data)
+                                    .map_err(|e| format!("cannot write {dst}: {e}"))?;
+                            }
+                            args.push(format!("--rom-slot={slot}:{dst}"));
                         }
-                        args.push(format!("--rom-slot={slot}:{dst}"));
                     }
                 },
                 Emulator::Ace(_)
@@ -3842,9 +3857,16 @@ mod tests {
     use super::*;
 
     /// `--enable-rom orgams --enable-rom unidos` on native 1984 must turn
-    /// into real `--rom-slot=N:PATH` launch args (slot 15/7, matching
-    /// `1984 --help`), with the embedded ROM images actually written to
-    /// disk - no live process needed, `args_for_emu` is pure arg synthesis.
+    /// into real `--rom-slot=N:PATH` launch args, matching `1984 --help`,
+    /// with the embedded ROM images actually written to disk - no live
+    /// process needed, `args_for_emu` is pure arg synthesis. Orgams needs
+    /// all four of its own ROMs (confirmed live - a lone `ORGAMS.ROM`
+    /// boots and its RSX is recognized, but it refuses to actually start,
+    /// "Missing ROMs", until `ORGEXT`/`MONOGAMS`/`BRICBRAC` are present
+    /// too), all placed in 1-15 (Orgams' own documented constraint on
+    /// `ORGAMS.ROM`'s slot, satisfied here for every one of the four so
+    /// `BRICBRAC`'s `|BURN` RSX - which needs 1-15 specifically - works
+    /// too, not just the wider 1-127 the other three would tolerate).
     #[test]
     fn emulator1984_orgams_roms_become_rom_slot_args() {
         let emu = Emulator::Emulator1984(Default::default());
@@ -3859,19 +3881,26 @@ mod tests {
         let args = conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
 
         let roms_folder = emu.roms_folder();
-        let orgams_path = roms_folder.join("ORGAMS.ROM");
         let unidos_path = roms_folder.join("unidos.rom");
-        assert!(orgams_path.exists(), "ORGAMS.ROM must have been written to {roms_folder}");
         assert!(unidos_path.exists(), "unidos.rom must have been written to {roms_folder}");
-
-        assert!(
-            args.contains(&format!("--rom-slot=15:{orgams_path}")),
-            "expected a slot-15 rom-slot arg for Orgams, got {args:?}"
-        );
         assert!(
             args.contains(&format!("--rom-slot=7:{unidos_path}")),
             "expected a slot-7 rom-slot arg for Unidos, got {args:?}"
         );
+
+        for (fname, slot) in [
+            ("BRICBRAC.ROM", 12),
+            ("MONOGAMS.ROM", 13),
+            ("ORGEXT.ROM", 14),
+            ("ORGAMS.ROM", 15)
+        ] {
+            let path = roms_folder.join(fname);
+            assert!(path.exists(), "{fname} must have been written to {roms_folder}");
+            assert!(
+                args.contains(&format!("--rom-slot={slot}:{path}")),
+                "expected a slot-{slot} rom-slot arg for {fname}, got {args:?}"
+            );
+        }
         assert!(args.contains(&"--memory=576".to_owned()), "expected --memory=576, got {args:?}");
     }
 
