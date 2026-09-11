@@ -1951,16 +1951,6 @@ impl Js1984Robot {
         Err("1984js has no disc-save facility reachable from Robot automation".to_owned())
     }
 
-    pub fn handle_orgams(
-        &mut self,
-        _drivea: Option<&str>,
-        _albireo: Option<&str>,
-        _action: OrgamsRobotAction<'_, '_>,
-        _o: &dyn EventObserver
-    ) -> Result<(), String> {
-        Err("Orgams automation is not yet implemented for 1984js".to_owned())
-    }
-
     pub fn close(&mut self) {
         crate::child_registry::deregister_child_pid(self.browser_pid);
         // Not just `kill_pid(self.browser_pid)`: confirmed live that killing
@@ -1978,6 +1968,21 @@ impl Js1984Robot {
             .status();
         #[cfg(windows)]
         crate::child_registry::kill_pid(self.browser_pid);
+    }
+}
+
+#[cfg(feature = "screenshot")]
+impl OrgamsCapable for Js1984Robot {
+    fn orgams_screenshot(&mut self) -> Screenshot {
+        self.screenshot()
+    }
+
+    fn orgams_events_manager(&mut self) -> &mut WindowEventsManager {
+        &mut self.events_manager
+    }
+
+    fn orgams_window(&self) -> Option<&EmuWindow> {
+        self.window.as_ref()
     }
 }
 
@@ -2181,20 +2186,24 @@ impl Native1984Robot {
         Err("native 1984 has no disc-save facility reachable from Robot automation".to_owned())
     }
 
-    pub fn handle_orgams(
-        &mut self,
-        _drivea: Option<&str>,
-        _albireo: Option<&str>,
-        _action: OrgamsRobotAction<'_, '_>,
-        _o: &dyn EventObserver
-    ) -> Result<(), String> {
-        Err("Orgams automation is not yet implemented for this native-1984 Robot backend"
-            .to_owned())
-    }
-
     pub fn close(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(all(feature = "screenshot", unix))]
+impl OrgamsCapable for Native1984Robot {
+    fn orgams_screenshot(&mut self) -> Screenshot {
+        self.screenshot()
+    }
+
+    fn orgams_events_manager(&mut self) -> &mut WindowEventsManager {
+        &mut self.events_manager
+    }
+
+    fn orgams_window(&self) -> Option<&EmuWindow> {
+        self.window.as_ref()
     }
 }
 
@@ -2538,25 +2547,39 @@ impl<E: UsedEmulator> RobotImpl<E> {
     }
 }
 
-impl<E: UsedEmulator> RobotImpl<E> {
-    pub fn unidos_select_drive(&mut self, drivea: Option<&str>, albireo: Option<&str>) {
+/// Everything needed to drive Orgams (the editor/assembler running
+/// *inside* the emulated CPC) through pixel-color polling and keyboard
+/// automation - originally a set of inherent methods on `RobotImpl<E>`
+/// only, factored into a trait so `Js1984Robot` and `Native1984Robot`
+/// (neither of which is a `RobotImpl<E>` - see their own doc comments for
+/// why) can reuse the exact same, delicately-tuned logic instead of a
+/// second copy. Every provided method here is ported verbatim from what
+/// used to be inherent methods directly on `RobotImpl<E>` - only the
+/// three required methods below changed shape (a screenshot/events-
+/// manager/window accessor instead of direct field access or an
+/// `E: UsedEmulator` type parameter), so this is a pure reshaping, not a
+/// behavior change, for every existing caller (Ace, WinAPE, ...).
+#[cfg(feature = "screenshot")]
+trait OrgamsCapable {
+    fn orgams_screenshot(&mut self) -> Screenshot;
+    fn orgams_events_manager(&mut self) -> &mut WindowEventsManager;
+    fn orgams_window(&self) -> Option<&EmuWindow>;
+
+    fn unidos_select_drive(&mut self, drivea: Option<&str>, albireo: Option<&str>) {
         if drivea.is_some() {
-            self.events_manager.type_text("load\"dfa:");
-            self.events_manager.r#return();
+            self.orgams_events_manager().type_text("load\"dfa:");
+            self.orgams_events_manager().r#return();
         }
         else if albireo.is_some() {
-            self.events_manager.type_text("load\"sd:");
-            self.events_manager.r#return();
+            self.orgams_events_manager().type_text("load\"sd:");
+            self.orgams_events_manager().r#return();
         }
         else {
             panic!("No storage selected");
         }
     }
-}
 
-impl<E: UsedEmulator> RobotImpl<E> {
-    #[cfg(feature = "screenshot")]
-    pub fn handle_orgams(
+    fn handle_orgams(
         &mut self,
         drivea: Option<&str>,
         albireo: Option<&str>,
@@ -2632,21 +2655,18 @@ impl<E: UsedEmulator> RobotImpl<E> {
         })
     }
 
-    #[cfg(feature = "screenshot")]
     fn orgams_jump(&mut self) -> Result<(), Screenshot> {
-        self.type_char('j');
+        self.orgams_events_manager().type_char('j');
         Ok(())
     }
 
-    #[cfg(feature = "screenshot")]
     fn orgams_wait_import(&mut self, o: &dyn EventObserver) -> Result<(), Screenshot> {
         self.orgams_wait_save(o)
     }
 
-    #[cfg(feature = "screenshot")]
     fn orgams_wait_save(&mut self, o: &dyn EventObserver) -> Result<(), Screenshot> {
         loop {
-            let screen = self.screenshot();
+            let screen = self.orgams_screenshot();
             let coord_of_interest = (0, 48);
             let pix_of_interest = screen.get_pixel(coord_of_interest.0, coord_of_interest.1);
 
@@ -2667,43 +2687,40 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
-    #[cfg(feature = "screenshot")]
     fn orgams_save_source(&mut self, dst: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
-        self.ctrl_char('s');
-        self.type_text(dst);
-        self.r#return();
+        self.orgams_events_manager().ctrl_char('s');
+        self.orgams_events_manager().type_text(dst);
+        self.orgams_events_manager().r#return();
 
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
         self.orgams_wait_save(o)
     }
 
-    #[cfg(feature = "screenshot")]
     fn orgams_export_source(&mut self, dst: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
-        self.ctrl_char('e');
-        self.type_text(dst);
-        self.r#return();
+        self.orgams_events_manager().ctrl_char('e');
+        self.orgams_events_manager().type_text(dst);
+        self.orgams_events_manager().r#return();
 
         std::thread::sleep(Duration::from_millis(1000 / 2));
-        self.type_char('W');
+        self.orgams_events_manager().type_char('W');
 
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
         self.orgams_wait_save(o)
     }
 
-    #[cfg(feature = "screenshot")]
     fn orgams_save(&mut self, dst: Option<&str>, o: &dyn EventObserver) -> Result<(), Screenshot> {
         o.emit_stdout("> Save result\n");
         // handle saving
-        self.type_char('b');
+        self.orgams_events_manager().type_char('b');
         std::thread::sleep(Duration::from_millis(2000));
         if let Some(dst) = dst {
-            self.type_text(dst);
-            self.r#return();
+            self.orgams_events_manager().type_text(dst);
+            self.orgams_events_manager().r#return();
         }
         else {
-            self.r#return();
+            self.orgams_events_manager().r#return();
             std::thread::sleep(Duration::from_millis(1000));
-            self.r#return();
+            self.orgams_events_manager().r#return();
         }
         o.emit_stdout("  Filename provided.\n");
 
@@ -2712,39 +2729,29 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_save(o)
     }
 
-    #[cfg(feature = "screenshot")]
-    fn orgams_import(
-        &mut self,
-        src: &str,
-        o: &dyn EventObserver
-    ) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
-        self.type_text("ùo");
-        self.r#return();
+    fn orgams_import(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
+        self.orgams_events_manager().type_text("ùo");
+        self.orgams_events_manager().r#return();
 
         std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
 
-        self.ctrl_char('i');
+        self.orgams_events_manager().ctrl_char('i');
         std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
 
-        self.type_text(src);
-        self.r#return();
+        self.orgams_events_manager().type_text(src);
+        self.orgams_events_manager().r#return();
 
         self.orgams_wait_import(o)
     }
 
-    #[cfg(feature = "screenshot")]
-    fn orgams_load(
-        &mut self,
-        src: &str,
-        o: &dyn EventObserver
-    ) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_load(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
         // Open orgams
         o.emit_stdout(&format!("> Launch orgams and open file \"{src}\"\n"));
 
         // French setup ?
         let chars = "ùo,\"".to_owned() + src + "\"";
-        self.type_text(chars.as_str());
-        self.r#return();
+        self.orgams_events_manager().type_text(chars.as_str());
+        self.orgams_events_manager().r#return();
 
         let res = self.wait_orgams_loading();
         o.emit_stdout("  done.\n");
@@ -2752,19 +2759,14 @@ impl<E: UsedEmulator> RobotImpl<E> {
         res
     }
 
-    #[cfg(feature = "screenshot")]
-    fn orgams_assemble(
-        &mut self,
-        src: &str,
-        o: &dyn EventObserver
-    ) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_assemble(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
         o.emit_stdout(&format!("> Assemble {src}\n"));
-        self.ctrl_char('1');
+        self.orgams_events_manager().ctrl_char('1');
 
         self.wait_orgams_assembling();
         o.emit_stdout("  done.\n");
 
-        let result: ImageBuffer<Rgba<u8>, Vec<u8>> = self.window.as_ref().unwrap().capture_image();
+        let result: Screenshot = self.orgams_window().unwrap().capture_image();
 
         if result
             .pixels()
@@ -2777,13 +2779,12 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
-    #[cfg(feature = "screenshot")]
     fn wait_orgams_assembling(&mut self) {
         let coord_of_interest = (0, 200);
         let mut finished = false;
         while !finished {
             std::thread::sleep(Duration::from_millis(1000 / 10));
-            let screen = E::screenshot(self);
+            let screen = self.orgams_screenshot();
             let pix_of_interest = screen.get_pixel(coord_of_interest.0, coord_of_interest.1);
 
             finished = !(pix_of_interest == &Rgba([1, 1, 1, 255])
@@ -2791,7 +2792,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
-    #[cfg(feature = "screenshot")]
     fn wait_orgams_loading(&mut self) -> Result<(), Screenshot> {
         #[derive(PartialEq)]
         enum State {
@@ -2803,7 +2803,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         // we check a specific pixel that goes from blue to black then purple
         let mut state = State::Basic;
         while state != State::Loaded {
-            let screen = E::screenshot(self);
+            let screen = self.orgams_screenshot();
             let coord_of_interest = (8, 48); // 2 to work on Amstrad plus and old
             let pix_of_interest = screen.get_pixel(coord_of_interest.0, coord_of_interest.1);
 
@@ -2843,6 +2843,21 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "screenshot")]
+impl<E: UsedEmulator> OrgamsCapable for RobotImpl<E> {
+    fn orgams_screenshot(&mut self) -> Screenshot {
+        E::screenshot(self)
+    }
+
+    fn orgams_events_manager(&mut self) -> &mut WindowEventsManager {
+        &mut self.events_manager
+    }
+
+    fn orgams_window(&self) -> Option<&EmuWindow> {
+        self.window.as_ref()
     }
 }
 
