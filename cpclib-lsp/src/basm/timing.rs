@@ -146,7 +146,7 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
 /// any `:` found inside parens (e.g. `(ix+n)` never contains one in
 /// practice, but this stays robust regardless). Used by
 /// `extract_instruction_at_col` to find the one segment under a cursor.
-fn split_segments(without_comment: &str) -> Vec<(usize, usize)> {
+pub(super) fn split_segments(without_comment: &str) -> Vec<(usize, usize)> {
     let bytes = without_comment.as_bytes();
     let mut depth = 0u32;
     let mut seg_start = 0usize;
@@ -211,7 +211,7 @@ fn extract_mnemonic_from_segment(seg: &str) -> Option<String> {
 /// byte offset and text of the first word that isn't itself immediately
 /// followed by `:` (i.e. the mnemonic/directive/whatever-comes-after-labels,
 /// or `None` if the segment is blank/label-only).
-fn leading_word(seg: &str) -> Option<(usize, &str)> {
+pub(super) fn leading_word(seg: &str) -> Option<(usize, &str)> {
     let bytes = seg.as_bytes();
     let mut pos = 0usize;
 

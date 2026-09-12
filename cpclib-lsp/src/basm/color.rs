@@ -205,12 +205,85 @@ fn skip_lines_for(
     skip_lines
 }
 
+/// The `DB`/`DW` family of data-defining directives (and their documented
+/// synonyms, straight from `docs/basm/directives.md`'s own `### BYTE, TEXT,
+/// DB, DEFB, DM, DEFM` / `### WORD, DW, DEFW` headings) - the one directive
+/// family a numeral genuinely sitting in a data table belongs to, exactly
+/// the case this whole feature exists for. Deliberately narrower than "any
+/// directive": `ORG`/`EQU`/`IF`/... taking a number that happens to match a
+/// GA byte is essentially always a coincidence, not a color.
+const BYTE_OR_WORD_DIRECTIVES: &[&str] =
+    &["DB", "DEFB", "BYTE", "TEXT", "DM", "DEFM", "DW", "DEFW", "WORD"];
+
+/// Whether a numeral literal or symbol reference at column `col` of
+/// `code` (already comment-stripped) should get a `documentColor` swatch,
+/// based on the enclosing statement's own leading word (mnemonic/
+/// directive/macro name, found the same way `timing::extract_instruction_
+/// at_col` already does for hover - skip any leading `label:` prefixes,
+/// split on top-level `:` for multi-statement lines).
+///
+/// Reduces real false positives found live: a byte that happens to match a
+/// Gate Array ink value is only *meaningfully* a color when it is actually
+/// headed for the Gate Array, and plenty of ordinary code uses the exact
+/// same byte range for something else entirely (`CP 0x54`, `AND 0x40`, a
+/// loop counter that happens to be 40) -
+/// - a Z80 instruction: only `LD` is trustworthy (a color byte is loaded
+///   into a register before being `OUT`put to the GA port - every other
+///   instruction that takes a byte operand uses it for its own, unrelated
+///   purpose);
+/// - a directive: only `DB`/`DW` and their synonyms (see
+///   `BYTE_OR_WORD_DIRECTIVES`) - any other known directive (`ORG`, `EQU`,
+///   `IF`, ...) never colorizes, a number there is essentially never a
+///   color;
+/// - anything else - kept, unrestricted: this is either a macro call
+///   (macro arguments commonly *are* meant as ink/color values, e.g.
+///   `SET_INK 0x54`, and basm's own set of user-defined macros isn't
+///   enumerable the way instructions/directives are) or a leading word this
+///   function doesn't otherwise recognize, and erring towards showing a
+///   swatch rather than hiding one is the safer direction for something
+///   genuinely unknown.
+fn statement_permits_swatch(code: &str, col: usize) -> bool {
+    for (start, end) in super::timing::split_segments(code) {
+        if col >= start && col <= end {
+            let seg = &code[start..end];
+            let Some((_, word)) = super::timing::leading_word(seg)
+            else {
+                return true;
+            };
+            let upper = word.to_uppercase();
+            if super::token::INSTRUCTION_SET.contains(upper.as_str()) {
+                return upper == "LD";
+            }
+            if BYTE_OR_WORD_DIRECTIVES.contains(&upper.as_str()) {
+                return true;
+            }
+            if super::token::DIRECTIVE_DOCS
+                .iter()
+                .any(|(names, _)| names.iter().any(|n| n.to_uppercase() == upper))
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+    true
+}
+
 /// Every colorizable byte on the assembly (non-LOCOMOTIVE) side of the
 /// document.
 fn asm_spans(document: &Document, skip_lines: &std::collections::HashSet<usize>) -> Vec<ColorSpan> {
     let text = document.text();
+    let lines: Vec<&str> = text.lines().collect();
     scan_numeral_literals(&text, skip_lines)
         .iter()
+        .filter(|lit| {
+            let Some(line) = lines.get(lit.line as usize)
+            else {
+                return true;
+            };
+            let code = super::format::strip_asm_comment(line);
+            statement_permits_swatch(&code, lit.token_start as usize)
+        })
         .flat_map(spans_for)
         .collect()
 }
@@ -273,8 +346,9 @@ fn symbol_spans(
                     }
                 }
                 let name = &code[start..end];
-                if let Some(idx) =
-                    resolve_symbol_byte(&table, name, 0).and_then(ink_index_from_ga_value)
+                if let Some(idx) = resolve_symbol_byte(&table, name, 0)
+                    .and_then(ink_index_from_ga_value)
+                    .filter(|_| statement_permits_swatch(&code, start))
                 {
                     out.push(ColorSpan {
                         line: line_idx as u32,
@@ -463,6 +537,66 @@ mod tests {
         // High byte 0x10 is not a GA value and isn't 0x7F -> even though
         // the low byte 0x54 matches, no swatch at all.
         let colors = colors_for("LD BC, 0x1054\n");
+        assert!(colors.is_empty(), "{colors:?}");
+    }
+
+    #[test]
+    fn a_non_ld_instruction_operand_is_not_colorized() {
+        // 0x54 is ink 0, but CP's byte is a comparison value, not a color -
+        // real false positives this gating exists to remove.
+        let colors = colors_for("CP 0x54\n");
+        assert!(colors.is_empty(), "{colors:?}");
+    }
+
+    #[test]
+    fn other_non_ld_instructions_are_also_excluded() {
+        for line in ["AND 0x40\n", "OR 0x54\n", "ADD A, 0x40\n", "SUB 0x54\n", "XOR 0x40\n"] {
+            let colors = colors_for(line);
+            assert!(colors.is_empty(), "{line:?}: {colors:?}");
+        }
+    }
+
+    #[test]
+    fn ld_still_colorizes_after_a_leading_label() {
+        // `leading_word` must skip the label before finding LD - the same
+        // handling `timing::extract_instruction_at_col` already relies on.
+        let colors = colors_for("myLabel: LD A, 0x54\n");
+        assert_eq!(colors.len(), 1, "{colors:?}");
+    }
+
+    #[test]
+    fn a_non_byte_or_word_directive_is_not_colorized() {
+        // ORG takes an address, not a color, even though 0x54 matches a GA
+        // value here too.
+        let colors = colors_for("ORG 0x54\n");
+        assert!(colors.is_empty(), "{colors:?}");
+    }
+
+    #[test]
+    fn db_dw_synonyms_all_still_colorize() {
+        for line in ["DEFB 0x54\n", "BYTE 0x54\n", "DW 0x40\n", "DEFW 0x40\n", "WORD 0x40\n"] {
+            let colors = colors_for(line);
+            assert_eq!(colors.len(), 1, "{line:?}: {colors:?}");
+        }
+    }
+
+    #[test]
+    fn a_macro_call_argument_is_still_colorized() {
+        // `SET_INK` is not a Z80 mnemonic or a basm directive - basm's own
+        // set of user-defined macros can't be enumerated the way
+        // instructions/directives can, so this stays unrestricted.
+        let colors = colors_for("SET_INK 0x54\n");
+        assert_eq!(colors.len(), 1, "{colors:?}");
+    }
+
+    #[test]
+    fn a_symbol_reference_is_gated_the_same_way_as_a_literal() {
+        // The user's own wording: "the number OR A VARIABLE with such
+        // number" - GA_WHITE used as a CP operand must not get a swatch,
+        // even though the same symbol in a `db` does (already covered by
+        // `symbol_references_through_an_include_are_colorized_via_the_alias_chain`).
+        let text = "include once \"inner://ga.asm\"\n\nCP GA_WHITE\n";
+        let colors = colors_for(text);
         assert!(colors.is_empty(), "{colors:?}");
     }
 
