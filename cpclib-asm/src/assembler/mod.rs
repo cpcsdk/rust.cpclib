@@ -3232,7 +3232,8 @@ impl Env {
                             msg,
                             line: line as u32,
                             column: column as u32,
-                            len: len as u32
+                            len: len as u32,
+                            filename: source_span.filename().to_string()
                         }
                     );
                 },
@@ -5267,7 +5268,8 @@ impl Env {
                         msg,
                         line: line as u32,
                         column: column as u32,
-                        len: len as u32
+                        len: len as u32,
+                        filename: span.filename().to_string()
                     }
                 );
             },
@@ -5645,12 +5647,14 @@ impl Env {
                 AssemblerError::RelocatedWarning { span, .. } => {
                     let (line, column) = span.relative_line_and_column();
                     let len = span.as_str().len();
+                    let filename = span.filename().to_string();
                     let msg = (*w).to_string();
                     *w = AssemblerError::AlreadyRenderedWarningWithLocation {
                         msg,
                         line: line as u32,
                         column: column as u32,
-                        len: len as u32
+                        len: len as u32,
+                        filename
                     };
                 },
                 _ => {

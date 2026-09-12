@@ -166,6 +166,16 @@ pub enum AssemblerError {
     /// precise location (e.g. the LSP, mapping this to a `Diagnostic`
     /// range) can use `line`/`column`/`len`; anything else can just use
     /// `Display`, exactly like `AlreadyRenderedError`.
+    ///
+    /// `filename` (`Z80Span::filename()`, captured eagerly for the same
+    /// reason the rest of this variant is) is what tells an `INCLUDE`d
+    /// file's own warning (e.g. an unused MACRO parameter, checked once at
+    /// the macro's *definition* site, wherever that file is) apart from one
+    /// in whichever file happens to include it - without it, every consumer
+    /// mapping `line`/`column` back to a document had no way to know
+    /// `line`/`column` might belong to a *different* file than the one it
+    /// was about to place a diagnostic in, and did so anyway (a real bug:
+    /// a macro file's own warning appearing in every file that included it).
     AlreadyRenderedWarningWithLocation {
         msg: String,
         /// 1-indexed, matches `Z80Span::relative_line_and_column()`.
@@ -173,7 +183,13 @@ pub enum AssemblerError {
         /// 1-indexed, matches `Z80Span::relative_line_and_column()`.
         column: u32,
         /// Byte length of the highlighted span.
-        len: u32
+        len: u32,
+        /// The file `line`/`column` are relative to - `Z80Span::filename()`,
+        /// captured eagerly alongside them. Never empty in practice (that
+        /// accessor itself falls back to a context name or `"no file
+        /// specified"`), so a consumer can compare it directly against a
+        /// known document's own path without an `Option` to unwrap.
+        filename: String
     },
 
     /// The maximum number of passes has been reached

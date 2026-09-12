@@ -589,7 +589,8 @@ mod test_super {
                 msg,
                 line,
                 column,
-                len
+                len,
+                ..
             } => {
                 assert!(msg.contains("fake instruction"), "{msg}");
                 assert_eq!(*line, 3);

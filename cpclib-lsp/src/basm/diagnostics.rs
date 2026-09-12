@@ -604,6 +604,41 @@ const NO_LOCATION_RANGE: Range = Range {
 
 // ─── Per-error diagnostics ─────────────────────────────────────────────────────
 
+/// Whether `filename` (`AlreadyRenderedWarningWithLocation`'s own captured
+/// `Z80Span::filename()`) names `document` itself, as opposed to some other
+/// file reached through it - most commonly an `INCLUDE`d file that defines
+/// a MACRO/FUNCTION/REPEAT whose unused-parameter/counter warning is
+/// checked once at that construct's own *definition* site, regardless of
+/// which file(s) later include it. `line`/`column` are only meaningful
+/// against `document`'s own text when the two paths actually name the same
+/// file - without this check, an included file's own warning was shown in
+/// every file that happened to include it, at whatever line/column its own
+/// line number landed on in the includer's unrelated text.
+///
+/// Canonicalized when possible (handles a relative include path against an
+/// absolute document path, symlinks, `.`/`..` components); falls back to a
+/// plain path comparison when either side doesn't exist on disk (an
+/// unsaved document, or a filename the parser only had a context-name
+/// fallback for) since `canonicalize` needs a real file to stat.
+fn warning_belongs_to_document(filename: &str, document: &Document) -> bool {
+    let Ok(document_path) = document.uri.to_file_path()
+    else {
+        // A non-`file://` document (untitled, etc.) has nothing to compare
+        // against - keep showing it there rather than silently dropping
+        // every such warning, matching this diagnostic's behavior before
+        // this check existed.
+        return true;
+    };
+    let warning_path = std::path::Path::new(filename);
+    match (
+        std::fs::canonicalize(&document_path),
+        std::fs::canonicalize(warning_path)
+    ) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => document_path == warning_path
+    }
+}
+
 /// Recursively walk an `AssemblerError` tree, emitting one `Diagnostic` per leaf
 /// error with the closest known source location. `document` is only needed
 /// by the `AlreadyRenderedWarningWithLocation` arm (it carries a raw
@@ -745,8 +780,21 @@ pub(super) fn collect_asm_diagnostics(
             msg,
             line,
             column,
-            len
+            len,
+            filename
         } => {
+            // This warning's `line`/`column` are only meaningful against
+            // `document`'s own text when it actually names `document` -
+            // most commonly an unused MACRO/FUNCTION parameter or REPEAT/
+            // FOR counter, checked once at the construct's own *definition*
+            // site regardless of which file(s) later `INCLUDE` it. Without
+            // this check, an included file's own warning was shown in
+            // every file that included it, at whatever line/column its
+            // *own* line number happened to land on in the includer's
+            // unrelated text - a real, reported bug, not a hypothetical.
+            if !warning_belongs_to_document(filename, document) {
+                return;
+            }
             let line = line.saturating_sub(1);
             let col = column.saturating_sub(1);
             // `column`/`len` are byte-based (see this variant's own field
@@ -958,7 +1006,8 @@ mod tests {
             msg: "test warning".to_string(),
             line: 2,
             column: 12,
-            len: 3
+            len: 3,
+            filename: "/t.asm".to_string()
         };
         let mut out = Vec::new();
         collect_asm_diagnostics(&error, None, &document, &mut out);
@@ -1534,6 +1583,50 @@ mod tests {
         assert_eq!(found.len(), 1, "{diags:?}");
         assert_eq!(found[0].severity, Some(DiagnosticSeverity::WARNING));
         assert!(found[0].message.contains('c'), "{}", found[0].message);
+    }
+
+    /// The bug report this whole `filename` field/check exists to fix: a
+    /// MACRO's unused-parameter warning is checked once, at the macro's own
+    /// *definition* site - here, in a separate, `include`d file - not at
+    /// wherever it happens to be called from. Before `warning_belongs_to_
+    /// document`, this warning showed up in *every* file that included
+    /// `macros.asm`, at whatever line/column `macros.asm`'s own MACRO
+    /// happened to sit on, misapplied to the includer's unrelated text.
+    #[test]
+    fn an_included_macros_own_warning_does_not_leak_into_the_file_that_includes_it() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("macros.asm"),
+            "MACRO foo, a, b, c\n    ld a, {a}\n    ld b, {b}\nENDM\n"
+        )
+        .unwrap();
+
+        let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let main_text = "    include \"macros.asm\"\n    foo(1, 2, 3)\n    ret\n";
+        let main_document = Document::new(main_uri, main_text.to_string(), 1);
+        let main_diags = AssemblyAnalyzer::new().analyze(&main_document);
+        assert!(
+            main_diags.iter().all(|d| !d.message.contains("is never used")),
+            "the includer must not show the included macro's own warning: {main_diags:?}"
+        );
+
+        let macros_uri = Url::from_file_path(tmp.path().join("macros.asm")).unwrap();
+        let macros_text = std::fs::read_to_string(tmp.path().join("macros.asm")).unwrap();
+        let macros_document = Document::new(macros_uri, macros_text, 1);
+        let macros_diags = AssemblyAnalyzer::new().analyze(&macros_document);
+        let found: Vec<_> = macros_diags
+            .iter()
+            .filter(|d| d.message.contains("is never used"))
+            .collect();
+        assert_eq!(
+            found.len(),
+            1,
+            "the included file must show its own warning when analyzed directly: {macros_diags:?}"
+        );
+        assert!(found[0].message.contains('c'), "{}", found[0].message);
+        // The macro definition is on line 0 (0-indexed) of macros.asm - not
+        // wherever line 0 happens to land in main.asm.
+        assert_eq!(found[0].range.start.line, 0, "{found:?}");
     }
 
     #[test]

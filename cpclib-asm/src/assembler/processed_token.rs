@@ -1692,7 +1692,8 @@ where
                             msg: rendered,
                             line: line as u32,
                             column: column as u32,
-                            len: len as u32
+                            len: len as u32,
+                            filename: span.filename().to_string()
                         };
                         env.add_warning(warning);
                         token.visited(env)
