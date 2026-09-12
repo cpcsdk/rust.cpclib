@@ -472,9 +472,43 @@ pub fn run_stdio() -> std::io::Result<()> {
                     });
 
                     let mut progress_state = cpclib_bndbuild::progress::ProgressState::new();
+                    // `ProgressUpdate::Asm(PassProgress { visited, expected, .. })`
+                    // fires once per token basm visits - hundreds of thousands of
+                    // times for a real demo with generated code (confirmed live:
+                    // over a million in one launch). Forwarding every single one
+                    // as its own DAP wire event flooded the editor badly enough
+                    // to look like a hang, not a slow build.
+                    //
+                    // A value-based de-dup alone is not enough: each small
+                    // parse/load *sub-item* (an include, a function call, ...)
+                    // restarts its own `done`/`total` fraction from a small
+                    // denominator, so consecutive events genuinely swing
+                    // between different percentages (0%, 50%, 33%, 67%, ...)
+                    // even though nothing a human would call "new progress"
+                    // happened - confirmed live: de-dup alone still let
+                    // ~288,000 distinct-looking updates through in one launch.
+                    // Throttled by wall-clock time instead (a human can't
+                    // perceive more than a handful of progress updates per
+                    // second anyway): at most one emitted per
+                    // `MIN_PROGRESS_INTERVAL`, always including the very first
+                    // one so the client isn't left on the indeterminate
+                    // `progressStart` spinner any longer than necessary. No
+                    // change to basm's own event granularity - other consumers
+                    // of the same events (the terminal `indicatif` bars) are
+                    // unaffected.
+                    const MIN_PROGRESS_INTERVAL: std::time::Duration =
+                        std::time::Duration::from_millis(100);
+                    let mut last_emitted_at: Option<std::time::Instant> = None;
                     while let Ok(update) = progress_rx.recv() {
                         if client_accepts_progress {
                             let (progress_message, percentage) = progress_state.apply(update);
+                            let now = std::time::Instant::now();
+                            let due = last_emitted_at
+                                .is_none_or(|at| now.duration_since(at) >= MIN_PROGRESS_INTERVAL);
+                            if !due {
+                                continue;
+                            }
+                            last_emitted_at = Some(now);
                             seq += 1;
                             emit(
                                 &protocol::event(

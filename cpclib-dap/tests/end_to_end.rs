@@ -239,6 +239,129 @@ fn a_client_that_never_said_so_gets_no_progress_events() {
     );
 }
 
+/// `ProgressUpdate::Asm(PassProgress { .. })` fires once per token basm
+/// visits per pass - confirmed live against a real demo (birthtro) that a
+/// naive "forward every one as a DAP wire event" loop produced over a
+/// million `progressUpdate` messages for a single launch, which is
+/// indistinguishable from a hang to anything trying to keep up with them
+/// (an editor, or this very test). A `repeat` this size is enough to
+/// generate thousands of `PassProgress` events on its own (each visited
+/// token counts) while still assembling in well under a second, so this
+/// stays fast without needing a whole real project as a fixture.
+///
+/// Real assertion: the number of DAP messages the client actually receives
+/// stays small - proof the throttling in `run_stdio`'s progress-forwarding
+/// loop is doing its job, not just that progress events exist at all (the
+/// pre-fix code also passed `assemble_for_debug_with_progress_reports_
+/// basm_internal_progress` above, since that test looks at the raw
+/// channel, upstream of the bug).
+#[test]
+fn progress_updates_are_throttled_not_forwarded_one_for_one() {
+    let dir = std::env::temp_dir().join(format!(
+        "cpclib-dap-progress-throttle-test-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let entry = dir.join("main.asm");
+    std::fs::write(
+        &entry,
+        "    org 0x4000\n    run $\nrepeat 20000, i, 0\n    nop\nendrepeat\n    ret\n"
+    )
+    .unwrap();
+
+    let mut child = adapter()
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("the adapter binary must run");
+
+    let mut stdin = child.stdin.take().unwrap();
+    stdin
+        .write_all(
+            frame(&json!({
+                "seq": 1, "type": "request", "command": "initialize",
+                "arguments": {"supportsProgressReporting": true}
+            }))
+            .as_bytes()
+        )
+        .unwrap();
+    stdin
+        .write_all(
+            frame(&json!({
+                "seq": 2, "type": "request", "command": "launch",
+                "arguments": {"program": entry.to_str().unwrap(), "openInWebview": false}
+            }))
+            .as_bytes()
+        )
+        .unwrap();
+    stdin.flush().unwrap();
+
+    // Not `read_messages`: its receive buffer is local to one call, so any
+    // partially-arrived next message still sitting in it when `wanted` is
+    // reached would be silently discarded by a follow-up call - exactly the
+    // kind of framing corruption this loop must not risk while draining an
+    // unknown, potentially large number of messages. One persistent buffer
+    // for the whole read instead.
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 65536];
+    let mut messages = Vec::new();
+    loop {
+        if messages
+            .iter()
+            .any(|m: &Value| m["type"] == json!("response") && m["command"] == json!("launch"))
+        {
+            break;
+        }
+        if messages.len() > 5000 {
+            break; // safety net - the very bug under test, if it regressed
+        }
+        match reader.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => buffer.extend_from_slice(&chunk[..read])
+        }
+        while let Some(position) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+            let header = String::from_utf8_lossy(&buffer[..position]).to_string();
+            let Some(length) = header
+                .lines()
+                .find_map(|l| l.strip_prefix("Content-Length:"))
+                .and_then(|v| v.trim().parse::<usize>().ok())
+            else {
+                buffer.drain(..position + 4);
+                continue;
+            };
+            if buffer.len() < position + 4 + length {
+                break;
+            }
+            let body = buffer[position + 4..position + 4 + length].to_vec();
+            buffer.drain(..position + 4 + length);
+            if let Ok(value) = serde_json::from_slice::<Value>(&body) {
+                messages.push(value);
+            }
+        }
+    }
+    let _ = child.kill();
+
+    let launch_response = messages
+        .iter()
+        .find(|m| m["type"] == json!("response") && m["command"] == json!("launch"))
+        .expect("a launch response must arrive");
+    assert_eq!(launch_response["success"], json!(true), "{launch_response:?}");
+
+    let progress_updates =
+        messages.iter().filter(|m| m["event"] == json!("progressUpdate")).count();
+    assert!(
+        progress_updates < 100,
+        "expected throttling to keep this well under 100 messages for a 20000-token repeat, \
+         got {progress_updates} (total messages: {})",
+        messages.len()
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// What the map really records for a contested address, on a real project.
 ///
 /// Run with a copy of birthtro at /tmp/bt:
