@@ -7,10 +7,11 @@
 
 use std::sync::Arc;
 
-use cpclib_tokens::{ListingElement, Token};
+use cpclib_asm::parser::obtained::MayHaveSpan;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
+use super::parse::ParseFreshness;
 use super::token::{DIRECTIVE_FILE_ARGS, SNASET_FLAGS, is_ident_byte};
 use crate::common::document::Document;
 
@@ -961,7 +962,7 @@ impl AssemblyAnalyzer {
                 // `global1.g1l1`) - every local label, from every scope, is
                 // fair game (each only ever offered in its qualified form
                 // here), same as any other symbol kind.
-                self.collect_symbols_cached(document)
+                self.collect_symbols_cached(document, ParseFreshness::ToleratesStale)
             };
             // A `Vec` scan per candidate symbol against everything
             // accumulated so far would be O(total-symbols²) across
@@ -976,7 +977,9 @@ impl AssemblyAnalyzer {
                     .and_then(|mut s| s.next_back())
                     .unwrap_or("")
                     .to_string();
-                for (sym, detail) in self.collect_symbols_cached(other) {
+                for (sym, detail) in
+                    self.collect_symbols_cached(other, ParseFreshness::ToleratesStale)
+                {
                     if seen.insert(sym.clone()) {
                         doc_symbols.push((sym, format!("{detail} ({fname})")));
                     }
@@ -1102,60 +1105,68 @@ impl AssemblyAnalyzer {
     /// Falls back to a text scan when the document does not parse — which is
     /// the common case while the user is mid-typing the very line being
     /// completed.
-    pub(super) fn collect_symbols(&self, document: &Document) -> Vec<(String, String)> {
-        let Ok(listing) = self.parse_document(document)
+    ///
+    /// `freshness` picks between `parse_document_for_completion` (may serve
+    /// a stale-but-cached parse) and plain `parse_document` (always exact)
+    /// - see `ParseFreshness`'s own doc comment for which callers may use
+    /// which, and why (measured: ~99ms to re-parse a real 3755-line file on
+    /// every keystroke, versus ~0.6ms once already parsed - the saving
+    /// `ToleratesStale` exists for).
+    pub(super) fn collect_symbols(
+        &self,
+        document: &Document,
+        freshness: ParseFreshness
+    ) -> Vec<(String, String)> {
+        let parsed = match freshness {
+            ParseFreshness::ToleratesStale => self.parse_document_for_completion(document),
+            ParseFreshness::ExactVersionOnly => self.parse_document(document)
+        };
+        let Ok(listing) = parsed
         else {
             return collect_symbols_by_text(document);
         };
         let mut syms = Vec::new();
-        // Track the last seen global label to qualify local labels (`.foo` →
-        // `parent.foo`), matching the outline (`symbols.rs`) exactly.
-        let mut current_global: Option<String> = None;
+        // Qualifies a local (`.foo` → `parent.foo`) against its owning
+        // global's scope - the same shared primitive the outline
+        // (`symbols.rs`) and the label-reference index
+        // (`references_lens.rs`) use, so all three agree on what a local's
+        // "real" qualified name is. See `qualify_local_at_line`'s own doc
+        // comment for why this - not a running "last label seen" tracker -
+        // is the correct one.
+        let scopes = super::token::global_label_scopes(listing.iter());
         for token in super::token::flatten_listing(listing.iter()) {
-            if token.is_label() {
-                let raw = token.label_symbol();
-                let display = if raw.starts_with('.') {
-                    match &current_global {
-                        Some(g) => format!("{g}{raw}"),
-                        None => raw.to_string()
-                    }
-                }
-                else {
-                    current_global = Some(raw.to_string());
-                    raw.to_string()
-                };
-                syms.push((display, "label".to_string()));
-            }
-            else if token.is_equ() {
-                syms.push((
-                    token.equ_symbol().to_string(),
-                    format!("= {}", token.equ_value())
-                ));
-            }
-            else if token.is_assign() {
-                syms.push((
-                    token.assign_symbol().to_string(),
-                    format!("= {}", token.assign_value())
-                ));
-            }
-            else if token.is_macro_definition() {
-                let name = token.macro_definition_name().to_string();
-                current_global = Some(name.clone());
-                syms.push((name, "macro".to_string()));
-            }
-            else if token.is_module() {
-                let name = token.module_name().to_string();
-                current_global = Some(name.clone());
-                syms.push((name, "module".to_string()));
-            }
-            else if token.is_directive() && super::token::starts_with_range_keyword(token) {
+            let Some(def) = super::token::classify_definition(token)
+            else {
+                continue;
+            };
+            match def {
+                super::token::Definition::Label { name: raw } => {
+                    let (line_1based, _) = token.span().relative_line_and_column();
+                    let line = line_1based.saturating_sub(1) as u32;
+                    let display = super::token::qualify_local_at_line(&scopes, line, raw)
+                        .unwrap_or_else(|| raw.to_string());
+                    syms.push((display, "label".to_string()));
+                },
+                super::token::Definition::Equ { name, value_display }
+                | super::token::Definition::Assign { name, value_display } => {
+                    syms.push((name.to_string(), value_display));
+                },
+                super::token::Definition::MacroDefinition { name } => {
+                    syms.push((name.to_string(), "macro".to_string()));
+                },
+                super::token::Definition::FunctionDefinition { name } => {
+                    syms.push((name.to_string(), "function".to_string()));
+                },
+                super::token::Definition::Module { name } => {
+                    syms.push((name.to_string(), "module".to_string()));
+                },
                 // A section name defined via `RANGE`/`DEFSECTION start, stop,
                 // name` — the only valid values for a `SECTION` directive's
                 // argument, but offered alongside every other symbol kind
                 // here rather than only there, consistent with how EQU
                 // constants and macros are already offered everywhere too.
-                if let Token::Range(name, start, stop) = token.to_token().into_owned() {
-                    syms.push((String::from(name), format!("section {start}..{stop}")));
+                super::token::Definition::Section { name, start, stop, .. } => {
+                    syms.push((name, format!("section {start}..{stop}")));
                 }
             }
         }
@@ -1167,13 +1178,22 @@ impl AssemblyAnalyzer {
     /// `env_cache`/`local_env_cache`. See `symbols_cache`'s own doc comment
     /// (`basm/mod.rs`) for why this matters most for *other* open documents
     /// during completion, not the one actively being typed in.
-    pub(super) fn collect_symbols_cached(&self, document: &Document) -> Vec<(String, String)> {
+    ///
+    /// This cache itself always stays keyed by the *exact* version - a miss
+    /// here just means "recompute", and `freshness` (forwarded to
+    /// `collect_symbols`) is what decides how expensive that recompute is
+    /// allowed to be.
+    pub(super) fn collect_symbols_cached(
+        &self,
+        document: &Document,
+        freshness: ParseFreshness
+    ) -> Vec<(String, String)> {
         if let Some(entry) = self.symbols_cache.get(&document.uri)
             && entry.0 == document.version
         {
             return (*entry.1).clone();
         }
-        let syms = self.collect_symbols(document);
+        let syms = self.collect_symbols(document, freshness);
         self.symbols_cache.insert(
             document.uri.clone(),
             (document.version, Arc::new(syms.clone()))
@@ -1182,23 +1202,18 @@ impl AssemblyAnalyzer {
     }
 
     /// `collect_symbols_cached(document)`, with local-label entries
-    /// (qualified as `"{owner}{.name}"` by `collect_symbols`) restricted to
-    /// the global label whose scope contains `line` — matching basm's own
+    /// (qualified as `"{owner}{.name}"` by `collect_symbols`, via the same
+    /// `qualify_local_at_line` this function's own `scopes` come from - so
+    /// the two always agree on what counts as an "owner") restricted to the
+    /// global label whose scope contains `line` — matching basm's own
     /// resolution rule for a bare `.name` reference. Each kept local label
     /// is offered in both its bare (`.name`) and qualified (`owner.name`)
     /// form; every other entry (global labels, `EQU`/assign constants,
-    /// macros, modules, sections) passes through unchanged, since those
-    /// aren't scoped to a global label at all.
-    ///
-    /// Known gap, deliberately left as-is rather than "fixed" either way:
-    /// `global_label_scopes` (like rename's own `label_scope_at_line`, which
-    /// it backs) only treats non-dotted *labels* as scope boundaries, not
-    /// MACRO/MODULE definitions — while `collect_symbols` qualifies locals
-    /// nested under a MACRO/MODULE using *that* definition's name instead of
-    /// the preceding global label's. Such an owner never appears in
-    /// `scopes`, so those entries don't match any recognized owner below and
-    /// fall through unfiltered (today's un-scoped behavior) rather than
-    /// being dropped.
+    /// macros, modules, sections, and a local with no enclosing global
+    /// label at all - shown bare, with nothing to qualify it against, same
+    /// as the outline) passes through unchanged, since `filter_locals_to_owner`
+    /// only ever restricts an entry that actually names a *recognized*
+    /// owner.
     ///
     /// Only scope-filters when `document` currently parses cleanly: unlike
     /// `parse_cache`'s other consumers, `LocatedListing::deref` (which
@@ -1210,7 +1225,7 @@ impl AssemblyAnalyzer {
     /// panic or hiding valid completions while the cursor's own line is
     /// still mid-edit.
     fn scope_filtered_symbols(&self, document: &Document, line: u32) -> Vec<(String, String)> {
-        let all = self.collect_symbols_cached(document);
+        let all = self.collect_symbols_cached(document, ParseFreshness::ToleratesStale);
 
         // When the document doesn't parse (e.g. a line like `jr nc, .` is
         // still mid-typed - a bare trailing `.` isn't a complete operand),
@@ -1220,8 +1235,19 @@ impl AssemblyAnalyzer {
         // same scoping filter below still applies, just driven by a
         // text-scanned "current owner" and a text-scanned recognized-owner
         // set (bare `"label"` entries in `all`) instead of
-        // `global_label_scopes`. Mirrors the AST path's own restriction to
-        // *labels* only (not MACRO/MODULE) — see the "known gap" note above.
+        // `global_label_scopes`. Already restricted to *labels* only, same
+        // as the AST path (`current_global_label_by_text` below has no
+        // special case for `MACRO`/`MODULE` names at all).
+        //
+        // Deliberately plain `parse_document`, not the stale-tolerant
+        // `parse_document_for_completion` `all` above already uses: this
+        // call's whole purpose is turning the cursor's *line number* into
+        // "which scope is it in" (`scope_containing`), and a stale
+        // listing's line layout can silently drift from the live text's
+        // once lines are inserted/removed above the cursor - a real
+        // mis-scoping risk `collect_symbols`'s own plain name list doesn't
+        // share (a name is still a name regardless of which line it last
+        // appeared to be on).
         let Ok(listing) = self.parse_document(document)
         else {
             let current_owner = current_global_label_by_text(document, line);
@@ -1276,7 +1302,17 @@ impl AssemblyAnalyzer {
                     .unwrap_or(0)
             };
             let included_doc = Document::new(synthetic_uri, content, version);
-            for (sym, detail) in self.collect_symbols_cached(&included_doc) {
+            // `ExactVersionOnly`, not `ToleratesStale`: unlike the main
+            // document or another open tab, nothing re-analyzes this
+            // synthetic, disk-read document on its own schedule - the only
+            // way it ever gets a fresher parse is a query like this one
+            // actually asking for it. Tolerating staleness here would mean
+            // an edit to an included file (in another buffer, or on disk)
+            // could go unnoticed indefinitely instead of just until the
+            // next completion request.
+            for (sym, detail) in
+                self.collect_symbols_cached(&included_doc, ParseFreshness::ExactVersionOnly)
+            {
                 out.push((source_name.clone(), sym, detail));
             }
         }
@@ -1293,7 +1329,7 @@ impl AssemblyAnalyzer {
 /// real URI, so parsing it (`parse_document`, keyed by URI) overwrote the
 /// including document's own cached listing on every completion keystroke
 /// that touched an include.
-fn synthetic_include_uri(filename: &str, doc_uri: &Url) -> Url {
+pub(super) fn synthetic_include_uri(filename: &str, doc_uri: &Url) -> Url {
     if super::includes::is_inner_uri(filename)
         && let Ok(u) = Url::parse(filename)
     {
@@ -2125,7 +2161,8 @@ mod include_tests {
         let text = "    ifndef GUARD\nGUARDED_LABEL:\n    ret\nGUARDED_CONST set 1\n    endif\n";
         let doc = Document::new(uri, text.to_string(), 1);
 
-        let syms = AssemblyAnalyzer::new().collect_symbols(&doc);
+        let syms =
+            AssemblyAnalyzer::new().collect_symbols(&doc, ParseFreshness::ExactVersionOnly);
         let names: Vec<&str> = syms.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"GUARDED_LABEL"), "{names:?}");
         assert!(names.contains(&"GUARDED_CONST"), "{names:?}");
@@ -2290,6 +2327,27 @@ mod directive_detail_and_symbol_parity_tests {
             items
                 .iter()
                 .any(|i| i.label == "foo" && i.detail.as_deref() == Some("module")),
+            "{items:?}"
+        );
+    }
+
+    #[test]
+    fn function_names_are_offered_in_completion() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "FUNCTION double(x)\n  RETURN x*2\nENDFUNCTION\n\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 3,
+                character: 0
+            },
+            &[]
+        );
+        assert!(
+            items
+                .iter()
+                .any(|i| i.label == "double" && i.detail.as_deref() == Some("function")),
             "{items:?}"
         );
     }
@@ -2491,24 +2549,24 @@ mod symbols_cache_tests {
         let analyzer = AssemblyAnalyzer::new();
         let d = doc("label1\n", 1);
 
-        let _ = analyzer.collect_symbols_cached(&d);
+        let _ = analyzer.collect_symbols_cached(&d, ParseFreshness::ExactVersionOnly);
         let first = analyzer.symbols_cache.get(&d.uri).unwrap().1.clone();
 
-        let _ = analyzer.collect_symbols_cached(&d);
+        let _ = analyzer.collect_symbols_cached(&d, ParseFreshness::ExactVersionOnly);
         let second = analyzer.symbols_cache.get(&d.uri).unwrap().1.clone();
 
         assert!(Arc::ptr_eq(&first, &second));
     }
 
     #[test]
-    fn a_version_bump_recomputes_the_cached_symbols() {
+    fn exact_version_only_a_version_bump_recomputes_the_cached_symbols() {
         let analyzer = AssemblyAnalyzer::new();
         let d1 = doc("label1\n", 1);
-        let _ = analyzer.collect_symbols_cached(&d1);
+        let _ = analyzer.collect_symbols_cached(&d1, ParseFreshness::ExactVersionOnly);
         let first = analyzer.symbols_cache.get(&d1.uri).unwrap().1.clone();
 
         let d2 = doc("label2\n", 2);
-        let _ = analyzer.collect_symbols_cached(&d2);
+        let _ = analyzer.collect_symbols_cached(&d2, ParseFreshness::ExactVersionOnly);
         let second = analyzer.symbols_cache.get(&d2.uri).unwrap().1.clone();
 
         assert!(!Arc::ptr_eq(&first, &second));
@@ -2516,10 +2574,43 @@ mod symbols_cache_tests {
     }
 
     #[test]
+    fn tolerates_stale_serves_whatever_is_cached_until_a_real_reparse_happens() {
+        // The whole point of `ToleratesStale`: avoid a full re-parse on
+        // every keystroke by reusing whatever's already parsed, even from
+        // an older version - so a version bump *alone*, with no real parse
+        // in between, must not immediately see new content.
+        let analyzer = AssemblyAnalyzer::new();
+        let d1 = doc("label1\n", 1);
+        let _ = analyzer.collect_symbols_cached(&d1, ParseFreshness::ToleratesStale);
+
+        let d2 = doc("label2\n", 2);
+        let stale = analyzer.collect_symbols_cached(&d2, ParseFreshness::ToleratesStale);
+        assert_eq!(
+            stale[0].0, "label1",
+            "expected the stale cached parse to still be served: {stale:?}"
+        );
+
+        // Once something actually reparses at a newer version - exactly
+        // what `spawn_deferred_analysis`'s debounced pass does in real
+        // usage, ~250ms after typing pauses - a *later* version's request
+        // picks up that fresher content. (Not the *same* version `stale`
+        // was served at: `symbols_cache` itself is still exact-version-keyed
+        // and won't re-check parse_cache for a version it already answered,
+        // so convergence happens on the next version change, not
+        // retroactively - a real, narrow, and short-lived limitation, since
+        // in practice a version is superseded by the next keystroke almost
+        // immediately anyway.)
+        let _ = analyzer.parse_document(&d2);
+        let d3 = doc("label2\n", 3);
+        let fresh = analyzer.collect_symbols_cached(&d3, ParseFreshness::ToleratesStale);
+        assert_eq!(fresh[0].0, "label2", "{fresh:?}");
+    }
+
+    #[test]
     fn evict_clears_the_cached_symbols() {
         let analyzer = AssemblyAnalyzer::new();
         let d = doc("label1\n", 1);
-        let _ = analyzer.collect_symbols_cached(&d);
+        let _ = analyzer.collect_symbols_cached(&d, ParseFreshness::ExactVersionOnly);
         assert_eq!(analyzer.symbols_cache.len(), 1);
 
         analyzer.evict(&d.uri);

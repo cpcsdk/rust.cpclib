@@ -297,7 +297,16 @@ fn symbol_spans(
     skip_lines: &std::collections::HashSet<usize>
 ) -> Vec<ColorSpan> {
     let mut table: HashMap<String, String> = HashMap::new();
-    for (name, detail) in analyzer.collect_symbols(document) {
+    // `document` is the live, `did_change`-tracked document this
+    // `documentColor` request is for - re-requested on essentially every
+    // edit, same as `code_lens` - so, exactly like completion's own main-
+    // document lookup, a briefly stale symbol table is fine (self-corrects
+    // via the same debounced re-analysis) and avoiding a full re-parse on
+    // every keystroke is what actually matters. See `ParseFreshness`'s own
+    // doc comment.
+    for (name, detail) in
+        analyzer.collect_symbols(document, super::parse::ParseFreshness::ToleratesStale)
+    {
         if let Some(rhs) = detail.strip_prefix("= ") {
             table.entry(name).or_insert_with(|| rhs.to_string());
         }

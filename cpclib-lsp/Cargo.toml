@@ -66,6 +66,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Collections
 dashmap.workspace = true
+indexmap.workspace = true
 
 # Cross-file goto-definition: walking the workspace for .asm files
 walkdir.workspace = true

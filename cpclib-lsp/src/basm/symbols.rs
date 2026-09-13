@@ -28,7 +28,7 @@
 use std::collections::HashMap;
 
 use cpclib_asm::parser::obtained::MayHaveSpan;
-use cpclib_tokens::{ListingElement, Token};
+use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -85,9 +85,6 @@ impl AssemblyAnalyzer {
         let mut constants: Vec<DocumentSymbol> = Vec::new();
         let mut variables: Vec<DocumentSymbol> = Vec::new();
 
-        // Track the last seen global label to qualify local labels (`.foo` → `parent.foo`)
-        let mut current_global: Option<String> = None;
-
         // Each global label's own line range (through the next global label,
         // or end of file) - reused to extend a global label symbol's `range`
         // for Sticky Scroll, the same way `scope_containing` already backs
@@ -102,132 +99,113 @@ impl AssemblyAnalyzer {
         let total_lines = super::token::clamp_to_last_addressable_line(&text, u32::MAX);
 
         for token in super::token::flatten_listing(listing.iter()) {
+            let Some(def) = super::token::classify_definition(token)
+            else {
+                continue;
+            };
+
             // source_len: byte length of the token as it appears in source
             // (for the selection range) — display_name: what the outline shows
             // pos_override: set only when the definition's own position isn't
-            // `token.span()` (see the RANGE/DEFSECTION arm below)
+            // `token.span()` (see the `Section` arm below)
             let (source_len, display_name, category, kind, detail, pos_override, is_local_label):
-                TokenSymbolFacts = if token.is_label() {
-                let raw = token.label_symbol();
-                let is_local = raw.starts_with('.');
-                let display = if is_local {
-                    match &current_global {
-                        Some(g) => format!("{}{}", g, raw),
-                        None => raw.to_string()
-                    }
+                TokenSymbolFacts = match def {
+                super::token::Definition::Label { name: raw } => {
+                    let is_local = raw.starts_with('.');
+                    let raw_len = raw.len();
+                    let (line_1based, _) = token.span().relative_line_and_column();
+                    let line = line_1based.saturating_sub(1) as u32;
+                    // Qualifies against the owning global's scope only - a
+                    // local with no enclosing global label (the nearest
+                    // preceding entity is a `MACRO`/`MODULE`/`FUNCTION`, or
+                    // there's none at all) is shown bare, matching
+                    // `nest_local_labels`'s own (already scope-based) decision
+                    // about where such a local gets nested - see
+                    // `qualify_local_at_line`'s own doc comment for why these
+                    // two used to disagree.
+                    let display = super::token::qualify_local_at_line(&global_scopes, line, raw)
+                        .unwrap_or_else(|| raw.to_string());
+                    (
+                        raw_len,
+                        display,
+                        SymbolCategory::Label,
+                        SymbolKind::FUNCTION,
+                        None,
+                        None,
+                        is_local
+                    )
+                },
+                super::token::Definition::Equ { name, value_display } => {
+                    (
+                        name.len(),
+                        name.to_string(),
+                        SymbolCategory::Constant,
+                        SymbolKind::CONSTANT,
+                        Some(value_display),
+                        None,
+                        false
+                    )
+                },
+                super::token::Definition::Assign { name, value_display } => {
+                    (
+                        name.len(),
+                        name.to_string(),
+                        SymbolCategory::Variable,
+                        SymbolKind::VARIABLE,
+                        Some(value_display),
+                        None,
+                        false
+                    )
+                },
+                super::token::Definition::MacroDefinition { name } => {
+                    (
+                        name.len(),
+                        name.to_string(),
+                        SymbolCategory::Macro,
+                        SymbolKind::FUNCTION,
+                        Some("MACRO".to_string()),
+                        None,
+                        false
+                    )
+                },
+                super::token::Definition::FunctionDefinition { name } => {
+                    (
+                        name.len(),
+                        name.to_string(),
+                        SymbolCategory::Function,
+                        SymbolKind::FUNCTION,
+                        Some("FUNCTION".to_string()),
+                        None,
+                        false
+                    )
+                },
+                super::token::Definition::Module { name } => {
+                    (
+                        name.len(),
+                        name.to_string(),
+                        SymbolCategory::Module,
+                        SymbolKind::MODULE,
+                        None,
+                        None,
+                        false
+                    )
+                },
+                super::token::Definition::Section {
+                    name,
+                    start,
+                    stop,
+                    name_pos
+                } => {
+                    (
+                        name.len(),
+                        name,
+                        SymbolCategory::Section,
+                        SymbolKind::NAMESPACE,
+                        Some(format!("{start}..{stop}")),
+                        Some(name_pos),
+                        false
+                    )
                 }
-                else {
-                    current_global = Some(raw.to_string());
-                    raw.to_string()
-                };
-                (
-                    raw.len(),
-                    display,
-                    SymbolCategory::Label,
-                    SymbolKind::FUNCTION,
-                    None,
-                    None,
-                    is_local
-                )
-            }
-            else if token.is_equ() {
-                let sym = token.equ_symbol();
-                (
-                    sym.len(),
-                    sym.to_string(),
-                    SymbolCategory::Constant,
-                    SymbolKind::CONSTANT,
-                    Some(format!("= {}", token.equ_value())),
-                    None,
-                    false
-                )
-            }
-            else if token.is_assign() {
-                let sym = token.assign_symbol();
-                (
-                    sym.len(),
-                    sym.to_string(),
-                    SymbolCategory::Variable,
-                    SymbolKind::VARIABLE,
-                    Some(format!("= {}", token.assign_value())),
-                    None,
-                    false
-                )
-            }
-            else if token.is_macro_definition() {
-                let name = token.macro_definition_name();
-                current_global = Some(name.to_string());
-                (
-                    name.len(),
-                    name.to_string(),
-                    SymbolCategory::Macro,
-                    SymbolKind::FUNCTION,
-                    Some("MACRO".to_string()),
-                    None,
-                    false
-                )
-            }
-            else if token.is_function_definition() {
-                let name = token.function_definition_name();
-                current_global = Some(name.to_string());
-                (
-                    name.len(),
-                    name.to_string(),
-                    SymbolCategory::Function,
-                    SymbolKind::FUNCTION,
-                    Some("FUNCTION".to_string()),
-                    None,
-                    false
-                )
-            }
-            else if token.is_module() {
-                let name = token.module_name();
-                current_global = Some(name.to_string());
-                (
-                    name.len(),
-                    name.to_string(),
-                    SymbolCategory::Module,
-                    SymbolKind::MODULE,
-                    None,
-                    None,
-                    false
-                )
-            }
-            else if token.is_directive() && super::token::starts_with_range_keyword(token) {
-                // A section's *definition*: `RANGE start, stop, name` (or the
-                // `DEFSECTION` alias) — the name is the last argument. Bare
-                // `SECTION name` only *uses* an already-defined section (it
-                // switches the current section for subsequent code), so it
-                // doesn't get its own outline entry — same as how a `CALL`
-                // to a label isn't a second definition of that label.
-                //
-                // `ListingElement` has no dedicated `is_range`/`range_*`
-                // accessors, so this goes through `to_token()` instead;
-                // `starts_with_range_keyword` keeps that call off the hot
-                // path of ordinary directives — see its doc comment.
-                match token.to_token().into_owned() {
-                    Token::Range(name, start, stop) => {
-                        // The token's own span points at the `RANGE`/
-                        // `DEFSECTION` keyword, not at `name` (the last
-                        // argument) — locate it within the statement so the
-                        // outline entry (and goto-definition, which reuses
-                        // this same extraction) highlights the actual name.
-                        let pos = super::token::locate_name_in_statement(token, &name);
-                        (
-                            name.len(),
-                            String::from(name),
-                            SymbolCategory::Section,
-                            SymbolKind::NAMESPACE,
-                            Some(format!("{start}..{stop}")),
-                            Some(pos),
-                            false
-                        )
-                    },
-                    _ => continue
-                }
-            }
-            else {
-                continue;
             };
 
             let (lsp_line, lsp_char) = pos_override.unwrap_or_else(|| {
@@ -379,10 +357,9 @@ impl AssemblyAnalyzer {
 /// there's no enclosing global at all — is left as a flat top-level entry
 /// instead: `global_label_scopes` only treats non-dotted *labels* as scope
 /// boundaries (matching `label_scope_at_line`, which backs rename's own
-/// local-scope confinement), narrower than this module's own
-/// `current_global` display-qualification tracker above (which also updates
-/// on `MACRO`/`MODULE` names). Same known, deliberately accepted gap already
-/// documented for `autocomplete.rs::scope_filtered_symbols`.
+/// local-scope confinement, and `qualify_local_at_line`, which the display
+/// name above is now built from too - the two used to disagree here, see
+/// that function's own doc comment).
 fn nest_local_labels<'a, T>(
     listing: impl IntoIterator<Item = &'a T> + 'a,
     labels: Vec<LabelEntry>
@@ -758,6 +735,30 @@ mod tests {
                 .as_ref()
                 .is_none_or(|c| !c.iter().any(|s| s.name == ".foo")),
             "{global1:?}"
+        );
+    }
+
+    #[test]
+    fn a_local_label_right_after_a_macro_with_no_enclosing_global_shows_bare_not_macro_qualified() {
+        // `qualify_local_at_line` (token.rs) only qualifies against a real
+        // enclosing global *label*'s scope, matching the real assembler's
+        // own `handle_global_and_local_labels`/`visit_label` (which only
+        // update the "current label" a following bare local resolves
+        // against on a genuine label definition, never on a MACRO/FUNCTION/
+        // MODULE one) - so a local right after a MACRO, with no enclosing
+        // global, must show its own bare name, consistent with
+        // `nest_local_labels` already refusing to nest it under the macro
+        // either (see this test's own sibling above).
+        let text = "MACRO m\nENDM\n.foo\nglobal1\n";
+        let symbols = symbols_for(text);
+        assert!(
+            symbols.iter().any(|s| s.name == ".foo"),
+            "expected `.foo` to show up bare, not qualified against the \
+             macro's name: {symbols:?}"
+        );
+        assert!(
+            !symbols.iter().any(|s| s.name == "m.foo"),
+            "{symbols:?}"
         );
     }
 

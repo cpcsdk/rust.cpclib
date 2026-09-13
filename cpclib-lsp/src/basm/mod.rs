@@ -10,6 +10,7 @@
 //! rule; that's detected here (`embedded_bndbuild`) but executed by the
 //! `bndbuild` module — a one-directional `basm -> bndbuild` dependency.
 
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 use cpclib_asm::assembler::Env;
@@ -38,11 +39,14 @@ pub mod format;
 pub mod hover;
 pub mod includes;
 pub mod inlay_hints;
+pub mod label_index;
 mod lint_smc_label;
 pub mod overflow;
 pub mod parse;
 pub mod peephole;
+pub mod pushpop;
 pub mod refactor;
+pub mod references_lens;
 pub mod registers;
 pub mod remove_parameter;
 pub mod run;
@@ -164,6 +168,18 @@ pub struct AssemblyAnalyzer {
     /// "redone on every completion keystroke" into "redone only when that
     /// other document itself actually changes".
     symbols_cache: DashMap<Url, SymbolsCacheEntry>,
+    /// Per-file label/reference facts, keyed by document version - see
+    /// `label_index`'s own module doc comment. Deliberately **not** touched
+    /// by `evict()`: unlike every cache above (a pure perf aid for *this*
+    /// document's own analysis, freely re-derivable), this is workspace-wide
+    /// knowledge that closing a tab must not make disappear from search -
+    /// the same reasoning `server::backend::CpcLspBackend`'s own
+    /// `embedded_bndbuild_index` already established as precedent.
+    label_index: DashMap<Url, (i32, Arc<label_index::FileLabelFacts>)>,
+    /// Reverse of `label_index`: a word to every file this session has ever
+    /// seen mention it. Best-effort, not a complete workspace oracle on its
+    /// own - see `label_index`'s own module doc comment.
+    global_name_index: DashMap<String, HashSet<Url>>,
     /// Loaded once at `initialize()` (see `common::config`) - defaults to
     /// today's exact behavior until/unless a real `cpclib-lsp.toml` is
     /// found. `RwLock<Arc<_>>` rather than a plain field so callers can grab
@@ -182,6 +198,8 @@ impl AssemblyAnalyzer {
             address_source_cache: DashMap::new(),
             peephole_requested: DashMap::new(),
             symbols_cache: DashMap::new(),
+            label_index: DashMap::new(),
+            global_name_index: DashMap::new(),
             config: RwLock::new(Arc::new(AsmConfig::default()))
         }
     }
@@ -198,6 +216,9 @@ impl AssemblyAnalyzer {
         self.peephole_requested.remove(uri);
         // The project cache deliberately survives: it is keyed by entry
         // path, not by document, and the project outlives any one editor tab.
+        // `label_index`/`global_name_index` deliberately survive too, for a
+        // different reason - see their own doc comments on the struct
+        // fields above.
     }
 
     /// Ask for peephole analysis of `uri`, optionally narrowed to `scope`.

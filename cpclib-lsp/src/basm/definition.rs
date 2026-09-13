@@ -89,6 +89,34 @@ impl AssemblyAnalyzer {
         self.extract_word_at_position(&line, document.char_column(position))
     }
 
+    /// If `word` (found at `position` in `document`) is a bare local label
+    /// (`.name`), resolve it to its owning global's qualified form
+    /// (`global.name`) - the same scope resolution `resolve_rename_target`
+    /// already uses for `RenameTarget::Local`, and the same canonical form
+    /// `label_index::FileLabelFacts` already buckets every local occurrence
+    /// under (see that module's own doc comment for why: two same-named
+    /// locals under different globals must never collide in one bucket,
+    /// and qualifying against the owner is what tells them apart). Anything
+    /// else - a global name, or an already-qualified `global.name` - is
+    /// already its own canonical key and is returned unchanged.
+    ///
+    /// Used wherever a query starts from "the word under the cursor" rather
+    /// than from an already-known definition (`textDocument/references`);
+    /// callers that already know which label they mean, definitions
+    /// included (`reference_count_code_lenses`,
+    /// `find_unreferenced_labels_in_workspace`), have no need for this -
+    /// they already have the canonical name in hand.
+    pub fn canonicalize_label_query(&self, document: &Document, position: Position, word: &str) -> String {
+        if word.starts_with('.')
+            && let Ok(listing) = self.parse_document(document)
+            && let Some((owner, _scope)) =
+                super::token::label_scope_at_line(listing.iter(), position.line)
+        {
+            return format!("{owner}{word}");
+        }
+        word.to_string()
+    }
+
     /// `textDocument/prepareRename`: the range to offer renaming for, or
     /// `None` to reject (cursor not on a real label/BASIC variable).
     pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {

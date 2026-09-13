@@ -7,12 +7,14 @@ import { BndbuildTaskProvider } from './tasks/bndbuildTaskProvider';
 import { registerCodeLensRunners } from './tasks/codeLensRunners';
 import { registerInkColorPicker } from './commands/inkColorPicker';
 import { registerPeephole } from './commands/peephole';
+import { registerReferences } from './commands/references';
 import { registerAssemble } from './commands/assemble';
 import { registerBuildActiveFile } from './commands/buildActiveFile';
 import { registerEditConfig } from './commands/editConfig';
 import { registerMusic } from './commands/music';
 import { registerCsl } from './commands/csl';
 import { registerHexView } from './commands/hexView';
+import { registerHexCalculator } from './commands/hexCalculator';
 import { registerCslEmulatorCommands } from './commands/cslEmulators';
 import { registerBreakpointSync } from './commands/breakpointSync';
 import { registerCycleCountStatusBar } from './statusBar/cycleCount';
@@ -60,10 +62,12 @@ export function activate(context: ExtensionContext): void {
     registerBuildActiveFile(context);
     registerCodeLensRunners(context);
     registerPeephole(context);
+    registerReferences(context);
     registerAssemble(context);
     registerMusic(context);
     registerCsl(context);
     registerHexView(context);
+    registerHexCalculator(context);
     registerCslEmulatorCommands(context, () => resolvedServerPath);
     registerEditConfig(context);
 

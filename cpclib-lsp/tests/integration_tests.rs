@@ -1350,6 +1350,474 @@ async fn test_rename_global_label_finds_the_one_match_among_many_candidates() {
     }
 }
 
+/// `textDocument/references` used to only ever search currently-open
+/// documents (`self.documents.iter()`), unlike rename's own workspace-wide
+/// scan - so a reference living in a file the editor was never told to open
+/// was invisible to "Find All References". This is the references-side
+/// counterpart of `test_rename_global_label_finds_the_one_match_among_many_candidates`
+/// above: same tempdir-of-decoys shape, but for `references` instead of
+/// `rename`.
+#[tokio::test]
+async fn test_references_finds_a_match_in_an_unopened_on_disk_file() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    for i in 0..8 {
+        std::fs::write(
+            tmp.path().join(format!("decoy{i}.asm")),
+            format!("UNRELATED_LABEL_{i}:\n    ret\n")
+        )
+        .unwrap();
+    }
+    std::fs::write(tmp.path().join("real.asm"), "    call some_label\n").unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "some_label:\n    ret\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .references(ReferenceParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                position: Position {
+                    line: 0,
+                    character: 1
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+            context: ReferenceContext {
+                include_declaration: true
+            }
+        })
+        .await
+        .unwrap();
+
+    let locations = result.expect("expected references");
+    let real_uri = Url::from_file_path(tmp.path().join("real.asm")).unwrap();
+    assert!(
+        locations.iter().any(|l| l.uri == main_uri),
+        "{locations:?}"
+    );
+    assert!(
+        locations.iter().any(|l| l.uri == real_uri),
+        "{locations:?}"
+    );
+    for i in 0..8 {
+        let decoy_uri = Url::from_file_path(tmp.path().join(format!("decoy{i}.asm"))).unwrap();
+        assert!(!locations.iter().any(|l| l.uri == decoy_uri), "{locations:?}");
+    }
+}
+
+/// `textDocument/references` invoked with the cursor on a bare local label
+/// (`.local1`) must find its bare, in-scope reference *and* a qualified
+/// cross-file reference (`global1.local1`, from a second, unrelated file),
+/// while never conflating it with a same-named local under a *different*
+/// global in the same file. Exercises
+/// `AssemblyAnalyzer::canonicalize_label_query`, the query-side counterpart
+/// to `label_index`'s own occurrence canonicalization.
+#[tokio::test]
+async fn test_references_on_a_bare_local_label_resolves_to_its_canonical_scoped_form() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    // A second file, referencing `global1`'s own local via its qualified
+    // form - never opened, only on disk, like a real cross-file caller.
+    std::fs::write(
+        tmp.path().join("caller.asm"),
+        "    call global1.local1\n"
+    )
+    .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "global1\n.local1\n    call .local1\n\
+                       global2\n.local1\n    call .local1\n"
+                    .to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .references(ReferenceParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                // Line 1: `global1`'s own `.local1` definition.
+                position: Position {
+                    line: 1,
+                    character: 1
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+            context: ReferenceContext {
+                include_declaration: true
+            }
+        })
+        .await
+        .unwrap();
+
+    let locations = result.expect("expected references");
+    // The definition itself (line 1), the bare in-scope call (line 2), and
+    // the cross-file qualified call - three, not more.
+    assert_eq!(locations.len(), 3, "{locations:?}");
+    assert!(
+        locations.iter().any(|l| l.uri != main_uri),
+        "expected the cross-file qualified reference to be found: {locations:?}"
+    );
+    // Never conflated with `global2`'s own, unrelated `.local1` (lines 4-5).
+    assert!(
+        !locations.iter().any(|l| l.uri == main_uri && l.range.start.line >= 3),
+        "{locations:?}"
+    );
+}
+
+/// `cpclib.findUnreferencedLabels`: the expensive, workspace-wide dead-label
+/// scan behind the CodeLens's own cheap, current-file-only count (see
+/// `AssemblyAnalyzer::reference_count_code_lenses`'s module doc comment for
+/// why the live lens can't just do this itself). A genuinely unused label
+/// must be reported; a label only referenced from a third file (not the one
+/// the command was invoked from, not an include of it) must still be found -
+/// proving this really walks the whole workspace and not just the current
+/// document's own include graph.
+#[tokio::test]
+async fn test_find_unreferenced_labels_flags_a_genuinely_dead_label_across_files() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    // `used_elsewhere` is referenced only from a third file, never opened
+    // and never `INCLUDE`d by `main.asm` - only a true workspace scan finds
+    // it.
+    std::fs::write(
+        tmp.path().join("caller.asm"),
+        "    call used_elsewhere\n"
+    )
+    .unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "used_elsewhere:\n    ret\ndead_label:\n    ret\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.findUnreferencedLabels".to_string(),
+            arguments: vec![serde_json::json!(main_uri.to_string())],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a findings array");
+
+    let findings = result.as_array().expect("expected a JSON array");
+    let names: Vec<&str> = findings
+        .iter()
+        .filter_map(|f| f["name"].as_str())
+        .collect();
+    assert!(names.contains(&"dead_label"), "{names:?}");
+    assert!(!names.contains(&"used_elsewhere"), "{names:?}");
+}
+
+/// The label/reference index (`cpclib_lsp::basm::label_index`) is meant to
+/// be kept live *as labels are inserted/removed*, not just refreshed on the
+/// next full re-scan - this is the end-to-end proof of that: editing one
+/// file (`b.asm`) to add a reference to a label defined in a completely
+/// different, already-open file (`a.asm`) must change what
+/// `cpclib.findUnreferencedLabels` reports for `a.asm`, without closing or
+/// reopening anything, once `did_change`'s own debounce (`DID_CHANGE_DEBOUNCE`,
+/// 250ms) has had time to run.
+#[tokio::test]
+async fn test_editing_one_file_updates_the_label_index_in_real_time_for_another() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let a_uri = Url::from_file_path(tmp.path().join("a.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: a_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "target:\n    ret\n".to_string()
+            }
+        })
+        .await;
+
+    // `candidate_asm_paths` walks the *real* directory tree - a document
+    // that only exists via `did_open`, with nothing on disk, is invisible to
+    // it (the open buffer's *content* wins once a path is found, but the
+    // path itself must exist to be found at all).
+    std::fs::write(tmp.path().join("b.asm"), "    nop\n").unwrap();
+    let b_uri = Url::from_file_path(tmp.path().join("b.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: b_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "    nop\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let findings_before = backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.findUnreferencedLabels".to_string(),
+            arguments: vec![serde_json::json!(a_uri.to_string())],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a findings array");
+    let names_before: Vec<&str> = findings_before
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|f| f["name"].as_str())
+        .collect();
+    assert!(names_before.contains(&"target"), "{names_before:?}");
+
+    // Edit `b.asm` (did_change, not did_open/did_close) to add a reference
+    // to `a.asm`'s own label - the real-time-update path under test.
+    backend
+        .did_change(DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier {
+                uri: b_uri.clone(),
+                version: 2
+            },
+            content_changes: vec![TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: "    call target\n".to_string()
+            }]
+        })
+        .await;
+    // Past `DID_CHANGE_DEBOUNCE` (250ms), with margin.
+    tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+
+    let findings_after = backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.findUnreferencedLabels".to_string(),
+            arguments: vec![serde_json::json!(a_uri.to_string())],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a findings array");
+    let names_after: Vec<&str> = findings_after
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|f| f["name"].as_str())
+        .collect();
+    assert!(
+        !names_after.contains(&"target"),
+        "expected `target` to no longer be reported as unreferenced after \
+         `b.asm` was edited to call it, without closing or reopening \
+         anything: {names_after:?}"
+    );
+}
+
+/// The "N references" CodeLens is workspace-wide, not scoped to the current
+/// file - matching asm-code-lens's own behavior (its README: "If a label
+/// has a reference count of 0, it is not used anywhere else", a cross-file
+/// claim). Editing a second, unrelated file to reference a label defined in
+/// the first must change what the CodeLens reports for the first, once
+/// `did_change`'s debounce has run - no `did_close`/`did_open` needed, and
+/// crucially no `INCLUDE` relationship between the two files at all.
+#[tokio::test]
+async fn test_reference_count_code_lens_is_workspace_wide_across_unrelated_files() {
+    let (service, _socket) = initialized_backend().await;
+    let backend = service.inner();
+
+    let a_uri = Url::parse("file:///a.asm").unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: a_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "target:\n    ret\n".to_string()
+            }
+        })
+        .await;
+
+    let b_uri = Url::parse("file:///b.asm").unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: b_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "    nop\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let lenses = backend
+        .code_lens(CodeLensParams {
+            text_document: TextDocumentIdentifier { uri: a_uri.clone() },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a reference-count lens");
+    let title = lenses
+        .iter()
+        .find(|l| l.command.as_ref().unwrap().command == "cpclib.showReferenceLocations")
+        .unwrap_or_else(|| panic!("no reference-count lens: {lenses:?}"))
+        .command
+        .as_ref()
+        .unwrap()
+        .title
+        .clone();
+    assert_eq!(title, "no references", "{lenses:?}");
+
+    backend
+        .did_change(DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier {
+                uri: b_uri.clone(),
+                version: 2
+            },
+            content_changes: vec![TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: "    call target\n".to_string()
+            }]
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+
+    let lenses = backend
+        .code_lens(CodeLensParams {
+            text_document: TextDocumentIdentifier { uri: a_uri.clone() },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a reference-count lens");
+    let title = lenses
+        .iter()
+        .find(|l| l.command.as_ref().unwrap().command == "cpclib.showReferenceLocations")
+        .unwrap_or_else(|| panic!("no reference-count lens: {lenses:?}"))
+        .command
+        .as_ref()
+        .unwrap()
+        .title
+        .clone();
+    assert_eq!(
+        title, "1 reference",
+        "expected `b.asm`'s edit to be reflected in `a.asm`'s own CodeLens: {lenses:?}"
+    );
+}
+
 // ─── cpclib.cycleCountForSelection ─────────────────────────────────────────
 
 #[tokio::test]

@@ -127,6 +127,18 @@ pub struct AsmConfig {
     /// embedded `#!bndbuild` block, and the peephole optimizer's "⚡ Fix All"
     /// summary.
     pub code_lens: bool,
+    /// A "N references"/"no references" CodeLens above every global label
+    /// definition. Scoped cheaply to the current document plus its own
+    /// direct `INCLUDE`s (no filesystem walk, no real assemble) - so it can
+    /// miss references that only exist in a file reached indirectly, or not
+    /// `INCLUDE`d by this file at all. For the fully-accurate, workspace-wide
+    /// answer, use `cpclib.findUnreferencedLabels` instead.
+    pub reference_lens: bool,
+    /// Highlight the `PUSH`/`POP` statement(s) that balance whichever one
+    /// the cursor is on, within the same routine (`textDocument/documentHighlight`
+    /// - see `basm::pushpop`'s own module doc comment for the LIFO-by-position
+    /// pairing rule and how a multi-register `push a, b, c` is handled).
+    pub push_pop_matching: bool,
     /// The directive an editor breakpoint writes into the source.
     ///
     /// Toggling the gutter's red dot inserts this in front of the line's first
@@ -175,6 +187,8 @@ impl Default for AsmConfig {
             inactive_code: true,
             inlay_hints: true,
             code_lens: true,
+            reference_lens: true,
+            push_pop_matching: true,
             breakpoint_directive: default_breakpoint_directive(),
             firmware_docs: true,
             peephole_goal: PeepholeGoal::default(),
@@ -641,6 +655,16 @@ inlay_hints = true
 # CodeLens buttons above assembly code: "▶ Run" for each rule of an embedded
 # #!bndbuild block, and the peephole optimizer's "⚡ Fix All" summary.
 code_lens = true
+# A "N references"/"no references" CodeLens above every global label
+# definition. Scoped cheaply to the current document plus its own direct
+# INCLUDEs, so it can miss references living elsewhere in the workspace - use
+# the "CPClib: Find Labels with No Reference" command for the accurate,
+# workspace-wide answer.
+reference_lens = true
+# Highlight the PUSH/POP statement(s) that balance whichever one the cursor
+# is on, within the same routine. Pairing is by position (LIFO), not by
+# register name - "push hl" / "pop de" is an ordinary idiom and still pairs.
+push_pop_matching = true
 # The directive an editor breakpoint writes in front of the line's first
 # instruction (basm's statement separator is added after it). Removing the
 # breakpoint takes it back out - recognised through the parse, so changing

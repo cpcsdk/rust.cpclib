@@ -73,7 +73,19 @@ pub struct CpcLspBackend {
     /// `onDidChangeActiveTextEditor` listener - see `should_fully_assemble`'s
     /// own doc comment for why this exists). `None` until the first such
     /// call, or when nothing is focused.
-    active_document: RwLock<Option<Url>>
+    active_document: RwLock<Option<Url>>,
+    /// The most recently, fully computed `semanticTokens/full` response data
+    /// for each URI - reused (skipping a real recomputation) when a newer
+    /// edit has already superseded the version being requested by the time
+    /// `semantic_tokens_full` is about to do the work, since that fresher
+    /// version will get its own answer very soon regardless of what's
+    /// returned for this now-moot one. See `semantic_tokens_full`'s own doc
+    /// comment for the measured cost this avoids repeating under fast
+    /// typing. Evicted on `did_close`, same as `parse_cache`/`symbols_cache`
+    /// - unlike `embedded_bndbuild_index`, this is a pure perf cache for a
+    /// *currently open* document, not workspace knowledge that should
+    /// outlive the tab.
+    last_semantic_tokens: Arc<DashMap<Url, Arc<Vec<SemanticToken>>>>
 }
 
 impl CpcLspBackend {
@@ -89,7 +101,8 @@ impl CpcLspBackend {
             workspace_roots: RwLock::new(Vec::new()),
             build_error_diagnostics: Arc::new(DashMap::new()),
             embedded_bndbuild_index: Arc::new(DashMap::new()),
-            active_document: RwLock::new(None)
+            active_document: RwLock::new(None),
+            last_semantic_tokens: Arc::new(DashMap::new())
         }
     }
 
@@ -252,6 +265,21 @@ impl CpcLspBackend {
                     document.uri,
                     index_start.elapsed()
                 );
+                // Keeps the label/reference index (`basm::label_index`) live
+                // as labels are inserted/removed, real time - the same
+                // "recompute here, on the debounced edit, instead of on the
+                // next query" shape `update_embedded_bndbuild_index` just
+                // above already established. Assembly-only: the index has
+                // no notion of BASIC/bndbuild/CSL symbols.
+                if document.doc_type == DocumentType::Assembly {
+                    let label_index_start = std::time::Instant::now();
+                    asm_analyzer.ensure_label_facts(&document);
+                    tracing::debug!(
+                        "ensure_label_facts for {} took {:?}",
+                        document.uri,
+                        label_index_start.elapsed()
+                    );
+                }
                 diagnostics
             })
             .await
@@ -474,6 +502,141 @@ impl CpcLspBackend {
         for (uri, edits) in results {
             changes.entry(uri).or_insert(edits);
         }
+    }
+
+    /// Workspace-wide `textDocument/references`: unlike the old
+    /// open-documents-only scan, this mirrors
+    /// `rename_label_across_workspace`'s three-source discovery exactly -
+    /// the current document (added by the caller), its own direct
+    /// `INCLUDE`s, and every other `.asm` file under `workspace_roots`
+    /// (open or on disk) - so a reference living in a file the editor was
+    /// never told to open is no longer invisible.
+    async fn find_references_across_workspace(
+        &self,
+        from_uri: &Url,
+        document_text: &str,
+        word: &str
+    ) -> Vec<Location> {
+        let mut refs = Vec::new();
+
+        for filename in crate::basm::definition::extract_include_filenames(document_text) {
+            if let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri)
+            {
+                refs.extend(references_at_path_with(
+                    &self.documents,
+                    &self.asm_analyzer,
+                    &path,
+                    word
+                ));
+            }
+        }
+
+        // Same rayon-inside-spawn_blocking shape as
+        // `rename_label_across_workspace`'s own workspace-wide phase, and
+        // for the same reason: `par_iter` blocks its caller until every
+        // parallel task finishes, so this must not run directly on a tokio
+        // worker thread. Each file's own cost here is now "ensure its index
+        // entry is fresh" (an O(1) cache hit once warm) rather than a fresh
+        // parse-and-scan every time - see `basm::label_index`'s own module
+        // doc comment.
+        let paths = self.candidate_asm_paths(from_uri).await;
+        let documents = Arc::clone(&self.documents);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let word_owned = word.to_string();
+        let results: Vec<Location> = tokio::task::spawn_blocking(move || {
+            paths
+                .par_iter()
+                .flat_map(|path| references_at_path_with(&documents, &asm_analyzer, path, &word_owned))
+                .collect()
+        })
+        .await
+        .unwrap_or_default();
+        refs.extend(results);
+        refs
+    }
+
+    /// The expensive, fully-accurate counterpart to
+    /// `AssemblyAnalyzer::reference_count_code_lenses` (which is
+    /// workspace-wide too now, but only *complete* among files the session
+    /// has already touched - see that function's own doc comment): every
+    /// label (global or local, the latter qualified against its owning
+    /// global - see `basm::token::qualify_local_at_line`) defined anywhere in the
+    /// workspace reachable from `from_uri`, whose only occurrence in that
+    /// same set is its own definition, guaranteed complete regardless of
+    /// what's been touched before this call. Backs the on-demand
+    /// `cpclib.findUnreferencedLabels` command - never called from
+    /// `code_lens` or any other editor-paced path.
+    ///
+    /// Same three-source discovery as `find_references_across_workspace`
+    /// (current document, its own `INCLUDE`s, every other `.asm` file under
+    /// `workspace_roots`), but this collects real `Document`s up front
+    /// (rather than one `references_at_path_with` call per label) since
+    /// every file's full text is needed for every label's count, not just
+    /// one.
+    async fn find_unreferenced_labels_in_workspace(&self, from_uri: &Url) -> Vec<(String, Location)> {
+        let Some(document) = self.load_document(from_uri)
+        else {
+            return Vec::new();
+        };
+
+        let mut all_docs: Vec<Document> = vec![document.clone()];
+        for filename in crate::basm::definition::extract_include_filenames(&document.text()) {
+            if let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri)
+                && let Ok(uri) = Url::from_file_path(&path)
+                && let Some(doc) = self.load_document(&uri)
+            {
+                all_docs.push(doc);
+            }
+        }
+
+        // Same rayon-inside-spawn_blocking shape as
+        // `find_references_across_workspace`'s own workspace-wide phase.
+        let paths = self.candidate_asm_paths(from_uri).await;
+        let documents = Arc::clone(&self.documents);
+        let loaded: Vec<Document> = tokio::task::spawn_blocking(move || {
+            paths
+                .par_iter()
+                .filter_map(|path| {
+                    let uri = Url::from_file_path(path).ok()?;
+                    load_document_from(&documents, &uri)
+                })
+                .collect()
+        })
+        .await
+        .unwrap_or_default();
+        all_docs.extend(loaded);
+
+        // Ensure every candidate's facts are fresh *once*, up front, and
+        // keep the resulting `Arc<FileLabelFacts>` - the loop below reads
+        // straight from these for both a file's own definitions and every
+        // other file's occurrence counts, instead of re-deriving
+        // definitions via a second parse-and-walk (as a separate
+        // `all_label_definitions` call used to) or re-fetching facts once
+        // per `(label, file)` pair through the cache again.
+        let facts: Vec<Arc<crate::basm::label_index::FileLabelFacts>> = all_docs
+            .iter()
+            .map(|doc| self.asm_analyzer.ensure_label_facts(doc))
+            .collect();
+
+        let mut unreferenced = Vec::new();
+        for (doc, doc_facts) in all_docs.iter().zip(&facts) {
+            for (key, (name, def_range)) in &doc_facts.definitions {
+                let total: usize = facts
+                    .iter()
+                    .map(|other| other.occurrences.get(key).map(Vec::len).unwrap_or(0))
+                    .sum();
+                if total <= 1 {
+                    unreferenced.push((
+                        name.clone(),
+                        Location {
+                            uri: doc.uri.clone(),
+                            range: *def_range
+                        }
+                    ));
+                }
+            }
+        }
+        unreferenced
     }
 
     /// Shared by `rename_label_across_workspace`'s two sources of candidate
@@ -1015,6 +1178,31 @@ fn rename_edits_at_path_with(
     (!edits.is_empty()).then_some((target_uri, edits))
 }
 
+/// `AssemblyAnalyzer::label_locations_in` at a single `path` (open document
+/// if there is one, else read from disk) - the same "open doc, else disk"
+/// shape as `rename_edits_at_path_with`, reused by
+/// `CpcLspBackend::find_references_across_workspace` for both its include
+/// list and its rayon-parallel workspace scan. Index-backed
+/// (`basm::label_index`): a file touched by an earlier call, or kept warm by
+/// its own edits via `spawn_deferred_analysis`, answers from cache instead
+/// of being re-read and re-scanned from scratch.
+fn references_at_path_with(
+    documents: &DashMap<Url, Document>,
+    asm_analyzer: &AssemblyAnalyzer,
+    path: &std::path::Path,
+    word: &str
+) -> Vec<Location> {
+    let Some(target_uri) = Url::from_file_path(path).ok()
+    else {
+        return Vec::new();
+    };
+    let Some(doc) = load_document_from(documents, &target_uri)
+    else {
+        return Vec::new();
+    };
+    asm_analyzer.label_locations_in(&doc, word)
+}
+
 /// Dispatch by `document.doc_type` to the matching analyzer, returning
 /// `unknown_default` for `DocumentType::Unknown`. Shared by the handlers
 /// whose per-arm bodies are all `self.X_analyzer.method(document, ...)`
@@ -1348,7 +1536,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.musicPlay",
     "cpclib.musicBuildDsk",
     "cpclib.musicSidInfo",
-    "cpclib.setActiveDocument"
+    "cpclib.setActiveDocument",
+    "cpclib.findUnreferencedLabels"
 ];
 
 #[tower_lsp::async_trait]
@@ -1444,6 +1633,7 @@ impl LanguageServer for CpcLspBackend {
                 }),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
@@ -1566,6 +1756,7 @@ impl LanguageServer for CpcLspBackend {
         self.asm_analyzer.evict(&params.text_document.uri);
         self.build_analyzer.evict(&params.text_document.uri);
         self.csl_analyzer.evict(&params.text_document.uri);
+        self.last_semantic_tokens.remove(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -1780,30 +1971,66 @@ impl LanguageServer for CpcLspBackend {
             };
         }
 
-        // Assembly: collect references across ALL open Assembly documents.
+        // Assembly: workspace-wide, mirroring rename's own three-source
+        // discovery (current document, its direct INCLUDEs, every other
+        // `.asm` file under the workspace root) instead of only the
+        // documents the editor happens to have open.
         let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
             Some(w) => w,
             None => return Ok(None)
         };
+        // A bare local (`.foo`) is re-keyed to its canonical, owner-
+        // qualified form here - the same form every occurrence of it is
+        // already bucketed under in the label index (see
+        // `basm::label_index`'s own module doc comment) - so the lookups
+        // below actually find it instead of missing under its own
+        // now-non-canonical bare text.
+        let word = self
+            .asm_analyzer
+            .canonicalize_label_query(entry.value(), position, &word);
+        let document_text = entry.value().text().to_string();
+        let mut all_refs: Vec<Location> =
+            self.asm_analyzer.label_locations_in(entry.value(), &word);
         drop(entry);
 
-        let case_sensitive = self.asm_analyzer.config().case_sensitive;
-        let mut all_refs: Vec<Location> = Vec::new();
-        for doc_entry in self.documents.iter() {
-            if doc_entry.value().doc_type != DocumentType::Assembly {
-                continue;
-            }
-            all_refs.extend(
-                self.asm_analyzer
-                    .find_references_in(doc_entry.value(), &word, case_sensitive)
-            );
-        }
+        all_refs.extend(
+            self.find_references_across_workspace(&uri, &document_text, &word)
+                .await
+        );
 
         if all_refs.is_empty() {
             Ok(None)
         }
         else {
             Ok(Some(all_refs))
+        }
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
+        // Assembly-only, like the peephole/reference-lens features - no
+        // other document type here has a stack-discipline concept to
+        // highlight.
+        if entry.value().doc_type != DocumentType::Assembly
+            || !self.asm_analyzer.config().push_pop_matching
+        {
+            return Ok(None);
+        }
+        let highlights = self.asm_analyzer.push_pop_highlights(entry.value(), position);
+        if highlights.is_empty() {
+            Ok(None)
+        }
+        else {
+            Ok(Some(highlights))
         }
     }
 
@@ -3734,6 +3961,30 @@ impl LanguageServer for CpcLspBackend {
             return Ok(Some(serde_json::json!(files)));
         }
 
+        if params.command == "cpclib.findUnreferencedLabels" {
+            let Some(uri) = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()))
+            else {
+                return Ok(None);
+            };
+            let unreferenced = self.find_unreferenced_labels_in_workspace(&uri).await;
+            let findings: Vec<serde_json::Value> = unreferenced
+                .into_iter()
+                .map(|(name, location)| {
+                    serde_json::json!({
+                        "name": name,
+                        "uri": location.uri.to_string(),
+                        "line": location.range.start.line,
+                        "character": location.range.start.character
+                    })
+                })
+                .collect();
+            return Ok(Some(serde_json::json!(findings)));
+        }
+
         if params.command != "cpclib.getTargets" {
             return Ok(None);
         }
@@ -3828,9 +4079,34 @@ impl LanguageServer for CpcLspBackend {
         else {
             return Ok(None);
         };
+        let version = document.version;
+
+        // A newer edit may already have superseded this exact version by
+        // the time this request is even reaching us - if so, and a
+        // previous, non-superseded call already left us a real answer,
+        // re-serve that instead of paying for a recomputation whose result
+        // is already moot: the fresher version either already has its own
+        // answer in flight or will be requested again very soon regardless,
+        // which is exactly the eventually-consistent flow LSP clients
+        // already expect from `semanticTokens/full` (no built-in
+        // synchronization between overlapping requests). See the
+        // `spawn_blocking` closure below for why re-parsing can't simply be
+        // made cheaper here the way it was for completion.
+        if self.pending_versions.get(&uri).is_some_and(|v| *v != version)
+            && let Some(cached) = self.last_semantic_tokens.get(&uri)
+        {
+            return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: (*cached.value()).to_vec()
+            })));
+        }
+
         let asm_analyzer = Arc::clone(&self.asm_analyzer);
         let build_analyzer = Arc::clone(&self.build_analyzer);
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let pending_versions = Arc::clone(&self.pending_versions);
+        let last_semantic_tokens = Arc::clone(&self.last_semantic_tokens);
+        let cache_key = uri.clone();
 
         // Same class of bug `spawn_deferred_analysis` already fixed for
         // diagnostics, in a handler that fix never touched: this used to
@@ -3846,15 +4122,42 @@ impl LanguageServer for CpcLspBackend {
         // real `didOpen` + `semanticTokens/full` burst outside VS Code
         // entirely (bypassing any client-side explanation) still stalled for
         // many seconds until this was also moved off the async pool.
+        //
+        // Measured on a real 3755-line file (birthtro's `PlayerAkg.asm`,
+        // release build): ~346ms/call when `document.version` bumps on
+        // every call (today's real per-keystroke path - VS Code requests
+        // this on essentially every edit across the whole file, not
+        // debounced), versus ~4.6ms/call once already parsed at that exact
+        // version - ~99% of the real cost is `parse_document` re-parsing
+        // from scratch, since `parse_cache` is keyed by exact version.
+        // Unlike completion's fix for the identical root cause
+        // (`ParseFreshness::ToleratesStale`, `parse_document_for_completion`),
+        // token *positions* can't tolerate a stale parse - a stale AST's
+        // line/column layout drifts from the live text on nearly any edit,
+        // so reusing one would paint highlighting on the wrong characters,
+        // not just show slightly outdated data. Hence the supersede check
+        // above (and again below) instead: skip the computation entirely
+        // once its answer is already moot, rather than trying to make the
+        // computation itself cheaper.
         let start = std::time::Instant::now();
         let data = match tokio::task::spawn_blocking(move || {
-            dispatch_by_doc_type(
+            // Re-checked here: time may have passed waiting in the blocking
+            // pool's own queue, during which an even newer edit could have
+            // arrived.
+            if pending_versions.get(&cache_key).is_some_and(|v| *v != version)
+                && let Some(cached) = last_semantic_tokens.get(&cache_key)
+            {
+                return (*cached.value()).to_vec();
+            }
+            let data = dispatch_by_doc_type(
                 &document,
                 vec![],
                 |doc| asm_analyzer.semantic_tokens(doc),
                 |doc| build_analyzer.semantic_tokens(doc),
                 |doc| basic_analyzer.semantic_tokens(doc)
-            )
+            );
+            last_semantic_tokens.insert(cache_key, Arc::new(data.clone()));
+            data
         })
         .await
         {
@@ -5118,6 +5421,188 @@ mod dispatch_by_doc_type_tests {
             }),
             "{lenses:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod semantic_tokens_supersede_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// A `semanticTokens/full` request answered once, then a `did_change`
+    /// bump with *no* second request in between (the common, non-burst
+    /// case: one edit, then the editor asks for fresh highlighting) - the
+    /// next call must still do a real, fresh computation. Only an
+    /// already-superseded request in flight at the moment of a *later*
+    /// edit should ever take the cached-fallback path - a version that was
+    /// never actually superseded while its own request was pending must
+    /// not start silently serving stale data.
+    #[tokio::test]
+    async fn a_settled_edit_with_no_pending_request_still_gets_a_fresh_answer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let before = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert!(before.is_some());
+
+        backend
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version: 2
+                },
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: "second_label_with_a_much_longer_name:\n    ret\n".to_string()
+                }]
+            })
+            .await;
+
+        // `pending_versions` now shows exactly version 2, matching this
+        // request's own document snapshot - not superseded, so this must be
+        // a real computation reflecting the *new* text, not the cached
+        // answer from version 1.
+        let after = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        match (before, after) {
+            (
+                Some(SemanticTokensResult::Tokens(before)),
+                Some(SemanticTokensResult::Tokens(after))
+            ) => {
+                assert_ne!(
+                    before.data, after.data,
+                    "expected the second, settled request to reflect the new, longer label \
+                     name rather than replaying the first response"
+                );
+            },
+            other => panic!("expected semantic tokens both times, got {other:?}")
+        }
+    }
+
+    /// The actual fast-typing burst this whole mechanism exists for:
+    /// `pending_versions` already shows a *newer* version than the one
+    /// this request's own document snapshot is for (another edit arrived
+    /// while this request was in flight) - it must be answered from the
+    /// cached fallback rather than paying for a full recomputation whose
+    /// answer would already be moot.
+    #[tokio::test]
+    async fn a_superseded_request_is_served_from_the_cached_fallback() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let first = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+
+        // Simulate the document moving on to version 2 (a real edit, with a
+        // very differently-shaped label so a real recomputation would be
+        // unmistakably distinguishable from the cached version-1 answer),
+        // but *without* updating `self.documents`' own copy of `document`
+        // that a version-1 request already snapshotted - exactly the
+        // in-flight-request situation `pending_versions` exists to detect.
+        backend.pending_versions.insert(uri.clone(), 2);
+
+        let stale_request = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+
+        match (first, stale_request) {
+            (
+                Some(SemanticTokensResult::Tokens(first)),
+                Some(SemanticTokensResult::Tokens(stale))
+            ) => {
+                assert_eq!(
+                    first.data, stale.data,
+                    "expected the superseded request to be served the cached, \
+                     previously-computed answer verbatim: {stale:?}"
+                );
+            },
+            other => panic!("expected semantic tokens both times, got {other:?}")
+        }
+    }
+
+    /// `did_close` must evict `last_semantic_tokens` for that URI - a
+    /// closed document's cached tokens serve no purpose once nobody can
+    /// ask for them again until the file is reopened.
+    #[tokio::test]
+    async fn did_close_evicts_the_cached_semantic_tokens() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let _ = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert!(backend.last_semantic_tokens.get(&uri).is_some());
+
+        backend
+            .did_close(DidCloseTextDocumentParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await;
+        assert!(backend.last_semantic_tokens.get(&uri).is_none());
     }
 }
 

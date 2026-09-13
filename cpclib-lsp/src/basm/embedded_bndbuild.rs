@@ -262,6 +262,9 @@ impl AssemblyAnalyzer {
                 .collect()
         );
         lenses.extend(self.peephole_code_lenses(document));
+        if self.config().reference_lens {
+            lenses.extend(self.reference_count_code_lenses(document));
+        }
         lenses
     }
 }

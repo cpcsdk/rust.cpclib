@@ -304,11 +304,7 @@ where
 ///
 /// Used by rename to confine a local-label rename to its own global's
 /// scope — a `.foo` under a *different* global is basm's own rules make
-/// into a wholly different symbol, and must not be touched. Reimplements,
-/// rather than shares, the `current_global`-tracking walk duplicated in
-/// `symbols.rs`'s `document_symbols` and `autocomplete.rs`'s
-/// `collect_symbols` — those build a display string per label as they go,
-/// this only needs scope boundaries.
+/// into a wholly different symbol, and must not be touched.
 pub(super) fn label_scope_at_line<'a, T>(
     listing: impl IntoIterator<Item = &'a T> + 'a,
     line: u32
@@ -364,6 +360,242 @@ pub(super) fn scope_containing(
         .iter()
         .find(|(_, range)| range.start <= line && line < range.end)
         .cloned()
+}
+
+/// Qualify a *bare* local label (`raw`, e.g. `.foo`) against whichever
+/// global's own scope (from `global_label_scopes`) contains `line` -
+/// `global.foo`. `None` when `raw` isn't local (no leading `.`), or there's
+/// no enclosing global to qualify against (an "orphan" local - the nearest
+/// preceding entity is a `MACRO`/`MODULE`/`FUNCTION` rather than a real
+/// label, or there is no preceding label at all).
+///
+/// Matches the real assembler's own resolution exactly:
+/// `handle_global_and_local_labels`/`visit_label` in
+/// `cpclib-asm/src/assembler/mod.rs` only update the symbol table's
+/// "current label" (the one a following bare local resolves against) on a
+/// genuine label definition, never on a `MACRO`/`FUNCTION`/`MODULE` one.
+///
+/// The single shared source of this qualification for every consumer that
+/// needs it - `symbols.rs`'s own outline, `autocomplete.rs::collect_symbols`,
+/// and `references_lens.rs`'s label-reference index. Each of those used to
+/// compute this independently via its own `current_global`-tracking walk
+/// (`symbols.rs`/`autocomplete.rs`'s copies additionally - and, per the
+/// assembler behavior above, incorrectly - re-qualified against a
+/// `MACRO`/`MODULE`/`FUNCTION` name too), which was also a real,
+/// self-documented inconsistency *within* `symbols.rs` alone: its own
+/// `nest_local_labels` already used this narrower, correct scope for
+/// deciding a local's *parent* in the outline tree, while the wider
+/// `current_global` tracker decided its *displayed name* - so a local
+/// following a `MACRO` with no enclosing label could show up qualified with
+/// the macro's name while nested at the flat top level, contradicting its
+/// own displayed qualifier.
+pub(super) fn qualify_local_at_line(
+    scopes: &[(String, std::ops::Range<u32>)],
+    line: u32,
+    raw: &str
+) -> Option<String> {
+    if !raw.starts_with('.') {
+        return None;
+    }
+    scope_containing(scopes, line).map(|(owner, _)| format!("{owner}{raw}"))
+}
+
+/// One classified "definition-shaped" token, with just the raw facts every
+/// consumer needs - the shared classification `symbols.rs::document_symbols`,
+/// `autocomplete.rs::collect_symbols`, and `label_definitions_in` (below)
+/// each used to independently re-derive via their own near-identical
+/// `is_label()`/`is_equ()`/`is_assign()`/`is_macro_definition()`/
+/// `is_function_definition()`/`is_module()`/`RANGE`-directive chain.
+///
+/// `name` borrows from `token` (via `'a`, the lifetime of the `&T` passed to
+/// `classify_definition`) rather than allocating a `String` up front, for
+/// every variant except `Section` - the underlying accessors
+/// (`label_symbol`/`equ_symbol`/.../`module_name`) already hand back a
+/// borrowed `&str`, and several call sites only conditionally end up
+/// keeping the name at all: `label_definitions_in` discards an "orphan"
+/// local with no enclosing global entirely, `collect_symbols` discards
+/// `FunctionDefinition` outright (not offered as a completion), and every
+/// consumer that qualifies a local label against its owning global
+/// (`qualify_local_at_line`) throws the *bare* name away in favor of a
+/// freshly-built qualified one whenever it actually has an owner. Eagerly
+/// allocating a `String` here paid for a copy that a large fraction of
+/// calls never used. `Section` is the one exception: its data comes from
+/// `to_token().into_owned()` (`ListingElement` has no dedicated
+/// `range_*` accessor to borrow through), which is already a fresh,
+/// standalone `Token` with nothing left to borrow from - see
+/// `classify_definition`'s own `Section` arm.
+///
+/// Deliberately free of any one consumer's own formatting, filtering, or
+/// display-name qualification: a caller that wants a local label qualified
+/// against its owning global calls `qualify_local_at_line` itself (only
+/// some callers want that, and all of them already have `scopes` in hand
+/// for their own other reasons); a caller that wants only a subset of these
+/// kinds (`label_definitions_in` only cares about `Label`) just matches on
+/// it and ignores the rest; a caller that wants its own detail wording
+/// (`symbols.rs`'s outline says "MACRO", `collect_symbols`'s completions say
+/// "macro") builds that string itself from the raw `name`.
+pub(super) enum Definition<'a> {
+    Label {
+        name: &'a str
+    },
+    Equ {
+        name: &'a str,
+        /// Pre-formatted `"= value"` - identical wording between every
+        /// consumer that wants an EQU's detail today, so computed once
+        /// here rather than separately in each. Unlike `name`, this can't
+        /// borrow - `Display`-formatting a value always produces an owned
+        /// `String` - but every real caller uses it unconditionally, so
+        /// there is no wasted allocation to avoid here the way there is
+        /// for `name`.
+        value_display: String
+    },
+    Assign {
+        name: &'a str,
+        value_display: String
+    },
+    MacroDefinition {
+        name: &'a str
+    },
+    FunctionDefinition {
+        name: &'a str
+    },
+    Module {
+        name: &'a str
+    },
+    /// A `RANGE`/`DEFSECTION` section definition. `name_pos` is the
+    /// `(line, character)` of the `name` argument itself - unlike every
+    /// other variant, the token's own `span()` points at the `RANGE`/
+    /// `DEFSECTION` keyword, not at `name`, so a caller can't derive this
+    /// itself the way it derives every other variant's position from
+    /// `token.span()`. `name` is owned, not borrowed - see this type's own
+    /// doc comment for why.
+    Section {
+        name: String,
+        start: cpclib_tokens::Expr,
+        stop: cpclib_tokens::Expr,
+        name_pos: (u32, u32)
+    }
+}
+
+/// Classify `token` as one of the definition-shaped kinds `Definition`
+/// covers, or `None` if it's neither (an ordinary instruction, a directive
+/// that isn't `RANGE`/`DEFSECTION`, ...).
+pub(super) fn classify_definition<T>(token: &T) -> Option<Definition<'_>>
+where T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement {
+    if token.is_label() {
+        Some(Definition::Label {
+            name: token.label_symbol()
+        })
+    }
+    else if token.is_equ() {
+        Some(Definition::Equ {
+            name: token.equ_symbol(),
+            value_display: format!("= {}", token.equ_value())
+        })
+    }
+    else if token.is_assign() {
+        Some(Definition::Assign {
+            name: token.assign_symbol(),
+            value_display: format!("= {}", token.assign_value())
+        })
+    }
+    else if token.is_macro_definition() {
+        Some(Definition::MacroDefinition {
+            name: token.macro_definition_name()
+        })
+    }
+    else if token.is_function_definition() {
+        Some(Definition::FunctionDefinition {
+            name: token.function_definition_name()
+        })
+    }
+    else if token.is_module() {
+        Some(Definition::Module {
+            name: token.module_name()
+        })
+    }
+    else if token.is_directive() && starts_with_range_keyword(token) {
+        // A section's *definition*: `RANGE start, stop, name` (or the
+        // `DEFSECTION` alias) — the name is the last argument. Bare
+        // `SECTION name` only *uses* an already-defined section, so it
+        // doesn't classify as a definition here — same as how a `CALL` to
+        // a label isn't a second definition of that label.
+        //
+        // `to_token().into_owned()` (not just `to_token()`, borrowing the
+        // `Cow`): a `RANGE`/`DEFSECTION` statement isn't necessarily
+        // represented as a real, storable `Token::Range` inside the
+        // listing itself - `to_token()` may well *synthesize* one on the
+        // fly (that's the whole reason `Cow` is its return type), and a
+        // synthesized value can't be borrowed past this match. This is why
+        // `Definition::Section` owns its `name`, unlike every other
+        // variant here.
+        match token.to_token().into_owned() {
+            cpclib_tokens::Token::Range(name, start, stop) => {
+                let name_pos = locate_name_in_statement(token, &name);
+                Some(Definition::Section {
+                    name: String::from(name),
+                    start,
+                    stop,
+                    name_pos
+                })
+            },
+            _ => None
+        }
+    }
+    else {
+        None
+    }
+}
+
+/// Every label definition in `listing`, given its already-computed
+/// `scopes` (`global_label_scopes`): `(canonical_name, definition_range)`.
+/// A global's canonical name is its own bare name; a local's is qualified
+/// via `qualify_local_at_line` (skipped entirely when there's no enclosing
+/// global to qualify against).
+///
+/// Takes `scopes` rather than computing them itself: its one caller,
+/// `label_index.rs`'s `compute_label_facts`, also needs them separately to
+/// canonicalize plain-text occurrences - passing them in means it doesn't
+/// pay for a second `global_label_scopes` walk just to also get the
+/// definitions out.
+pub(super) fn label_definitions_in<'a, T>(
+    listing: impl IntoIterator<Item = &'a T> + 'a,
+    scopes: &[(String, std::ops::Range<u32>)]
+) -> Vec<(String, Range)>
+where T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a {
+    let mut defs = Vec::new();
+    for token in flatten_listing(listing) {
+        let Some(Definition::Label { name: raw }) = classify_definition(token)
+        else {
+            continue;
+        };
+        let (line_1based, col_1based) = token.span().relative_line_and_column();
+        let line = line_1based.saturating_sub(1) as u32;
+        let character = col_1based.saturating_sub(1) as u32;
+        // The *source* token's own byte length - for the selection range -
+        // not the (potentially longer, once qualified) canonical name's.
+        let raw_len = raw.len();
+
+        let name = if raw.starts_with('.') {
+            match qualify_local_at_line(scopes, line, raw) {
+                Some(qualified) => qualified,
+                None => continue
+            }
+        }
+        else {
+            raw.to_string()
+        };
+
+        let range = Range {
+            start: Position { line, character },
+            end: Position {
+                line,
+                character: character + raw_len as u32
+            }
+        };
+        defs.push((name, range));
+    }
+    defs
 }
 
 // ─── Block-scope helpers (FUNCTION / REPEAT / ITERATE) ────────────────────

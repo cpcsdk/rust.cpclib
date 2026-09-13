@@ -427,6 +427,16 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.findUnreferencedLabelsInProject",
+        "title": "Find Labels with No Reference",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.openHexCalculator",
+        "title": "Open Hex Calculator",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.debugThisFile",
         "title": "Debug this file in the emulator",
         "category": "CPClib"
@@ -792,6 +802,11 @@
           "command": "cpclib.clearPeepholeResults",
           "when": "editorLangId == basm",
           "group": "cpclib.peephole@3"
+        },
+        {
+          "command": "cpclib.findUnreferencedLabelsInProject",
+          "when": "editorLangId == basm",
+          "group": "cpclib.references@1"
         },
         {
           "command": "cpclib.pickInkColor",
