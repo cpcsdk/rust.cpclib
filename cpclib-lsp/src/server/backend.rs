@@ -1895,70 +1895,117 @@ impl LanguageServer for CpcLspBackend {
 
         tracing::debug!("Goto definition request at {}:{}", uri, position.line);
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
-        let doc_type = entry.value().doc_type;
+        let doc_type = document.doc_type;
 
-        // Try the primary document first.
-        let location = match doc_type {
-            DocumentType::Assembly => self.asm_analyzer.goto_definition(entry.value(), position),
-            DocumentType::BuildFile => self.build_analyzer.goto_definition(entry.value(), position),
-            DocumentType::Basic | DocumentType::CatartBasic => {
-                self.basic_analyzer.goto_definition(entry.value(), position)
-            },
-            DocumentType::Csl | DocumentType::Unknown => None
-        };
-        if let Some(loc) = location {
-            return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let documents = Arc::clone(&self.documents);
+        let uri_for_blocking = uri.clone();
+
+        // Same class of bug already fixed for `hover`/`semantic_tokens_full`/
+        // `document_symbol`/`code_lens`: the primary-document lookup, the
+        // scan across every other already-open Assembly document, and the
+        // current document's own direct `INCLUDE`s each reach
+        // `parse_document` at an exact version (~100-350ms uncached on a
+        // real large file) - looping over every open document compounds
+        // that further. All of it now runs inside one `spawn_blocking`
+        // closure; only the genuinely last-resort, already-`spawn_blocking`-
+        // wrapped full workspace scan (`find_definition_via_workspace_scan`)
+        // stays outside, awaited afterward.
+        enum Outcome {
+            Found(Location),
+            SearchWorkspace(String),
+            NotFound
         }
-
-        // For Assembly: if the symbol was not defined locally, search all other
-        // open Assembly documents (cross-file navigation). Kept as-typed
-        // (not uppercased) - basm labels are case-sensitive by default, and
-        // every cross-file lookup below now compares case-sensitively too
-        // (see `AssemblyAnalyzer::find_definition_in`'s own doc comment).
-        if doc_type == DocumentType::Assembly {
-            let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
-                Some(w) => w,
-                None => return Ok(None)
+        let outcome = match tokio::task::spawn_blocking(move || {
+            // Try the primary document first.
+            let location = match doc_type {
+                DocumentType::Assembly => asm_analyzer.goto_definition(&document, position),
+                DocumentType::BuildFile => build_analyzer.goto_definition(&document, position),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    basic_analyzer.goto_definition(&document, position)
+                },
+                DocumentType::Csl | DocumentType::Unknown => None
             };
-            let document_text = entry.value().text();
-            drop(entry); // release the DashMap read guard before iterating/reading files
+            if let Some(loc) = location {
+                return Outcome::Found(loc);
+            }
+            if doc_type != DocumentType::Assembly {
+                return Outcome::NotFound;
+            }
 
-            for other in self.documents.iter() {
-                if *other.key() == uri {
+            // If the symbol was not defined locally, search all other open
+            // Assembly documents (cross-file navigation). Kept as-typed
+            // (not uppercased) - basm labels are case-sensitive by default,
+            // and every cross-file lookup below now compares
+            // case-sensitively too (see `AssemblyAnalyzer::find_definition_in`'s
+            // own doc comment).
+            let Some(word) = asm_analyzer.word_at_position(&document, position)
+            else {
+                return Outcome::NotFound;
+            };
+            let document_text = document.text();
+
+            for other in documents.iter() {
+                if *other.key() == uri_for_blocking {
                     continue;
                 }
                 if other.value().doc_type != DocumentType::Assembly {
                     continue;
                 }
-                if let Some(loc) = self.asm_analyzer.find_definition_in(
+                if let Some(loc) = asm_analyzer.find_definition_in(
                     other.value(),
                     &word,
-                    self.asm_analyzer.config().case_sensitive
+                    asm_analyzer.config().case_sensitive
                 ) {
-                    return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+                    return Outcome::Found(loc);
                 }
             }
 
             // Not found among already-open documents either: the symbol is
             // presumably defined in a file the editor was never told to
-            // open. Eagerly try, in order: (1) files this document itself
-            // `INCLUDE`s, then (2) any `.asm` file under the workspace -
-            // real-world sources are made of many files, most of which are
-            // never individually opened, so without this goto-definition
-            // would only ever work by accident.
-            if let Some(loc) = self.find_definition_via_includes(&document_text, &uri, &word) {
-                return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+            // open. Eagerly try this document's own `INCLUDE`s before
+            // falling back to the (more expensive, so kept outside this
+            // closure) full workspace scan.
+            for filename in crate::basm::definition::extract_include_filenames(&document_text) {
+                let Some(path) =
+                    crate::basm::definition::resolve_include_path(&filename, &uri_for_blocking)
+                else {
+                    continue;
+                };
+                if let Some(loc) =
+                    find_definition_at_path_with(&documents, &asm_analyzer, &path, &word)
+                {
+                    return Outcome::Found(loc);
+                }
             }
-            if let Some(loc) = self.find_definition_via_workspace_scan(&uri, &word).await {
-                return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+
+            Outcome::SearchWorkspace(word)
+        })
+        .await
+        {
+            Ok(outcome) => outcome,
+            Err(_join_error) => return Ok(None)
+        };
+
+        match outcome {
+            Outcome::Found(loc) => Ok(Some(GotoDefinitionResponse::Scalar(loc))),
+            Outcome::NotFound => Ok(None),
+            Outcome::SearchWorkspace(word) => {
+                // Real-world sources are made of many files, most of which
+                // are never individually opened - without this,
+                // goto-definition would only ever work by accident.
+                Ok(self
+                    .find_definition_via_workspace_scan(&uri, &word)
+                    .await
+                    .map(GotoDefinitionResponse::Scalar))
             }
         }
-
-        Ok(None)
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
@@ -1967,21 +2014,29 @@ impl LanguageServer for CpcLspBackend {
 
         tracing::debug!("References request at {}:{}", uri, position.line);
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
-        let doc_type = entry.value().doc_type;
+        let doc_type = document.doc_type;
 
         if doc_type != DocumentType::Assembly {
-            let references = match doc_type {
-                DocumentType::BuildFile => {
-                    self.build_analyzer.find_references(entry.value(), position)
-                },
+            let build_analyzer = Arc::clone(&self.build_analyzer);
+            let basic_analyzer = Arc::clone(&self.basic_analyzer);
+            // Same class of bug already fixed for `hover`/`document_symbol`/
+            // etc: `find_references` reaches `parse_document` at the exact
+            // version.
+            let references = match tokio::task::spawn_blocking(move || match doc_type {
+                DocumentType::BuildFile => build_analyzer.find_references(&document, position),
                 DocumentType::Basic | DocumentType::CatartBasic => {
-                    self.basic_analyzer.find_references(entry.value(), position)
+                    basic_analyzer.find_references(&document, position)
                 },
                 _ => Vec::new()
+            })
+            .await
+            {
+                Ok(references) => references,
+                Err(_join_error) => return Ok(None)
             };
             return if references.is_empty() {
                 Ok(None)
@@ -1991,27 +2046,38 @@ impl LanguageServer for CpcLspBackend {
             };
         }
 
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
         // Assembly: workspace-wide, mirroring rename's own three-source
         // discovery (current document, its direct INCLUDEs, every other
         // `.asm` file under the workspace root) instead of only the
-        // documents the editor happens to have open.
-        let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
-            Some(w) => w,
-            None => return Ok(None)
+        // documents the editor happens to have open. The current
+        // document's own part - `word_at_position`/`canonicalize_label_query`/
+        // `label_locations_in`, each reaching `parse_document` at the exact
+        // version - runs inside `spawn_blocking`, same reasoning as
+        // `goto_definition`. `find_references_across_workspace` (the other
+        // files) is already `spawn_blocking`-wrapped internally.
+        let outcome = match tokio::task::spawn_blocking(move || {
+            let word = asm_analyzer.word_at_position(&document, position)?;
+            // A bare local (`.foo`) is re-keyed to its canonical, owner-
+            // qualified form here - the same form every occurrence of it is
+            // already bucketed under in the label index (see
+            // `basm::label_index`'s own module doc comment) - so the
+            // lookups below actually find it instead of missing under its
+            // own now-non-canonical bare text.
+            let word = asm_analyzer.canonicalize_label_query(&document, position, &word);
+            let document_text = document.text().to_string();
+            let refs = asm_analyzer.label_locations_in(&document, &word);
+            Some((word, document_text, refs))
+        })
+        .await
+        {
+            Ok(outcome) => outcome,
+            Err(_join_error) => return Ok(None)
         };
-        // A bare local (`.foo`) is re-keyed to its canonical, owner-
-        // qualified form here - the same form every occurrence of it is
-        // already bucketed under in the label index (see
-        // `basm::label_index`'s own module doc comment) - so the lookups
-        // below actually find it instead of missing under its own
-        // now-non-canonical bare text.
-        let word = self
-            .asm_analyzer
-            .canonicalize_label_query(entry.value(), position, &word);
-        let document_text = entry.value().text().to_string();
-        let mut all_refs: Vec<Location> =
-            self.asm_analyzer.label_locations_in(entry.value(), &word);
-        drop(entry);
+        let Some((word, document_text, mut all_refs)) = outcome
+        else {
+            return Ok(None);
+        };
 
         all_refs.extend(
             self.find_references_across_workspace(&uri, &document_text, &word)
@@ -2033,19 +2099,35 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
         // Assembly-only, like the peephole/reference-lens features - no
         // other document type here has a stack-discipline concept to
         // highlight.
-        if entry.value().doc_type != DocumentType::Assembly
+        if document.doc_type != DocumentType::Assembly
             || !self.asm_analyzer.config().push_pop_matching
         {
             return Ok(None);
         }
-        let highlights = self.asm_analyzer.push_pop_highlights(entry.value(), position);
+
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        // Same class of bug already fixed for `hover`/`semantic_tokens_full`/
+        // `document_symbol`/`code_lens`: `push_pop_highlights` reaches
+        // `parse_document` at the document's exact version, same cost as
+        // those (~100-350ms uncached on a real large file). Fires on
+        // essentially every cursor move, not just edits, so - unlike
+        // `goto_definition`/`rename`/etc, which are deliberate, one-shot
+        // user actions - this one can realistically land mid-burst too.
+        let highlights = match tokio::task::spawn_blocking(move || {
+            asm_analyzer.push_pop_highlights(&document, position)
+        })
+        .await
+        {
+            Ok(highlights) => highlights,
+            Err(_join_error) => return Ok(None)
+        };
         if highlights.is_empty() {
             Ok(None)
         }
@@ -2061,18 +2143,31 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document.uri;
         let position = params.position;
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
 
-        let range = dispatch_by_doc_type(
-            entry.value(),
-            None,
-            |doc| self.asm_analyzer.prepare_rename(doc, position),
-            |doc| self.build_analyzer.prepare_rename(doc, position),
-            |doc| self.basic_analyzer.prepare_rename(doc, position)
-        );
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        // Same class of bug already fixed for `hover`/`document_symbol`/etc:
+        // each `prepare_rename` reaches `parse_document` at the document's
+        // exact version.
+        let range = match tokio::task::spawn_blocking(move || {
+            dispatch_by_doc_type(
+                &document,
+                None,
+                |doc| asm_analyzer.prepare_rename(doc, position),
+                |doc| build_analyzer.prepare_rename(doc, position),
+                |doc| basic_analyzer.prepare_rename(doc, position)
+            )
+        })
+        .await
+        {
+            Ok(range) => range,
+            Err(_join_error) => return Ok(None)
+        };
 
         Ok(range.map(PrepareRenameResponse::Range))
     }
@@ -2089,29 +2184,51 @@ impl LanguageServer for CpcLspBackend {
             new_name
         );
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
 
-        match entry.value().doc_type {
+        match document.doc_type {
             DocumentType::Basic | DocumentType::CatartBasic => {
-                Ok(self
-                    .basic_analyzer
-                    .rename(entry.value(), position, &new_name))
+                let basic_analyzer = Arc::clone(&self.basic_analyzer);
+                let new_name_owned = new_name.clone();
+                match tokio::task::spawn_blocking(move || {
+                    basic_analyzer.rename(&document, position, &new_name_owned)
+                })
+                .await
+                {
+                    Ok(edit) => Ok(edit),
+                    Err(_join_error) => Ok(None)
+                }
             },
 
             DocumentType::BuildFile => {
-                let document_text = entry.value().text();
+                let document_text = document.text();
+                let build_analyzer = Arc::clone(&self.build_analyzer);
+                let new_name_owned = new_name.clone();
+                // Only the local, current-document edit reaches
+                // `parse_document` at the exact version, so only that part
+                // is worth moving off the async pool here -
+                // `rename_jinja_variable_across_workspace` below reads a
+                // cached include graph plus a handful of already-transitive
+                // files, a different (and, per that cache, usually cheap)
+                // cost profile from the basm reparse this whole fix exists
+                // for.
                 let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
                     std::collections::HashMap::new();
-                if let Some(edit) = self
-                    .build_analyzer
-                    .rename(entry.value(), position, &new_name)
+                let local_edit = match tokio::task::spawn_blocking(move || {
+                    build_analyzer.rename(&document, position, &new_name_owned)
+                })
+                .await
+                {
+                    Ok(edit) => edit,
+                    Err(_join_error) => return Ok(None)
+                };
+                if let Some(edit) = local_edit
                     && let Some(local_changes) = edit.changes {
                         changes.extend(local_changes);
                     }
-                drop(entry);
                 if !changes.is_empty() {
                     self.rename_jinja_variable_across_workspace(
                         &uri,
@@ -2125,39 +2242,75 @@ impl LanguageServer for CpcLspBackend {
             },
 
             DocumentType::Assembly => {
-                // Determine whether this is workspace-wide (a `Global`
-                // label) — if not (a `Local`/`Qualified` label, or the
-                // cursor is inside a `LOCOMOTIVE` block), the single-file
-                // result from `asm_analyzer.rename` is already complete.
-                let target = self
-                    .asm_analyzer
-                    .resolve_rename_target(entry.value(), position);
-                let Some(target @ crate::basm::definition::RenameTarget::Global(_)) = target
-                else {
-                    return Ok(self.asm_analyzer.rename(entry.value(), position, &new_name));
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                let new_name_owned = new_name.clone();
+                let uri_owned = uri.clone();
+                let document_text = document.text();
+                // Same class of bug already fixed for `goto_definition`/
+                // `references`: `resolve_rename_target`/`rename_occurrences_in`/
+                // `rename` each reach `parse_document` at the document's
+                // exact version. `rename_label_across_workspace` (the other
+                // files) is already `spawn_blocking`-wrapped internally, so
+                // it stays outside, awaited afterward.
+                enum Outcome {
+                    SingleFile(Option<WorkspaceEdit>),
+                    Workspace {
+                        target: crate::basm::definition::RenameTarget,
+                        changes: std::collections::HashMap<Url, Vec<TextEdit>>
+                    }
+                }
+                let outcome = match tokio::task::spawn_blocking(move || {
+                    // Determine whether this is workspace-wide (a `Global`
+                    // label) — if not (a `Local`/`Qualified` label, or the
+                    // cursor is inside a `LOCOMOTIVE` block), the
+                    // single-file result from `asm_analyzer.rename` is
+                    // already complete.
+                    let target = asm_analyzer.resolve_rename_target(&document, position);
+                    let Some(target @ crate::basm::definition::RenameTarget::Global(_)) = target
+                    else {
+                        return Outcome::SingleFile(asm_analyzer.rename(
+                            &document,
+                            position,
+                            &new_name_owned
+                        ));
+                    };
+
+                    let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
+                        std::collections::HashMap::new();
+                    let current_edits = asm_analyzer.rename_occurrences_in(
+                        &document,
+                        &target,
+                        &new_name_owned
+                    );
+                    if !current_edits.is_empty() {
+                        changes.insert(uri_owned, current_edits);
+                    }
+                    Outcome::Workspace { target, changes }
+                })
+                .await
+                {
+                    Ok(outcome) => outcome,
+                    Err(_join_error) => return Ok(None)
                 };
 
-                let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
-                    std::collections::HashMap::new();
-                let current_edits =
-                    self.asm_analyzer
-                        .rename_occurrences_in(entry.value(), &target, &new_name);
-                if !current_edits.is_empty() {
-                    changes.insert(uri.clone(), current_edits);
+                match outcome {
+                    Outcome::SingleFile(edit) => Ok(edit),
+                    Outcome::Workspace {
+                        target,
+                        mut changes
+                    } => {
+                        self.rename_label_across_workspace(
+                            &uri,
+                            &document_text,
+                            &target,
+                            &new_name,
+                            &mut changes
+                        )
+                        .await;
+
+                        Ok(non_empty_workspace_edit(changes))
+                    }
                 }
-                let document_text = entry.value().text();
-                drop(entry);
-
-                self.rename_label_across_workspace(
-                    &uri,
-                    &document_text,
-                    &target,
-                    &new_name,
-                    &mut changes
-                )
-                .await;
-
-                Ok(non_empty_workspace_edit(changes))
             },
 
             DocumentType::Csl | DocumentType::Unknown => Ok(None)
@@ -2171,26 +2324,47 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
 
-        let Some(entry) = self.documents.get(&uri)
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
         else {
             return Ok(None);
         };
+        let doc_type = document.doc_type;
 
-        let item = match entry.value().doc_type {
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let document_for_blocking = document.clone();
+        // Same class of bug already fixed for `hover`/`document_symbol`/etc:
+        // each `prepare_call_hierarchy` reaches `parse_document` at the
+        // document's exact version. `bndbuild_cross_file_prepare` (the
+        // cross-file bndbuild fallback below) stays outside - it needs
+        // `&self` and reads a cached include graph plus a handful of
+        // already-transitive files, a different (and, per that cache,
+        // usually cheap) cost profile from the basm reparse this fix exists
+        // for.
+        let item = match tokio::task::spawn_blocking(move || match doc_type {
             DocumentType::Assembly => {
-                self.asm_analyzer
-                    .prepare_call_hierarchy(entry.value(), position)
+                asm_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
             },
             DocumentType::Basic | DocumentType::CatartBasic => {
-                self.basic_analyzer
-                    .prepare_call_hierarchy(entry.value(), position)
+                basic_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
             },
             DocumentType::BuildFile => {
-                self.build_analyzer
-                    .prepare_call_hierarchy(entry.value(), position)
-                    .or_else(|| self.bndbuild_cross_file_prepare(entry.value(), &uri, position))
+                build_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
             },
             DocumentType::Csl | DocumentType::Unknown => None
+        })
+        .await
+        {
+            Ok(item) => item,
+            Err(_join_error) => return Ok(None)
+        };
+
+        let item = if item.is_none() && doc_type == DocumentType::BuildFile {
+            self.bndbuild_cross_file_prepare(&document, &uri, position)
+        }
+        else {
+            item
         };
 
         Ok(item.map(|i| vec![i]))
@@ -2210,20 +2384,34 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         };
 
+        // The Assembly/Basic arms below each reach `parse_document` at the
+        // document's exact version (the `AsmLabel` one does so once per
+        // open Assembly document, the worst case among every handler fixed
+        // this session) - same class of bug already fixed for `hover`/
+        // `goto_definition`/etc, so each is individually moved onto
+        // `spawn_blocking`. The BuildFile-doc-type arms further down stay
+        // synchronous: they need `&self` for `bndbuild_incoming_candidate_docs`
+        // (a cached include graph plus a handful of already-transitive
+        // files - a different, usually-cheap cost profile from the basm
+        // reparse this fix exists for), and converting them would mean
+        // duplicating that helper as a free function for uncertain benefit.
         let calls = match (doc_type, data) {
             (DocumentType::Assembly, CallHierarchyData::AsmLabel { name }) => {
                 let name_upper = name.to_uppercase();
-                let mut calls = Vec::new();
-                for doc_entry in self.documents.iter() {
-                    if doc_entry.value().doc_type != DocumentType::Assembly {
-                        continue;
+                let documents = Arc::clone(&self.documents);
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    let mut calls = Vec::new();
+                    for doc_entry in documents.iter() {
+                        if doc_entry.value().doc_type != DocumentType::Assembly {
+                            continue;
+                        }
+                        calls.extend(asm_analyzer.incoming_calls_in(doc_entry.value(), &name_upper));
                     }
-                    calls.extend(
-                        self.asm_analyzer
-                            .incoming_calls_in(doc_entry.value(), &name_upper)
-                    );
-                }
-                calls
+                    calls
+                })
+                .await
+                .unwrap_or_default()
             },
             (
                 DocumentType::Assembly,
@@ -2232,11 +2420,12 @@ impl LanguageServer for CpcLspBackend {
                     block_start_line: Some(start)
                 }
             ) => {
-                self.asm_analyzer.incoming_calls_for_embedded_basic_line(
-                    &document,
-                    line_number,
-                    start
-                )
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    asm_analyzer.incoming_calls_for_embedded_basic_line(&document, line_number, start)
+                })
+                .await
+                .unwrap_or_default()
             },
             (
                 DocumentType::Basic | DocumentType::CatartBasic,
@@ -2244,7 +2433,14 @@ impl LanguageServer for CpcLspBackend {
                     line_number,
                     block_start_line: None
                 }
-            ) => self.basic_analyzer.incoming_calls(&document, line_number),
+            ) => {
+                let basic_analyzer = Arc::clone(&self.basic_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    basic_analyzer.incoming_calls(&document, line_number)
+                })
+                .await
+                .unwrap_or_default()
+            },
             (
                 DocumentType::Assembly,
                 CallHierarchyData::BndbuildTarget {
@@ -2252,8 +2448,14 @@ impl LanguageServer for CpcLspBackend {
                     block_start_line: Some(start)
                 }
             ) => {
-                self.asm_analyzer
-                    .incoming_calls_for_embedded_bndbuild_target(&document, &target, start)
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    asm_analyzer.incoming_calls_for_embedded_bndbuild_target(
+                        &document, &target, start
+                    )
+                })
+                .await
+                .unwrap_or_default()
             },
             (
                 DocumentType::BuildFile,
@@ -2309,53 +2511,62 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         };
 
+        // Same reasoning as `incoming_calls`: the Assembly/Basic arms below
+        // each reach `parse_document` at the document's exact version, so
+        // each is individually moved onto `spawn_blocking`. The BuildFile-
+        // doc-type arms further down stay synchronous - they need `&self`
+        // for `resolve_bndbuild_item` (a cached include graph plus a
+        // handful of already-transitive files, a different, usually-cheap
+        // cost profile).
         let calls = match (doc_type, data) {
             (DocumentType::Assembly, CallHierarchyData::AsmLabel { name }) => {
                 let name_upper = name.to_uppercase();
+                let documents = Arc::clone(&self.documents);
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                let item_uri = item.uri.clone();
+                tokio::task::spawn_blocking(move || {
+                    let targets = asm_analyzer.outgoing_call_targets(&document, &name_upper);
 
-                let targets = self
-                    .asm_analyzer
-                    .outgoing_call_targets(&document, &name_upper);
+                    // Collected once per request rather than once per
+                    // target: the loop below used to re-filter
+                    // `self.documents` (a full DashMap iteration) for every
+                    // one of a routine's outgoing calls, which gets worse
+                    // exactly when it matters most (a routine with many
+                    // calls in a workspace with many open files).
+                    let other_asm_docs: Vec<Document> = documents
+                        .iter()
+                        .filter(|e| {
+                            *e.key() != item_uri && e.value().doc_type == DocumentType::Assembly
+                        })
+                        .map(|e| e.value().clone())
+                        .collect();
 
-                // Collected once per request rather than once per target:
-                // the loop below used to re-filter `self.documents` (a full
-                // DashMap iteration) for every one of a routine's outgoing
-                // calls, which gets worse exactly when it matters most (a
-                // routine with many calls in a workspace with many open
-                // files).
-                let other_asm_docs: Vec<Document> = self
-                    .documents
-                    .iter()
-                    .filter(|e| {
-                        *e.key() != item.uri && e.value().doc_type == DocumentType::Assembly
-                    })
-                    .map(|e| e.value().clone())
-                    .collect();
-
-                let mut calls = Vec::new();
-                for (target, ranges) in targets {
-                    let target_upper = target.to_uppercase();
-                    // Current document first, then every other open
-                    // Assembly document - same "current, then others" shape
-                    // as `goto_definition`'s own cross-file fallback (minus
-                    // the disk-scan step, per this feature's scoping).
-                    let to = self
-                        .asm_analyzer
-                        .call_hierarchy_item_for_label(&document, &target_upper)
-                        .or_else(|| {
-                            other_asm_docs.iter().find_map(|doc| {
-                                self.asm_analyzer
-                                    .call_hierarchy_item_for_label(doc, &target_upper)
-                            })
-                        });
-                    if let Some(to) = to {
-                        calls.push(CallHierarchyOutgoingCall {
-                            to,
-                            from_ranges: ranges
-                        });
+                    let mut calls = Vec::new();
+                    for (target, ranges) in targets {
+                        let target_upper = target.to_uppercase();
+                        // Current document first, then every other open
+                        // Assembly document - same "current, then others"
+                        // shape as `goto_definition`'s own cross-file
+                        // fallback (minus the disk-scan step, per this
+                        // feature's scoping).
+                        let to = asm_analyzer
+                            .call_hierarchy_item_for_label(&document, &target_upper)
+                            .or_else(|| {
+                                other_asm_docs.iter().find_map(|doc| {
+                                    asm_analyzer.call_hierarchy_item_for_label(doc, &target_upper)
+                                })
+                            });
+                        if let Some(to) = to {
+                            calls.push(CallHierarchyOutgoingCall {
+                                to,
+                                from_ranges: ranges
+                            });
+                        }
                     }
-                }
-                calls
+                    calls
+                })
+                .await
+                .unwrap_or_default()
             },
             (
                 DocumentType::Assembly,
@@ -2364,11 +2575,12 @@ impl LanguageServer for CpcLspBackend {
                     block_start_line: Some(start)
                 }
             ) => {
-                self.asm_analyzer.outgoing_calls_for_embedded_basic_line(
-                    &document,
-                    line_number,
-                    start
-                )
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    asm_analyzer.outgoing_calls_for_embedded_basic_line(&document, line_number, start)
+                })
+                .await
+                .unwrap_or_default()
             },
             (
                 DocumentType::Basic | DocumentType::CatartBasic,
@@ -2376,7 +2588,14 @@ impl LanguageServer for CpcLspBackend {
                     line_number,
                     block_start_line: None
                 }
-            ) => self.basic_analyzer.outgoing_calls(&document, line_number),
+            ) => {
+                let basic_analyzer = Arc::clone(&self.basic_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    basic_analyzer.outgoing_calls(&document, line_number)
+                })
+                .await
+                .unwrap_or_default()
+            },
             (
                 DocumentType::Assembly,
                 CallHierarchyData::BndbuildTarget {
@@ -2384,8 +2603,14 @@ impl LanguageServer for CpcLspBackend {
                     block_start_line: Some(start)
                 }
             ) => {
-                self.asm_analyzer
-                    .outgoing_calls_for_embedded_bndbuild_target(&document, &target, start)
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
+                tokio::task::spawn_blocking(move || {
+                    asm_analyzer.outgoing_calls_for_embedded_bndbuild_target(
+                        &document, &target, start
+                    )
+                })
+                .await
+                .unwrap_or_default()
             },
             (
                 DocumentType::BuildFile,
@@ -4290,57 +4515,85 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document.uri;
         tracing::debug!("Formatting request for {}", uri);
 
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            if document.doc_type == DocumentType::Assembly {
-                // Load the project/user config file, reporting any parse error to the client.
-                let base_opt = match cpclib_asmfmt::find_config_file() {
-                    None => cpclib_asmfmt::AsmFormatOptions::default(),
-                    Some(path) => {
-                        match cpclib_asmfmt::load_config_from(&path) {
-                            Ok(cfg) => cfg,
-                            Err(e) => {
-                                self.client
-                                    .show_message(
-                                        MessageType::ERROR,
-                                        format!("basm-fmt config error: {e}")
-                                    )
-                                    .await;
-                                cpclib_asmfmt::AsmFormatOptions::default()
-                            }
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
+
+        if document.doc_type == DocumentType::Assembly {
+            // Load the project/user config file, reporting any parse error to the client.
+            let base_opt = match cpclib_asmfmt::find_config_file() {
+                None => cpclib_asmfmt::AsmFormatOptions::default(),
+                Some(path) => {
+                    match cpclib_asmfmt::load_config_from(&path) {
+                        Ok(cfg) => cfg,
+                        Err(e) => {
+                            self.client
+                                .show_message(
+                                    MessageType::ERROR,
+                                    format!("basm-fmt config error: {e}")
+                                )
+                                .await;
+                            cpclib_asmfmt::AsmFormatOptions::default()
                         }
-                    },
-                };
-                // Let the editor's tab-size setting override the config's indent_size.
-                let opt = cpclib_asmfmt::AsmFormatOptions {
-                    indent_size: params.options.tab_size as usize,
-                    ..base_opt
-                };
-                return Ok(self.asm_analyzer.format(document, &opt));
-            }
-            if matches!(
-                document.doc_type,
-                DocumentType::Basic | DocumentType::CatartBasic
-            ) {
-                return Ok(self.basic_analyzer.format(document));
-            }
+                    }
+                },
+            };
+            // Let the editor's tab-size setting override the config's indent_size.
+            let opt = cpclib_asmfmt::AsmFormatOptions {
+                indent_size: params.options.tab_size as usize,
+                ..base_opt
+            };
+            let asm_analyzer = Arc::clone(&self.asm_analyzer);
+            // Same class of bug already fixed for `hover`/`document_symbol`/
+            // etc: formatting re-tokenizes the whole file.
+            return match tokio::task::spawn_blocking(move || {
+                asm_analyzer.format(&document, &opt)
+            })
+            .await
+            {
+                Ok(edits) => Ok(edits),
+                Err(_join_error) => Ok(None)
+            };
+        }
+        if matches!(
+            document.doc_type,
+            DocumentType::Basic | DocumentType::CatartBasic
+        ) {
+            let basic_analyzer = Arc::clone(&self.basic_analyzer);
+            return match tokio::task::spawn_blocking(move || basic_analyzer.format(&document))
+                .await
+            {
+                Ok(edits) => Ok(edits),
+                Err(_join_error) => Ok(None)
+            };
         }
         Ok(None)
     }
 
     async fn document_color(&self, params: DocumentColorParams) -> Result<Vec<ColorInformation>> {
         let uri = params.text_document.uri;
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            return Ok(match document.doc_type {
-                DocumentType::Assembly => self.asm_analyzer.document_colors(document),
-                DocumentType::Basic | DocumentType::CatartBasic => {
-                    self.basic_analyzer.document_colors(document)
-                },
-                _ => Vec::new()
-            });
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(Vec::new());
+        };
+
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        // Same class of bug already fixed for `hover`/`document_symbol`/etc,
+        // run inline on the async thread until now.
+        match tokio::task::spawn_blocking(move || match document.doc_type {
+            DocumentType::Assembly => asm_analyzer.document_colors(&document),
+            DocumentType::Basic | DocumentType::CatartBasic => {
+                basic_analyzer.document_colors(&document)
+            },
+            _ => Vec::new()
+        })
+        .await
+        {
+            Ok(colors) => Ok(colors),
+            Err(_join_error) => Ok(Vec::new())
         }
-        Ok(Vec::new())
     }
 
     async fn color_presentation(
@@ -4348,21 +4601,27 @@ impl LanguageServer for CpcLspBackend {
         params: ColorPresentationParams
     ) -> Result<Vec<ColorPresentation>> {
         let uri = params.text_document.uri;
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            return Ok(match document.doc_type {
-                DocumentType::Assembly => {
-                    self.asm_analyzer
-                        .color_presentations(document, params.color, params.range)
-                },
-                DocumentType::Basic | DocumentType::CatartBasic => {
-                    self.basic_analyzer
-                        .color_presentations(params.color, params.range)
-                },
-                _ => Vec::new()
-            });
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(Vec::new());
+        };
+
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        match tokio::task::spawn_blocking(move || match document.doc_type {
+            DocumentType::Assembly => {
+                asm_analyzer.color_presentations(&document, params.color, params.range)
+            },
+            DocumentType::Basic | DocumentType::CatartBasic => {
+                basic_analyzer.color_presentations(params.color, params.range)
+            },
+            _ => Vec::new()
+        })
+        .await
+        {
+            Ok(presentations) => Ok(presentations),
+            Err(_join_error) => Ok(Vec::new())
         }
-        Ok(Vec::new())
     }
 
     async fn on_type_formatting(
@@ -4375,21 +4634,30 @@ impl LanguageServer for CpcLspBackend {
         if params.ch != "\n" {
             return Ok(None);
         }
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            if matches!(
-                document.doc_type,
-                DocumentType::Basic | DocumentType::CatartBasic
-            ) {
-                // Continue BASIC line numbering on the new line.
-                return Ok(self.basic_analyzer.on_type_newline(document, position));
-            }
-            if document.doc_type == DocumentType::Assembly {
-                // Same, but for BASIC embedded in a LOCOMOTIVE block.
-                return Ok(self.asm_analyzer.on_type_newline(document, position));
-            }
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
+
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        // Fires on essentially every Enter keystroke in a BASIC (or
+        // embedded-BASIC) document - same class of bug already fixed for
+        // `hover`/`document_symbol`/etc.
+        match tokio::task::spawn_blocking(move || match document.doc_type {
+            // Continue BASIC line numbering on the new line.
+            DocumentType::Basic | DocumentType::CatartBasic => {
+                basic_analyzer.on_type_newline(&document, position)
+            },
+            // Same, but for BASIC embedded in a LOCOMOTIVE block.
+            DocumentType::Assembly => asm_analyzer.on_type_newline(&document, position),
+            _ => None
+        })
+        .await
+        {
+            Ok(edits) => Ok(edits),
+            Err(_join_error) => Ok(None)
         }
-        Ok(None)
     }
 }
 
