@@ -516,7 +516,16 @@ pub struct PeepholeMatch {
     /// explain beyond the pattern itself.
     ///
     /// A [`Reason::witness`] indexes the same token slice the match does.
-    pub reasons: Vec<Reason>
+    pub reasons: Vec<Reason>,
+    /// [`Rule::is_pure_dead_output_deletion`] for the rule that produced
+    /// this match - computed once here, where the actual [`Rule`] is still
+    /// in hand, rather than asking every consumer to re-derive it from
+    /// [`Self::rule_name`] afterward (which cannot work for an unnamed
+    /// rule - see that method's own doc comment). A bulk-apply flow
+    /// (an editor's "Fix All", `basmopt --in-place`) must skip any match
+    /// with this set; a per-site reviewed flow (a single quickfix, a plain
+    /// diagnostic) may still offer it.
+    pub bulk_unsafe: bool
 }
 
 impl PeepholeMatch {
@@ -776,6 +785,7 @@ where
         end,
         anchor,
         replacement,
+        bulk_unsafe: rule.is_pure_dead_output_deletion(),
         reasons
     })
 }

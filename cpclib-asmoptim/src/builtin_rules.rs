@@ -41,36 +41,6 @@ pub enum OptimizationGoal {
     Speed
 }
 
-/// Rules held back on the CPC because an instruction's *duration* is part of
-/// its meaning here.
-///
-/// These four delete an instruction on the grounds that every register and flag
-/// it writes is dead. That reasoning is sound about data and useless about
-/// time: an instruction whose entire output is dead is, on this platform,
-/// overwhelmingly likely to have been written for exactly that reason - to burn
-/// a known number of NOPs. Measured against the real sources in
-/// `current_projects`, every single one of the 16 suggestions these produced was
-/// timing padding (`cp (hl)` in the Arkos players, sitting under a
-/// `;Waits for 29 cycles` comment), and applying any of them would break a
-/// cycle-exact music player.
-///
-/// This is the same judgement upstream already makes twice: it filters
-/// `tstatez80` rules for t-state-based Z80s, and its own `unnecessary-push-pop`
-/// rules carry an `atLeastOneCPUOp` constraint whose stated purpose is *"to
-/// prevent eliminating the usual push af; pop af combination used for timing"*.
-/// Upstream simply has no equivalent guard for the single-instruction case.
-///
-/// Deliberately narrow: only the rules that delete purely on dead-output
-/// grounds. Rules that *rewrite* an instruction, or delete a provably
-/// meaningless one like `ld b,b`, are untouched - and a user who wants these
-/// back can supply them through `basmopt --rules`.
-const TIMING_HOSTILE_RULES: &[&str] = &[
-    "unnecessary-0args",
-    "unnecessary-1args",
-    "unnecessary-2args",
-    "unnecessary-2args-ex"
-];
-
 /// Whether a rule applies to the Amstrad CPC.
 ///
 /// Upstream documents its tag vocabulary in `pbo-patterns.txt`'s own header:
@@ -87,15 +57,20 @@ const TIMING_HOSTILE_RULES: &[&str] = &[
 /// silently disable rules, and the engine's own constraint checking is what
 /// actually guarantees safety.
 ///
-/// On top of the tags, [`TIMING_HOSTILE_RULES`] are held back by name.
+/// This used to also hold back, by name, the handful of rules that delete an
+/// instruction purely because its output is dead - real, sound data-flow
+/// judgments that are nonetheless risky to apply *unreviewed* on the CPC, an
+/// instruction's duration being part of its meaning here (see
+/// `Rule::is_pure_dead_output_deletion`'s own doc comment for the measured
+/// real-world reason). That's a bulk-*application* concern, not a "should
+/// this rule exist at all" one, so it no longer excludes anything at load
+/// time - every evaluable rule stays in the normal set, offered as an
+/// ordinary diagnostic/quickfix, and each bulk-apply call site
+/// (`cpclib-lsp::basm::peephole::fix_all_peephole_edit`, `basmopt
+/// --in-place`) is responsible for skipping `is_pure_dead_output_deletion`
+/// matches itself.
 pub fn is_applicable(rule: &Rule) -> bool {
-    if rule.tags.iter().any(|tag| tag == "tstatez80") {
-        return false;
-    }
-    !rule
-        .name
-        .as_deref()
-        .is_some_and(|name| TIMING_HOSTILE_RULES.contains(&name))
+    !rule.tags.iter().any(|tag| tag == "tstatez80")
 }
 
 /// Parse one of the vendored files, resolving its `include` against the others.
@@ -219,11 +194,12 @@ mod tests {
     #[test]
     fn the_executable_builtin_rules_are_known() {
         let neutral = supported_names(OptimizationGoal::Neutral);
-        // 185 base rules are *evaluable* (see `upstream_engine.rs`); four are
-        // held back here as timing-hostile on the CPC.
+        // 185 base rules are *evaluable* (see `upstream_engine.rs`) - all 185
+        // are in the normal set; `Rule::is_pure_dead_output_deletion` rules
+        // are only excluded from bulk-apply call sites, not from this set.
         assert_eq!(
             neutral.len(),
-            181,
+            185,
             "executable rule count changed; see upstream_engine.rs's own \
              assertion for the same number over the raw corpus"
         );
@@ -268,10 +244,112 @@ mod tests {
 mod timing_tests {
     use super::*;
 
-    /// The four dead-output deletion rules must not reach a CPC user by
-    /// default - see `TIMING_HOSTILE_RULES`.
+    /// Every rule this exhaustive, hand-verified list names is a genuine
+    /// dead-output deletion (empty replacement + a liveness constraint) -
+    /// found by dumping every empty-replacement rule in the base corpus and
+    /// checking each one's constraints by hand (see the module doc comment
+    /// on `Rule::is_pure_dead_output_deletion` for why this had to be done
+    /// structurally rather than by name: the corpus turns out to contain an
+    /// *unnamed* rule, "Remove redundant ?op a", with exactly this shape,
+    /// which a name-based list could never cover). Two rules from that same
+    /// "empty replacement" scan are deliberately absent because they are
+    /// *not* liveness-dependent: `unnecessary-ld-to-itself` (`ld reg,reg` is
+    /// always a no-op, independent of context) and the named `redundant-op`
+    /// (its replacement keeps one copy - it rewrites, it doesn't delete).
+    const KNOWN_DEAD_OUTPUT_DELETIONS: &[&str] = &[
+        "unused-ld-any",
+        "unused-ld-i",
+        "unnecessary-op-const",
+        "unnecessary-op-a-const",
+        "unused-op-regpair",
+        "unused-op-1arg",
+        "unused-op-1arg2",
+        "unused-op-2args",
+        "unused-sub",
+        "unnecessary-add",
+        "unnecessary-adc-sbc",
+        "unused-double-ld",
+        "unnecessary-0args",
+        "unnecessary-1args",
+        "unnecessary-2args",
+        "unnecessary-2args-ex"
+    ];
+
+    /// `Rule::is_pure_dead_output_deletion` classifies exactly the named
+    /// rules above, plus the one unnamed one - not more, not fewer. Pinned
+    /// so a future upstream re-vendor that adds or removes a rule of this
+    /// shape is caught here rather than silently changing which rules are
+    /// bulk-unsafe.
     #[test]
-    fn the_timing_hostile_rules_are_held_back() {
+    fn is_pure_dead_output_deletion_matches_the_known_list_exactly() {
+        let all = parse_vendored(BASE);
+        let flagged: Vec<&Rule> = all
+            .rules
+            .iter()
+            .filter(|r| r.is_pure_dead_output_deletion())
+            .collect();
+
+        for name in KNOWN_DEAD_OUTPUT_DELETIONS {
+            assert!(
+                flagged.iter().any(|r| r.name.as_deref() == Some(*name)),
+                "{name} should be classified as a dead-output deletion"
+            );
+        }
+        let unnamed_count = flagged.iter().filter(|r| r.name.is_none()).count();
+        assert_eq!(
+            unnamed_count, 1,
+            "expected exactly the one known unnamed dead-output deletion \
+             (\"Remove redundant ?op a\"): {flagged:?}"
+        );
+        assert_eq!(
+            flagged.len(),
+            KNOWN_DEAD_OUTPUT_DELETIONS.len() + 1,
+            "a rule was added to or removed from this shape without updating \
+             KNOWN_DEAD_OUTPUT_DELETIONS: {flagged:?}"
+        );
+    }
+
+    /// Two structurally-similar-looking rules must NOT be flagged:
+    /// `unnecessary-ld-to-itself` (no liveness constraint at all - `ld
+    /// reg,reg` is always a no-op) and `redundant-op` (its replacement
+    /// keeps one copy, so it isn't even a deletion).
+    #[test]
+    fn structurally_similar_but_safe_rules_are_not_flagged() {
+        let all = parse_vendored(BASE);
+        for name in ["unnecessary-ld-to-itself", "redundant-op"] {
+            let rule = all
+                .rules
+                .iter()
+                .find(|r| r.name.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("{name} must exist in the corpus"));
+            assert!(
+                !rule.is_pure_dead_output_deletion(),
+                "{name} should not be classified as a dead-output deletion"
+            );
+        }
+    }
+
+    /// Every dead-output deletion rule is still fully *evaluable* (not held
+    /// back for lack of engine support) - the classification is about
+    /// unreviewed bulk application, not a gap in the engine.
+    #[test]
+    fn the_dead_output_deletion_rules_are_still_fully_supported() {
+        let all = parse_vendored(BASE);
+        for rule in all.rules.iter().filter(|r| r.is_pure_dead_output_deletion()) {
+            assert!(
+                crate::constraints::all_supported(&rule.constraints),
+                "{:?} should be fully evaluable: {rule:?}",
+                rule.name
+            );
+        }
+    }
+
+    /// They reach a CPC user like any other rule - as an ordinary
+    /// diagnostic/quickfix, individually reviewed. Only a bulk-apply call
+    /// site is responsible for skipping them (see
+    /// `Rule::is_pure_dead_output_deletion`'s own doc comment).
+    #[test]
+    fn the_dead_output_deletion_rules_are_present_in_the_normal_set() {
         for goal in [
             OptimizationGoal::Neutral,
             OptimizationGoal::Size,
@@ -282,31 +360,13 @@ mod timing_tests {
                 .iter()
                 .filter_map(|r| r.name.as_deref())
                 .collect();
-            for held in TIMING_HOSTILE_RULES {
+            for name in KNOWN_DEAD_OUTPUT_DELETIONS {
                 assert!(
-                    !names.contains(held),
-                    "{held} must not be active under {goal:?}"
+                    names.contains(name),
+                    "{name} should be present (as an individually-reviewed \
+                     rule) under {goal:?}"
                 );
             }
-        }
-    }
-
-    /// ...but they are still *evaluable*, so this is a deliberate policy
-    /// choice about the CPC rather than a gap in the engine. A user supplying
-    /// them through `--rules` gets a working rule, not a silently skipped one.
-    #[test]
-    fn the_held_back_rules_are_still_fully_supported() {
-        let all = parse_vendored(BASE);
-        for held in TIMING_HOSTILE_RULES {
-            let rule = all
-                .rules
-                .iter()
-                .find(|r| r.name.as_deref() == Some(held))
-                .unwrap_or_else(|| panic!("{held} must exist in the corpus"));
-            assert!(
-                crate::constraints::all_supported(&rule.constraints),
-                "{held} is held back by policy, not because it cannot be evaluated"
-            );
         }
     }
 }

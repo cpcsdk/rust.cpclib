@@ -103,6 +103,21 @@ fn peephole_matches<'a>(
     (tokens, matches)
 }
 
+/// Drop every match a bulk-apply flow must not touch unreviewed - see
+/// `cpclib_asmoptim::engine::PeepholeMatch::bulk_unsafe`'s own doc comment
+/// for why (an instruction whose entire output is dead is, on the CPC,
+/// plausibly deliberate timing padding; deleting it needs a human looking
+/// at that specific site, not a file-wide sweep). Used by both the "Fix
+/// All" CodeLens's own count (`peephole_code_lenses`) and the edit it
+/// actually applies (`fix_all_peephole_edit`) - the two must always agree,
+/// or a user would see "N opportunities" and get fewer than N fixed.
+/// Diagnostics and the single-match quickfix are unaffected: both are
+/// already individually reviewed by construction, which is exactly what
+/// makes a bulk-unsafe rule's own suggestion safe to *offer* there.
+fn retain_bulk_safe(matches: Vec<PeepholeMatch>) -> Vec<PeepholeMatch> {
+    matches.into_iter().filter(|m| !m.bulk_unsafe).collect()
+}
+
 /// The span of the first unconditional `jp <label>` in `listing`, if any.
 ///
 /// Used to decide whether the "addresses unavailable" notice is worth showing:
@@ -536,6 +551,9 @@ impl AssemblyAnalyzer {
         let goal = self.config().peephole_goal.into();
         let (_tokens, matches) =
             peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), goal);
+        // Counted (and later applied) as only the bulk-safe subset - see
+        // `retain_bulk_safe`'s own doc comment.
+        let matches = retain_bulk_safe(matches);
         if matches.is_empty() {
             return Vec::new();
         }
@@ -593,14 +611,15 @@ impl AssemblyAnalyzer {
         out
     }
 
-    /// Build one `WorkspaceEdit` applying every peephole match in
-    /// `document` at once (the [`FIX_ALL_COMMAND`] handler's job), alongside
-    /// how many matches it covers (for the confirmation message). `None`
-    /// when there is nothing to fix. `TextEdit`s within one document are
-    /// resolved against the *original* text by the client
-    /// (`single_file_multi_edit`'s own doc comment), so this doesn't need to
-    /// worry about one match's edit shifting another's offsets - matches
-    /// never overlap in the first place (`find_matches`'s own guarantee).
+    /// Build one `WorkspaceEdit` applying every *bulk-safe* peephole match
+    /// (`retain_bulk_safe`) in `document` at once (the [`FIX_ALL_COMMAND`]
+    /// handler's job), alongside how many matches it covers (for the
+    /// confirmation message). `None` when there is nothing to fix.
+    /// `TextEdit`s within one document are resolved against the *original*
+    /// text by the client (`single_file_multi_edit`'s own doc comment), so
+    /// this doesn't need to worry about one match's edit shifting another's
+    /// offsets - matches never overlap in the first place (`find_matches`'s
+    /// own guarantee).
     pub(crate) fn fix_all_peephole_edit(
         &self,
         document: &Document
@@ -610,6 +629,9 @@ impl AssemblyAnalyzer {
         let goal = self.config().peephole_goal.into();
         let (tokens, matches) =
             peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), goal);
+        // Same bulk-safe subset `peephole_code_lenses` counted - see
+        // `retain_bulk_safe`'s own doc comment.
+        let matches = retain_bulk_safe(matches);
         if matches.is_empty() {
             return None;
         }
@@ -1147,6 +1169,55 @@ mod code_lens_and_fix_all_tests {
         let d = doc("start:\n    xor a\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
         assert!(analyzer.fix_all_peephole_edit(&d).is_none());
+    }
+
+    /// A bulk-unsafe match (`ld a,1` immediately overwritten by `ld a,2` -
+    /// `unused-ld-any`, one of `Rule::is_pure_dead_output_deletion`'s rules)
+    /// alongside an ordinary, bulk-safe one (`ld b,b`,
+    /// `unnecessary-ld-to-itself`). Both must still show up in plain
+    /// diagnostics (a human reviews each one), but only the safe one may
+    /// count toward, or be touched by, "Fix All".
+    fn doc_with_a_bulk_unsafe_and_a_bulk_safe_match() -> Document {
+        doc("start:\n    ld b, b\n    ld a, 1\n    ld a, 2\n    ret\n")
+    }
+
+    #[test]
+    fn a_bulk_unsafe_match_still_shows_up_in_plain_diagnostics() {
+        let d = doc_with_a_bulk_unsafe_and_a_bulk_safe_match();
+        let analyzer = AssemblyAnalyzer::new();
+        let diagnostics = analyzer.peephole_scan(&d);
+        assert!(
+            diagnostics.iter().any(|diag| diag.range.start.line == 2),
+            "expected the dead `ld a,1` to still be reported: {diagnostics:?}"
+        );
+        assert_eq!(diagnostics.len(), 2, "{diagnostics:?}");
+    }
+
+    #[test]
+    fn fix_all_excludes_the_bulk_unsafe_match_from_both_its_count_and_its_edit() {
+        let d = doc_with_a_bulk_unsafe_and_a_bulk_safe_match();
+        let analyzer = AssemblyAnalyzer::new();
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = true;
+        analyzer.set_config(config);
+
+        let lenses = analyzer.peephole_code_lenses(&d);
+        let cmd = lenses[0].command.as_ref().unwrap();
+        assert_eq!(
+            cmd.title, "⚡ 1 optimization opportunity - Fix All",
+            "the bulk-unsafe match must not inflate the count"
+        );
+
+        let (edit, count) = analyzer
+            .fix_all_peephole_edit(&d)
+            .expect("expected a combined edit for the one safe match");
+        assert_eq!(count, 1);
+        let text_edits = &edit.changes.expect("expected changes")[&d.uri];
+        assert_eq!(text_edits.len(), 1);
+        assert!(
+            text_edits[0].new_text.is_empty(),
+            "expected only `ld b, b` to be removed, not the dead `ld a,1`: {text_edits:?}"
+        );
     }
 }
 

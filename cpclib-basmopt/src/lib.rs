@@ -87,6 +87,11 @@ pub struct Suggestion {
     pub column: u32,
     /// The matched rule's `name:`, when it had one.
     pub rule_name: Option<String>,
+    /// [`cpclib_asmoptim::engine::PeepholeMatch::bulk_unsafe`] - whether
+    /// this suggestion must not be applied unreviewed. `--in-place` skips
+    /// these; the plain report still lists them for a human to judge
+    /// individually.
+    pub bulk_unsafe: bool,
     /// The rule's `pattern:` description with `?variables` substituted -
     /// what to show the user.
     pub message: String,
@@ -313,6 +318,7 @@ fn to_suggestion(
         line: line as u32,
         column: column as u32,
         rule_name: m.rule_name.clone(),
+        bulk_unsafe: m.bulk_unsafe,
         message: m.message.clone(),
         replacement: m.replacement.clone(),
         fix: edit,

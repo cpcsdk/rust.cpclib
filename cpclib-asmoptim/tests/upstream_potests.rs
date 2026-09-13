@@ -13,11 +13,13 @@
 //!
 //! We deliberately do not aim to reproduce upstream exactly. This crate targets
 //! the CPC and is more conservative in several documented places: `tstatez80`
-//! rules are filtered, `TIMING_HOSTILE_RULES` are held back because deleting an
-//! instruction whose output is dead usually means deleting cycle padding, and
-//! `memoryNot*`/`noStackArguments` answer `Unknown` rather than guess. So the
-//! property worth asserting is not equality - it is that **we never go further
-//! than upstream did**.
+//! rules are filtered, dead-output deletion rules
+//! (`Rule::is_pure_dead_output_deletion`) are held back from *bulk*
+//! application (not from the engine itself - see that method's own doc
+//! comment) because deleting an instruction whose output is dead usually
+//! means deleting cycle padding on the CPC, and `memoryNot*`/`noStackArguments`
+//! answer `Unknown` rather than guess. So the property worth asserting is not
+//! equality - it is that **we never go further than upstream did**.
 
 use std::path::{Path, PathBuf};
 

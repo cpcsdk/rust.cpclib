@@ -83,6 +83,40 @@ impl Rule {
         }
         out
     }
+
+    /// Whether this rule deletes every instruction it matches purely on the
+    /// grounds that the registers/flags they write are unused afterward -
+    /// i.e. `replacement_lines` is empty (nothing survives the match) *and*
+    /// at least one constraint is a liveness check
+    /// (`regsNotUsedAfter`/`flagsNotUsedAfter`/`regFlagEffectsNotUsedAfter`).
+    ///
+    /// This is a *structural* test on the rule itself, deliberately not a
+    /// name-based list: this crate's vendored corpus turned out to contain
+    /// an unnamed rule ("Remove redundant ?op a", `?op` in `and`/`or`) with
+    /// exactly this shape, which a name list can never cover by
+    /// construction (`rule_name` is `None` for it - see
+    /// `PeepholeMatch::bulk_unsafe`'s own doc comment for why that field
+    /// exists instead of asking every consumer to re-derive this from a
+    /// name). A rule matching this predicate is a real, sound judgment
+    /// about data (the deleted registers/flags truly are dead in that
+    /// context) - what makes it unsafe to apply *unreviewed*, file-wide, is
+    /// platform-specific (an instruction whose entire output is dead is,
+    /// on the Amstrad CPC, plausibly deliberate cycle-timing padding - see
+    /// `cpclib-lsp`'s own consumer for the measured real-world false
+    /// positives this caused). A rule that instead *rewrites* (keeps
+    /// something) or deletes on purely structural grounds regardless of
+    /// context (`unnecessary-ld-to-itself`'s `ld reg,reg` is always a
+    /// no-op, independent of what runs afterward) carries no such
+    /// ambiguity and is unaffected.
+    pub fn is_pure_dead_output_deletion(&self) -> bool {
+        self.replacement_lines.is_empty()
+            && self.constraints.iter().any(|c| {
+                matches!(
+                    c.name.as_str(),
+                    "regsNotUsedAfter" | "flagsNotUsedAfter" | "regFlagEffectsNotUsedAfter"
+                )
+            })
+    }
 }
 
 /// An instruction line, prefixed by the index that maps pattern to replacement.

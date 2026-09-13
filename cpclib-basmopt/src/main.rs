@@ -49,7 +49,17 @@ fn run() -> i32 {
     }
 
     if cli.in_place {
-        let fixed = apply_fixes(&source, &suggestions);
+        // Only bulk-safe suggestions get applied unreviewed - see
+        // `cpclib_asmoptim::engine::PeepholeMatch::bulk_unsafe`'s own doc
+        // comment for why: an instruction whose entire output is dead is,
+        // on the CPC, plausibly deliberate timing padding, and `-i` applies
+        // every match in one shot with nobody looking at each site. The
+        // plain (non-`-i`) report above still lists them - a human reading
+        // it can judge each one individually, which is exactly what a bulk
+        // rewrite cannot do.
+        let (safe, skipped): (Vec<Suggestion>, Vec<Suggestion>) =
+            suggestions.into_iter().partition(|s| !s.bulk_unsafe);
+        let fixed = apply_fixes(&source, &safe);
         if let Err(e) = fs_err::write(&cli.source, fixed) {
             eprintln!("error: cannot write {}: {e}", cli.source);
             return 2;
@@ -57,9 +67,19 @@ fn run() -> i32 {
         println!(
             "{}: applied {} fix{}",
             cli.source,
-            suggestions.len(),
-            if suggestions.len() == 1 { "" } else { "es" }
+            safe.len(),
+            if safe.len() == 1 { "" } else { "es" }
         );
+        if !skipped.is_empty() {
+            println!(
+                "{}: {} suggestion{} skipped (needs individual review - rerun without -i to see \
+                 {})",
+                cli.source,
+                skipped.len(),
+                if skipped.len() == 1 { "" } else { "s" },
+                if skipped.len() == 1 { "it" } else { "them" }
+            );
+        }
         0
     }
     else {
