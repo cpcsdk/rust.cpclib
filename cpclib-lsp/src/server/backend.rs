@@ -92,7 +92,16 @@ pub struct CpcLspBackend {
     /// tolerated here either (a `DocumentSymbol` carries an exact `Range`)
     /// and why supersede-detection is used instead. Evicted on `did_close`
     /// for the same reason `last_semantic_tokens` is.
-    last_document_symbols: Arc<DashMap<Url, Arc<Vec<DocumentSymbol>>>>
+    last_document_symbols: Arc<DashMap<Url, Arc<Vec<DocumentSymbol>>>>,
+    /// Same idea as `last_semantic_tokens`/`last_document_symbols`, for
+    /// `code_lens` - see `code_lens`'s own doc comment. A `CodeLens`' range
+    /// is also an exact position (same reasoning as `DocumentSymbol`), and
+    /// `reference_count_code_lenses` (`basm::references_lens`) forces a
+    /// real reparse of the current document on every version bump via
+    /// `ensure_label_facts`'s own exact-version keying, so this carries the
+    /// identical per-keystroke cost the other two were fixed for. Evicted
+    /// on `did_close`.
+    last_code_lens: Arc<DashMap<Url, Arc<Vec<CodeLens>>>>
 }
 
 impl CpcLspBackend {
@@ -110,7 +119,8 @@ impl CpcLspBackend {
             embedded_bndbuild_index: Arc::new(DashMap::new()),
             active_document: RwLock::new(None),
             last_semantic_tokens: Arc::new(DashMap::new()),
-            last_document_symbols: Arc::new(DashMap::new())
+            last_document_symbols: Arc::new(DashMap::new()),
+            last_code_lens: Arc::new(DashMap::new())
         }
     }
 
@@ -1766,6 +1776,7 @@ impl LanguageServer for CpcLspBackend {
         self.csl_analyzer.evict(&params.text_document.uri);
         self.last_semantic_tokens.remove(&params.text_document.uri);
         self.last_document_symbols.remove(&params.text_document.uri);
+        self.last_code_lens.remove(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -2541,37 +2552,73 @@ impl LanguageServer for CpcLspBackend {
         tracing::debug!("CodeLens request for {}", uri);
         let start = std::time::Instant::now();
 
-        // Timed as a whole, not per-language-branch: this dispatch itself
-        // is always cheap (a cached Jinja render plus in-memory text scans
-        // for bndbuild, similarly cheap paths for the other two) - it never
-        // touches the include/project-graph caches or triggers a real
-        // assemble. Logged unconditionally so that claim is directly
-        // checkable from a real log instead of only from this comment.
-        let result = if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            // Each language decides for itself: a project may well want the
-            // bndbuild "▶ Run" buttons and not the ones on every `.bas`.
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
+        let version = document.version;
+
+        // Same supersede-detection as `document_symbol`/`semantic_tokens_full`
+        // (see either's own doc comment for the full reasoning): a
+        // `CodeLens`' `range` is also an exact position, so completion's
+        // `ParseFreshness::ToleratesStale` fix doesn't transfer here either.
+        if self.pending_versions.get(&uri).is_some_and(|v| *v != version)
+            && let Some(cached) = self.last_code_lens.get(&uri)
+        {
+            return Ok(Some((*cached.value()).to_vec()));
+        }
+
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let csl_analyzer = Arc::clone(&self.csl_analyzer);
+        let pending_versions = Arc::clone(&self.pending_versions);
+        let last_code_lens = Arc::clone(&self.last_code_lens);
+        let cache_key = uri.clone();
+
+        // Moved off the async pool for the same reason `document_symbol`
+        // was: the bndbuild/basic/CSL branches stay cheap (a cached Jinja
+        // render, in-memory text scans), but the assembly branch no longer
+        // is now that `embedded_bndbuild::code_lens` also calls
+        // `reference_count_code_lenses` (`basm::references_lens`) - which
+        // forces a real reparse of the current document on every version
+        // bump, via `ensure_label_facts`'s own exact-version keying.
+        // Measured on a real 3755-line file (birthtro's `PlayerAkg.asm`,
+        // release build): ~104ms/call uncached vs ~1.8ms/call once already
+        // parsed at that exact version - the same ~98% wasted-reparse shape
+        // `semantic_tokens_full`/`document_symbol` had.
+        let result = match tokio::task::spawn_blocking(move || {
+            if pending_versions.get(&cache_key).is_some_and(|v| *v != version)
+                && let Some(cached) = last_code_lens.get(&cache_key)
+            {
+                return (*cached.value()).to_vec();
+            }
+            // Each language decides for itself: a project may well want
+            // the bndbuild "▶ Run" buttons and not the ones on every `.bas`.
             let lenses = match document.doc_type {
-                DocumentType::BuildFile if self.build_analyzer.config().code_lens => {
-                    self.build_analyzer.code_lens(document)
+                DocumentType::BuildFile if build_analyzer.config().code_lens => {
+                    build_analyzer.code_lens(&document)
                 },
-                DocumentType::Assembly if self.asm_analyzer.config().code_lens => {
-                    self.asm_analyzer.code_lens(document)
+                DocumentType::Assembly if asm_analyzer.config().code_lens => {
+                    asm_analyzer.code_lens(&document)
                 },
                 DocumentType::Basic | DocumentType::CatartBasic
-                    if self.basic_analyzer.config().code_lens =>
+                    if basic_analyzer.config().code_lens =>
                 {
-                    self.basic_analyzer.code_lens(document)
+                    basic_analyzer.code_lens(&document)
                 },
-                DocumentType::Csl if self.csl_analyzer.config().code_lens => {
-                    self.csl_analyzer.code_lens(document)
+                DocumentType::Csl if csl_analyzer.config().code_lens => {
+                    csl_analyzer.code_lens(&document)
                 },
                 _ => Vec::new()
             };
-            if !lenses.is_empty() { Some(lenses) } else { None }
-        }
-        else {
-            None
+            last_code_lens.insert(cache_key, Arc::new(lenses.clone()));
+            lenses
+        })
+        .await
+        {
+            Ok(lenses) => Some(lenses).filter(|v| !v.is_empty()),
+            Err(_join_error) => None
         };
         tracing::debug!("CodeLens request for {} took {:?}", uri, start.elapsed());
         Ok(result)
@@ -5830,6 +5877,151 @@ mod document_symbol_supersede_tests {
             })
             .await;
         assert!(backend.last_document_symbols.get(&uri).is_none());
+    }
+}
+
+#[cfg(test)]
+mod code_lens_supersede_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// Same shape as `document_symbol_supersede_tests`'
+    /// `a_settled_edit_with_no_pending_request_still_gets_a_fresh_answer`:
+    /// a settled edit must still get a real, fresh set of lenses.
+    #[tokio::test]
+    async fn a_settled_edit_with_no_pending_request_still_gets_a_fresh_answer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let before = backend
+            .code_lens(CodeLensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert!(before.is_some());
+
+        backend
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version: 2
+                },
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: "second_label_with_a_much_longer_name:\n    ret\n".to_string()
+                }]
+            })
+            .await;
+
+        let after = backend
+            .code_lens(CodeLensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert_ne!(
+            before, after,
+            "expected the second, settled request to reflect the new, longer label name \
+             rather than replaying the first response"
+        );
+    }
+
+    /// Same shape as `document_symbol_supersede_tests`'
+    /// `a_superseded_request_is_served_from_the_cached_fallback`.
+    #[tokio::test]
+    async fn a_superseded_request_is_served_from_the_cached_fallback() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let first = backend
+            .code_lens(CodeLensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+
+        backend.pending_versions.insert(uri.clone(), 2);
+
+        let stale_request = backend
+            .code_lens(CodeLensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            first, stale_request,
+            "expected the superseded request to be served the cached, previously-computed \
+             answer verbatim: {stale_request:?}"
+        );
+    }
+
+    /// `did_close` must evict `last_code_lens` for that URI.
+    #[tokio::test]
+    async fn did_close_evicts_the_cached_code_lens() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let _ = backend
+            .code_lens(CodeLensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert!(backend.last_code_lens.get(&uri).is_some());
+
+        backend
+            .did_close(DidCloseTextDocumentParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await;
+        assert!(backend.last_code_lens.get(&uri).is_none());
     }
 }
 
