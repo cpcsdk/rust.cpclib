@@ -48,11 +48,12 @@
 //! here, which is exactly what makes `ensure_label_facts`'s own
 //! version-mismatch check recompute it self-healingly).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use dashmap::mapref::entry::Entry;
 use indexmap::IndexMap;
+use rustc_hash::FxHashMap;
 use tower_lsp::lsp_types::{Location, Position, Range, Url};
 
 use super::AssemblyAnalyzer;
@@ -88,7 +89,16 @@ pub struct FileLabelFacts {
     /// form during tokenizing (`owning_global_of`), since its bare text
     /// alone can't tell two same-named locals under different globals
     /// apart - see the module doc comment.
-    pub occurrences: HashMap<String, Vec<Range>>
+    ///
+    /// `FxHashMap`, not `std::collections::HashMap`: this is rebuilt from
+    /// scratch on every edit (`ensure_label_facts` recomputes on any
+    /// version bump) with one insert per identifier occurrence in the file
+    /// - tens of thousands on a real large file - so the default hasher's
+    /// DoS-resistant SipHash is paying for a guarantee this in-process,
+    /// non-adversarial-input cache has no use for. `FxHash` (the same
+    /// hasher rustc itself uses internally for exactly this kind of
+    /// many-small-string-keys hot path) trades that guarantee for speed.
+    pub occurrences: FxHashMap<String, Vec<Range>>
 }
 
 /// Maximal identifier-byte runs on `line`, as `(word, start_col, end_col)` -
@@ -162,7 +172,7 @@ impl AssemblyAnalyzer {
         .map(|(name, range)| (normalize(&name, case_sensitive), (name, range)))
         .collect();
 
-        let mut occurrences: HashMap<String, Vec<Range>> = HashMap::new();
+        let mut occurrences: FxHashMap<String, Vec<Range>> = FxHashMap::default();
         for (line_idx, line) in document.text().lines().enumerate() {
             let line_idx = line_idx as u32;
             for (word, start, end) in tokenize_line(&line) {
