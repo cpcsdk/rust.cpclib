@@ -319,29 +319,6 @@ impl CpcLspBackend {
         });
     }
 
-    /// Symbol defined in a file explicitly `INCLUDE`/`INCBIN`/`BINCLUDE`d by
-    /// `document_text` (the document at `from_uri`), even when that file was
-    /// never opened by the editor. Prefers the already-open in-memory
-    /// version when there is one (it may have unsaved changes), otherwise
-    /// reads straight from disk.
-    fn find_definition_via_includes(
-        &self,
-        document_text: &str,
-        from_uri: &Url,
-        word_upper: &str
-    ) -> Option<Location> {
-        for filename in crate::basm::definition::extract_include_filenames(document_text) {
-            let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri)
-            else {
-                continue;
-            };
-            if let Some(loc) = self.find_definition_at_path(&path, word_upper) {
-                return Some(loc);
-            }
-        }
-        None
-    }
-
     /// Symbol defined in any `.asm` file under the workspace root(s) (or, if
     /// the client reported none, the nearest project-root ancestor of
     /// `from_uri`), even when never opened by the editor. `.git`/`target`/
@@ -453,14 +430,6 @@ impl CpcLspBackend {
     /// `executeCommand` handlers).
     fn load_document(&self, uri: &Url) -> Option<Document> {
         load_document_from(&self.documents, uri)
-    }
-
-    /// Shared by both cross-file fallbacks: look up `word` (case-sensitively,
-    /// since basm labels are case-sensitive by default - see
-    /// `AssemblyAnalyzer::find_definition_in`'s own doc comment) in the file
-    /// at `path`, using the already-open in-memory document if there is one.
-    fn find_definition_at_path(&self, path: &std::path::Path, word: &str) -> Option<Location> {
-        find_definition_at_path_with(&self.documents, &self.asm_analyzer, path, word)
     }
 
     /// Workspace-wide rename of a `Global` basm label: unlike
@@ -1167,9 +1136,13 @@ fn load_document_from(documents: &DashMap<Url, Document>, uri: &Url) -> Option<D
     Some(Document::new(uri.clone(), text, disk_file_version(&path)))
 }
 
-/// `CpcLspBackend::find_definition_at_path`'s logic, `documents`/
-/// `asm_analyzer` taken explicitly - see `load_document_from`'s doc comment
-/// for why.
+/// Look up `word` (case-sensitively, since basm labels are case-sensitive by
+/// default - see `AssemblyAnalyzer::find_definition_in`'s own doc comment)
+/// in the file at `path`, using the already-open in-memory document if
+/// there is one. `documents`/`asm_analyzer` taken explicitly rather than
+/// `&self` - see `load_document_from`'s doc comment for why (this runs
+/// inside `goto_definition`'s `spawn_blocking` closure, and inside
+/// `find_definition_via_workspace_scan`'s own parallel scan).
 fn find_definition_at_path_with(
     documents: &DashMap<Url, Document>,
     asm_analyzer: &AssemblyAnalyzer,

@@ -352,14 +352,48 @@ where T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingEleme
 
 /// The scope in `scopes` (as computed by `global_label_scopes`) containing
 /// `line`, if any.
+///
+/// Binary search, not a linear scan: `global_label_scopes` builds `scopes`
+/// as a single forward pass in increasing line order, each range running
+/// from one global label's own line up to the next one's (or to
+/// `u32::MAX` for the last) - so the list is always sorted by `start` and
+/// every entry but the first is contiguous with the one before it (no
+/// gaps, no overlaps). That makes "the scope containing `line`" a
+/// `partition_point` away: the last entry whose `start <= line`, if any,
+/// is the only one that could contain it.
+///
+/// Both hot-path callers - `compute_label_facts` (`label_index.rs`, once
+/// per *bare-local* occurrence via `qualify_local_at_line`, which only
+/// calls this for a word starting with `.`) and `push_pop_highlights`
+/// (`pushpop.rs`, once per `PUSH`/`POP` statement) - call this once per
+/// token, not once per file, so the old O(scopes) linear scan made both
+/// O(qualifying-tokens x scopes) in the worst case. Measured on a real
+/// 3755-line file (birthtro's `PlayerAkg.asm`, ~210 label-ish definitions):
+/// `compute_label_facts`'s own total cost (parse cache warm) was ~2.47ms
+/// before this change and ~2.49ms after - within noise, since this file's
+/// own scope count and bare-local occurrence count both stay small enough
+/// that the linear scan was never actually the bottleneck here (string
+/// allocation/hashing in `compute_label_facts`'s own occurrence-bucketing
+/// loop dominates instead - a separate, not-yet-addressed cost). Kept
+/// anyway: it is strictly better (no measured downside, and the same
+/// O(scopes) scan would show up on a file with far more local-label-heavy
+/// routines, where `qualifying-tokens` and `scopes` both grow), just not
+/// the bottleneck on this particular file.
 pub(super) fn scope_containing(
     scopes: &[(String, std::ops::Range<u32>)],
     line: u32
 ) -> Option<(String, std::ops::Range<u32>)> {
-    scopes
-        .iter()
-        .find(|(_, range)| range.start <= line && line < range.end)
-        .cloned()
+    let idx = scopes.partition_point(|(_, range)| range.start <= line);
+    if idx == 0 {
+        return None;
+    }
+    let (name, range) = &scopes[idx - 1];
+    if line < range.end {
+        Some((name.clone(), range.clone()))
+    }
+    else {
+        None
+    }
 }
 
 /// Qualify a *bare* local label (`raw`, e.g. `.foo`) against whichever
