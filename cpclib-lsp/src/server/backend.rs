@@ -85,7 +85,14 @@ pub struct CpcLspBackend {
     /// - unlike `embedded_bndbuild_index`, this is a pure perf cache for a
     /// *currently open* document, not workspace knowledge that should
     /// outlive the tab.
-    last_semantic_tokens: Arc<DashMap<Url, Arc<Vec<SemanticToken>>>>
+    last_semantic_tokens: Arc<DashMap<Url, Arc<Vec<SemanticToken>>>>,
+    /// Same idea as `last_semantic_tokens`, for `document_symbol` (the
+    /// outline/breadcrumbs/Sticky Scroll request) - see that field's own
+    /// doc comment and `document_symbol`'s for why a stale parse can't be
+    /// tolerated here either (a `DocumentSymbol` carries an exact `Range`)
+    /// and why supersede-detection is used instead. Evicted on `did_close`
+    /// for the same reason `last_semantic_tokens` is.
+    last_document_symbols: Arc<DashMap<Url, Arc<Vec<DocumentSymbol>>>>
 }
 
 impl CpcLspBackend {
@@ -102,7 +109,8 @@ impl CpcLspBackend {
             build_error_diagnostics: Arc::new(DashMap::new()),
             embedded_bndbuild_index: Arc::new(DashMap::new()),
             active_document: RwLock::new(None),
-            last_semantic_tokens: Arc::new(DashMap::new())
+            last_semantic_tokens: Arc::new(DashMap::new()),
+            last_document_symbols: Arc::new(DashMap::new())
         }
     }
 
@@ -1757,6 +1765,7 @@ impl LanguageServer for CpcLspBackend {
         self.build_analyzer.evict(&params.text_document.uri);
         self.csl_analyzer.evict(&params.text_document.uri);
         self.last_semantic_tokens.remove(&params.text_document.uri);
+        self.last_document_symbols.remove(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -2432,20 +2441,74 @@ impl LanguageServer for CpcLspBackend {
 
         tracing::debug!("Document symbol request for {}", uri);
 
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
+        let Some(document) = self.documents.get(&uri).map(|d| d.value().clone())
+        else {
+            return Ok(None);
+        };
+        let version = document.version;
 
-            let symbols = dispatch_by_doc_type(
-                document,
-                Vec::new(),
-                |doc| self.asm_analyzer.document_symbols(doc),
-                |doc| self.build_analyzer.document_symbols(doc),
-                |doc| self.basic_analyzer.document_symbols(doc)
-            );
+        // Same supersede-detection as `semantic_tokens_full` (see that
+        // handler's own doc comment for the full reasoning): a
+        // `DocumentSymbol`'s `range`/`selectionRange` are exact positions,
+        // so `ParseFreshness::ToleratesStale` (completion's fix for this
+        // identical root cause) can't apply here either - re-serving the
+        // last real answer for an already-superseded version is the only
+        // safe way to skip the recomputation.
+        if self.pending_versions.get(&uri).is_some_and(|v| *v != version)
+            && let Some(cached) = self.last_document_symbols.get(&uri)
+        {
+            return Ok(Some(DocumentSymbolResponse::Nested(
+                (*cached.value()).to_vec()
+            )));
+        }
 
-            if !symbols.is_empty() {
-                return Ok(Some(DocumentSymbolResponse::Nested(symbols)));
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let pending_versions = Arc::clone(&self.pending_versions);
+        let last_document_symbols = Arc::clone(&self.last_document_symbols);
+        let cache_key = uri.clone();
+
+        // Same class of bug `semantic_tokens_full` was fixed for: this used
+        // to compute the outline directly, inline, on whichever async
+        // worker thread picked up the request - real work (a full re-parse
+        // plus an AST walk) with no yield point. VS Code requests this for
+        // every newly-opened/focused document and again on essentially
+        // every edit (Sticky Scroll/breadcrumbs track the cursor live), so
+        // moving it off the async pool matters here the same way it did for
+        // semantic tokens.
+        //
+        // Measured on a real 3755-line file (birthtro's `PlayerAkg.asm`,
+        // release build): ~126ms/call when `document.version` bumps on
+        // every call, versus ~3.8ms/call once already parsed at that exact
+        // version - the same ~97% "wasted re-parse" shape
+        // `semantic_tokens_full` measured, from the same cause
+        // (`parse_document`'s exact-version cache keying against a version
+        // that changes on every keystroke).
+        let data = match tokio::task::spawn_blocking(move || {
+            if pending_versions.get(&cache_key).is_some_and(|v| *v != version)
+                && let Some(cached) = last_document_symbols.get(&cache_key)
+            {
+                return (*cached.value()).to_vec();
             }
+            let data = dispatch_by_doc_type(
+                &document,
+                Vec::new(),
+                |doc| asm_analyzer.document_symbols(doc),
+                |doc| build_analyzer.document_symbols(doc),
+                |doc| basic_analyzer.document_symbols(doc)
+            );
+            last_document_symbols.insert(cache_key, Arc::new(data.clone()));
+            data
+        })
+        .await
+        {
+            Ok(data) => data,
+            Err(_join_error) => return Ok(None)
+        };
+
+        if !data.is_empty() {
+            return Ok(Some(DocumentSymbolResponse::Nested(data)));
         }
 
         Ok(None)
@@ -5603,6 +5666,170 @@ mod semantic_tokens_supersede_tests {
             })
             .await;
         assert!(backend.last_semantic_tokens.get(&uri).is_none());
+    }
+}
+
+#[cfg(test)]
+mod document_symbol_supersede_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// Same shape as `semantic_tokens_supersede_tests`'
+    /// `a_settled_edit_with_no_pending_request_still_gets_a_fresh_answer`:
+    /// a settled edit (no request superseded it) must still get a real,
+    /// fresh outline reflecting the new text.
+    #[tokio::test]
+    async fn a_settled_edit_with_no_pending_request_still_gets_a_fresh_answer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let before = backend
+            .document_symbol(DocumentSymbolParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert!(before.is_some());
+
+        backend
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version: 2
+                },
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: "second_label_with_a_much_longer_name:\n    ret\n".to_string()
+                }]
+            })
+            .await;
+
+        let after = backend
+            .document_symbol(DocumentSymbolParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        match (before, after) {
+            (
+                Some(DocumentSymbolResponse::Nested(before)),
+                Some(DocumentSymbolResponse::Nested(after))
+            ) => {
+                assert_ne!(
+                    before, after,
+                    "expected the second, settled request to reflect the new, longer label \
+                     name rather than replaying the first response"
+                );
+            },
+            other => panic!("expected document symbols both times, got {other:?}")
+        }
+    }
+
+    /// Same shape as `semantic_tokens_supersede_tests`'
+    /// `a_superseded_request_is_served_from_the_cached_fallback`: an
+    /// in-flight-superseded request is served the last real answer instead
+    /// of paying for a recomputation whose result is already moot.
+    #[tokio::test]
+    async fn a_superseded_request_is_served_from_the_cached_fallback() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let first = backend
+            .document_symbol(DocumentSymbolParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+
+        backend.pending_versions.insert(uri.clone(), 2);
+
+        let stale_request = backend
+            .document_symbol(DocumentSymbolParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+
+        match (first, stale_request) {
+            (
+                Some(DocumentSymbolResponse::Nested(first)),
+                Some(DocumentSymbolResponse::Nested(stale))
+            ) => {
+                assert_eq!(
+                    first, stale,
+                    "expected the superseded request to be served the cached, \
+                     previously-computed answer verbatim: {stale:?}"
+                );
+            },
+            other => panic!("expected document symbols both times, got {other:?}")
+        }
+    }
+
+    /// `did_close` must evict `last_document_symbols` for that URI.
+    #[tokio::test]
+    async fn did_close_evicts_the_cached_document_symbols() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "first_label:\n    ret\n".to_string()
+                }
+            })
+            .await;
+        let _ = backend
+            .document_symbol(DocumentSymbolParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await
+            .unwrap();
+        assert!(backend.last_document_symbols.get(&uri).is_some());
+
+        backend
+            .did_close(DidCloseTextDocumentParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await;
+        assert!(backend.last_document_symbols.get(&uri).is_none());
     }
 }
 
