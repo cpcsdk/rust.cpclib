@@ -121,6 +121,19 @@ fn normalize(word: &str, case_sensitive: bool) -> String {
     }
 }
 
+/// Same case-folding as `normalize`, but for a caller that already owns
+/// `word` outright (nothing else keeps its own reference to it) and can
+/// fold it in place instead of allocating a second copy just to hold the
+/// folded result - `make_ascii_uppercase` mutates rather than allocating,
+/// which is safe here since every basm identifier this indexes is ASCII
+/// (case-folding never changes an ASCII string's byte length).
+fn normalize_owned(mut word: String, case_sensitive: bool) -> String {
+    if !case_sensitive {
+        word.make_ascii_uppercase();
+    }
+    word
+}
+
 impl AssemblyAnalyzer {
     /// Build `document`'s `FileLabelFacts` from scratch. Parses once and
     /// computes `global_label_scopes` once, reused for both `definitions`
@@ -163,11 +176,17 @@ impl AssemblyAnalyzer {
                 // canonical form is computed the same way everywhere - a
                 // global word, or a local with no enclosing scope, is
                 // returned unchanged.
-                let canonical = scopes
+                // One allocation, not two: `qualify_local_at_line` already
+                // returns an owned `String` (it has to - the qualified form
+                // doesn't exist in the source text to borrow from), so
+                // there is no separately-kept "canonical" value here worth
+                // allocating again just to case-fold - fold this same
+                // owned `String` in place instead (`normalize_owned`).
+                let owned = scopes
                     .as_ref()
                     .and_then(|scopes| super::token::qualify_local_at_line(scopes, line_idx, word))
                     .unwrap_or_else(|| word.to_string());
-                let key = normalize(&canonical, case_sensitive);
+                let key = normalize_owned(owned, case_sensitive);
                 occurrences.entry(key).or_default().push(Range {
                     start: Position {
                         line: line_idx,
