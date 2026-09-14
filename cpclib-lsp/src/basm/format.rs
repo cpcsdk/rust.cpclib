@@ -92,6 +92,51 @@ pub(super) fn strip_asm_comment(line: &str) -> &str {
     line
 }
 
+/// Line indices entirely covered by a `/* ... */` block comment that spans
+/// more than one physical line — every line strictly inside it, plus the
+/// line it closes on (any code following `*/` there is, like
+/// `strip_asm_comment`'s own single-line trade-off above, simply not
+/// scanned — a rarer under-scan traded for the much more common over-scan
+/// of misreading comment content as code). The *opening* line is NOT
+/// included — `strip_asm_comment` already truncates it correctly on its
+/// own. Callers that skip full lines by index (`scan_numeral_literals`,
+/// `symbol_spans`) union this into their existing `skip_lines` set so a
+/// multi-line block comment stops leaking numeral/symbol color swatches,
+/// the same way `semantic_tokens.rs`'s own `in_block_comment` already
+/// handles the identical problem for syntax highlighting.
+pub(super) fn block_comment_lines(text: &str) -> std::collections::HashSet<usize> {
+    let mut lines = std::collections::HashSet::new();
+    let mut in_block = false;
+    for (idx, line) in text.lines().enumerate() {
+        if in_block {
+            lines.insert(idx);
+            if line.contains("*/") {
+                in_block = false;
+            }
+            continue;
+        }
+
+        let bytes = line.as_bytes();
+        let mut in_str = false;
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'"' => in_str = !in_str,
+                b';' if !in_str => break,
+                b'/' if !in_str && matches!(bytes.get(i + 1), Some(b'*')) => {
+                    if !line[i..].contains("*/") {
+                        in_block = true;
+                    }
+                    break;
+                },
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+    lines
+}
+
 /// Split an ASM line at `:` statement separators (string-literal aware).
 /// A `:` that immediately follows a bare identifier (label colon) is NOT split.
 /// Split `line` at top-level (non-string) single `:` characters, one

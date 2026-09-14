@@ -76,7 +76,8 @@ impl AssemblyAnalyzer {
         // re-extract the same blocks from the same text, three times total
         // per request.
         let blocks = extract_locomotive_blocks(&text);
-        let skip_lines = skip_lines_for(&blocks);
+        let mut skip_lines = skip_lines_for(&blocks);
+        skip_lines.extend(super::format::block_comment_lines(&text));
 
         let mut colors: Vec<ColorInformation> = asm_spans(document, &skip_lines)
             .iter()
@@ -144,7 +145,8 @@ impl AssemblyAnalyzer {
         }
 
         let target = from_lsp_color(color);
-        let skip_lines = skip_lines_for(&blocks);
+        let mut skip_lines = skip_lines_for(&blocks);
+        skip_lines.extend(super::format::block_comment_lines(&text));
         let spans = asm_spans(document, &skip_lines);
         // A range with no matching numeral span is a symbol-reference
         // swatch (e.g. `GA_WHITE`) — those are read-only, no presentations.
@@ -618,6 +620,40 @@ mod tests {
     #[test]
     fn byte_inside_a_comment_is_not_colorized() {
         let colors = colors_for("LD A, 1 ; 0x54 is not code\n");
+        assert!(colors.is_empty(), "{colors:?}");
+    }
+
+    #[test]
+    fn byte_on_a_line_fully_inside_a_multiline_block_comment_is_not_colorized() {
+        // The line with the byte has no `;` or `/*` of its own - it's only
+        // a comment because an unterminated `/*` opened on an earlier line.
+        let colors = colors_for("/*\nDB 0x54\n*/\n");
+        assert!(colors.is_empty(), "{colors:?}");
+    }
+
+    #[test]
+    fn byte_after_a_block_comment_closes_on_its_own_line_is_still_colorized() {
+        let colors = colors_for("/*\ncomment\n*/\nDB 0x54\n");
+        assert_eq!(colors.len(), 1, "{colors:?}");
+    }
+
+    #[test]
+    fn byte_on_the_closing_line_of_a_block_comment_is_not_colorized() {
+        // Conservative trade-off shared with `strip_asm_comment`'s own
+        // single-line case: code following `*/` on the same line the
+        // comment closes on is not scanned either.
+        let colors = colors_for("/*\ncomment\n*/ DB 0x54\n");
+        assert!(colors.is_empty(), "{colors:?}");
+    }
+
+    #[test]
+    fn single_line_block_comment_is_unaffected_by_the_new_multiline_tracking() {
+        // A `/* ... */` that both opens and closes on this line is already
+        // handled by `strip_asm_comment` (which truncates from the opening
+        // `/*` onward, so code after it on the same line is not scanned
+        // either - a pre-existing, separately-documented trade-off). The
+        // new multi-line tracking must not change this line's outcome.
+        let colors = colors_for("/* note */ DB 0x54\n");
         assert!(colors.is_empty(), "{colors:?}");
     }
 
