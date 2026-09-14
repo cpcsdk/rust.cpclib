@@ -2,7 +2,7 @@ use std::process;
 
 use clap::Parser;
 use cpclib_basmopt::cli::Cli;
-use cpclib_basmopt::{Suggestion, analyze_file, apply_fixes};
+use cpclib_basmopt::{Suggestion, analyze_file, apply_fixes_in_place};
 
 fn print_suggestion(source: &camino::Utf8Path, s: &Suggestion) {
     let rule = s.rule_name.as_deref().unwrap_or("<unnamed>");
@@ -22,6 +22,10 @@ fn print_suggestion(source: &camino::Utf8Path, s: &Suggestion) {
 fn run() -> i32 {
     let cli = Cli::parse();
 
+    if cli.in_place {
+        return run_in_place(&cli);
+    }
+
     let outcome = match analyze_file(&cli.source, &cli.options()) {
         Ok(result) => result,
         Err(e) => {
@@ -30,7 +34,7 @@ fn run() -> i32 {
         }
     };
     let cpclib_basmopt::AnalyzeOutcome {
-        source,
+        source: _,
         suggestions,
         assemble_warning
     } = outcome;
@@ -42,57 +46,80 @@ fn run() -> i32 {
     }
 
     if suggestions.is_empty() {
-        if !cli.in_place {
-            println!("{}: no optimization opportunities found", cli.source);
-        }
+        println!("{}: no optimization opportunities found", cli.source);
         return 0;
     }
 
-    if cli.in_place {
-        // Only bulk-safe suggestions get applied unreviewed - see
-        // `cpclib_asmoptim::engine::PeepholeMatch::bulk_unsafe`'s own doc
-        // comment for why: an instruction whose entire output is dead is,
-        // on the CPC, plausibly deliberate timing padding, and `-i` applies
-        // every match in one shot with nobody looking at each site. The
-        // plain (non-`-i`) report above still lists them - a human reading
-        // it can judge each one individually, which is exactly what a bulk
-        // rewrite cannot do.
-        let (safe, skipped): (Vec<Suggestion>, Vec<Suggestion>) =
-            suggestions.into_iter().partition(|s| !s.bulk_unsafe);
-        let fixed = apply_fixes(&source, &safe);
-        if let Err(e) = fs_err::write(&cli.source, fixed) {
-            eprintln!("error: cannot write {}: {e}", cli.source);
+    for s in &suggestions {
+        print_suggestion(&cli.source, s);
+    }
+    println!(
+        "{} optimization opportunit{} found",
+        suggestions.len(),
+        if suggestions.len() == 1 { "y" } else { "ies" }
+    );
+    1
+}
+
+/// `-i`/`--in-place`: analyze-and-apply, up to a fixed 2 passes so a fix one
+/// pass applies that exposes a genuinely new opportunity gets caught in the
+/// same run - see `apply_fixes_in_place`'s own doc comment. Only bulk-safe
+/// suggestions ever get applied unreviewed - see
+/// `cpclib_asmoptim::engine::PeepholeMatch::bulk_unsafe`'s own doc comment
+/// for why: an instruction whose entire output is dead is, on the CPC,
+/// plausibly deliberate timing padding, and `-i` applies every match with
+/// nobody looking at each site. The plain (non-`-i`) report still lists
+/// them - a human reading it can judge each one individually, which is
+/// exactly what a bulk rewrite cannot do.
+fn run_in_place(cli: &Cli) -> i32 {
+    let outcome = match apply_fixes_in_place(&cli.source, &cli.options()) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("error: {e}");
             return 2;
         }
-        println!(
-            "{}: applied {} fix{}",
-            cli.source,
-            safe.len(),
-            if safe.len() == 1 { "" } else { "es" }
+    };
+    if let Some(warning) = &outcome.assemble_warning {
+        eprintln!(
+            "warning: {}: could not fully assemble, address-aware suggestions skipped: {warning}",
+            cli.source
         );
-        if !skipped.is_empty() {
-            println!(
-                "{}: {} suggestion{} skipped (needs individual review - rerun without -i to see \
-                 {})",
-                cli.source,
-                skipped.len(),
-                if skipped.len() == 1 { "" } else { "s" },
-                if skipped.len() == 1 { "it" } else { "them" }
-            );
-        }
-        0
+    }
+
+    // Silent on nothing found, matching this flag's own established
+    // behavior (the plain report path is where "nothing found" gets
+    // announced) - useful for scripting `-i` over many files unattended.
+    if outcome.total_applied == 0 && outcome.remaining_skipped == 0 {
+        return 0;
+    }
+
+    if let Err(e) = fs_err::write(&cli.source, &outcome.final_source) {
+        eprintln!("error: cannot write {}: {e}", cli.source);
+        return 2;
+    }
+    let passes = if outcome.passes_run > 1 {
+        format!(" across {} passes", outcome.passes_run)
     }
     else {
-        for s in &suggestions {
-            print_suggestion(&cli.source, s);
-        }
+        String::new()
+    };
+    println!(
+        "{}: applied {} fix{}{passes}",
+        cli.source,
+        outcome.total_applied,
+        if outcome.total_applied == 1 { "" } else { "es" }
+    );
+    if outcome.remaining_skipped > 0 {
         println!(
-            "{} optimization opportunit{} found",
-            suggestions.len(),
-            if suggestions.len() == 1 { "y" } else { "ies" }
+            "{}: {} suggestion{} skipped (needs individual review - rerun without -i to see \
+             {})",
+            cli.source,
+            outcome.remaining_skipped,
+            if outcome.remaining_skipped == 1 { "" } else { "s" },
+            if outcome.remaining_skipped == 1 { "it" } else { "them" }
         );
-        1
     }
+    0
 }
 
 fn main() {

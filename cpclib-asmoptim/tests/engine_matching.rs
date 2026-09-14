@@ -421,3 +421,122 @@ replacement:
 ";
     assert_eq!(matches_for(" srl a\n srl a\n srl a\n ret\n", renderable).len(), 1);
 }
+
+/// Two rules that both match `cp 0`: one a genuine no-op rewrite (0 bytes/
+/// cycles saved), the other the real upstream `cp02ora` (`or a` - fewer
+/// bytes and cycles). The engine must pick the objectively better one
+/// regardless of which is listed first in the rule text - see
+/// `cpclib-asmoptim::match_cost`'s own module doc comment for the gap this
+/// closes (the engine used to just take whichever rule was listed first).
+const WORSE_NOOP_FIRST: &str = "\
+pattern: A no-op rewrite of cp 0
+name: worse-noop-cp
+0: cp 0
+replacement:
+0: cp 0
+
+pattern: Replace cp 0 with or a
+name: cp02ora
+0: cp 0
+replacement:
+0: or a
+";
+
+const BETTER_RULE_FIRST: &str = "\
+pattern: Replace cp 0 with or a
+name: cp02ora
+0: cp 0
+replacement:
+0: or a
+
+pattern: A no-op rewrite of cp 0
+name: worse-noop-cp
+0: cp 0
+replacement:
+0: cp 0
+";
+
+#[test]
+fn the_objectively_better_rule_wins_when_listed_after_a_worse_one() {
+    let found = matches_for(" cp 0\n ret\n", WORSE_NOOP_FIRST);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        found[0].rule_name.as_deref(),
+        Some("cp02ora"),
+        "the rule that actually saves bytes/cycles must win, not whichever \
+         came first in the file: {found:?}"
+    );
+}
+
+#[test]
+fn the_same_rule_wins_regardless_of_which_order_the_file_lists_them_in() {
+    // Same two rules, reverse file order - proves the winner is chosen on
+    // merit, not just "the one after the worst one so far".
+    let found = matches_for(" cp 0\n ret\n", BETTER_RULE_FIRST);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule_name.as_deref(), Some("cp02ora"));
+}
+
+#[test]
+fn matches_never_overlap_even_when_several_candidate_rules_compete() {
+    // Every instruction here is independently matchable by LD_SELF - a real
+    // stress case for "does ranking still respect the non-overlap guarantee
+    // every consumer (Fix All, basmopt's apply_fixes) relies on without
+    // re-checking it themselves".
+    let found = matches_for(
+        " ld a, a\n ld b, b\n ld c, c\n ld d, d\n ret\n",
+        LD_SELF
+    );
+    assert_eq!(found.len(), 4, "{found:?}");
+    let mut last_end = 0usize;
+    for m in &found {
+        assert!(
+            m.start >= last_end,
+            "match {m:?} overlaps the previous one (last_end={last_end})"
+        );
+        last_end = m.end;
+    }
+}
+
+#[test]
+fn a_fake_instruction_in_the_replacement_does_not_break_ranking() {
+    // `ld hl, de` is a real *fake* instruction in this corpus - no
+    // `cpclib_z80flow::cost::opcode_duration` table entry, so its cycle cost
+    // is `Unknown` for the purposes of `MatchCost` (it still assembles fine,
+    // so bytes-saved stays known). The match must still be found and ranked
+    // without panicking - the `Unknown` tier just falls through to the next
+    // one rather than deciding anything.
+    let fake_instruction_replacement = "\
+pattern: Replace ld h,d : ld l,e with ld hl,de
+name: hl-de-fake
+0: ld h,d
+1: ld l,e
+replacement:
+0: ld hl, de
+";
+    let found = matches_for(" ld h,d\n ld l,e\n ret\n", fake_instruction_replacement);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule_name.as_deref(), Some("hl-de-fake"));
+}
+
+#[test]
+fn a_bulk_unsafe_rule_still_reports_bulk_unsafe_after_winning_the_ranking() {
+    // A dead-output deletion (empty replacement + a liveness constraint -
+    // `Rule::is_pure_dead_output_deletion`) that is also the *only* rule
+    // matching this shape, so it necessarily wins the new best-of-candidates
+    // ranking. `PeepholeMatch::bulk_unsafe` must still come out `true` -
+    // winning the ranking is orthogonal to whether a bulk-apply flow
+    // (Fix All, `basmopt --in-place`) may touch it unreviewed.
+    let dead_output_delete = "\
+pattern: Remove unused ld ?reg, ?any
+name: unused-ld-any
+0: ld ?reg,?any
+replacement:
+constraints:
+regsNotUsedAfter(0,?reg)
+";
+    let found = matches_for(" ld a, 1\n ld a, 2\n ret\n", dead_output_delete);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule_name.as_deref(), Some("unused-ld-any"));
+    assert!(found[0].bulk_unsafe, "{found:?}");
+}

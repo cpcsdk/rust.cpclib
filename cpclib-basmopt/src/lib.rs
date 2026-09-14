@@ -167,7 +167,21 @@ pub fn analyze_file(path: &Utf8Path, options: &Options) -> Result<AnalyzeOutcome
             source
         }
     })?;
+    analyze_source(source, path, options)
+}
 
+/// [`analyze_file`]'s real work, taking the source text directly instead of
+/// reading it - what [`apply_fixes_in_place`]'s multi-pass loop needs, since
+/// a later pass must analyze the *rewritten* in-memory text, not whatever is
+/// still on disk. `path` is still needed (not just for error messages): it
+/// anchors `INCLUDE` resolution and `assemble_dry_run`'s per-token address
+/// recording to a real location on every pass, even though only the first
+/// pass's text came from that location.
+fn analyze_source(
+    source: String,
+    path: &Utf8Path,
+    options: &Options
+) -> Result<AnalyzeOutcome, BasmOptError> {
     let mut parser_options = ParserOptions::default();
     if let Ok(cwd) = std::env::current_dir()
         && let Ok(cwd) = Utf8PathBuf::from_path_buf(cwd)
@@ -341,5 +355,82 @@ pub fn apply_fixes(source: &str, suggestions: &[Suggestion]) -> String {
         out.replace_range(edit.range.clone(), &edit.text);
     }
     out
+}
+
+/// [`apply_fixes_in_place`]'s result.
+#[derive(Debug, Clone)]
+pub struct MultiPassOutcome {
+    /// The rewritten source, after every pass that found something to fix.
+    pub final_source: String,
+    /// How many passes actually ran a real analysis - `1` in the common
+    /// case (nothing left a second pass anything new to do), up to
+    /// [`apply_fixes_in_place`]'s fixed cap.
+    pub passes_run: usize,
+    /// Bulk-safe suggestions applied, summed across every pass.
+    pub total_applied: usize,
+    /// Bulk-unsafe suggestions still standing after the last pass run - not
+    /// applied, and not going to be by another pass either.
+    pub remaining_skipped: usize,
+    /// [`AnalyzeOutcome::assemble_warning`] from the *first* pass only - an
+    /// `INCLUDE` this run can't resolve won't resolve itself on a later pass
+    /// over the same text, so there's nothing more later passes could add.
+    pub assemble_warning: Option<String>
+}
+
+/// Repeatedly analyze-and-apply `path`'s bulk-safe suggestions, up to a
+/// fixed 2 passes (mirrors upstream `mdlz80optimizer`'s own default
+/// `nPasses`) - so a fix pass 1 applies that exposes a genuinely new
+/// opportunity (e.g. a dead load only becomes provably dead once an earlier
+/// instruction reading it is itself removed) gets caught within the same
+/// `--in-place` run, rather than needing the user to notice and re-run.
+///
+/// Stops early once a pass finds nothing bulk-safe to apply - the common
+/// single-pass case costs exactly what it did before this existed. Each
+/// pass re-analyzes the *rewritten* in-memory text (`analyze_source`), never
+/// re-reading the file - the file itself is only written once, after the
+/// loop ends.
+pub fn apply_fixes_in_place(
+    path: &Utf8Path,
+    options: &Options
+) -> Result<MultiPassOutcome, BasmOptError> {
+    const MAX_PASSES: usize = 2;
+
+    let mut source = fs_err::read_to_string(path).map_err(|source| {
+        BasmOptError::Io {
+            path: path.to_owned(),
+            source
+        }
+    })?;
+    let mut passes_run = 0;
+    let mut total_applied = 0;
+    let mut remaining_skipped = 0;
+    let mut assemble_warning = None;
+
+    for pass in 0..MAX_PASSES {
+        let outcome = analyze_source(source, path, options)?;
+        passes_run += 1;
+        if pass == 0 {
+            assemble_warning = outcome.assemble_warning;
+        }
+
+        let (safe, skipped): (Vec<Suggestion>, Vec<Suggestion>) =
+            outcome.suggestions.into_iter().partition(|s| !s.bulk_unsafe);
+        remaining_skipped = skipped.len();
+
+        if safe.is_empty() {
+            source = outcome.source;
+            break;
+        }
+        total_applied += safe.len();
+        source = apply_fixes(&outcome.source, &safe);
+    }
+
+    Ok(MultiPassOutcome {
+        final_source: source,
+        passes_run,
+        total_applied,
+        remaining_skipped,
+        assemble_warning
+    })
 }
 

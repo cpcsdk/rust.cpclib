@@ -3,7 +3,10 @@
 //! future `cpclib-bndbuild` runner do, and check the result.
 
 use camino::Utf8PathBuf;
-use cpclib_basmopt::{BasmOptError, OptimizationGoal, Options, Suggestion, analyze_file, apply_fixes};
+use cpclib_basmopt::{
+    BasmOptError, OptimizationGoal, Options, Suggestion, analyze_file, apply_fixes,
+    apply_fixes_in_place
+};
 
 fn write(dir: &camino_tempfile::Utf8TempDir, name: &str, content: &str) -> Utf8PathBuf {
     let path = dir.path().join(name);
@@ -439,4 +442,77 @@ fn a_deletion_on_a_shared_line_takes_its_separator() {
     assert!(!fixed.contains("ld b, b"), "the ld should be gone:\n{fixed}");
     cpclib_asm::parser::parse_z80_str(&fixed)
         .unwrap_or_else(|e| panic!("fixed source no longer parses: {e}\n{fixed}"));
+}
+
+/// A pass-2-only opportunity: `r2-collapse-ld-a` only matches `ld a,1`
+/// immediately followed by `ld a,2`, with nothing between them. In the
+/// original source a `nop` sits in between, so pass 1 can only fire
+/// `r1-remove-nop` - but that deletion makes the two `ld a` instructions
+/// adjacent, which is exactly the shape `r2-collapse-ld-a` needs. This is
+/// `apply_fixes_in_place`'s whole reason to exist: a single `analyze_file` +
+/// `apply_fixes` call (one pass) cannot find `r2-collapse-ld-a` at all, since
+/// it genuinely does not match the original text.
+#[test]
+fn a_second_pass_catches_an_opportunity_the_first_pass_exposed() {
+    let dir = camino_tempfile::tempdir().unwrap();
+    let source_path = write(
+        &dir,
+        "test.asm",
+        "start:\n    ld a, 1\n    nop\n    ld a, 2\n    ret\n"
+    );
+    let rules_path = write(
+        &dir,
+        "extra.txt",
+        "pattern: Remove standalone nop\n\
+         name: r1-remove-nop\n\
+         0: nop\n\
+         replacement:\n\
+         \n\
+         pattern: Collapse redundant ld a\n\
+         name: r2-collapse-ld-a\n\
+         0: ld a,1\n\
+         1: ld a,2\n\
+         replacement:\n\
+         1: ld a,2\n"
+    );
+    let options = Options {
+        no_builtin: true,
+        extra_rule_files: vec![rules_path],
+        ..Options::default()
+    };
+
+    // A single pass finds and applies only r1 - r2 genuinely does not match
+    // the original source (the nop is still in the way).
+    let (source, first_pass_suggestions) = {
+        let outcome = analyze_file(&source_path, &options).unwrap();
+        (outcome.source, outcome.suggestions)
+    };
+    assert_eq!(
+        first_pass_suggestions
+            .iter()
+            .map(|s| s.rule_name.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("r1-remove-nop")],
+        "{first_pass_suggestions:?}"
+    );
+    let single_pass_result = apply_fixes(&source, &first_pass_suggestions);
+    assert!(
+        single_pass_result.contains("ld a, 1"),
+        "a single pass must not have collapsed the ld a's yet:\n{single_pass_result}"
+    );
+
+    // The multi-pass entry point catches both, within its 2-pass cap.
+    let outcome = apply_fixes_in_place(&source_path, &options).unwrap();
+    assert_eq!(outcome.passes_run, 2, "{outcome:?}");
+    assert_eq!(outcome.total_applied, 2, "{outcome:?}");
+    assert_eq!(outcome.remaining_skipped, 0, "{outcome:?}");
+    assert!(!outcome.final_source.contains("nop"), "{}", outcome.final_source);
+    assert!(
+        !outcome.final_source.contains("ld a, 1"),
+        "the second pass should have collapsed this: {}",
+        outcome.final_source
+    );
+    assert!(outcome.final_source.contains("ld a, 2"), "{}", outcome.final_source);
+    cpclib_asm::parser::parse_z80_str(&outcome.final_source)
+        .unwrap_or_else(|e| panic!("final source no longer parses: {e}\n{}", outcome.final_source));
 }
