@@ -4945,6 +4945,24 @@ impl Env {
                         }
                     },
 
+                    ExprResult::Range { start, end, inclusive, step } => {
+                        // Walked directly, never materialized into a `Vec` -
+                        // same reasoning as `output_expr_result_masked`'s own
+                        // `Range` arm.
+                        let len = ExprResult::range_len(start, end, inclusive, step);
+                        for i in 0..len {
+                            let counter_value =
+                                ExprResult::Value(ExprResult::range_nth_value(start, step, i));
+                            self.inner_visit_repeat(
+                                Some(counter_name),
+                                Some(counter_value),
+                                i as _,
+                                code,
+                                span
+                            )?;
+                        }
+                    },
+
                     _ => {
                         let kind = values.r#type();
                         return Err(Box::new(AssemblerError::AssemblingError {
@@ -6133,6 +6151,18 @@ impl Env {
                     for c in row.list_content() {
                         self.output_expr_result_masked(c, delta, mask)?;
                     }
+                }
+                Ok(())
+            },
+            ExprResult::Range { start, end, inclusive, step } => {
+                // Walked directly, never materialized into a `Vec` - the
+                // whole point of `Range` being a genuine runtime type (see
+                // its own doc comment) is that `db 0..65536` doesn't have to
+                // allocate a 65536-element `List` first.
+                let len = ExprResult::range_len(*start, *end, *inclusive, *step);
+                for n in 0..len {
+                    let value = ExprResult::Value(ExprResult::range_nth_value(*start, *step, n));
+                    self.output_expr_result_masked(&value, delta, mask)?;
                 }
                 Ok(())
             }

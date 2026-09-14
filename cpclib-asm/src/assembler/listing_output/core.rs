@@ -1371,7 +1371,10 @@ impl ListingOutputTrigger {
                 width,
                 height,
                 content: _
-            } => Some((*width * *height) as _)
+            } => Some((*width * *height) as _),
+            ExprResult::Range { start, end, inclusive, step } => {
+                Some(ExprResult::range_len(*start, *end, *inclusive, *step) as _)
+            }
         }
     }
 

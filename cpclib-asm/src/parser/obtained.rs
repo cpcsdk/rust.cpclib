@@ -66,6 +66,19 @@ pub enum LocatedExpr {
 
     List(Vec<LocatedExpr>, Z80Span),
 
+    /// `a..b`/`a..=b` - see [`cpclib_tokens::Expr::Range`]'s own doc comment
+    /// for the full rationale (including why it evaluates to
+    /// `ExprResult::Range`, not `List`, and the naming note about the
+    /// unrelated `Token::Range` directive). The `Option` is a step, always
+    /// `None` from parsing - kept for structural symmetry only.
+    Range(
+        Box<LocatedExpr>,
+        Box<LocatedExpr>,
+        bool,
+        Option<Box<LocatedExpr>>,
+        Z80Span
+    ),
+
     PrefixedLabel(LabelPrefix, Z80Span, Z80Span),
 
     Paren(Box<LocatedExpr>, Z80Span),
@@ -135,6 +148,14 @@ impl LocatedExpr {
             LocatedExpr::Label(l) => Expr::Label(l.into()),
             LocatedExpr::List(l, _) => {
                 Expr::List(l.iter().map(|e| e.to_expr_owned()).collect_vec())
+            },
+            LocatedExpr::Range(start, end, inclusive, step, _) => {
+                Expr::Range(
+                    Box::new(start.to_expr_owned()),
+                    Box::new(end.to_expr_owned()),
+                    *inclusive,
+                    step.as_ref().map(|s| Box::new(s.to_expr_owned()))
+                )
             },
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
             LocatedExpr::Paren(p, _) => Expr::Paren(Box::new(p.to_expr_owned())),
@@ -378,6 +399,17 @@ impl ExprElement for LocatedExpr {
         matches!(self, Self::Paren(..))
     }
 
+    fn is_range(&self) -> bool {
+        matches!(self, Self::Range(..))
+    }
+
+    fn range_inclusive(&self) -> bool {
+        match self {
+            Self::Range(_, _, inclusive, ..) => *inclusive,
+            _ => unreachable!()
+        }
+    }
+
     fn is_rnd(&self) -> bool {
         matches!(self, Self::Rnd(_))
     }
@@ -405,6 +437,7 @@ impl ExprElement for LocatedExpr {
             Self::BinaryOperation(_, arg1, ..) => arg1.as_ref(),
             Self::UnaryOperation(_, arg, _) => arg.as_ref(),
             Self::Paren(p, _) => p.as_ref(),
+            Self::Range(start, ..) => start.as_ref(),
 
             _ => unreachable!()
         }
@@ -413,6 +446,7 @@ impl ExprElement for LocatedExpr {
     fn arg2(&self) -> &Self {
         match self {
             Self::BinaryOperation(_, _, arg2, _) => arg2.as_ref(),
+            Self::Range(_, end, ..) => end.as_ref(),
             _ => unreachable!()
         }
     }
@@ -475,6 +509,15 @@ impl ExprEvaluationExt for LocatedExpr {
                     .chain(false_expr.symbols_used())
                     .collect_vec()
             },
+
+            LocatedExpr::Range(start, end, _, step, _) => {
+                start
+                    .symbols_used()
+                    .into_iter()
+                    .chain(end.symbols_used())
+                    .chain(step.iter().flat_map(|s| s.symbols_used()))
+                    .collect_vec()
+            },
         }
     }
 
@@ -487,6 +530,7 @@ impl ExprEvaluationExt for LocatedExpr {
             LocatedExpr::String(..) => "string",
             LocatedExpr::Label(..) | LocatedExpr::PrefixedLabel(..) => "label",
             LocatedExpr::List(..) => "list",
+            LocatedExpr::Range(..) => "range",
             LocatedExpr::Paren(..)
             | LocatedExpr::UnaryOperation(..)
             | LocatedExpr::BinaryOperation(..)
@@ -524,7 +568,8 @@ impl MayHaveSpan for LocatedExpr {
             | LocatedExpr::BinaryOperation(_, _, _, span)
             | LocatedExpr::Ternary(_, _, _, span)
             | LocatedExpr::AnyFunction(_, _, span)
-            | LocatedExpr::Rnd(span) => span
+            | LocatedExpr::Rnd(span) => span,
+            LocatedExpr::Range(_, _, _, _, span) => span
         }
     }
 }

@@ -552,6 +552,13 @@ fn walk_expr_for_function_calls<'a>(expr: &'a LocatedExpr, out: &mut Vec<&'a Loc
                 walk_expr_for_function_calls(arg, out);
             }
         },
+        LocatedExpr::Range(start, end, _, step, _) => {
+            walk_expr_for_function_calls(start, out);
+            walk_expr_for_function_calls(end, out);
+            if let Some(step) = step {
+                walk_expr_for_function_calls(step, out);
+            }
+        },
         _ => {}
     }
 }

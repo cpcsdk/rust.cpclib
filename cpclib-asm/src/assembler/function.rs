@@ -12,8 +12,8 @@ use cpclib_tokens::{
 use either::Either;
 
 use super::list::{
-    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_format,
-    string_from_list, string_new, string_push
+    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, list_sublist_by_range,
+    range_step_by, string_format, string_from_list, string_new, string_push
 };
 use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
@@ -250,6 +250,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_position_predicate": Function::HardCoded(HardCodedFunction::ListPositionPredicate),
         "list_position_value": Function::HardCoded(HardCodedFunction::ListPositionValue),
         "list_split_by_value": Function::HardCoded(HardCodedFunction::ListSplitByValue),
+        "range_step_by": Function::HardCoded(HardCodedFunction::RangeStepBy),
 
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
@@ -349,6 +350,7 @@ pub enum HardCodedFunction {
     ListGet,
     ListSublist,
     ListLen,
+    RangeStepBy,
     ListPush,
     ListExtend,
     ListSort,
@@ -554,6 +556,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListFold => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::ListGet => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListLen => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::RangeStepBy => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListMap => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListNew => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListPositionPredicate => ExpectedNbArgs::Fixed(2),
@@ -562,7 +565,10 @@ impl HardCodedFunction {
             HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListSet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::ListSort => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::ListSublist => ExpectedNbArgs::Fixed(3),
+            // 3 args: `list_sublist(list, start, end)` (unchanged).
+            // 2 args: `list_sublist(list, a_range)` - the range used as an
+            // index selector, see `list_sublist_by_range`'s own doc comment.
+            HardCodedFunction::ListSublist => ExpectedNbArgs::Variable(&[2, 3]),
             HardCodedFunction::ListSplitByValue => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
@@ -732,28 +738,36 @@ impl HardCodedFunction {
             },
             HardCodedFunction::ListNew => Ok(list_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone())),
             HardCodedFunction::ListSet => {
-                let (result, warnings) = list_set(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref().clone())?;
+                let (result, warnings) = list_set(params[0].as_ref().materialize(), params[1].as_ref().int_value()? as _, params[2].as_ref().clone())?;
                 env.add_expression_warnings(warnings);
                 Ok(result)
             },
             HardCodedFunction::ListGet => list_get(params[0].as_ref(), params[1].as_ref().int_value()? as _),
-            HardCodedFunction::ListPush => list_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
-            HardCodedFunction::ListExtend => list_extend(params[0].as_ref().clone(), params[1].as_ref().clone()),
+            HardCodedFunction::RangeStepBy => {
+                range_step_by(params[0].as_ref(), params[1].as_ref().int_value()?)
+            },
+            HardCodedFunction::ListPush => list_push(params[0].as_ref().materialize(), params[1].as_ref().clone()),
+            HardCodedFunction::ListExtend => list_extend(params[0].as_ref().materialize(), params[1].as_ref().clone()),
             HardCodedFunction::ListLen => list_len(params[0].as_ref()),
-            HardCodedFunction::ListReverse => list_reverse(params[0].as_ref().clone()),
-            HardCodedFunction::ListFilter => list_filter(env, params[0].as_ref(), params[1].as_ref()),
-            HardCodedFunction::ListMap => list_map(env, params[0].as_ref(), params[1].as_ref()),
-            HardCodedFunction::ListFold => list_fold(env, params[0].as_ref(), params[1].as_ref(), params[2].as_ref()),
-            HardCodedFunction::ListPositionPredicate => list_position_predicate(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::ListReverse => list_reverse(params[0].as_ref().materialize()),
+            HardCodedFunction::ListFilter => list_filter(env, &params[0].as_ref().materialize(), params[1].as_ref()),
+            HardCodedFunction::ListMap => list_map(env, &params[0].as_ref().materialize(), params[1].as_ref()),
+            HardCodedFunction::ListFold => list_fold(env, &params[0].as_ref().materialize(), params[1].as_ref(), params[2].as_ref()),
+            HardCodedFunction::ListPositionPredicate => list_position_predicate(env, &params[0].as_ref().materialize(), params[1].as_ref()),
             HardCodedFunction::ListPositionValue => {
-                list_position_value(env, params[0].as_ref(), params[1].as_ref())
-            },  
+                list_position_value(env, &params[0].as_ref().materialize(), params[1].as_ref())
+            },
             
             HardCodedFunction::ListSublist => {
-                list_sublist(params[0].as_ref(), params[1].as_ref().int_value()? as _, params[2].as_ref().int_value()? as _)
+                if params.len() == 2 {
+                    list_sublist_by_range(params[0].as_ref(), params[1].as_ref())
+                }
+                else {
+                    list_sublist(params[0].as_ref(), params[1].as_ref().int_value()? as _, params[2].as_ref().int_value()? as _)
+                }
             },
             HardCodedFunction::ListSplitByValue => {
-                list_split_by_value( params[0].as_ref(), params[1].as_ref())
+                list_split_by_value(&params[0].as_ref().materialize(), params[1].as_ref())
             },
             HardCodedFunction::StringPush => string_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
             HardCodedFunction::StringFromList => string_from_list(params[0].as_ref().clone()),
@@ -770,8 +784,8 @@ impl HardCodedFunction {
                 }
                 Ok(base)
             },
-            HardCodedFunction::ListSort => list_sort(params[0].as_ref().clone()),
-            HardCodedFunction::ListArgsort => list_argsort(params[0].as_ref()),
+            HardCodedFunction::ListSort => list_sort(params[0].as_ref().materialize()),
+            HardCodedFunction::ListArgsort => list_argsort(&params[0].as_ref().materialize()),
 
             HardCodedFunction::StringNew => string_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone()),
             HardCodedFunction::StringFilter => string_filter(env, params[0].as_ref(), params[1].as_ref()),

@@ -157,6 +157,18 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
             Ok(list.list_get(index).clone())
         },
 
+        // O(1), no materialization - the whole point of `Range` being a
+        // genuine runtime type (see its own doc comment).
+        ExprResult::Range { start, end, inclusive, step } => {
+            let len = ExprResult::range_len(*start, *end, *inclusive, *step);
+            if index >= len {
+                return Err(Box::new(AssemblerError::ExpressionError(
+                    ExpressionError::InvalidSize(len, index)
+                )));
+            }
+            Ok(ExprResult::Value(ExprResult::range_nth_value(*start, *step, index)))
+        },
+
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -292,11 +304,96 @@ pub fn list_sublist(
     }
 }
 
+/// `list_sublist(a_list, a_range)` - the range used as an *index selector*
+/// into an ordinary list, gathering the elements at those positions (the
+/// practical equivalent of Baron's own `L[1..3]` slicing, reached via a
+/// function call instead of new subscript syntax on `[...]` list literals,
+/// which this backport deliberately leaves untouched). Dispatched from
+/// `function.rs` when `list_sublist` is called with 2 arguments instead of
+/// the existing 3 (`list_sublist(list, start, end)`, unchanged). Returns a
+/// `List`, not a `Range` - an arbitrary subset of a `List`'s elements isn't
+/// itself representable as a contiguous range. Out-of-bounds indices are a
+/// hard error, matching `list_get`'s own existing bounds-checking
+/// convention.
+pub fn list_sublist_by_range(
+    list: &ExprResult,
+    selector: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    let ExprResult::List(l) = list
+    else {
+        return Err(Box::new(AssemblerError::ExpressionError(
+            ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                msg: format!("{list} is not a list")
+            }))
+        )));
+    };
+    let ExprResult::Range { start, end, inclusive, step } = selector
+    else {
+        return Err(Box::new(AssemblerError::ExpressionError(
+            ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                msg: format!("{selector} is not a range")
+            }))
+        )));
+    };
+    let selector_len = ExprResult::range_len(*start, *end, *inclusive, *step);
+    let mut result = Vec::with_capacity(selector_len);
+    for n in 0..selector_len {
+        let index = ExprResult::range_nth_value(*start, *step, n);
+        let index = usize::try_from(index).map_err(|_| {
+            Box::new(AssemblerError::ExpressionError(ExpressionError::InvalidSize(
+                l.len(),
+                index as usize
+            )))
+        })?;
+        if index >= l.len() {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::InvalidSize(l.len(), index)
+            )));
+        }
+        result.push(l[index].clone());
+    }
+    Ok(ExprResult::List(result.into()))
+}
+
+/// `range_step_by(a_range, step)` - returns a new `Range` with `step` set
+/// to the given value, without any dedicated `a..step..b` syntax (the user
+/// explicitly did not want that - a strided sequence is otherwise
+/// expressible via broadcasting, e.g. `base + (0..n) * stride`, but a
+/// stepped `Range` stays lazy through `ITERATE`/`DB` emission/`list_len`/
+/// `list_get` in a way a broadcast-computed `List` cannot).
+pub fn range_step_by(range: &ExprResult, step: i32) -> Result<ExprResult, Box<AssemblerError>> {
+    let ExprResult::Range { start, end, inclusive, .. } = range
+    else {
+        return Err(Box::new(AssemblerError::ExpressionError(
+            ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                msg: format!("{range} is not a range")
+            }))
+        )));
+    };
+    if step == 0 {
+        return Err(Box::new(AssemblerError::ExpressionError(
+            ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                msg: "range_step_by's step must not be 0".to_string()
+            }))
+        )));
+    }
+    Ok(ExprResult::Range {
+        start: *start,
+        end: *end,
+        inclusive: *inclusive,
+        step
+    })
+}
+
 pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => Ok(l.len().into()),
         ExprResult::String(s) => Ok(s.len().into()),
         ExprResult::Char(_) => Ok(1.into()),
+        // O(1), no materialization.
+        ExprResult::Range { start, end, inclusive, step } => {
+            Ok(ExprResult::range_len(*start, *end, *inclusive, *step).into())
+        },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {

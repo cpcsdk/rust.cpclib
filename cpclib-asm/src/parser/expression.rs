@@ -565,6 +565,16 @@ pub fn number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErr
             |input: &mut InnerZ80Span| -> ModalResult<LocatedExpr, Z80ParserError> {
                 '.'.parse_next(input)?;
 
+                // A second '.' immediately following means this is actually
+                // a range operator (`..`/`..=`), not a decimal point - back
+                // off so `alt` falls through to the plain-integer branch
+                // below and leaves both dots for `located_expr`'s range
+                // check. A single trailing `.` (EOF, or followed by
+                // anything else) is still accepted as a float - see
+                // `number_parsing.rs`'s `a_bare_trailing_dot_parses_as_a_float`,
+                // which this must not regress.
+                not('.').parse_next(input)?;
+
                 // Fractional part (decimal digits), same grammar as before.
                 let frac_str = opt(take_while(1.., ('0'..='9', '_'))).parse_next(input)?;
 
@@ -789,13 +799,92 @@ where I: Into<<A as Array>::Item>
     }
 }
 
+/// `a..b` (exclusive of `b`) / `a..=b` (inclusive) - Rust's own range
+/// syntax exactly, including `a > b` being empty rather than auto-
+/// descending, and the *same* (low) precedence Rust's own range operator
+/// has: since range-checking happens only once, after the full
+/// [`expr_no_range`] chain (which already includes `+`/`-`/etc.) has
+/// consumed as much as it can, `1 + 0..5` parses as `(1 + 0)..5`, not as
+/// `1 + (0..5)` - exactly like Rust's own `1 + 0..5`. A range as an operand
+/// to broadcasting therefore always needs explicit parens, e.g. `(0..5) *
+/// 2`, composing for free through the existing `Paren` variant.
+///
+/// The end bound is parsed via `expr_no_range`, not `located_expr` -
+/// otherwise `a..b..c` would silently parse as `Range(a, Range(b, c))`
+/// instead of being rejected.
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     if input.state.options().is_orgams() {
+        // Range syntax is out of scope for Orgams-compatibility mode, same
+        // precedent as bracketed list literals just below.
         return parse_orgams_expression.parse_next(input);
     }
 
+    let input_start = input.checkpoint();
+    let input_offset = input.eof_offset();
+
+    let lhs = expr_no_range(input)?;
+
+    let range_op = opt(range_operator).parse_next(input)?;
+
+    match range_op {
+        None => Ok(lhs),
+        Some(inclusive) => {
+            let _ = my_space0(input)?;
+            let rhs = expr_no_range(input)?;
+            let span = build_span(input_offset, &input_start, *input);
+            Ok(LocatedExpr::Range(
+                Box::new(lhs),
+                Box::new(rhs),
+                inclusive,
+                None,
+                span.into()
+            ))
+        }
+    }
+}
+
+/// `..=` (-> `true`) or `..` (-> `false`), consuming leading whitespace.
+/// Tried longest-match-first, same idiom as `<=` before `<` elsewhere in
+/// this file.
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+fn range_operator(input: &mut InnerZ80Span) -> ModalResult<bool, Z80ParserError> {
+    preceded(my_space0, alt(("..=".value(true), "..".value(false)))).parse_next(input)
+}
+
+/// A *bare* range literal (`a..b`/`a..=b`), with no optional non-range
+/// fallback - unlike [`located_expr`], this fails outright when no `..`/
+/// `..=` follows, so it composes as one alternative among several in a
+/// grammar position that doesn't otherwise accept a full expression (e.g.
+/// `ITERATE i IN <value>`, which today only accepts a handful of specific
+/// forms - a bracketed list, a function call, or a bare label - not an
+/// arbitrary expression).
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn located_range(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+    let input_start = input.checkpoint();
+    let input_offset = input.eof_offset();
+
+    let lhs = expr_no_range(input)?;
+    let inclusive = range_operator(input)?;
+    let _ = my_space0(input)?;
+    let rhs = expr_no_range(input)?;
+
+    let span = build_span(input_offset, &input_start, *input);
+    Ok(LocatedExpr::Range(
+        Box::new(lhs),
+        Box::new(rhs),
+        inclusive,
+        None,
+        span.into()
+    ))
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+fn expr_no_range(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 

@@ -35,8 +35,9 @@ use super::common::{
 use super::context;
 use super::error::Z80ParserErrorKind;
 use super::expression::{
-    expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
-    parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner, parse_label, parse_string
+    expr, expr_list, ignore_ascii_case_allowed_label, located_expr, located_range,
+    parse_any_function_call, parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner,
+    parse_label, parse_string
 };
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
@@ -557,6 +558,7 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80P
             cut_err(
                 alt((
                     parse_expr_bracketed_list,
+                    located_range,
                     parse_any_function_call,
                     parse_assemble,
                     parse_label(false).map(|l| LocatedExpr::Label(l.into()))

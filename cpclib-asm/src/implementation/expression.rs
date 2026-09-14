@@ -165,10 +165,18 @@ macro_rules! resolve_impl {
                             Ok((!eq).into())
                         },
 
-                        cpclib_tokens::BinaryOperation::LowerOrEqual => Ok((a <= b).into()),
-                        cpclib_tokens::BinaryOperation::StrictlyLower => Ok((a < b).into()),
-                        cpclib_tokens::BinaryOperation::GreaterOrEqual => Ok((a >= b).into()),
-                        cpclib_tokens::BinaryOperation::StrictlyGreater => Ok((a > b).into())
+                        cpclib_tokens::BinaryOperation::LowerOrEqual => {
+                            a.le_checked(&b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        },
+                        cpclib_tokens::BinaryOperation::StrictlyLower => {
+                            a.lt_checked(&b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        },
+                        cpclib_tokens::BinaryOperation::GreaterOrEqual => {
+                            a.ge_checked(&b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        },
+                        cpclib_tokens::BinaryOperation::StrictlyGreater => {
+                            a.gt_checked(&b).map_err(|e| AssemblerError::ExpressionTypeError(e))
+                        }
                     }
                 }
                 (Err(a), Ok(_b)) => {
@@ -271,6 +279,19 @@ macro_rules! resolve_impl {
                     .into()
                 )
             )
+        }
+        else if $self.is_range() {
+            // `arg1()`/`arg2()` already resolve labels/forward-refs via the
+            // normal `.resolve($env)` machinery - a range bound referencing
+            // a symbol works for free, no separate "range with symbols"
+            // code path needed.
+            let start = $self.arg1().resolve($env)?.range_bound()
+                .map_err(AssemblerError::ExpressionTypeError)
+                .map_err(Box::new)?;
+            let end = $self.arg2().resolve($env)?.range_bound()
+                .map_err(AssemblerError::ExpressionTypeError)
+                .map_err(Box::new)?;
+            Ok(ExprResult::Range { start, end, inclusive: $self.range_inclusive(), step: 1 })
         }
         else if $self.is_prefix_label() {
             let label = $self.label();
@@ -400,6 +421,15 @@ impl ExprEvaluationExt for Expr {
                 syms.extend(true_expr.symbols_used());
                 syms.extend(false_expr.symbols_used());
                 syms
+            },
+
+            Expr::Range(start, end, _, step) => {
+                let mut syms = start.symbols_used();
+                syms.extend(end.symbols_used());
+                if let Some(step) = step {
+                    syms.extend(step.symbols_used());
+                }
+                syms
             }
         }
     }
@@ -423,6 +453,7 @@ impl ExprEvaluationExt for Expr {
             Expr::BinaryOperation(..) => "binary_operation",
             Expr::AnyFunction(name, _) => name.as_str(),
             Expr::List(_) => "list",
+            Expr::Range(..) => "range",
             Expr::Rnd => "rnd",
             _ => "unknown"
         }

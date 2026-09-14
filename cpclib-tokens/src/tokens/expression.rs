@@ -34,6 +34,20 @@ pub enum Expr {
     /// List of expression
     List(Vec<Expr>),
 
+    /// `a..b` (exclusive of `b`) / `a..=b` (inclusive) - matches Rust's own
+    /// `Range`/`RangeInclusive` semantics exactly, including being empty
+    /// when `a > b` (no auto-descending). Evaluates to `ExprResult::Range`,
+    /// a genuine runtime type distinct from `ExprResult::List` - see that
+    /// variant's own doc comment for why. The trailing `Option<Box<Expr>>`
+    /// is a step, always `None` from parsing (no `a..step..b` syntax
+    /// exists) - kept for structural symmetry with `ExprResult::Range`,
+    /// whose `step` field the `range_step_by` builtin can set at runtime.
+    ///
+    /// Not to be confused with [`crate::tokens::Token::Range`], the
+    /// unrelated `RANGE start, stop, label` memory-region assertion
+    /// directive - different enum, same name, no relation.
+    Range(Box<Expr>, Box<Expr>, bool, Option<Box<Expr>>),
+
     /// Label with a prefix
     PrefixedLabel(LabelPrefix, SmolStr),
 
@@ -200,6 +214,14 @@ where T: ExprElement
         self.as_ref().is_paren()
     }
 
+    fn is_range(&self) -> bool {
+        self.as_ref().is_range()
+    }
+
+    fn range_inclusive(&self) -> bool {
+        self.as_ref().range_inclusive()
+    }
+
     fn is_rnd(&self) -> bool {
         self.as_ref().is_rnd()
     }
@@ -306,6 +328,11 @@ pub trait ExprElement: Sized {
     // Removed is_unary_function, unary_function, is_binary_function, binary_function
 
     fn is_paren(&self) -> bool;
+
+    /// `a..b`/`a..=b` - operands accessible via `arg1()`/`arg2()`, same as
+    /// `BinaryOperation`.
+    fn is_range(&self) -> bool;
+    fn range_inclusive(&self) -> bool;
 
     fn is_rnd(&self) -> bool;
 
@@ -776,6 +803,17 @@ impl ExprElement for Expr {
         matches!(self, Self::Paren(..))
     }
 
+    fn is_range(&self) -> bool {
+        matches!(self, Self::Range(..))
+    }
+
+    fn range_inclusive(&self) -> bool {
+        match self {
+            Self::Range(_, _, inclusive, _) => *inclusive,
+            _ => unreachable!()
+        }
+    }
+
     fn is_rnd(&self) -> bool {
         matches!(self, Self::Rnd)
     }
@@ -803,6 +841,7 @@ impl ExprElement for Expr {
             Self::BinaryOperation(_, arg1, _) => arg1,
             Self::UnaryOperation(_, arg) => arg,
             Self::Paren(p) => p,
+            Self::Range(start, ..) => start,
 
             _ => unreachable!()
         }
@@ -812,6 +851,7 @@ impl ExprElement for Expr {
     fn arg2(&self) -> &Self {
         match self {
             Self::BinaryOperation(_, _, arg2) => arg2.deref(),
+            Self::Range(_, end, _, _) => end.deref(),
             _ => unreachable!()
         }
     }
@@ -854,6 +894,13 @@ impl ExprElement for Expr {
             Self::BinaryOperation(_, expr1, expr2) => {
                 symbols.extend(expr1.symbols());
                 symbols.extend(expr2.symbols());
+            },
+            Self::Range(start, end, _, step) => {
+                symbols.extend(start.symbols());
+                symbols.extend(end.symbols());
+                if let Some(step) = step {
+                    symbols.extend(step.symbols());
+                }
             },
             Self::Ternary(cond, true_expr, false_expr) => {
                 symbols.extend(cond.symbols());
@@ -929,6 +976,9 @@ impl Display for Expr {
                 write!(f, "({cond} ? {true_expr} : {false_expr})")
             },
             Expr::RelativeDelta(val) => write!(f, "$ + {val} + 2"),
+            Expr::Range(start, end, inclusive, _) => {
+                write!(f, "{start}..{}{end}", if *inclusive { "=" } else { "" })
+            },
             Expr::Rnd => write!(f, "RND()")
         }
     }
@@ -1149,10 +1199,10 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                 BinaryOperation::BooleanOr => Ok(ExprResult::from(a.bool()? || b.bool()?)),
                 BinaryOperation::Equal => Ok((a == b).into()),
                 BinaryOperation::Different => Ok((a != b).into()),
-                BinaryOperation::LowerOrEqual => Ok((a <= b).into()),
-                BinaryOperation::StrictlyLower => Ok((a < b).into()),
-                BinaryOperation::GreaterOrEqual => Ok((a >= b).into()),
-                BinaryOperation::StrictlyGreater => Ok((a > b).into())
+                BinaryOperation::LowerOrEqual => a.le_checked(&b).map_err(PureExprEvalError::from),
+                BinaryOperation::StrictlyLower => a.lt_checked(&b).map_err(PureExprEvalError::from),
+                BinaryOperation::GreaterOrEqual => a.ge_checked(&b).map_err(PureExprEvalError::from),
+                BinaryOperation::StrictlyGreater => a.gt_checked(&b).map_err(PureExprEvalError::from)
             }
         },
         Expr::Ternary(cond, when_true, when_false) => {
@@ -1164,6 +1214,20 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
             }
         },
         Expr::AnyFunction(..) => Err(PureExprEvalError::HasSideEffects),
+        Expr::Range(start, end, inclusive, step) => {
+            let start = try_eval_expr_without_context(start)?.range_bound()?;
+            let end = try_eval_expr_without_context(end)?.range_bound()?;
+            let step = match step {
+                Some(step) => try_eval_expr_without_context(step)?.range_bound()?,
+                None => 1
+            };
+            if step == 0 {
+                return Err(PureExprEvalError::Type(ExpressionTypeError(
+                    "Range step must not be 0".to_string()
+                )));
+            }
+            Ok(ExprResult::Range { start, end, inclusive: *inclusive, step })
+        },
         Expr::Rnd => Err(PureExprEvalError::HasSideEffects)
     }
 }
@@ -1213,6 +1277,69 @@ pub enum ExprResult {
         width: usize,
         height: usize,
         content: std::sync::Arc<Vec<ExprResult>>
+    },
+    /// `a..b`/`a..=b`, kept as a genuine runtime type rather than eagerly
+    /// expanded into a `List` - `0..1000000` must not allocate a
+    /// million-element `Vec` just because it was evaluated. `len()`/
+    /// `nth_value()` (below) are pure arithmetic over these four fields, no
+    /// allocation regardless of range size. `step` is `1` for a plain
+    /// `a..b`; the `range_step_by` builtin (`cpclib-asm/src/assembler/
+    /// list.rs`) is the only thing that ever sets it to something else.
+    /// `ITERATE ... IN`, `DB`/`DEFW`/`STR`/`ABYTE` emission, and
+    /// `list_len`/`list_get` walk/compute against this directly; every
+    /// other list-consuming builtin and the broadcasting operators
+    /// materialize it into a `List` at their own boundary first, since most
+    /// of them (sort, reverse, filter, map, fold, ...) have no O(1) formula
+    /// over a range anyway.
+    Range {
+        start: i32,
+        end: i32,
+        inclusive: bool,
+        step: i32
+    }
+}
+
+impl ExprResult {
+    /// Number of values a `Range` denotes - `0` when `start > end` under a
+    /// positive step (no auto-descending, matches Rust's own empty-range
+    /// behavior) rather than panicking or wrapping.
+    pub fn range_len(start: i32, end: i32, inclusive: bool, step: i32) -> usize {
+        debug_assert!(step != 0, "range_step_by must reject a zero step");
+        let span = if inclusive { end - start + 1 } else { end - start };
+        if span <= 0 {
+            0
+        }
+        else {
+            // Manual ceiling division - `i32::div_ceil` is still unstable.
+            ((span + step - 1) / step) as usize
+        }
+    }
+
+    /// The `n`th value of a `Range` (0-based) - `start + n * step`, not
+    /// bounds-checked against `range_len` (callers that need a checked
+    /// lookup, e.g. the `list_get` builtin, check first and report their
+    /// own `InvalidSize`-style error).
+    pub fn range_nth_value(start: i32, step: i32, n: usize) -> i32 {
+        start + (n as i32) * step
+    }
+
+    /// Materializes a `Range` into a `List` of `Value`s - the boundary every
+    /// non-bespoke `Range` consumer (broadcasting, and every `list_*`/
+    /// `matrix_*` builtin without an O(1) formula) converts through. A
+    /// no-op `.clone()` for anything that isn't a `Range`.
+    pub fn materialize(&self) -> Self {
+        match self {
+            Self::Range { start, end, inclusive, step } => {
+                let len = Self::range_len(*start, *end, *inclusive, *step);
+                Self::List(
+                    (0..len)
+                        .map(|n| Self::Value(Self::range_nth_value(*start, *step, n)))
+                        .collect::<Vec<_>>()
+                        .into()
+                )
+            },
+            other => other.clone()
+        }
     }
 }
 
@@ -1448,6 +1575,24 @@ impl ExprResult {
             _ => {
                 Err(ExpressionTypeError(format!(
                     "Try to convert {self} as a char"
+                )))
+            },
+        }
+    }
+
+    /// Strict integer extraction for a `Range` bound/step - unlike `int()`,
+    /// does NOT round a `Float`: a non-`Value` bound is an assembly-time
+    /// error, not a silent coercion (a range of floats has no obvious
+    /// meaning). Shared by both the context-free evaluator
+    /// (`try_eval_expr_without_context`) and `cpclib-asm`'s `Env`-aware
+    /// `resolve_impl!` macro, so the two never disagree about what counts
+    /// as a valid range bound.
+    pub fn range_bound(&self) -> Result<i32, ExpressionTypeError> {
+        match self {
+            ExprResult::Value(i) => Ok(*i),
+            _ => {
+                Err(ExpressionTypeError(format!(
+                    "Range bound must be an integer, found {self}"
                 )))
             },
         }
@@ -1693,12 +1838,120 @@ impl std::ops::Neg for ExprResult {
     }
 }
 
+/// Shared list/range broadcasting dispatch, used by every operator that
+/// supports it (`+ - * / %`, `&`, `|`, and the comparison methods below).
+/// `op` is the operator's own scalar-capable method (e.g. `ExprResult::add`
+/// itself), so a nested list (`[[1,2],[3,4]] + 1`, already parseable and
+/// evaluable independent of this feature) broadcasts through every level
+/// automatically - `op` recurses back into `broadcast` on its own next call.
+///
+/// A `Range` operand materializes into a `List` first (via
+/// `ExprResult::materialize`): a scaled/shifted range generally isn't a
+/// contiguous range any more (`(0..1000) * 2` has no `Range` representation),
+/// so there is no way to stay lazy through arbitrary broadcasting the way
+/// `ITERATE`/`DB` emission/`list_len`/`list_get` can for a *plain* range walk.
+///
+/// Returns `None` when neither operand is list-like, so the caller falls
+/// straight through to its own existing scalar-only match arms, unchanged -
+/// broadcasting only ever adds a `List`-shaped wrapper in front of the
+/// existing scalar logic, never replaces it. `List`/`List` of mismatched
+/// length is a hard error, same as every arm this replaces already
+/// enforced individually.
+fn broadcast(
+    lhs: &ExprResult,
+    rhs: &ExprResult,
+    op: impl Fn(ExprResult, ExprResult) -> Result<ExprResult, ExpressionTypeError>
+) -> Option<Result<ExprResult, ExpressionTypeError>> {
+    if !matches!(lhs, ExprResult::List(_) | ExprResult::Range { .. })
+        && !matches!(rhs, ExprResult::List(_) | ExprResult::Range { .. })
+    {
+        return None;
+    }
+    let lhs = lhs.materialize();
+    let rhs = rhs.materialize();
+
+    let combine = |pairs: Vec<(ExprResult, ExprResult)>| -> Result<ExprResult, ExpressionTypeError> {
+        let values = pairs
+            .into_iter()
+            .map(|(a, b)| op(a, b))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ExprResult::List(values.into()))
+    };
+
+    Some(match (&lhs, &rhs) {
+        (ExprResult::List(l), ExprResult::List(r)) => {
+            if l.len() != r.len() {
+                Err(ExpressionTypeError(format!(
+                    "Cannot combine lists of different lengths ({} and {})",
+                    l.len(),
+                    r.len()
+                )))
+            }
+            else {
+                combine(l.iter().cloned().zip(r.iter().cloned()).collect())
+            }
+        },
+        (ExprResult::List(l), _) => combine(l.iter().cloned().map(|a| (a, rhs.clone())).collect()),
+        (_, ExprResult::List(r)) => combine(r.iter().cloned().map(|b| (lhs.clone(), b)).collect()),
+        _ => unreachable!("at least one side materializes to a List, per the guard above")
+    })
+}
+
+/// As [`broadcast`], for an operator whose scalar form also threads
+/// [`ExprWarning`]s (`bitand_checked`/`bitor_checked`) - every element's
+/// warnings are concatenated in order.
+fn broadcast_checked(
+    lhs: &ExprResult,
+    rhs: &ExprResult,
+    op: impl Fn(ExprResult, ExprResult) -> Result<(ExprResult, Vec<ExprWarning>), ExpressionTypeError>
+) -> Option<Result<(ExprResult, Vec<ExprWarning>), ExpressionTypeError>> {
+    if !matches!(lhs, ExprResult::List(_) | ExprResult::Range { .. })
+        && !matches!(rhs, ExprResult::List(_) | ExprResult::Range { .. })
+    {
+        return None;
+    }
+    let lhs = lhs.materialize();
+    let rhs = rhs.materialize();
+
+    let combine = |pairs: Vec<(ExprResult, ExprResult)>| -> Result<(ExprResult, Vec<ExprWarning>), ExpressionTypeError> {
+        let mut warnings = Vec::new();
+        let mut values = Vec::with_capacity(pairs.len());
+        for (a, b) in pairs {
+            let (v, w) = op(a, b)?;
+            warnings.extend(w);
+            values.push(v);
+        }
+        Ok((ExprResult::List(values.into()), warnings))
+    };
+
+    Some(match (&lhs, &rhs) {
+        (ExprResult::List(l), ExprResult::List(r)) => {
+            if l.len() != r.len() {
+                Err(ExpressionTypeError(format!(
+                    "Cannot combine lists of different lengths ({} and {})",
+                    l.len(),
+                    r.len()
+                )))
+            }
+            else {
+                combine(l.iter().cloned().zip(r.iter().cloned()).collect())
+            }
+        },
+        (ExprResult::List(l), _) => combine(l.iter().cloned().map(|a| (a, rhs.clone())).collect()),
+        (_, ExprResult::List(r)) => combine(r.iter().cloned().map(|b| (lhs.clone(), b)).collect()),
+        _ => unreachable!("at least one side materializes to a List, per the guard above")
+    })
+}
+
 impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     /// TODO Allow "string" + &80 to add a number to the very last string
     fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
+        if let Some(result) = broadcast(&self, rhs, |a, b| a.add(b)) {
+            return result;
+        }
         match (self, rhs) {
             (any, ExprResult::Bool(_)) => {
                 let b = rhs.as_type(&any)?;
@@ -1731,15 +1984,6 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
                 Ok(ExprResult::String(format!("{s}{rhs_str}").into()))
             },
 
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = std::sync::Arc::unwrap_or_clone(l1)
-                    .into_iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.add(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3.into()))
-            },
-
             (ExprResult::Char(c), _) => ExprResult::Value(c as _) + rhs.clone(),
 
             (any, ExprResult::String(s)) if s.len() == 1 => {
@@ -1767,6 +2011,9 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
 
     fn sub(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
+        if let Some(result) = broadcast(&self, rhs, |a, b| a.sub(b)) {
+            return result;
+        }
         match (self, rhs) {
             (any, ExprResult::Bool(_)) => {
                 let b = rhs.as_type(&any)?;
@@ -1798,15 +2045,6 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             },
             (any, ExprResult::Char(c)) => any - ExprResult::Value(*c as _),
 
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = std::sync::Arc::unwrap_or_clone(l1)
-                    .into_iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.sub(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3.into()))
-            },
-
             (any, rhs) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible substraction between {any} and {rhs}"
@@ -1821,6 +2059,9 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
 
     fn mul(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
+        if let Some(result) = broadcast(&self, rhs, |a, b| a.mul(b)) {
+            return result;
+        }
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() * f2.into_inner()).into())
@@ -1836,15 +2077,6 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
             (ExprResult::Value(v1), ExprResult::Char(v2))
             | (ExprResult::Char(v2), ExprResult::Value(v1)) => Ok((*v1 * (*v2 as i32)).into()),
 
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
-                    .iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.clone().mul(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3.into()))
-            },
-
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible multiplication between {self} and {rhs}"
@@ -1859,6 +2091,9 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
 
     fn div(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
+        if let Some(result) = broadcast(&self, rhs, |a, b| a.div(b)) {
+            return result;
+        }
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() / f2.into_inner()).into())
@@ -1871,15 +2106,6 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
             },
             (ExprResult::Value(_), ExprResult::Value(_)) => {
                 Ok((self.float()? / rhs.float()?).into())
-            },
-
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
-                    .iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.clone().div(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3.into()))
             },
 
             (..) => {
@@ -1896,6 +2122,9 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
 
     fn rem(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
+        if let Some(result) = broadcast(&self, rhs, |a, b| a.rem(b)) {
+            return result;
+        }
         match (&self, &rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() % f2.into_inner()).into())
@@ -1918,15 +2147,6 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
                 // for negative operands and panicked on a zero divisor; no
                 // test fixture in this workspace was found to depend on it.
                 Ok((v1 % v2).into())
-            },
-
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = l1
-                    .iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.clone().rem(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(ExprResult::List(l3.into()))
             },
 
             (..) => {
@@ -1962,42 +2182,24 @@ impl ExprResult {
     /// `&`, warning-carrying form - see `shr_checked`. The `List`/`List` case
     /// never touches `int()` and so never warns.
     pub fn bitand_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
-        match (self, rhs) {
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = std::sync::Arc::unwrap_or_clone(l1)
-                    .into_iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.add(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok((ExprResult::List(l3.into()), vec![]))
-            },
-            (myself, rhs) => {
-                let (a, mut warnings) = myself.int()?;
-                let (b, w2) = rhs.int()?;
-                warnings.extend(w2);
-                Ok(((a & b).into(), warnings))
-            }
+        if let Some(result) = broadcast_checked(&self, &rhs, |a, b| a.bitand_checked(b)) {
+            return result;
         }
+        let (a, mut warnings) = self.int()?;
+        let (b, w2) = rhs.int()?;
+        warnings.extend(w2);
+        Ok(((a & b).into(), warnings))
     }
 
     /// `|`, warning-carrying form - see `bitand_checked`.
     pub fn bitor_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
-        match (self, rhs) {
-            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
-                let l3 = std::sync::Arc::unwrap_or_clone(l1)
-                    .into_iter()
-                    .zip(l2.iter())
-                    .map(|(a, b)| a.add(b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok((ExprResult::List(l3.into()), vec![]))
-            },
-            (myself, rhs) => {
-                let (a, mut warnings) = myself.int()?;
-                let (b, w2) = rhs.int()?;
-                warnings.extend(w2);
-                Ok(((a | b).into(), warnings))
-            }
+        if let Some(result) = broadcast_checked(&self, &rhs, |a, b| a.bitor_checked(b)) {
+            return result;
         }
+        let (a, mut warnings) = self.int()?;
+        let (b, w2) = rhs.int()?;
+        warnings.extend(w2);
+        Ok(((a | b).into(), warnings))
     }
 
     /// `^`, warning-carrying form - see `shr_checked`.
@@ -2018,6 +2220,11 @@ impl ExprResult {
             (Self::String(l0), Self::String(r0)) => (l0 == r0, vec![]),
             (Self::List(l0), Self::List(r0)) => (l0 == r0, vec![]),
             (Self::Matrix { content: l0, .. }, Self::Matrix { content: r0, .. }) => (l0 == r0, vec![]),
+            (
+                Self::Range { start: s0, end: e0, inclusive: i0, step: st0 },
+                Self::Range { start: s1, end: e1, inclusive: i1, step: st1 }
+            ) => (s0 == s1 && e0 == e1 && i0 == i1 && st0 == st1, vec![]),
+            (Self::Range { .. }, _) | (_, Self::Range { .. }) => (false, vec![]),
 
             (Self::String(s), Self::List(l)) | (Self::List(l), Self::String(s)) => {
                 let s = s.as_bytes();
@@ -2042,6 +2249,47 @@ impl ExprResult {
                 (a == b, warnings)
             }
         }
+    }
+
+    /// `<`, broadcast-aware. Unlike `eq_checked`'s `List` handling (whole-list
+    /// identity, left deliberately unchanged by this feature - see this
+    /// module's own notes on why `==`/`!=` don't broadcast), `<`/`>`/`<=`/`>=`
+    /// had no defined `List`/`Range` behavior before this (`Ord::cmp` below
+    /// panics via `unimplemented!()` the moment either side is a `List`), so
+    /// broadcasting here is purely additive, not a behavior change. The
+    /// scalar fallback's use of `Ord::cmp` is safe specifically because
+    /// `broadcast` returning `None` already guarantees neither operand is a
+    /// `List`/`Range`, so `cmp`'s `unimplemented!()` arm can never be hit
+    /// from this path.
+    pub fn lt_checked(&self, other: &Self) -> Result<Self, ExpressionTypeError> {
+        if let Some(result) = broadcast(self, other, |a, b| a.lt_checked(&b)) {
+            return result;
+        }
+        Ok(Self::from(self.cmp(other) == std::cmp::Ordering::Less))
+    }
+
+    /// `>`, broadcast-aware - see `lt_checked`.
+    pub fn gt_checked(&self, other: &Self) -> Result<Self, ExpressionTypeError> {
+        if let Some(result) = broadcast(self, other, |a, b| a.gt_checked(&b)) {
+            return result;
+        }
+        Ok(Self::from(self.cmp(other) == std::cmp::Ordering::Greater))
+    }
+
+    /// `<=`, broadcast-aware - see `lt_checked`.
+    pub fn le_checked(&self, other: &Self) -> Result<Self, ExpressionTypeError> {
+        if let Some(result) = broadcast(self, other, |a, b| a.le_checked(&b)) {
+            return result;
+        }
+        Ok(Self::from(self.cmp(other) != std::cmp::Ordering::Greater))
+    }
+
+    /// `>=`, broadcast-aware - see `lt_checked`.
+    pub fn ge_checked(&self, other: &Self) -> Result<Self, ExpressionTypeError> {
+        if let Some(result) = broadcast(self, other, |a, b| a.ge_checked(&b)) {
+            return result;
+        }
+        Ok(Self::from(self.cmp(other) != std::cmp::Ordering::Less))
     }
 }
 
@@ -2148,6 +2396,13 @@ impl std::fmt::Display for ExprResult {
                         .collect::<Vec<_>>()
                         .join(",")
                 )
+            },
+            ExprResult::Range { start, end, inclusive, step } => {
+                write!(f, "{start}..{}{end}", if *inclusive { "=" } else { "" })?;
+                if *step != 1 {
+                    write!(f, " step {step}")?;
+                }
+                Ok(())
             }
         }
     }
@@ -2181,7 +2436,8 @@ impl std::fmt::LowerHex for ExprResult {
                         .collect::<Vec<_>>()
                         .join(",")
                 )
-            }
+            },
+            ExprResult::Range { .. } => write!(f, "RANGE REPRESENTATION ISSUE")
         }
     }
 }
@@ -2214,7 +2470,8 @@ impl std::fmt::UpperHex for ExprResult {
                         .collect::<Vec<_>>()
                         .join(",")
                 )
-            }
+            },
+            ExprResult::Range { .. } => write!(f, "RANGE REPRESENTATION ISSUE")
         }
     }
 }
@@ -2310,6 +2567,221 @@ mod int_warning_tests {
         assert_eq!(
             ExprResult::Value(-7).rem(ExprResult::Value(-2)).unwrap(),
             ExprResult::Value(-1)
+        );
+    }
+}
+
+#[cfg(test)]
+mod range_and_broadcast_tests {
+    use super::*;
+
+    fn range(start: i32, end: i32, inclusive: bool) -> ExprResult {
+        ExprResult::Range { start, end, inclusive, step: 1 }
+    }
+
+    fn stepped_range(start: i32, end: i32, inclusive: bool, step: i32) -> ExprResult {
+        ExprResult::Range { start, end, inclusive, step }
+    }
+
+    fn values(vs: &[i32]) -> Vec<ExprResult> {
+        vs.iter().map(|v| ExprResult::Value(*v)).collect()
+    }
+
+    #[test]
+    fn range_to_expr_evaluates_ascending_exclusive_and_inclusive() {
+        let exclusive = Expr::Range(
+            Box::new(Expr::Value(0)),
+            Box::new(Expr::Value(5)),
+            false,
+            None
+        );
+        assert_eq!(
+            try_eval_expr_without_context(&exclusive).unwrap(),
+            ExprResult::Range { start: 0, end: 5, inclusive: false, step: 1 }
+        );
+
+        let inclusive = Expr::Range(
+            Box::new(Expr::Value(0)),
+            Box::new(Expr::Value(5)),
+            true,
+            None
+        );
+        assert_eq!(
+            try_eval_expr_without_context(&inclusive).unwrap(),
+            ExprResult::Range { start: 0, end: 5, inclusive: true, step: 1 }
+        );
+    }
+
+    #[test]
+    fn range_bound_rejects_non_integer() {
+        let bad = Expr::Range(
+            Box::new(Expr::Float(1.5.into())),
+            Box::new(Expr::Value(5)),
+            false,
+            None
+        );
+        assert!(try_eval_expr_without_context(&bad).is_err());
+    }
+
+    #[test]
+    fn range_len_ascending_exclusive_and_inclusive() {
+        assert_eq!(ExprResult::range_len(0, 5, false, 1), 5);
+        assert_eq!(ExprResult::range_len(0, 5, true, 1), 6);
+    }
+
+    #[test]
+    fn range_len_descending_is_empty_both_forms() {
+        // Matches Rust exactly - no auto-descending.
+        assert_eq!(ExprResult::range_len(5, 1, false, 1), 0);
+        assert_eq!(ExprResult::range_len(5, 1, true, 1), 0);
+    }
+
+    #[test]
+    fn range_len_equal_bounds() {
+        assert_eq!(ExprResult::range_len(3, 3, false, 1), 0);
+        assert_eq!(ExprResult::range_len(3, 3, true, 1), 1);
+    }
+
+    #[test]
+    fn range_len_and_nth_value_with_a_step_that_does_not_evenly_divide_the_span() {
+        // 0, 3, 6, 9 - 10 itself is excluded (exclusive end), and 12 would
+        // overshoot, so exactly 4 values, not 10/3 rounded some other way.
+        assert_eq!(ExprResult::range_len(0, 10, false, 3), 4);
+        assert_eq!(ExprResult::range_nth_value(0, 3, 0), 0);
+        assert_eq!(ExprResult::range_nth_value(0, 3, 3), 9);
+    }
+
+    #[test]
+    fn materialize_expands_a_range_into_a_list_of_values() {
+        assert_eq!(
+            range(0, 4, false).materialize(),
+            ExprResult::List(values(&[0, 1, 2, 3]).into())
+        );
+    }
+
+    #[test]
+    fn materialize_is_a_no_op_for_non_range_values() {
+        let list = ExprResult::List(values(&[1, 2, 3]).into());
+        assert_eq!(list.materialize(), list);
+        assert_eq!(ExprResult::Value(5).materialize(), ExprResult::Value(5));
+    }
+
+    #[test]
+    fn broadcast_add_list_scalar_and_scalar_list_both_orders() {
+        let list = ExprResult::List(values(&[1, 2, 3]).into());
+        assert_eq!(
+            (list.clone() + ExprResult::Value(10)).unwrap(),
+            ExprResult::List(values(&[11, 12, 13]).into())
+        );
+        assert_eq!(
+            (ExprResult::Value(10) + list).unwrap(),
+            ExprResult::List(values(&[11, 12, 13]).into())
+        );
+    }
+
+    #[test]
+    fn broadcast_mul_range_scalar_materializes_first() {
+        // (0..3) * 2 -> [0, 2, 4] - no longer a contiguous range once
+        // scaled, so this must come back as a List, not a Range.
+        let result = (range(0, 3, false) * ExprResult::Value(2)).unwrap();
+        assert_eq!(result, ExprResult::List(values(&[0, 2, 4]).into()));
+    }
+
+    #[test]
+    fn broadcast_nested_list_recurses() {
+        let nested = ExprResult::List(
+            vec![
+                ExprResult::List(values(&[1, 2]).into()),
+                ExprResult::List(values(&[3, 4]).into()),
+            ]
+            .into()
+        );
+        let result = (nested + ExprResult::Value(1)).unwrap();
+        assert_eq!(
+            result,
+            ExprResult::List(
+                vec![
+                    ExprResult::List(values(&[2, 3]).into()),
+                    ExprResult::List(values(&[4, 5]).into()),
+                ]
+                .into()
+            )
+        );
+    }
+
+    #[test]
+    fn broadcast_mismatched_length_list_list_still_errors() {
+        let a = ExprResult::List(values(&[1, 2]).into());
+        let b = ExprResult::List(values(&[1, 2, 3]).into());
+        assert!((a + b).is_err());
+    }
+
+    #[test]
+    fn bitand_checked_list_list_actually_ands_not_adds() {
+        // Regression test for the discovered bug: the old (List,List) arm
+        // called `.add(b)` instead of `.bitand_checked(b)`.
+        let a = ExprResult::List(values(&[0b110, 0b101]).into());
+        let b = ExprResult::List(values(&[0b011, 0b110]).into());
+        let (result, _) = a.bitand_checked(b).unwrap();
+        assert_eq!(result, ExprResult::List(values(&[0b010, 0b100]).into()));
+    }
+
+    #[test]
+    fn bitor_checked_list_list_actually_ors_not_adds() {
+        let a = ExprResult::List(values(&[0b100, 0b001]).into());
+        let b = ExprResult::List(values(&[0b010, 0b010]).into());
+        let (result, _) = a.bitor_checked(b).unwrap();
+        assert_eq!(result, ExprResult::List(values(&[0b110, 0b011]).into()));
+    }
+
+    #[test]
+    fn bitand_checked_broadcasts_list_scalar() {
+        let list = ExprResult::List(values(&[0b110, 0b101]).into());
+        let (result, _) = list.bitand_checked(ExprResult::Value(0b011)).unwrap();
+        assert_eq!(result, ExprResult::List(values(&[0b010, 0b001]).into()));
+    }
+
+    #[test]
+    fn lt_checked_broadcasts_list_scalar_into_list_of_bool() {
+        let list = ExprResult::List(values(&[1, 2, 3]).into());
+        let result = list.lt_checked(&ExprResult::Value(2)).unwrap();
+        assert_eq!(
+            result,
+            ExprResult::List(
+                vec![ExprResult::Bool(true), ExprResult::Bool(false), ExprResult::Bool(false)]
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn eq_checked_on_list_list_is_unchanged_whole_list_equality_not_broadcast() {
+        // Q1 regression guard: `==`/`!=` deliberately do NOT broadcast -
+        // this must stay a single Bool, not a List of per-element Bools.
+        let a = ExprResult::List(values(&[1, 2]).into());
+        let b = ExprResult::List(values(&[1, 2]).into());
+        let (eq, _) = a.eq_checked(&b);
+        assert!(eq);
+
+        let c = ExprResult::List(values(&[1, 2]).into());
+        let (eq_scalar, _) = c.eq_checked(&ExprResult::Value(1));
+        assert!(!eq_scalar, "List == scalar is always false, never broadcast");
+    }
+
+    #[test]
+    fn bool_on_a_range_or_list_errors_exactly_the_same_way() {
+        // No new IF/truthiness coercion introduced by this feature.
+        let list_err = ExprResult::List(values(&[1, 2, 3]).into()).bool();
+        let range_err = range(0, 3, false).bool();
+        assert!(list_err.is_err());
+        assert!(range_err.is_err());
+    }
+
+    #[test]
+    fn stepped_range_materializes_correctly() {
+        assert_eq!(
+            stepped_range(0, 10, false, 2).materialize(),
+            ExprResult::List(values(&[0, 2, 4, 6, 8]).into())
         );
     }
 }
