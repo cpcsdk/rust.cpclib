@@ -370,7 +370,7 @@ impl ListingOutput {
         symbols: Option<*const SymbolsTable>
     ) {
         self.current_token_kind = match token.deref() {
-            LocatedTokenInner::Label(l) => {
+            LocatedTokenInner::Label(l, _) => {
                 let raw_label = l.to_string();
                 let expanded_label = self.expand_listing_label(&raw_label, symbols);
                 if !raw_label.starts_with('.') && !raw_label.starts_with('@') {

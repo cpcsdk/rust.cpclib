@@ -210,7 +210,7 @@ impl TokenExt for Token {
             Token::Assert(..)
             | Token::Breakpoint { .. }
             | Token::Comment(_)
-            | Token::Label(_)
+            | Token::Label(..)
             | Token::Equ { .. }
             | Token::Protect(..) => 0,
 

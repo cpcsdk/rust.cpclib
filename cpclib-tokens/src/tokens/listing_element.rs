@@ -873,7 +873,7 @@ pub type Listing = BaseListing<Token>;
 impl Listing {
     /// Add a new label to the listing
     pub fn add_label<S: Into<SmolStr>>(&mut self, label: S) {
-        self.listing_mut().push(Token::Label(label.into()));
+        self.listing_mut().push(Token::Label(label.into(), None));
     }
 
     /// Add a new comment to the listing

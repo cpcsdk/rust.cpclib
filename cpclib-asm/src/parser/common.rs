@@ -504,9 +504,18 @@ pub fn parse_line_component_standard(
         opt(parse_label(false)).parse_next(input)?
     };
 
+    let smc_offset: Option<SmcOffset> = if label.is_some() {
+        opt(parse_smc_offset_suffix).parse_next(input)?
+    }
+    else {
+        None
+    };
+
     // build the label token later when needed
     let build_possible_label = move || {
-        label.map(|label| LocatedTokenInner::Label(label.into()).into_located_token_direct())
+        label.map(|label| {
+            LocatedTokenInner::Label(label.into(), smc_offset).into_located_token_direct()
+        })
     };
 
     let before_double_column = input.checkpoint();
@@ -577,6 +586,14 @@ pub fn parse_line_component_standard(
         )))
         .parse_next(input)?
     };
+
+    if smc_offset.is_some() && label_modifier.is_some() {
+        return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
+            input,
+            &before_label,
+            "SMC offset suffix (+N/+*) cannot be combined with a label modifier (EQU/SET/MACRO/...)"
+        )));
+    }
 
     if let Some(label_modifier) = label_modifier {
         if label_modifier == LabelModifier::Macro {
@@ -696,6 +713,15 @@ pub fn parse_line_component_standard(
                 .parse_next(input)
             {
                 // this is a macro call
+                if smc_offset.is_some() {
+                    return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
+                        input,
+                        &before_label,
+                        "SMC offset suffix requires a label immediately followed by an \
+                         instruction, not a macro call"
+                    )));
+                }
+
                 let call = call.map(|t| t.into_located_token_between(&before_label, *input));
                 my_space0.parse_next(input)?;
 
@@ -834,6 +860,25 @@ enum LabelModifier {
     Next,
     Field,
     Macro
+}
+
+/// sjasmplus-style "SMC offset" label-definition suffix: `label+1:` (an
+/// explicit byte offset) or `label+*:` ("smart", inferred from the
+/// following instruction - see `Env::pending_smc_label`). Called only at
+/// the two label-*definition* `parse_label(false)` sites in
+/// `parse_line_component_standard`, never at the `source_label`
+/// label-*reference* parse (`NEXT`/`SETN`'s argument) a few lines below -
+/// an SMC suffix on a definition is semantically unrelated to "copy another
+/// label's address".
+fn parse_smc_offset_suffix(input: &mut InnerZ80Span) -> ModalResult<SmcOffset, Z80ParserError> {
+    preceded(
+        '+',
+        alt((
+            '*'.value(SmcOffset::Smart),
+            cpclib_common::parse_value.map(|n: u32| SmcOffset::Literal(n as u16))
+        ))
+    )
+    .parse_next(input)
 }
 
 // parse_fname is now defined in expression module

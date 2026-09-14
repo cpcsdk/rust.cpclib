@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn a_non_instruction_token_reports_no_instruction_data() {
-        let label = Token::Label("start".into());
+        let label = Token::Label("start".into(), None);
         let op = AnalysisOp::Other(&label);
 
         assert_eq!(op.mnemonic(), None);
@@ -352,7 +352,7 @@ mod tests {
         };
         assert_eq!(expanded.classify(), OpClass::Executes);
 
-        let label = Token::Label("start".into());
+        let label = Token::Label("start".into(), None);
         assert_eq!(AnalysisOp::<Token>::Other(&label).classify(), OpClass::Inert);
 
         let comment = Token::Comment("; hi".into());

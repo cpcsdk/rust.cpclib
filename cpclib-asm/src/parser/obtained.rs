@@ -29,8 +29,9 @@ use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryOperation, CharsetFormat,
     CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr,
     IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
-    Mnemonic, Register8, Register16, SaveType, StableTickerAction, TestKind, TestKindElement,
-    ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation, data_access_impl_most_methods,
+    Mnemonic, Register8, Register16, SaveType, SmcOffset, StableTickerAction, TestKind,
+    TestKindElement, ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation,
+    data_access_impl_most_methods,
     data_access_is_any_indexregister8, data_access_is_any_indexregister16,
     data_access_is_any_register8, data_access_is_any_register16, listing_element_impl_most_methods
 };
@@ -1097,7 +1098,7 @@ pub enum LocatedTokenInner {
         LocatedListing
     ),
 
-    Label(Z80Span),
+    Label(Z80Span, Option<SmcOffset>),
     Let(Z80Span, Expr),
     Limit(LocatedExpr),
     List,
@@ -1231,7 +1232,7 @@ impl LocatedTokenInner {
 
     pub fn into_located_token_direct(self) -> LocatedToken {
         let span = match &self {
-            Self::Label(span) | Self::Comment(span) => span.clone(),
+            Self::Label(span, _) | Self::Comment(span) => span.clone(),
 
             _ => todo!("not coded yet or impossible {:?}", self)
         };
@@ -1684,7 +1685,7 @@ impl LocatedTokenInner {
                     listing: Box::new(listing.as_listing())
                 }
             },
-            Self::Label(label) => Token::Label(label.into()),
+            Self::Label(label, offset) => Token::Label(label.into(), *offset),
             Self::MacroCall(name, params) => {
                 Token::MacroCall(
                     name.into(),
@@ -1873,7 +1874,7 @@ impl ListingElement for LocatedTokenInner {
         // Extract symbols based on the variant type directly
         match self {
             // Skip comments and label definitions - they're definitions, not references
-            Self::Comment(_) | Self::Label(_) | Self::Macro { .. } => {},
+            Self::Comment(_) | Self::Label(..) | Self::Macro { .. } => {},
 
             // Expression-based tokens
             Self::Org { val1, val2 } => {

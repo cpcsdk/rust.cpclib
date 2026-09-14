@@ -84,7 +84,7 @@ pub fn equ<S: AsRef<str>, E: Into<Expr>>(label: S, expr: E) -> Token {
 
 #[allow(missing_docs)]
 pub fn label<S: AsRef<str>>(label: S) -> Token {
-    Token::Label(label.as_ref().into())
+    Token::Label(label.as_ref().into(), None)
 }
 
 /// Generate an ASSERT token from the string description of the expression

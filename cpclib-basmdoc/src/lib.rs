@@ -1523,7 +1523,7 @@ mod test {
     fn test_aggregate_global_documentation() {
         let tokens = [
             Token::Comment(";;; This file is commented, not the function!".into()),
-            Token::Label("my_function".into())
+            Token::Label("my_function".into(), None)
         ];
         let doc = aggregate_documentation_on_tokens(
             &tokens,
@@ -1559,7 +1559,7 @@ mod test {
     fn test_aggregate_label_comment() {
         let tokens = [
             Token::Comment(";; This function does something".into()),
-            Token::Label("my_function".into())
+            Token::Label("my_function".into(), None)
         ];
         let doc = aggregate_documentation_on_tokens(
             &tokens,
@@ -1576,7 +1576,7 @@ mod test {
         let tokens = [
             Token::Comment(";; This function does something ...".into()),
             Token::Comment(";; ... on two lines".into()),
-            Token::Label("my_function".into())
+            Token::Label("my_function".into(), None)
         ];
         let doc = aggregate_documentation_on_tokens(
             &tokens,

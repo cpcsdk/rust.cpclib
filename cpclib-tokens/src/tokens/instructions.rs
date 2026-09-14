@@ -667,6 +667,17 @@ pub enum AssemblerFlavor {
     Orgams
 }
 
+/// sjasmplus-style "SMC offset" label suffix on a label *definition*:
+/// `label+N:` (`Literal`) or `label+*:` (`Smart`, inferred from the very
+/// next instruction). Purely a value-computation modifier: it doesn't
+/// change how the label is looked up or displayed elsewhere, only what
+/// address it resolves to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SmcOffset {
+    Literal(u16),
+    Smart
+}
+
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[derive(Debug, Clone, Hash, PartialEq)]
 #[allow(missing_docs)]
@@ -764,7 +775,7 @@ pub enum Token {
     Include(Expr, Option<SmolStr>, bool),
     Iterate(SmolStr, either::Either<Vec<Expr>, Expr>, Listing),
 
-    Label(SmolStr),
+    Label(SmolStr, Option<SmcOffset>),
     Let(SmolStr, Expr),
     Limit(Expr),
     List,
@@ -1288,7 +1299,14 @@ impl fmt::Display for Token {
 
                  Token::Include( fname, None, once)
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
-            Token::Label( string) => write!(f, "{string}"),
+            Token::Label(string, offset) => {
+                write!(f, "{string}")?;
+                match offset {
+                    Some(SmcOffset::Literal(n)) => write!(f, "+{n}"),
+                    Some(SmcOffset::Smart) => write!(f, "+*"),
+                    None => Ok(())
+                }
+            },
 
             Token::Macro { name, params, content, flavor: _, tokenized_content: _, has_variadic } => {
                 let params = if params.is_empty() && !has_variadic {
@@ -1483,13 +1501,13 @@ impl Token {
 
     pub fn label(&self) -> Option<&str> {
         match self {
-            Token::Label(label) | Token::Equ { label, .. } => Some(label),
+            Token::Label(label, _) | Token::Equ { label, .. } => Some(label),
             _ => None
         }
     }
 
     pub fn is_label(&self) -> bool {
-        matches!(self, Self::Label(_))
+        matches!(self, Self::Label(..))
     }
 
     pub fn macro_name(&self) -> Option<&str> {

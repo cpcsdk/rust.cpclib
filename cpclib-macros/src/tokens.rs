@@ -257,8 +257,26 @@ impl MyToTokens for Token {
                 two_named_params("Equ", "label", label, "expr", expr, tokens);
             },
 
-            Self::Label(arg) => {
-                one_param("Label", arg, tokens);
+            Self::Label(arg, offset) => {
+                // `offset` (an `Option<SmcOffset>`) is deliberately dropped
+                // here rather than re-quoted - this generates code for the
+                // test-fixture DSL, which has no syntax for SMC-offset
+                // labels, so any real value would be unreachable in
+                // practice; erroring loudly if one ever shows up is safer
+                // than silently mis-generating code for a case this DSL
+                // can't express.
+                if offset.is_some() {
+                    unimplemented!(
+                        "MyToTokens for Token::Label: SMC offset labels are not supported by \
+                         this DSL"
+                    );
+                }
+                tokens.append(Ident::new("Label", Span::call_site()));
+                let mut inside = TokenStream::new();
+                arg.to_tokens(&mut inside);
+                inside.append(Punct::new(',', Spacing::Joint));
+                inside.append(Ident::new("None", Span::call_site()));
+                tokens.append(Group::new(Delimiter::Parenthesis, inside));
             },
 
             Self::OpCode(mnemo, arg1, arg2, arg3) => {

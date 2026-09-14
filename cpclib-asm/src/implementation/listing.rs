@@ -167,7 +167,7 @@ impl fmt::Display for PrintableListing<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for token in self.0.listing().iter() {
             match token {
-                Token::Label(_) | Token::Equ { .. } | Token::Comment(_) => (),
+                Token::Label(..) | Token::Equ { .. } | Token::Comment(_) => (),
                 _ => {
                     write!(f, "\t")?;
                 }

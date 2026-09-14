@@ -66,6 +66,35 @@ Each time you define a new `_` label, it becomes independent from previous ones.
     - Proximity labels are completely independent from normal labels that contain underscores (e.g., `my_label`)
     - Each `_` definition increments an internal counter, making it distinct from previous `_` labels
 
+### SMC offset labels
+
+`BASM` supports `sjasmplus`-style "SMC offset" labels, purpose-built for self-modifying-code runtime
+patching: instead of resolving to the address of the instruction it labels, an SMC offset label
+resolves to the address of a specific byte *inside* that instruction's encoding - typically an
+immediate value you intend to poke a new value into while the program runs.
+
+Two forms:
+
+- **`label+N:`** - a manual offset, written by hand. `N` is the byte index within the labeled
+  instruction's own encoding (`0` is its first byte).
+- **`label+*:`** - a "smart" offset: the same result, but `N` is inferred automatically from the
+  instruction that immediately follows, so it doesn't need updating by hand if that instruction's
+  shape changes.
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_smc_offset_labels.asm"
+```
+
+- A `+*` label must be immediately followed by a supported instruction (comments in between are fine -
+  they don't move `$`) - anything else, including no instruction at all, is an assembling error rather
+  than a silent guess.
+- Only instructions with a genuine patchable immediate/address operand are supported by `+*` - common
+  forms like `LD r,n`, `LD rr,nn`, `LD (nn),x`, `JP`/`CALL`/`JR`/`DJNZ`, `IN`/`OUT (n)`,
+  `AND`/`OR`/`XOR`/`CP n`, and indexed bit-ops like `RLC (IX+d)`. An unsupported instruction (`NOP`,
+  `LD A,B`, ...) is a clear assembling error naming the mnemonic.
+- `label+N:` has no such requirement - the offset is fixed by hand, so it doesn't need to inspect
+  what follows.
+
 ## Instructions
 
 Here is the list of instructions used to validate `BASM`:

@@ -27,6 +27,7 @@ pub mod processed_token;
 pub mod report;
 pub mod save_command;
 pub mod section;
+pub mod smc;
 pub mod stable_ticker;
 pub mod string;
 pub mod support;
@@ -345,6 +346,17 @@ impl CrunchedSectionState {
     }
 }
 
+/// A `label+*:` ("smart" SMC offset) label definition, recorded by
+/// `Env::visit_label` while waiting for the following instruction's shape
+/// to determine its final offset - see `Env::pending_smc_label`.
+#[derive(Clone)]
+struct PendingSmcLabel {
+    /// Already resolved via `handle_global_and_local_labels` at the point
+    /// `visit_label` records this.
+    label: SmolStr,
+    span: Option<SourceLocation>
+}
+
 #[derive(Clone)]
 pub struct CharsetEncoding {
     lut: std::collections::HashMap<char, i32>
@@ -602,6 +614,13 @@ pub struct Env {
     /// Set only if the run instruction has been used
     run_options: Option<(u16, Option<u16>)>,
 
+    /// A `label+*:` ("smart" SMC offset) label whose value computation is
+    /// deferred by exactly one token: waiting for the very next visited
+    /// instruction to classify its offset (see `smc::smart_smc_offset` and
+    /// the guard at the top of `visit_token_impl!`). `None` outside that
+    /// one-token window; reset every pass alongside `run_options`.
+    pending_smc_label: Option<PendingSmcLabel>,
+
     /// optional object that manages the listing output
     output_trigger: Option<ListingOutputTrigger>,
     /// How deep we are inside expression evaluation.
@@ -744,6 +763,7 @@ impl Clone for Env {
             byte_written: self.byte_written,
             symbols: self.symbols.clone(),
             run_options: self.run_options,
+            pending_smc_label: self.pending_smc_label.clone(),
             output_trigger: self.output_trigger.clone(),
             expression_depth: self.expression_depth,
             symbols_output: self.symbols_output.clone(),
@@ -1416,6 +1436,7 @@ impl Env {
 
             self.stable_counters.new_pass();
             self.run_options = None;
+            self.pending_smc_label = None;
 
             // A pass starts where the file starts: outside every global label.
             //
@@ -2962,7 +2983,8 @@ impl Env {
 
     fn visit_label<S: SourceString + MayHaveSpan>(
         &mut self,
-        label_span: S
+        label_span: S,
+        smc_offset: Option<SmcOffset>
     ) -> Result<(), Box<AssemblerError>> {
         let label = self.symbols().normalize_symbol(label_span.as_str());
         let label = label.value();
@@ -3015,13 +3037,31 @@ impl Env {
 
             // If the current address is not set up, we force it to be 0
             let value = self.symbols().current_address().unwrap_or_default();
-            let addr = self.logical_to_physical_address(value);
 
-            self.add_symbol_to_symbol_table(
-                label,
-                addr,
-                label_span.possible_span().map(|s| s.into())
-            )
+            match smc_offset {
+                Some(SmcOffset::Smart) => {
+                    // Resolved one token later, once the following
+                    // instruction's shape is known - see the guard in
+                    // `visit_token_impl!` and `Env::visit_opcode`.
+                    self.pending_smc_label = Some(PendingSmcLabel {
+                        label: label.into(),
+                        span: label_span.possible_span().map(|s| s.into())
+                    });
+                    Ok(())
+                },
+                offset => {
+                    let value = match offset {
+                        Some(SmcOffset::Literal(n)) => value.wrapping_add(n),
+                        _ => value
+                    };
+                    let addr = self.logical_to_physical_address(value);
+                    self.add_symbol_to_symbol_table(
+                        label,
+                        addr,
+                        label_span.possible_span().map(|s| s.into())
+                    )
+                }
+            }
         };
 
         // Try to fallback on a macro call - parser is not that much great
@@ -4317,6 +4357,7 @@ impl Env {
 
             symbols: SymbolsTable::default(),
             run_options: None,
+            pending_smc_label: None,
             byte_written: false,
             output_trigger: None,
             expression_depth: 0,
@@ -4510,6 +4551,25 @@ where
         if let Err(e) = res {
             return Err((Some(tokens), env, e));
         }
+
+        // A `label+*:` at the very end of this pass (EOF, or only comments
+        // follow) never reaches the guard in `visit_token_impl!`, which
+        // only fires on the *next visited token* - checked here, at the
+        // true end of a pass, rather than inside `visit_processed_tokens`
+        // itself, since that function is also called recursively for
+        // nested listings (REPEAT/FOR bodies, macro/struct expansions,
+        // crunched sections, ...) where "end of this sub-listing" does not
+        // mean "end of the pass" - the pending label may still be resolved
+        // by whatever token comes next once control returns to the caller.
+        if let Some(pending) = env.pending_smc_label.take() {
+            let e = Box::new(AssemblerError::AssemblingError {
+                msg: format!(
+                    "smart SMC offset label '{}' has no following instruction",
+                    pending.label
+                )
+            });
+            return Err((Some(tokens), env, e));
+        }
     }
 
     env.cleanup_warnings();
@@ -4547,6 +4607,33 @@ pub fn visit_tokens_one_pass<T: Visited>(
 macro_rules! visit_token_impl {
     ($token:ident, $env:ident, $span:ident, $cls:tt) => {{
         $env.update_dollar();
+
+        // A `label+*:` ("smart" SMC offset) label defers resolving its
+        // value until the very next visited instruction - see
+        // `Env::pending_smc_label`'s doc comment. Comments don't move `$`,
+        // so they're allowed to sit between the label and its instruction;
+        // anything else means the label has no instruction to derive an
+        // offset from.
+        if let Some(pending) = $env.pending_smc_label.take() {
+            match &$token {
+                $cls::OpCode(..) => {
+                    $env.pending_smc_label = Some(pending);
+                },
+                $cls::Comment(..) => {
+                    $env.pending_smc_label = Some(pending);
+                },
+                _ => {
+                    return Err(Box::new(AssemblerError::AssemblingError {
+                        msg: format!(
+                            "smart SMC offset label '{}' must be immediately followed by a \
+                             supported instruction",
+                            pending.label
+                        )
+                    }));
+                }
+            }
+        }
+
         match &$token {
             $cls::Abyte(d, l) => $env.visit_abyte(d, l.as_ref()),
             $cls::Align(boundary, fill) => $env.visit_align(boundary, fill.as_ref()),
@@ -4623,7 +4710,7 @@ macro_rules! visit_token_impl {
             $cls::Warning(exp) => $env.visit_warning(exp.as_ref().map(|v| v.as_slice())),
             $cls::Field { label, expr, .. } => $env.visit_field(label, expr),
 
-            $cls::Label(label) => $env.visit_label(label),
+            $cls::Label(label, offset) => $env.visit_label(label, *offset),
             $cls::Limit(exp) => $env.visit_limit(exp),
             $cls::List => {
                 $env.output_trigger.as_mut().map(|l| {
@@ -6363,6 +6450,29 @@ impl Env {
     {
         // TODO update $ in the symbol table
         let bytes = self.assemble_opcode_impl(mnemonic, arg1, arg2, arg3)?;
+
+        if let Some(pending) = self.pending_smc_label.take() {
+            let offset = crate::assembler::smc::smart_smc_offset(
+                mnemonic,
+                arg1.as_ref(),
+                arg2.as_ref(),
+                arg3.as_ref(),
+                bytes.len()
+            )
+            .map_err(|msg| {
+                Box::new(AssemblerError::AssemblingError {
+                    msg: format!("smart SMC offset label '{}': {msg}", pending.label)
+                })
+            })?;
+            let value = self
+                .symbols()
+                .current_address()
+                .unwrap_or_default()
+                .wrapping_add(offset as u16);
+            let addr = self.logical_to_physical_address(value);
+            self.add_symbol_to_symbol_table(&pending.label, addr, pending.span.clone())?;
+        }
+
         for b in bytes.iter() {
             self.output_byte(*b)?;
         }
@@ -8677,7 +8787,7 @@ mod test {
     #[test]
     pub fn basic_variable_set() {
         let tokens = vec![
-            Token::Label("STUFF".into()),
+            Token::Label("STUFF".into(), None),
             Token::Basic(Some(vec!["STUFF".into()]), None, "10 PRINT {STUFF}".into()),
         ];
 
@@ -8758,7 +8868,7 @@ mod test {
         let res = visit_token(&Token::Org(0x4000.into(), None), &mut env);
         assert!(res.is_ok());
         assert!(!env.symbols().contains_symbol("hello").unwrap());
-        let res = visit_token(&Token::Label("hello".into()), &mut env);
+        let res = visit_token(&Token::Label("hello".into(), None), &mut env);
         assert!(res.is_ok());
         assert!(env.symbols().contains_symbol("hello").unwrap());
         assert_eq!(env.symbols().int_value("hello").unwrap(), 0x4000.into());
@@ -8794,8 +8904,8 @@ mod test {
         let res = visit_tokens_all_passes(
             &[
                 Token::Org(0x4000.into(), None),
-                Token::Label("hello".into()),
-                Token::Label("hello".into())
+                Token::Label("hello".into(), None),
+                Token::Label("hello".into(), None)
             ],
             ctx()
         );
@@ -8827,7 +8937,7 @@ mod test {
                 Some(DataAccess::Expression(Expr::Label("test".into()))),
                 None
             ),
-            Token::Label("test".into()),
+            Token::Label("test".into(), None),
         ];
         let env = visit_tokens(&tokens);
         assert!(env.is_err());
