@@ -2309,6 +2309,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-tokens",
  "fs-err",
+ "ignore",
  "indicatif",
  "thiserror 2.0.20",
 ]

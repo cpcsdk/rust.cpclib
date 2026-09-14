@@ -507,3 +507,183 @@ pub fn apply_fixes_in_place(
     })
 }
 
+/// [`apply_fixes_in_place_project`]'s result, summed across every file in a
+/// project-wide run.
+#[derive(Debug, Clone, Default)]
+pub struct ProjectApplyOutcome {
+    pub files_touched: usize,
+    pub files_with_errors: usize,
+    pub total_applied: usize,
+    pub total_skipped_for_review: usize,
+    /// Address-aware suggestions (e.g. `jp2jr`) found but never applied in
+    /// this mode - a real count, not an estimate. See
+    /// [`apply_fixes_in_place_project`]'s own doc comment for why
+    /// project-wide apply always excludes them.
+    pub total_address_aware_skipped: usize
+}
+
+/// Every rule name (`Options::disabled_rules`'s own doc comment notes an
+/// unnamed rule can't be individually targeted - the same limitation applies
+/// here) that `cpclib_asmoptim::constraints::rule_needs_addresses` flags in
+/// `rules`.
+fn address_aware_rule_names(rules: &RuleSet) -> HashSet<String> {
+    rules
+        .rules
+        .iter()
+        .filter(|r| cpclib_asmoptim::constraints::rule_needs_addresses(r))
+        .filter_map(|r| r.name.clone())
+        .collect()
+}
+
+/// Every `.asm` file under `root`, gitignore-respecting (a project's own
+/// generated output stays unmodified) and walked in parallel, sorted by
+/// path for reproducible results - every `.asm` regardless of include-
+/// reachability, matching a human's `find . -name '*.asm' -exec basmopt -i
+/// {}'` mental model and this crate's own single-file simplicity.
+///
+/// A small, self-contained copy of `cpclib_project::walk`'s own walk
+/// (same `ignore::WalkBuilder` settings) rather than a dependency on that
+/// crate: `cpclib-project` itself depends on `cpclib-bndbuild`, which
+/// depends on `cpclib-basmopt` (it wires this crate in as a build-rule
+/// runner) - a direct dependency the other way would be a real cycle, not
+/// just an inconvenience.
+fn asm_files_under(root: &Utf8Path) -> Vec<Utf8PathBuf> {
+    let mut builder = ignore::WalkBuilder::new(root.as_std_path());
+    builder
+        .require_git(false)
+        .hidden(false)
+        .filter_entry(|entry| {
+            !entry.file_type().is_some_and(|t| t.is_dir())
+                || !entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|n| matches!(n, ".git" | ".hg" | ".svn" | "target" | "node_modules"))
+        });
+
+    let found = std::sync::Mutex::new(Vec::new());
+    builder.build_parallel().run(|| {
+        Box::new(|entry| {
+            if let Ok(entry) = entry
+                && entry.file_type().is_some_and(|t| t.is_file())
+                && entry.path().extension().is_some_and(|e| e == "asm")
+                && let Ok(path) = Utf8PathBuf::from_path_buf(entry.into_path())
+            {
+                found.lock().unwrap().push(path);
+            }
+            ignore::WalkState::Continue
+        })
+    });
+
+    let mut found = found.into_inner().unwrap();
+    found.sort();
+    found
+}
+
+/// Apply bulk-safe, non-address-aware fixes to every `.asm` file under
+/// `root` (via [`asm_files_under`]), one file at a time via
+/// [`apply_fixes_in_place`]'s own unchanged 2-pass loop.
+///
+/// Deliberately never applies an address-aware rule's suggestion (today,
+/// only `jp2jr`'s `reachableByJr`), regardless of `options.goal`:
+/// [`cpclib_asmoptim::ProjectAddressResolver`] resolves every file's
+/// addresses from *one* `Env`, assembled once from the project's entry
+/// point - rewriting one file in this run can shift another file's real
+/// addresses (via a shared `INCLUDE`), invalidating an address-aware
+/// match found before that rewrite happened. Bulk-safe, non-address-aware
+/// rules never consult addresses at all and are unaffected by rewrite
+/// order. Composes with a `; noopt`-marked instruction automatically: the
+/// engine vetoes it before a match is ever constructed
+/// (`cpclib_asmoptim::noopt`), so it never reaches this function's own
+/// apply/skip logic in the first place.
+///
+/// Not implemented by filtering the rule set before matching (which would
+/// need a second, unfiltered analysis per file just to count what got
+/// excluded): each file is analyzed once, with the full rule set, and each
+/// resulting [`Suggestion`] is classified by name against
+/// [`address_aware_rule_names`] - cheap, computed once for the whole run,
+/// not per file. Known limitation, documented rather than solved: this is
+/// name-based, so an *unnamed* custom rule (via `--rules FILE`) that
+/// happens to need addresses cannot be excluded this way and would be
+/// treated as safe - name your own custom rules if they need addresses,
+/// same advice `Options::disabled_rules` already gives for the same reason.
+pub fn apply_fixes_in_place_project(root: &Utf8Path, options: &Options) -> ProjectApplyOutcome {
+    const MAX_PASSES: usize = 2;
+
+    let address_aware = build_rule_set(options, root)
+        .map(|rules| address_aware_rule_names(&rules))
+        .unwrap_or_default();
+
+    let mut result = ProjectApplyOutcome::default();
+    for path in asm_files_under(root) {
+        let Ok(initial_source) = fs_err::read_to_string(&path)
+        else {
+            result.files_with_errors += 1;
+            continue;
+        };
+
+        let mut source = initial_source.clone();
+        let mut file_applied = 0;
+        let mut file_skipped_for_review = 0;
+        let mut file_address_aware_skipped = 0;
+        let mut file_had_error = false;
+
+        for _pass in 0..MAX_PASSES {
+            // Cloned rather than moved (unlike `apply_fixes_in_place`'s own
+            // loop): that function propagates a failed `analyze_source` via
+            // `?` and never touches `source` again, but this one has to
+            // fall back to the last known-good `source` on a per-file error
+            // and keep going with the next file, so `source` must stay
+            // usable either way.
+            let analysis = match analyze_source(source.clone(), &path, options) {
+                Ok(a) => a,
+                Err(_) => {
+                    file_had_error = true;
+                    break;
+                }
+            };
+
+            let mut safe = Vec::new();
+            file_skipped_for_review = 0;
+            file_address_aware_skipped = 0;
+            for suggestion in analysis.suggestions {
+                if suggestion.bulk_unsafe {
+                    file_skipped_for_review += 1;
+                }
+                else if suggestion
+                    .rule_name
+                    .as_deref()
+                    .is_some_and(|n| address_aware.contains(n))
+                {
+                    file_address_aware_skipped += 1;
+                }
+                else {
+                    safe.push(suggestion);
+                }
+            }
+
+            if safe.is_empty() {
+                source = analysis.source;
+                break;
+            }
+            file_applied += safe.len();
+            source = apply_fixes(&analysis.source, &safe);
+        }
+
+        if file_had_error {
+            result.files_with_errors += 1;
+            continue;
+        }
+
+        if source != initial_source {
+            let _ = fs_err::write(&path, &source);
+        }
+
+        result.files_touched += 1;
+        result.total_applied += file_applied;
+        result.total_skipped_for_review += file_skipped_for_review;
+        result.total_address_aware_skipped += file_address_aware_skipped;
+    }
+
+    result
+}
+

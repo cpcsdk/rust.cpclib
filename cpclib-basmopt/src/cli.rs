@@ -57,7 +57,19 @@ pub struct Cli {
     /// `--progress` - useful on a real, possibly slow analysis, so the tool
     /// doesn't look hung while it works.
     #[arg(long = "progress")]
-    pub progress: bool
+    pub progress: bool,
+
+    /// Rewrite every `.asm` file under this directory in place, instead of
+    /// treating `source` as the one file to analyze. `source` is still
+    /// required but unused in this mode - kept as a separate flag rather
+    /// than letting `source`'s type be inferred from what's on disk, so a
+    /// destructive `-i`-only mode never silently changes behavior based on
+    /// whether a path happens to be a file or a directory. Only bulk-safe,
+    /// non-address-aware fixes are applied - see
+    /// `cpclib_basmopt::apply_fixes_in_place_project`'s own doc comment for
+    /// why address-aware rules (`jp2jr`) are never attempted this way.
+    #[arg(long = "project", value_name = "DIR", requires = "in_place")]
+    pub project: Option<Utf8PathBuf>
 }
 
 impl Cli {
@@ -70,6 +82,25 @@ impl Cli {
             include_dirs: self.include_dirs.clone(),
             show_progress: self.progress
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    #[test]
+    fn project_without_in_place_is_rejected() {
+        let result = Cli::try_parse_from(["basmopt", "src.asm", "--project", "."]);
+        assert!(result.is_err(), "{result:?}");
+    }
+
+    #[test]
+    fn project_with_in_place_parses() {
+        let result = Cli::try_parse_from(["basmopt", "src.asm", "-i", "--project", "."]);
+        assert!(result.is_ok(), "{result:?}");
     }
 }
 
