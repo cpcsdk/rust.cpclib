@@ -99,7 +99,9 @@ This page documents all built-in functions available in basm expressions.
 - **`list_set(list, index, value)`** - Set element at index (returns new list)
 - **`list_len(list)`** - Length of list
 - **`list_sublist(list, start, end)`** - Extract sublist (end is not included)
-- **`list_sublist(list, a_range)`** - Extract the elements at the positions the range selects
+- **`list_sublist(list_or_string, a_range)`** - Extract the elements (or characters) at the positions
+  the range selects - the same thing `target[a_range]`
+  [does via brackets](expression-types.md#indexing-and-slicing)
 - **`list_sort(list)`** - Sort list in ascending order (returns new list)
 - **`list_argsort(list)`** - Return indices that would sort the list
 - **`list_push(list, element)`** - Append element to list (returns new list)
@@ -125,8 +127,11 @@ compute in constant time even for a very large range.
 To be called on a matrix object or a list of list object (WIP).
 
 - **`matrix_new(width, height, filler)`** - Create matrix filled with value, or `matrix_new(list_of_lists)` to create from nested lists
-- **`matrix_set(matrix, x, y, value)`** - Set element at position (returns new matrix)
-- **`matrix_get(matrix, x, y)`** - Get element at position
+- **`matrix_set(matrix, y, x, value)`** - Set element at position (returns new matrix) - note the
+  argument order is row (`y`) then column (`x`), not `x, y`
+- **`matrix_get(matrix, y, x)`** - Get element at position - same `y, x` order as `matrix_set`. The
+  `matrix[x, y]` [bracket form](expression-types.md#indexing-and-slicing) uses the more natural `x,
+  y` order instead and swaps internally, if that reads better in your own code
 - **`matrix_col(matrix, x)`** - Get column as list
 - **`matrix_row(matrix, y)`** - Get row as list  
 - **`matrix_set_col(matrix, x, list)`** - Set column from list (returns new matrix)

@@ -559,6 +559,12 @@ fn walk_expr_for_function_calls<'a>(expr: &'a LocatedExpr, out: &mut Vec<&'a Loc
                 walk_expr_for_function_calls(step, out);
             }
         },
+        LocatedExpr::Subscript(target, indices, _) => {
+            walk_expr_for_function_calls(target, out);
+            for index in indices {
+                walk_expr_for_function_calls(index, out);
+            }
+        },
         _ => {}
     }
 }

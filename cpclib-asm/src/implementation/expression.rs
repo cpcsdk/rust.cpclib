@@ -6,8 +6,69 @@ use cpclib_tokens::tokens::*;
 
 use crate::SymbolFor;
 use crate::assembler::Env;
+use crate::assembler::list::{list_get, list_sublist_by_range};
+use crate::assembler::matrix::matrix_get;
 use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
+
+/// `target[i]`/`target[a..b]`/`target[x, y]` - see
+/// `cpclib_tokens::Expr::Subscript`'s own doc comment for the full
+/// semantics. `Env`-aware sibling of `ExprResult::subscript` (the
+/// self-contained version `try_eval_expr_without_context` uses): this one
+/// calls the real `list_get`/`list_sublist_by_range`/`matrix_get`
+/// functions instead, for their more detailed bounds-checked error
+/// messages.
+pub(crate) fn eval_subscript(target: &ExprResult, indices: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+    match indices {
+        [ExprResult::Range { .. }] => list_sublist_by_range(target, &indices[0]),
+        [index] => {
+            let i = index.int_value().map_err(AssemblerError::ExpressionTypeError)?;
+            let i = usize::try_from(i).map_err(|_| {
+                Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                    AssemblerError::AssemblingError {
+                        msg: format!("Subscript index {i} must not be negative")
+                    }
+                ))))
+            })?;
+            list_get(target, i)
+        },
+        [x, y] => {
+            // User-facing `target[x, y]` is (column, row) - `matrix_get`'s
+            // own convention is row-major (row index first), so this swaps
+            // order on the way in - see `ExprResult::subscript`'s own doc
+            // comment for the same swap in the context-free evaluator.
+            let x = x.int_value().map_err(AssemblerError::ExpressionTypeError)?;
+            let y = y.int_value().map_err(AssemblerError::ExpressionTypeError)?;
+            let (x, y) = (
+                usize::try_from(x).map_err(|_| {
+                    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                        AssemblerError::AssemblingError {
+                            msg: format!("Subscript column {x} must not be negative")
+                        }
+                    ))))
+                })?,
+                usize::try_from(y).map_err(|_| {
+                    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                        AssemblerError::AssemblingError {
+                            msg: format!("Subscript row {y} must not be negative")
+                        }
+                    ))))
+                })?
+            );
+            matrix_get(target, y, x)
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                AssemblerError::AssemblingError {
+                    msg: format!(
+                        "Wrong number of subscript indices ({}) - expected 1 or 2",
+                        indices.len()
+                    )
+                }
+            )))))
+        }
+    }
+}
 
 /// Orgams only handles integer values and strings. Called unconditionally
 /// from `LocatedExpr::resolve` on every resolved expression - a no-op
@@ -293,6 +354,13 @@ macro_rules! resolve_impl {
                 .map_err(Box::new)?;
             Ok(ExprResult::Range { start, end, inclusive: $self.range_inclusive(), step: 1 })
         }
+        else if $self.is_subscript() {
+            let target = $self.subscript_target().resolve($env)?;
+            let indices = $self.subscript_indices().iter()
+                .map(|i| i.resolve($env))
+                .collect::<Result<Vec<_>, _>>()?;
+            crate::implementation::expression::eval_subscript(&target, &indices)
+        }
         else if $self.is_prefix_label() {
             let label = $self.label();
             let prefix = $self.prefix();
@@ -430,6 +498,14 @@ impl ExprEvaluationExt for Expr {
                     syms.extend(step.symbols_used());
                 }
                 syms
+            },
+
+            Expr::Subscript(target, indices) => {
+                let mut syms = target.symbols_used();
+                for index in indices {
+                    syms.extend(index.symbols_used());
+                }
+                syms
             }
         }
     }
@@ -454,6 +530,7 @@ impl ExprEvaluationExt for Expr {
             Expr::AnyFunction(name, _) => name.as_str(),
             Expr::List(_) => "list",
             Expr::Range(..) => "range",
+            Expr::Subscript(..) => "subscript",
             Expr::Rnd => "rnd",
             _ => "unknown"
         }

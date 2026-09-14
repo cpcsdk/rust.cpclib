@@ -677,6 +677,37 @@ where
     }
 }
 
+/// `target[i]` / `target[a..b]` / `target[x, y]` - postfix indexing/slicing,
+/// applied directly after [`parse_factor`], before any binary operator, so
+/// it binds as tightly as possible (`a[0] + b[1]` is `(a[0]) + (b[1])`).
+/// Chains: `a[0][1]` loops twice, wrapping the previous result each time.
+/// Each index is parsed via [`located_expr`] (not `expr_no_range`), so a
+/// range index - `list[1..3]` - is a real, first-class case here, not a
+/// special one.
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_factor_with_subscript(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+    let mut result = parse_factor(input)?;
+    loop {
+        let input_start = input.checkpoint();
+        let input_offset = input.eof_offset();
+        let indices: Option<Vec<LocatedExpr>> = opt(delimited(
+            (my_space0, '['),
+            separated(1.., located_expr, parse_comma),
+            (my_space0, ']')
+        ))
+        .parse_next(input)?;
+        match indices {
+            None => break,
+            Some(indices) => {
+                let span = build_span(input_offset, &input_start, *input);
+                result = LocatedExpr::Subscript(Box::new(result), indices, span.into());
+            }
+        }
+    }
+    Ok(result)
+}
+
 /// Compute operations related to * % /
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -684,15 +715,15 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let initial = parse_factor(input)?;
+    let initial = parse_factor_with_subscript(input)?;
     let remainder: MySmallVec<[_; 2]> = repeat(
         0..,
         alt((
-            parse_oper(parse_factor, b"*", BinaryOperation::Mul),
-            parse_oper(parse_factor, b"%", BinaryOperation::Mod),
-            parse_oper(parse_factor, b"MOD", BinaryOperation::Mod),
-            parse_oper(parse_factor, b"//", BinaryOperation::IntDiv),
-            parse_oper(parse_factor, b"/", BinaryOperation::Div)
+            parse_oper(parse_factor_with_subscript, b"*", BinaryOperation::Mul),
+            parse_oper(parse_factor_with_subscript, b"%", BinaryOperation::Mod),
+            parse_oper(parse_factor_with_subscript, b"MOD", BinaryOperation::Mod),
+            parse_oper(parse_factor_with_subscript, b"//", BinaryOperation::IntDiv),
+            parse_oper(parse_factor_with_subscript, b"/", BinaryOperation::Div)
         ))
     )
     .parse_next(input)?;

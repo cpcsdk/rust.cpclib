@@ -399,6 +399,9 @@ fn expr_tokens(expr: &LocatedExpr) -> Tokens<'_> {
                     .chain(step.iter().flat_map(|s| expr_tokens(s)))
             )
         },
+        LocatedExpr::Subscript(target, indices, _) => {
+            Box::new(expr_tokens(target).chain(indices.iter().flat_map(expr_tokens)))
+        },
         LocatedExpr::AnyFunction(_, args, _) => Box::new(args.iter().flat_map(expr_tokens)),
         // Bool/Rnd/RelativeDelta/UnaryTokenOperation: no clean old-scanner
         // parity target and/or rare in hand-written source - left unclaimed.

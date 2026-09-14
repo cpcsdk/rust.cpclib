@@ -48,6 +48,17 @@ pub enum Expr {
     /// directive - different enum, same name, no relation.
     Range(Box<Expr>, Box<Expr>, bool, Option<Box<Expr>>),
 
+    /// `target[i]` / `target[a..b]` / `target[x, y]` - postfix indexing.
+    /// One index: element access when it evaluates to `Value` (`List`,
+    /// `Range`, or `String`), or a slice when it evaluates to `Range`
+    /// (`List` or `String` only - slicing a `Range` by a `Range` is not
+    /// supported, materialize first). Two indices: `Matrix` `[x, y]`
+    /// access only - there is no flattened single-index form for a
+    /// `Matrix`. Binds as tightly as possible, directly to the preceding
+    /// factor, before any binary operator - `a[0] + b[1]` is `(a[0]) +
+    /// (b[1])`. Chains: `a[0][1]` is `Subscript(Subscript(a, [0]), [1])`.
+    Subscript(Box<Expr>, Vec<Expr>),
+
     /// Label with a prefix
     PrefixedLabel(LabelPrefix, SmolStr),
 
@@ -222,6 +233,18 @@ where T: ExprElement
         self.as_ref().range_inclusive()
     }
 
+    fn is_subscript(&self) -> bool {
+        self.as_ref().is_subscript()
+    }
+
+    fn subscript_target(&self) -> &Self::Expr {
+        self.as_ref().subscript_target()
+    }
+
+    fn subscript_indices(&self) -> &[Self::Expr] {
+        self.as_ref().subscript_indices()
+    }
+
     fn is_rnd(&self) -> bool {
         self.as_ref().is_rnd()
     }
@@ -333,6 +356,13 @@ pub trait ExprElement: Sized {
     /// `BinaryOperation`.
     fn is_range(&self) -> bool;
     fn range_inclusive(&self) -> bool;
+
+    /// `target[i]`/`target[a..b]`/`target[x, y]` - a variable-length index
+    /// list, so it gets its own accessors rather than reusing `arg1()`/
+    /// `arg2()`.
+    fn is_subscript(&self) -> bool;
+    fn subscript_target(&self) -> &Self::Expr;
+    fn subscript_indices(&self) -> &[Self::Expr];
 
     fn is_rnd(&self) -> bool;
 
@@ -814,6 +844,24 @@ impl ExprElement for Expr {
         }
     }
 
+    fn is_subscript(&self) -> bool {
+        matches!(self, Self::Subscript(..))
+    }
+
+    fn subscript_target(&self) -> &Self {
+        match self {
+            Self::Subscript(target, _) => target,
+            _ => unreachable!()
+        }
+    }
+
+    fn subscript_indices(&self) -> &[Self] {
+        match self {
+            Self::Subscript(_, indices) => indices.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
     fn is_rnd(&self) -> bool {
         matches!(self, Self::Rnd)
     }
@@ -902,6 +950,12 @@ impl ExprElement for Expr {
                     symbols.extend(step.symbols());
                 }
             },
+            Self::Subscript(target, indices) => {
+                symbols.extend(target.symbols());
+                for index in indices {
+                    symbols.extend(index.symbols());
+                }
+            },
             Self::Ternary(cond, true_expr, false_expr) => {
                 symbols.extend(cond.symbols());
                 symbols.extend(true_expr.symbols());
@@ -978,6 +1032,13 @@ impl Display for Expr {
             Expr::RelativeDelta(val) => write!(f, "$ + {val} + 2"),
             Expr::Range(start, end, inclusive, _) => {
                 write!(f, "{start}..{}{end}", if *inclusive { "=" } else { "" })
+            },
+            Expr::Subscript(target, indices) => {
+                write!(
+                    f,
+                    "{target}[{}]",
+                    indices.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+                )
             },
             Expr::Rnd => write!(f, "RND()")
         }
@@ -1228,6 +1289,14 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
             }
             Ok(ExprResult::Range { start, end, inclusive: *inclusive, step })
         },
+        Expr::Subscript(target, indices) => {
+            let target = try_eval_expr_without_context(target)?;
+            let indices = indices
+                .iter()
+                .map(try_eval_expr_without_context)
+                .collect::<Result<Vec<_>, _>>()?;
+            target.subscript(&indices).map_err(PureExprEvalError::from)
+        },
         Expr::Rnd => Err(PureExprEvalError::HasSideEffects)
     }
 }
@@ -1339,6 +1408,129 @@ impl ExprResult {
                 )
             },
             other => other.clone()
+        }
+    }
+
+    /// `target[i]`/`target[a..b]`/`target[x, y]` - see `Expr::Subscript`'s
+    /// own doc comment for the full semantics (one index: element or slice
+    /// depending on whether it's a `Value` or a `Range`; two indices:
+    /// `Matrix[x, y]` only). Self-contained (no `cpclib-asm` dependency),
+    /// used by `try_eval_expr_without_context`. `cpclib-asm`'s own
+    /// `Env`-aware evaluation instead calls the real `list_get`/
+    /// `string_get`/`list_sublist_by_range`/`matrix_get` functions in
+    /// `cpclib-asm/src/assembler/{list,matrix}.rs`, which give more
+    /// detailed bounds-checked error messages - this version intentionally
+    /// trades some of that detail for staying dependency-free, matching how
+    /// `range_bound` already does.
+    pub fn subscript(&self, indices: &[ExprResult]) -> Result<ExprResult, ExpressionTypeError> {
+        fn as_usize(v: &ExprResult) -> Result<usize, ExpressionTypeError> {
+            let i = v.range_bound()?;
+            usize::try_from(i)
+                .map_err(|_| ExpressionTypeError(format!("Subscript index {i} must not be negative")))
+        }
+
+        match indices {
+            [ExprResult::Range { start, end, inclusive, step }] => {
+                let len = Self::range_len(*start, *end, *inclusive, *step);
+                match self {
+                    Self::List(_) | Self::Range { .. } => {
+                        let list = self.materialize();
+                        let mut out = Vec::with_capacity(len);
+                        for n in 0..len {
+                            let i = as_usize(&Self::Value(Self::range_nth_value(*start, *step, n)))?;
+                            if i >= list.list_len() {
+                                return Err(ExpressionTypeError(format!(
+                                    "Subscript index {i} out of range (length {})",
+                                    list.list_len()
+                                )));
+                            }
+                            out.push(list.list_get(i).clone());
+                        }
+                        Ok(Self::List(out.into()))
+                    },
+                    Self::String(s) => {
+                        let chars: Vec<char> = s.chars().collect();
+                        let mut out = String::with_capacity(len);
+                        for n in 0..len {
+                            let i = as_usize(&Self::Value(Self::range_nth_value(*start, *step, n)))?;
+                            let c = chars.get(i).ok_or_else(|| {
+                                ExpressionTypeError(format!(
+                                    "Subscript index {i} out of range (length {})",
+                                    chars.len()
+                                ))
+                            })?;
+                            out.push(*c);
+                        }
+                        Ok(Self::String(out.into()))
+                    },
+                    _ => {
+                        Err(ExpressionTypeError(format!(
+                            "{self} cannot be sliced by a range"
+                        )))
+                    }
+                }
+            },
+            [index] => {
+                let i = as_usize(index)?;
+                match self {
+                    Self::List(_) | Self::Range { .. } => {
+                        let list = self.materialize();
+                        if i >= list.list_len() {
+                            return Err(ExpressionTypeError(format!(
+                                "Subscript index {i} out of range (length {})",
+                                list.list_len()
+                            )));
+                        }
+                        Ok(list.list_get(i).clone())
+                    },
+                    Self::String(s) => {
+                        s.chars().nth(i).map(|c| Self::Char(c as u8)).ok_or_else(|| {
+                            ExpressionTypeError(format!(
+                                "Subscript index {i} out of range (length {})",
+                                s.chars().count()
+                            ))
+                        })
+                    },
+                    _ => Err(ExpressionTypeError(format!("{self} cannot be indexed"))),
+                }
+            },
+            [x, y] => {
+                match self {
+                    Self::Matrix { .. } => {
+                        // User-facing `matrix[x, y]` is (column, row) - the
+                        // internal `matrix_get`/`matrix_rows` convention is
+                        // row-major (row index first), so this swaps order
+                        // on the way in.
+                        let x = as_usize(x)?;
+                        let y = as_usize(y)?;
+                        if y >= self.matrix_height() {
+                            return Err(ExpressionTypeError(format!(
+                                "Subscript row {y} out of range (height {})",
+                                self.matrix_height()
+                            )));
+                        }
+                        if x >= self.matrix_width() {
+                            return Err(ExpressionTypeError(format!(
+                                "Subscript column {x} out of range (width {})",
+                                self.matrix_width()
+                            )));
+                        }
+                        Ok(self.matrix_get(y, x).clone())
+                    },
+                    _ => {
+                        Err(ExpressionTypeError(format!(
+                            "{self} needs exactly one index (or a range), not two - `[x, y]` only \
+                             applies to a Matrix"
+                        )))
+                    }
+                }
+            },
+            _ => {
+                Err(ExpressionTypeError(format!(
+                    "Wrong number of subscript indices ({}) - expected 1 or 2",
+                    indices.len()
+                )))
+            }
         }
     }
 }
@@ -2782,6 +2974,102 @@ mod range_and_broadcast_tests {
         assert_eq!(
             stepped_range(0, 10, false, 2).materialize(),
             ExprResult::List(values(&[0, 2, 4, 6, 8]).into())
+        );
+    }
+
+    #[test]
+    fn subscript_single_index_on_a_list() {
+        let list = ExprResult::List(values(&[10, 20, 30]).into());
+        assert_eq!(
+            list.subscript(&[ExprResult::Value(1)]).unwrap(),
+            ExprResult::Value(20)
+        );
+    }
+
+    #[test]
+    fn subscript_single_index_out_of_range_errors() {
+        let list = ExprResult::List(values(&[10, 20, 30]).into());
+        assert!(list.subscript(&[ExprResult::Value(3)]).is_err());
+    }
+
+    #[test]
+    fn subscript_range_slices_a_list() {
+        let list = ExprResult::List(values(&[10, 20, 30, 40, 50]).into());
+        assert_eq!(
+            list.subscript(&[range(1, 3, false)]).unwrap(),
+            ExprResult::List(values(&[20, 30]).into())
+        );
+    }
+
+    #[test]
+    fn subscript_single_index_on_a_range_is_o1_no_materialization_needed_to_be_correct() {
+        assert_eq!(
+            range(0, 1000000, false)
+                .subscript(&[ExprResult::Value(500000)])
+                .unwrap(),
+            ExprResult::Value(500000)
+        );
+    }
+
+    #[test]
+    fn subscript_single_index_on_a_string_returns_a_char() {
+        let s = ExprResult::String("hello".into());
+        assert_eq!(s.subscript(&[ExprResult::Value(1)]).unwrap(), ExprResult::Char(b'e'));
+    }
+
+    #[test]
+    fn subscript_range_slices_a_string() {
+        let s = ExprResult::String("hello".into());
+        assert_eq!(
+            s.subscript(&[range(1, 4, false)]).unwrap(),
+            ExprResult::String("ell".into())
+        );
+    }
+
+    #[test]
+    fn subscript_two_indices_on_a_matrix_is_x_then_y_user_facing() {
+        // A 2-wide, 3-tall matrix - row 0 is [1,2], row 1 is [3,4], row 2 is
+        // [5,6]. `content` holds one `List` per row, not flat scalars -
+        // confirmed by `matrix_get`'s own `matrix_rows()[y].list_get(x)`.
+        let matrix = ExprResult::Matrix {
+            width: 2,
+            height: 3,
+            content: vec![
+                ExprResult::List(values(&[1, 2]).into()),
+                ExprResult::List(values(&[3, 4]).into()),
+                ExprResult::List(values(&[5, 6]).into()),
+            ]
+            .into()
+        };
+        // matrix[x=1, y=2] must be row 2, column 1 -> value 6.
+        assert_eq!(
+            matrix
+                .subscript(&[ExprResult::Value(1), ExprResult::Value(2)])
+                .unwrap(),
+            ExprResult::Value(6)
+        );
+        // matrix[x=0, y=0] must be row 0, column 0 -> value 1.
+        assert_eq!(
+            matrix
+                .subscript(&[ExprResult::Value(0), ExprResult::Value(0)])
+                .unwrap(),
+            ExprResult::Value(1)
+        );
+    }
+
+    #[test]
+    fn subscript_two_indices_on_a_non_matrix_errors() {
+        let list = ExprResult::List(values(&[1, 2, 3]).into());
+        assert!(list.subscript(&[ExprResult::Value(0), ExprResult::Value(0)]).is_err());
+    }
+
+    #[test]
+    fn subscript_wrong_index_count_errors() {
+        let list = ExprResult::List(values(&[1, 2, 3]).into());
+        assert!(list.subscript(&[]).is_err());
+        assert!(
+            list.subscript(&[ExprResult::Value(0), ExprResult::Value(0), ExprResult::Value(0)])
+                .is_err()
         );
     }
 }

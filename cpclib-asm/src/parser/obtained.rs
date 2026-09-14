@@ -79,6 +79,10 @@ pub enum LocatedExpr {
         Z80Span
     ),
 
+    /// `target[i]`/`target[a..b]`/`target[x, y]` - see
+    /// [`cpclib_tokens::Expr::Subscript`]'s own doc comment.
+    Subscript(Box<LocatedExpr>, Vec<LocatedExpr>, Z80Span),
+
     PrefixedLabel(LabelPrefix, Z80Span, Z80Span),
 
     Paren(Box<LocatedExpr>, Z80Span),
@@ -155,6 +159,12 @@ impl LocatedExpr {
                     Box::new(end.to_expr_owned()),
                     *inclusive,
                     step.as_ref().map(|s| Box::new(s.to_expr_owned()))
+                )
+            },
+            LocatedExpr::Subscript(target, indices, _) => {
+                Expr::Subscript(
+                    Box::new(target.to_expr_owned()),
+                    indices.iter().map(|e| e.to_expr_owned()).collect_vec()
                 )
             },
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
@@ -410,6 +420,24 @@ impl ExprElement for LocatedExpr {
         }
     }
 
+    fn is_subscript(&self) -> bool {
+        matches!(self, Self::Subscript(..))
+    }
+
+    fn subscript_target(&self) -> &Self {
+        match self {
+            Self::Subscript(target, ..) => target.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn subscript_indices(&self) -> &[Self] {
+        match self {
+            Self::Subscript(_, indices, _) => indices.as_slice(),
+            _ => unreachable!()
+        }
+    }
+
     fn is_rnd(&self) -> bool {
         matches!(self, Self::Rnd(_))
     }
@@ -518,6 +546,14 @@ impl ExprEvaluationExt for LocatedExpr {
                     .chain(step.iter().flat_map(|s| s.symbols_used()))
                     .collect_vec()
             },
+
+            LocatedExpr::Subscript(target, indices, _) => {
+                target
+                    .symbols_used()
+                    .into_iter()
+                    .chain(indices.iter().flat_map(|i| i.symbols_used()))
+                    .collect_vec()
+            },
         }
     }
 
@@ -531,6 +567,7 @@ impl ExprEvaluationExt for LocatedExpr {
             LocatedExpr::Label(..) | LocatedExpr::PrefixedLabel(..) => "label",
             LocatedExpr::List(..) => "list",
             LocatedExpr::Range(..) => "range",
+            LocatedExpr::Subscript(..) => "subscript",
             LocatedExpr::Paren(..)
             | LocatedExpr::UnaryOperation(..)
             | LocatedExpr::BinaryOperation(..)
@@ -569,7 +606,8 @@ impl MayHaveSpan for LocatedExpr {
             | LocatedExpr::Ternary(_, _, _, span)
             | LocatedExpr::AnyFunction(_, _, span)
             | LocatedExpr::Rnd(span) => span,
-            LocatedExpr::Range(_, _, _, _, span) => span
+            LocatedExpr::Range(_, _, _, _, span) => span,
+            LocatedExpr::Subscript(_, _, span) => span
         }
     }
 }

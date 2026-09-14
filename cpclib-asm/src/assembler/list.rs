@@ -319,14 +319,6 @@ pub fn list_sublist_by_range(
     list: &ExprResult,
     selector: &ExprResult
 ) -> Result<ExprResult, Box<AssemblerError>> {
-    let ExprResult::List(l) = list
-    else {
-        return Err(Box::new(AssemblerError::ExpressionError(
-            ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                msg: format!("{list} is not a list")
-            }))
-        )));
-    };
     let ExprResult::Range { start, end, inclusive, step } = selector
     else {
         return Err(Box::new(AssemblerError::ExpressionError(
@@ -336,23 +328,49 @@ pub fn list_sublist_by_range(
         )));
     };
     let selector_len = ExprResult::range_len(*start, *end, *inclusive, *step);
-    let mut result = Vec::with_capacity(selector_len);
-    for n in 0..selector_len {
+    let index_at = |n: usize| -> Result<usize, Box<AssemblerError>> {
         let index = ExprResult::range_nth_value(*start, *step, n);
-        let index = usize::try_from(index).map_err(|_| {
-            Box::new(AssemblerError::ExpressionError(ExpressionError::InvalidSize(
-                l.len(),
-                index as usize
+        usize::try_from(index).map_err(|_| {
+            Box::new(AssemblerError::ExpressionError(ExpressionError::InvalidSize(0, index as usize)))
+        })
+    };
+    match list {
+        ExprResult::List(l) => {
+            let mut result = Vec::with_capacity(selector_len);
+            for n in 0..selector_len {
+                let index = index_at(n)?;
+                if index >= l.len() {
+                    return Err(Box::new(AssemblerError::ExpressionError(
+                        ExpressionError::InvalidSize(l.len(), index)
+                    )));
+                }
+                result.push(l[index].clone());
+            }
+            Ok(ExprResult::List(result.into()))
+        },
+        ExprResult::String(s) => {
+            let chars: Vec<char> = s.chars().collect();
+            let mut result = String::with_capacity(selector_len);
+            for n in 0..selector_len {
+                let index = index_at(n)?;
+                let c = chars.get(index).ok_or_else(|| {
+                    Box::new(AssemblerError::ExpressionError(ExpressionError::InvalidSize(
+                        chars.len(),
+                        index
+                    )))
+                })?;
+                result.push(*c);
+            }
+            Ok(ExprResult::String(result.into()))
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list or a string")
+                }))
             )))
-        })?;
-        if index >= l.len() {
-            return Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::InvalidSize(l.len(), index)
-            )));
         }
-        result.push(l[index].clone());
     }
-    Ok(ExprResult::List(result.into()))
 }
 
 /// `range_step_by(a_range, step)` - returns a new `Range` with `step` set

@@ -96,7 +96,7 @@ Lists are heterogeneous collections enclosed in square brackets:
 
 Lists support:
 
-- Indexing: `list[0]` (0-based)
+- Indexing and slicing: `list[0]`, `list[1..3]` - see [Indexing and Slicing](#indexing-and-slicing)
 - Nesting: `[[1, 2], [3, 4]]`
 - Functions: `list_len()`, `list_get()`, etc.
 
@@ -157,13 +157,38 @@ Matrices are 2D arrays, created via `matrix_new()` or from nested lists:
 
 Matrices support various operations through built-in functions (see [functions](functions.md#matrix-functions)).
 
-Matrices support specialized access functions documented in the [functions page](functions.md#matrix-functions).
+Matrices support specialized access functions documented in the [functions page](functions.md#matrix-functions),
+and the `[x, y]` bracket form below.
+
+## Indexing and Slicing
+
+`target[...]` accesses an element or a slice of a list, string, range, or matrix - the same bracket
+notation used to *write* a list literal (`[1, 2, 3]`), applied *after* an existing value instead:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_subscript.asm"
+```
+
+- **`target[i]`** - a single element (0-based). On a list or range this gives a value; on a string
+  it gives a character.
+- **`target[a..b]`** - a slice, using a [range](#ranges) as the index. Works on lists and strings,
+  giving back the same kind of value (a sub-list or a sub-string).
+- **`target[x, y]`** - two indices, for a matrix only: `x` is the column, `y` is the row.
+- Indexing a range is constant-time, just like `list_len`/`list_get` on a range - no list is
+  materialized to answer `(0..1000000)[500000]`.
+- Subscripts bind as tightly as possible, directly to the value they follow, before any binary
+  operator - `a[0] + b[1]` is `(a[0]) + (b[1])`. They also chain: `a[0][1]` applies the second `[1]`
+  to the result of `a[0]`.
+- A literal can be indexed directly, without a named variable: `[1, 2, 3][1]`, `"abc"[0]`,
+  `(0..5)[2]`.
 
 ## Operators
 
 ### Binary Operators
 
-Listed by precedence (highest to lowest):
+Listed by precedence (highest to lowest). [Indexing/slicing](#indexing-and-slicing) (`target[...]`)
+binds tighter than any of these - it applies directly to the value it follows, before any operator
+below gets a chance to.
 
 1. **Multiplication/Division**: `*`, `/` (real division), `//` (integer division), `%` (modulo)
 2. **Addition/Subtraction**: `+`, `-`
