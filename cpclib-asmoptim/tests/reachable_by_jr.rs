@@ -32,7 +32,7 @@ fn suggestions(source: &str, goal: OptimizationGoal) -> Vec<PeepholeMatch> {
     let (listing, env) = assemble(source);
     let refs: Vec<&LocatedToken> = listing.iter().collect();
     let resolver = EnvAddressResolver::new(&env);
-    find_matches_with_resolver(&refs, builtin_rules(goal), &resolver)
+    find_matches_with_resolver(&refs, builtin_rules(goal), &resolver, goal)
 }
 
 #[test]
@@ -97,7 +97,12 @@ fn a_resolver_still_cannot_help_token_which_never_had_a_position() {
     let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
 
     let resolver = EnvAddressResolver::new(&env);
-    let found = find_matches_with_resolver(&simple_refs, builtin_rules(OptimizationGoal::Size), &resolver);
+    let found = find_matches_with_resolver(
+        &simple_refs,
+        builtin_rules(OptimizationGoal::Size),
+        &resolver,
+        OptimizationGoal::Size
+    );
 
     assert!(
         !found.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
@@ -112,7 +117,11 @@ fn without_a_resolver_jp2jr_never_fires_even_when_it_would_be_valid() {
     // deliberately conservative fallback.
     let listing = parse_z80_str("start:\n    jp target\ntarget:\n    ret\n").unwrap();
     let tokens: Vec<_> = listing.iter().collect();
-    let found = cpclib_asmoptim::engine::find_matches(&tokens, builtin_rules(OptimizationGoal::Size));
+    let found = cpclib_asmoptim::engine::find_matches(
+        &tokens,
+        builtin_rules(OptimizationGoal::Size),
+        OptimizationGoal::Size
+    );
     assert!(
         !found.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
         "jp2jr must stay silent without real address information: {found:?}"

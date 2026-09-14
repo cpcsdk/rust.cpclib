@@ -7,6 +7,7 @@
 //! tests are about what it must refuse rather than what it allows.
 
 use cpclib_asm::parser::parse_z80_str;
+use cpclib_asmoptim::OptimizationGoal;
 use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
 
@@ -25,7 +26,7 @@ fn matches(source: &str) -> Vec<PeepholeMatch> {
     let listing = parse_z80_str(source).expect("test source must parse");
     let rules = RuleSet::parse(UNNECESSARY_2ARGS).expect("test rules must parse");
     let tokens: Vec<_> = listing.iter().collect();
-    find_matches(&tokens, &rules)
+    find_matches(&tokens, &rules, OptimizationGoal::Neutral)
 }
 
 #[test]

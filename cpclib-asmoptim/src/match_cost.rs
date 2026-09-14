@@ -8,9 +8,22 @@
 //! `engine.rs`'s own module doc comment and its `find_matches_with_resolver`
 //! for why that was a real gap, not a deliberate simplification. This module
 //! is the comparator that closes it.
+//!
+//! One deliberate departure from upstream's fixed order: which of
+//! bytes-saved/cycles-saved gets checked *first* depends on
+//! [`crate::OptimizationGoal`] (see [`MatchCost::cmp_better`]) - a
+//! demomaking-specific need, not something upstream's own general-purpose
+//! optimizer has to care about. A standard demo cares about runtime speed;
+//! a size-constrained intro (4k/8k) cares about what ships after crunching,
+//! which raw byte savings only approximates (more regular/repetitive code
+//! sometimes crunches better than fewer-but-irregular bytes) - a real
+//! crunched-size estimate would need running an actual cruncher per
+//! candidate, which this does not attempt.
 
 use cpclib_asm::implementation::tokens::TokenExt;
 use cpclib_tokens::{DataAccessElem, ListingElement};
+
+use crate::OptimizationGoal;
 
 /// One instruction's cycle cost, straight from `cpclib_z80flow::cost`'s own
 /// static table - no assemble needed. `None` (unknown) for anything the
@@ -125,25 +138,48 @@ impl MatchCost {
         }
     }
 
-    /// `Greater` when `self` should win over `other`. A tier where either
-    /// side is `Unknown` decides nothing there - it is a tie for that tier,
-    /// not a win for the known side, and comparison falls through to the
-    /// next one. When every tier ties, the two are declared `Equal` -
-    /// callers keep whichever candidate was found first in that case, the
-    /// same file-order behavior this comparator otherwise replaces.
-    pub(crate) fn cmp_better(&self, other: &Self) -> std::cmp::Ordering {
+    /// `Greater` when `self` should win over `other`, for `goal`. A tier
+    /// where either side is `Unknown` decides nothing there - it is a tie
+    /// for that tier, not a win for the known side, and comparison falls
+    /// through to the next one. When every tier ties, the two are declared
+    /// `Equal` - callers keep whichever candidate was found first in that
+    /// case, the same file-order behavior this comparator otherwise
+    /// replaces.
+    ///
+    /// `goal` decides which of bytes-saved/cycles-saved is checked *first*
+    /// - `Speed` prefers cycles first (a standard demo cares about runtime),
+    /// `Size` and `Neutral` prefer bytes first (a size-constrained intro
+    /// cares about what ships, and upstream's own fixed order has no
+    /// stronger claim than "bytes first" absent a reason to prefer
+    /// otherwise). Whichever runs second still applies as the very next
+    /// tiebreak, before falling through to constraint/span-length - a
+    /// `Speed` goal does not *ignore* bytes, it just does not let them
+    /// override a real cycle-count difference.
+    pub(crate) fn cmp_better(&self, other: &Self, goal: OptimizationGoal) -> std::cmp::Ordering {
         use std::cmp::Ordering;
 
-        if let (Some(a), Some(b)) = (self.bytes_saved, other.bytes_saved)
-            && a != b
-        {
-            return a.cmp(&b);
+        let bytes_tier = |a: &Self, b: &Self| -> Option<Ordering> {
+            match (a.bytes_saved, b.bytes_saved) {
+                (Some(x), Some(y)) if x != y => Some(x.cmp(&y)),
+                _ => None
+            }
+        };
+        let cycles_tier = |a: &Self, b: &Self| -> Option<Ordering> {
+            match (a.cycles_saved, b.cycles_saved) {
+                (Some(x), Some(y)) if x != y => Some(x.cmp(&y)),
+                _ => None
+            }
+        };
+        let tiers: [&dyn Fn(&Self, &Self) -> Option<Ordering>; 2] = match goal {
+            OptimizationGoal::Speed => [&cycles_tier, &bytes_tier],
+            OptimizationGoal::Size | OptimizationGoal::Neutral => [&bytes_tier, &cycles_tier]
+        };
+        for tier in tiers {
+            if let Some(ordering) = tier(self, other) {
+                return ordering;
+            }
         }
-        if let (Some(a), Some(b)) = (self.cycles_saved, other.cycles_saved)
-            && a != b
-        {
-            return a.cmp(&b);
-        }
+
         if self.constraint_count != other.constraint_count {
             // Fewer constraints wins.
             return other.constraint_count.cmp(&self.constraint_count);
@@ -175,18 +211,61 @@ mod tests {
     }
 
     #[test]
-    fn more_bytes_saved_wins_outright() {
+    fn more_bytes_saved_wins_outright_under_size() {
         let better = cost(Some(3), Some(0), 5, 5);
         let worse = cost(Some(1), Some(100), 0, 0);
-        assert_eq!(better.cmp_better(&worse), std::cmp::Ordering::Greater);
-        assert_eq!(worse.cmp_better(&better), std::cmp::Ordering::Less);
+        assert_eq!(
+            better.cmp_better(&worse, OptimizationGoal::Size),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            worse.cmp_better(&better, OptimizationGoal::Size),
+            std::cmp::Ordering::Less
+        );
     }
 
     #[test]
-    fn tied_bytes_falls_through_to_cycles() {
+    fn tied_bytes_falls_through_to_cycles_under_size() {
         let better = cost(Some(2), Some(5), 3, 3);
         let worse = cost(Some(2), Some(1), 0, 0);
-        assert_eq!(better.cmp_better(&worse), std::cmp::Ordering::Greater);
+        assert_eq!(
+            better.cmp_better(&worse, OptimizationGoal::Size),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn more_cycles_saved_wins_outright_under_speed() {
+        // Same two candidates as `more_bytes_saved_wins_outright_under_size`,
+        // but with cycles clearly favoring the *other* one - under `Speed`
+        // the winner must flip, proving the goal actually swaps tier order
+        // rather than just being accepted as a parameter.
+        let more_bytes_fewer_cycles = cost(Some(3), Some(0), 5, 5);
+        let fewer_bytes_more_cycles = cost(Some(1), Some(100), 0, 0);
+        assert_eq!(
+            fewer_bytes_more_cycles.cmp_better(&more_bytes_fewer_cycles, OptimizationGoal::Speed),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn tied_cycles_falls_through_to_bytes_under_speed() {
+        let better = cost(Some(5), Some(2), 3, 3);
+        let worse = cost(Some(1), Some(2), 0, 0);
+        assert_eq!(
+            better.cmp_better(&worse, OptimizationGoal::Speed),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn neutral_prefers_bytes_first_same_as_size() {
+        let better = cost(Some(3), Some(0), 5, 5);
+        let worse = cost(Some(1), Some(100), 0, 0);
+        assert_eq!(
+            better.cmp_better(&worse, OptimizationGoal::Neutral),
+            std::cmp::Ordering::Greater
+        );
     }
 
     #[test]
@@ -197,7 +276,7 @@ mod tests {
         let fewer_constraints = cost(None, None, 1, 2);
         let more_constraints = cost(None, None, 4, 2);
         assert_eq!(
-            fewer_constraints.cmp_better(&more_constraints),
+            fewer_constraints.cmp_better(&more_constraints, OptimizationGoal::Size),
             std::cmp::Ordering::Greater
         );
     }
@@ -206,20 +285,29 @@ mod tests {
     fn fewer_constraints_wins_when_bytes_and_cycles_tie() {
         let fewer = cost(Some(1), Some(1), 1, 10);
         let more = cost(Some(1), Some(1), 3, 10);
-        assert_eq!(fewer.cmp_better(&more), std::cmp::Ordering::Greater);
+        assert_eq!(
+            fewer.cmp_better(&more, OptimizationGoal::Size),
+            std::cmp::Ordering::Greater
+        );
     }
 
     #[test]
     fn fewer_lines_is_the_final_tiebreak() {
         let shorter = cost(Some(1), Some(1), 2, 2);
         let longer = cost(Some(1), Some(1), 2, 5);
-        assert_eq!(shorter.cmp_better(&longer), std::cmp::Ordering::Greater);
+        assert_eq!(
+            shorter.cmp_better(&longer, OptimizationGoal::Size),
+            std::cmp::Ordering::Greater
+        );
     }
 
     #[test]
     fn total_tie_reports_equal() {
         let a = cost(Some(1), Some(1), 2, 2);
         let b = cost(Some(1), Some(1), 2, 2);
-        assert_eq!(a.cmp_better(&b), std::cmp::Ordering::Equal);
+        assert_eq!(
+            a.cmp_better(&b, OptimizationGoal::Size),
+            std::cmp::Ordering::Equal
+        );
     }
 }

@@ -211,15 +211,24 @@ fn analyze_source(
         match assemble_dry_run(&listing, parser_options) {
             Ok(env) => {
                 let resolver = EnvAddressResolver::new(&env);
-                (find_matches_with_resolver(&tokens, &rules, &resolver), None)
+                (
+                    find_matches_with_resolver(&tokens, &rules, &resolver, options.goal),
+                    None
+                )
             },
             Err(message) => {
-                (cpclib_asmoptim::engine::find_matches(&tokens, &rules), Some(message))
+                (
+                    cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal),
+                    Some(message)
+                )
             }
         }
     }
     else {
-        (cpclib_asmoptim::engine::find_matches(&tokens, &rules), None)
+        (
+            cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal),
+            None
+        )
     };
 
     let suggestions = matches

@@ -7,6 +7,7 @@
 //! every case here starts from source a user could really write.
 
 use cpclib_asm::parser::parse_z80_str;
+use cpclib_asmoptim::OptimizationGoal;
 use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
 use cpclib_tokens::{ToSimpleToken, Token};
@@ -27,18 +28,25 @@ mod common;
 /// style constraint must degrade to "unknown" for - see
 /// `tests/reachable_by_jr.rs`).
 fn matches_for(source: &str, rules: &str) -> Vec<PeepholeMatch> {
+    matches_for_goal(source, rules, OptimizationGoal::Neutral)
+}
+
+/// As [`matches_for`], with an explicit goal - for the tests that need to
+/// prove ranking is actually goal-dependent (see
+/// `cpclib_asmoptim::match_cost`'s own module doc comment).
+fn matches_for_goal(source: &str, rules: &str, goal: OptimizationGoal) -> Vec<PeepholeMatch> {
     let listing = parse_z80_str(source).expect("test source must parse");
     let rules = RuleSet::parse(rules).expect("test rules must parse");
 
     let located_tokens: Vec<_> = listing.iter().collect();
-    let located_result = find_matches(&located_tokens, &rules);
+    let located_result = find_matches(&located_tokens, &rules, goal);
 
     let simple_tokens: Vec<Token> = listing
         .iter()
         .map(|t| t.as_simple_token().into_owned())
         .collect();
     let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
-    let simple_result = find_matches(&simple_refs, &rules);
+    let simple_result = find_matches(&simple_refs, &rules, goal);
 
     common::assert_token_kinds_agree(&located_result, &simple_result, source);
 
@@ -348,7 +356,7 @@ replacement:
 fn an_empty_token_stream_yields_no_matches() {
     let rules = RuleSet::parse(CP_ZERO).unwrap();
     let tokens: Vec<&cpclib_asm::parser::LocatedToken> = Vec::new();
-    assert!(find_matches(&tokens, &rules).is_empty());
+    assert!(find_matches(&tokens, &rules, OptimizationGoal::Neutral).is_empty());
 }
 
 #[test]
@@ -475,6 +483,52 @@ fn the_same_rule_wins_regardless_of_which_order_the_file_lists_them_in() {
     let found = matches_for(" cp 0\n ret\n", BETTER_RULE_FIRST);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].rule_name.as_deref(), Some("cp02ora"));
+}
+
+/// Two rules, deliberately opposed: one saves more bytes but costs more
+/// cycles, the other is the reverse. Which one wins must flip with the
+/// `OptimizationGoal` - a demomaking-specific need `cmp_better` accounts for
+/// (see `match_cost.rs`'s own module doc comment): a size-constrained intro
+/// wants the byte-cheaper rewrite, a standard demo wants the cycle-cheaper
+/// one, and neither is objectively "more correct" than the other.
+///
+/// The two replacement instructions are real, verified opposites in this
+/// workspace's own NOP-based (CPC-contention-aware) cost model - `push hl`
+/// is 1 byte but 4 NOPs, `ld de,0` is 3 bytes but only 3 NOPs. (A `jr`-vs-`jp`
+/// pair, the classic Z80 example, turned out *not* to invert here: this
+/// project's CPC-specific timing table normalizes both to the same NOP
+/// count, and a label-referencing instruction's byte size can't be
+/// determined without a real address anyway - `TokenExt::number_of_bytes`
+/// reports it `Unknown` rather than guess.)
+const OPPOSED_BYTES_VS_CYCLES: &str = "\
+pattern: Smaller but slower
+name: smaller-rewrite
+0: nop
+replacement:
+0: push hl
+
+pattern: Bigger but faster
+name: faster-rewrite
+0: nop
+replacement:
+0: ld de, 0
+";
+
+#[test]
+fn the_size_goal_prefers_the_byte_cheaper_rule() {
+    let found = matches_for_goal(" nop\n pop hl\n ret\n", OPPOSED_BYTES_VS_CYCLES, OptimizationGoal::Size);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule_name.as_deref(), Some("smaller-rewrite"));
+}
+
+#[test]
+fn the_speed_goal_prefers_the_cycle_cheaper_rule() {
+    // Same two rules, same source - only the goal changes, and the winner
+    // must flip: this is the whole point of threading the goal into the
+    // engine rather than only using it to pick the rule *set*.
+    let found = matches_for_goal(" nop\n pop hl\n ret\n", OPPOSED_BYTES_VS_CYCLES, OptimizationGoal::Speed);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule_name.as_deref(), Some("faster-rewrite"));
 }
 
 #[test]

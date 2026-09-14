@@ -90,15 +90,15 @@ fn peephole_matches<'a>(
         // The document is its own program: its own assemble is the real one.
         Addresses::OwnAssemble(env) => {
             let resolver = EnvAddressResolver::new(env);
-            find_matches_with_resolver(&tokens, rules, &resolver)
+            find_matches_with_resolver(&tokens, rules, &resolver, goal)
         },
         // The document is part of a larger program, so the addresses come from
         // assembling *that* - see `entry::project_addresses`.
         Addresses::Project(project) => {
             let resolver = ProjectAddressResolver::new(&project.env, project.document.clone());
-            find_matches_with_resolver(&tokens, rules, &resolver)
+            find_matches_with_resolver(&tokens, rules, &resolver, goal)
         },
-        Addresses::None => find_matches(&tokens, rules)
+        Addresses::None => find_matches(&tokens, rules, goal)
     };
     (tokens, matches)
 }

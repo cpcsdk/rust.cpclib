@@ -7,6 +7,7 @@
 //! rule is tested in isolation.
 
 use cpclib_asm::parser::parse_z80_str;
+use cpclib_asmoptim::OptimizationGoal;
 use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
 use cpclib_tokens::{ToSimpleToken, Token};
@@ -26,14 +27,14 @@ fn matches_both_token_kinds(source: &str) -> Vec<PeepholeMatch> {
     let listing = parse_z80_str(source).expect("source must parse");
 
     let located_tokens: Vec<_> = listing.iter().collect();
-    let located_result = find_matches(&located_tokens, &rules);
+    let located_result = find_matches(&located_tokens, &rules, OptimizationGoal::Neutral);
 
     let simple_tokens: Vec<Token> = listing
         .iter()
         .map(|t| t.as_simple_token().into_owned())
         .collect();
     let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
-    let simple_result = find_matches(&simple_refs, &rules);
+    let simple_result = find_matches(&simple_refs, &rules, OptimizationGoal::Neutral);
 
     common::assert_token_kinds_agree(&located_result, &simple_result, source);
 
@@ -209,7 +210,7 @@ fn matching_a_long_repetitive_input_terminates_promptly() {
     let tokens: Vec<_> = listing.iter().collect();
 
     let started = std::time::Instant::now();
-    let found = find_matches(&tokens, &rules);
+    let found = find_matches(&tokens, &rules, OptimizationGoal::Neutral);
     let elapsed = started.elapsed();
 
     assert!(

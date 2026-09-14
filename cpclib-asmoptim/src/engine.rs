@@ -553,19 +553,31 @@ struct RuleAttempt {
     replacement_cycles: Option<u32>
 }
 
-/// Find every rule match in `tokens`.
+/// Find every rule match in `tokens`, ranking same-position candidates for
+/// `goal` (see [`MatchCost::cmp_better`]'s own doc comment: `Size` and
+/// `Neutral` prefer the candidate that saves the most bytes first, `Speed`
+/// prefers the one that saves the most cycles first - a demomaking-specific
+/// choice this crate makes on top of upstream's own fixed bytes-first order,
+/// since which one actually matters depends on what's being built: a
+/// standard demo cares about runtime speed, a size-constrained intro cares
+/// about what ships after crunching, which raw byte savings only
+/// approximates).
 ///
 /// Rules whose constraints this crate cannot evaluate are skipped entirely -
 /// suggesting an optimization whose safety condition was never checked would
 /// be worse than suggesting nothing. Address-aware constraints
 /// (`reachableByJr`) always report unknown - use [`find_matches_with_resolver`]
 /// to evaluate those too.
-pub fn find_matches<T>(tokens: &[&T], rules: &RuleSet) -> Vec<PeepholeMatch>
+pub fn find_matches<T>(
+    tokens: &[&T],
+    rules: &RuleSet,
+    goal: crate::OptimizationGoal
+) -> Vec<PeepholeMatch>
 where
     T: TokenExt + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
-    find_matches_with_resolver(tokens, rules, &NoResolver)
+    find_matches_with_resolver(tokens, rules, &NoResolver, goal)
 }
 
 /// As [`find_matches`], with a [`AddressResolver`] so address-aware
@@ -573,7 +585,8 @@ where
 pub fn find_matches_with_resolver<T, R>(
     tokens: &[&T],
     rules: &RuleSet,
-    resolver: &R
+    resolver: &R,
+    goal: crate::OptimizationGoal
 ) -> Vec<PeepholeMatch>
 where
     T: TokenExt + std::fmt::Display,
@@ -714,7 +727,9 @@ where
             // change when nothing objectively distinguishes two rules.
             let is_better = match &best {
                 None => true,
-                Some((_, best_cost)) => cost.cmp_better(best_cost) == std::cmp::Ordering::Greater
+                Some((_, best_cost)) => {
+                    cost.cmp_better(best_cost, goal) == std::cmp::Ordering::Greater
+                }
             };
             if is_better {
                 best = Some((attempt.m, cost));

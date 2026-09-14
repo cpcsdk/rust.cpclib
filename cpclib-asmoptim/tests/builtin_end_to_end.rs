@@ -20,14 +20,14 @@ fn suggestions(source: &str, goal: OptimizationGoal) -> Vec<PeepholeMatch> {
     let rules = builtin_rules(goal);
 
     let located_tokens: Vec<_> = listing.iter().collect();
-    let located_result = find_matches(&located_tokens, rules);
+    let located_result = find_matches(&located_tokens, rules, goal);
 
     let simple_tokens: Vec<Token> = listing
         .iter()
         .map(|t| t.as_simple_token().into_owned())
         .collect();
     let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
-    let simple_result = find_matches(&simple_refs, rules);
+    let simple_result = find_matches(&simple_refs, rules, goal);
 
     common::assert_token_kinds_agree(&located_result, &simple_result, source);
 
