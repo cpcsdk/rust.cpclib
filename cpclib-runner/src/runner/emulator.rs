@@ -1,4 +1,6 @@
 pub mod ace;
+#[cfg(feature = "screenshot")]
+pub mod ace_api;
 pub mod amspirit;
 pub mod amspiritlite;
 pub mod amspiritlite_api;

@@ -28,6 +28,8 @@ use crate::runner::emulator::Emulator;
 #[cfg(feature = "screenshot")]
 use crate::runner::emulator::amspiritlite_api;
 #[cfg(feature = "screenshot")]
+use crate::runner::emulator::ace_api;
+#[cfg(feature = "screenshot")]
 use crate::runner::emulator::js1984_robot_api;
 #[cfg(all(feature = "screenshot", unix))]
 use crate::runner::emulator::native1984_monitor;
@@ -683,6 +685,19 @@ impl EmulatorConf {
         if let Emulator::AmspiritLite(_) = emu {
             args.push("--web-port".to_owned());
             args.push(AMSPIRIT_LITE_ROBOT_WEB_PORT.to_string());
+        }
+
+        // `AceUsedEmulator::read_memory`/`write_memory` (below) need ACE's
+        // own web API listening on a fixed, known port - same reasoning as
+        // AMSpiriT Lite above. Deliberately no `-borderless` here: unlike
+        // the DAP backend's own ACE launch, this Robot-launched instance's
+        // existing `screenshot()` override and Orgams keystroke automation
+        // both depend on a real, normally-decorated window.
+        #[cfg(feature = "screenshot")]
+        if let Emulator::Ace(_) = emu {
+            args.push("-enable_webapi".to_owned());
+            args.push("-web_port".to_owned());
+            args.push(ACE_ROBOT_WEB_API_PORT.to_string());
         }
 
         if let Some(drive_a) = &drive_a {
@@ -1404,6 +1419,14 @@ pub(crate) trait UsedEmulator: Sized {
     }
 }
 
+/// The port `args_for_emu` passes to a Robot-launched ACE via
+/// `-web_port` - `ace_api`'s functions need a fixed, known port to connect
+/// to, same reasoning as `AMSPIRIT_LITE_ROBOT_WEB_PORT`/
+/// `SUGARBOX_ROBOT_DEBUG_SERVER_PORT` above. Next free number after those
+/// two (8765/8766).
+#[cfg(feature = "screenshot")]
+const ACE_ROBOT_WEB_API_PORT: u16 = 8767;
+
 pub(crate) struct AceUsedEmulator {}
 pub(crate) struct CpcecUsedEmulator {}
 pub(crate) struct WinapeUsedEmulator {}
@@ -1468,6 +1491,22 @@ impl UsedEmulator for AceUsedEmulator {
         // it just leaves a harmless leftover screenshot file behind.
         let _ = fs_err::remove_file(file);
         im
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn read_memory(_robot: &mut RobotImpl<Self>, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        Ok(retry_native_api_call(
+            "ACE readMemory via its own web API",
+            || ace_api::read_memory(ACE_ROBOT_WEB_API_PORT, address, count)
+        ))
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn write_memory(_robot: &mut RobotImpl<Self>, address: u16, data: &[u8]) -> Result<(), String> {
+        retry_native_api_call("ACE writeMemory via its own web API", || {
+            ace_api::write_memory(ACE_ROBOT_WEB_API_PORT, address, data)
+        });
+        Ok(())
     }
 }
 
