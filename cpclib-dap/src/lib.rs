@@ -19,6 +19,7 @@
 //! The mapping comes from [`cpclib_project::srcmap::SourceMap`], built by the
 //! assembler during its listing pass.
 
+pub mod ace;
 pub mod amspiritlite;
 pub mod basic;
 pub mod basic_session;
@@ -114,7 +115,9 @@ enum Backend {
     AmspiritLite(amspiritlite::AmspiritLitePeer),
     /// SugarboxV2, reached over its own newline-delimited-JSON TCP debug
     /// server.
-    SugarBox(sugarbox::SugarBoxPeer)
+    SugarBox(sugarbox::SugarBoxPeer),
+    /// ACE, reached over its own newline-delimited-JSON TCP web API.
+    Ace(ace::AcePeer)
 }
 
 impl peer::DapPeer for Backend {
@@ -123,7 +126,8 @@ impl peer::DapPeer for Backend {
         match self {
             Self::Served(peer) => peer.send(message),
             Self::AmspiritLite(peer) => peer.send(message),
-            Self::SugarBox(peer) => peer.send(message)
+            Self::SugarBox(peer) => peer.send(message),
+            Self::Ace(peer) => peer.send(message)
         }
     }
 
@@ -131,7 +135,8 @@ impl peer::DapPeer for Backend {
         match self {
             Self::Served(peer) => peer.drain(),
             Self::AmspiritLite(peer) => peer.drain(),
-            Self::SugarBox(peer) => peer.drain()
+            Self::SugarBox(peer) => peer.drain(),
+            Self::Ace(peer) => peer.drain()
         }
     }
 
@@ -145,7 +150,8 @@ impl peer::DapPeer for Backend {
         match self {
             Self::Served(peer) => peer.note_line_at_pc(line),
             Self::AmspiritLite(peer) => peer.note_line_at_pc(line),
-            Self::SugarBox(peer) => peer.note_line_at_pc(line)
+            Self::SugarBox(peer) => peer.note_line_at_pc(line),
+            Self::Ace(peer) => peer.note_line_at_pc(line)
         }
     }
 
@@ -153,7 +159,8 @@ impl peer::DapPeer for Backend {
         match self {
             Self::Served(peer) => peer.quirks(),
             Self::AmspiritLite(peer) => peer.quirks(),
-            Self::SugarBox(peer) => peer.quirks()
+            Self::SugarBox(peer) => peer.quirks(),
+            Self::Ace(peer) => peer.quirks()
         }
     }
 
@@ -161,7 +168,8 @@ impl peer::DapPeer for Backend {
         match self {
             Self::Served(peer) => peer.supports(command),
             Self::AmspiritLite(peer) => peer.supports(command),
-            Self::SugarBox(peer) => peer.supports(command)
+            Self::SugarBox(peer) => peer.supports(command),
+            Self::Ace(peer) => peer.supports(command)
         }
     }
 }
@@ -177,7 +185,8 @@ impl Backend {
         match self {
             Self::Served(_) => "1984js",
             Self::AmspiritLite(_) => "amspiritlite",
-            Self::SugarBox(_) => "sugarbox"
+            Self::SugarBox(_) => "sugarbox",
+            Self::Ace(_) => "ace"
         }
     }
 }
@@ -723,6 +732,7 @@ fn start_session(
     let (early_chosen_emulator, _) = resolve_emulator_choice(&arguments);
     let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite");
     let wants_sugarbox_early = early_chosen_emulator.eq_ignore_ascii_case("sugarbox");
+    let wants_ace_early = early_chosen_emulator.eq_ignore_ascii_case("ace");
     let install_check = std::thread::spawn(move || {
         if wants_lite_early {
             use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
@@ -735,6 +745,14 @@ fn start_session(
         else if wants_sugarbox_early {
             use cpclib_runner::runner::emulator::{Emulator, SugarBoxV2Version};
             let configuration = Emulator::SugarBoxV2(SugarBoxV2Version::default())
+                .configuration::<cpclib_common::event::DiscardObserver>();
+            if !configuration.is_cached() {
+                let _ = configuration.install(&cpclib_common::event::DiscardObserver);
+            }
+        }
+        else if wants_ace_early {
+            use cpclib_runner::runner::emulator::{AceVersion, Emulator};
+            let configuration = Emulator::Ace(AceVersion::default())
                 .configuration::<cpclib_common::event::DiscardObserver>();
             if !configuration.is_cached() {
                 let _ = configuration.install(&cpclib_common::event::DiscardObserver);
@@ -1032,10 +1050,11 @@ fn start_session(
     if !chosen_emulator.eq_ignore_ascii_case("1984js")
         && !chosen_emulator.eq_ignore_ascii_case("amspiritlite")
         && !chosen_emulator.eq_ignore_ascii_case("sugarbox")
+        && !chosen_emulator.eq_ignore_ascii_case("ace")
     {
         notices.push(format!(
             "\"{chosen_emulator}\" cannot be debugged; this session uses 1984js. \
-             Debuggable emulators: 1984js, amspiritlite, sugarbox - set one in the launch \
+             Debuggable emulators: 1984js, amspiritlite, sugarbox, ace - set one in the launch \
              configuration, or as `emulator` under `[dap]` in cpclib-lsp.toml."
         ));
     }
@@ -1044,6 +1063,10 @@ fn start_session(
         notices.push(
             "Debugging through SugarboxV2, in its own window.".to_string()
         );
+    }
+    let wants_ace = chosen_emulator.eq_ignore_ascii_case("ace");
+    if wants_ace {
+        notices.push("Debugging through ACE, in its own window.".to_string());
     }
     if wants_lite {
         notices.push("Debugging through AMSpiriT Lite, in its own window. Its web page is \
@@ -1148,6 +1171,7 @@ fn connect_backend(
     let (chosen_emulator, dap_config) = resolve_emulator_choice(arguments);
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
     let wants_sugarbox = chosen_emulator.eq_ignore_ascii_case("sugarbox");
+    let wants_ace = chosen_emulator.eq_ignore_ascii_case("ace");
 
     let (backend, url) = if wants_lite {
         // An instance already serving, named by the configuration or found at
@@ -1277,6 +1301,43 @@ fn connect_backend(
         }
 
         (Backend::SugarBox(peer), String::new())
+    }
+    else if wants_ace {
+        // Same reasoning as SugarboxV2 above: no `endpoint`/attach path yet.
+        // ACE's own web API has no auto-halt-on-connect (unlike SugarboxV2),
+        // but nothing here has a way to distinguish "an instance the user
+        // is already running" from "one left over from a previous session" -
+        // always started fresh, same as SugarboxV2's own no-`endpoint`
+        // branch.
+        if is_basic {
+            return Err(
+                "BASIC debugging is only supported with the \"amspiritlite\" emulator today - \
+                 set it in the launch configuration, or as `emulator` under `[dap]` in \
+                 cpclib-lsp.toml."
+                    .to_string()
+            );
+        }
+        let port = arguments
+            .get("port")
+            .and_then(Value::as_u64)
+            .and_then(|port| u16::try_from(port).ok())
+            .unwrap_or(dap_config.port);
+
+        let (endpoint, peer) = if let Some(disk) = disk_path {
+            ace::launch_with_disk(disk, port, &cpclib_common::event::DiscardObserver)?
+        }
+        else {
+            ace::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?
+        };
+        if !endpoint.ends_with(&format!(":{port}")) {
+            early_notices.push(format!(
+                "port {port} was already answering - an emulator left behind by an earlier \
+                 session, most likely - so this one serves on {endpoint} instead. The older \
+                 window is not the one being debugged; close it."
+            ));
+        }
+
+        (Backend::Ace(peer), String::new())
     }
     else {
         if disk_path.is_some() {
