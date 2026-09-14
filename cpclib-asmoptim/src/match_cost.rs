@@ -20,10 +20,42 @@
 //! crunched-size estimate would need running an actual cruncher per
 //! candidate, which this does not attempt.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use cpclib_asm::implementation::tokens::TokenExt;
 use cpclib_tokens::{DataAccessElem, ListingElement};
 
 use crate::OptimizationGoal;
+
+/// Memoizes byte-size/cycle-cost results by an instruction's own rendered
+/// text - see [`span_cost`]'s own doc comment for why a real per-candidate
+/// assemble is expensive enough to be worth caching, and why keying by text
+/// (not by token identity or position) is correct: two textually-identical
+/// instructions always cost the same, and real demoscene sources are full
+/// of exactly this kind of repetition (`ld b,b`, `xor a`, a save/restore
+/// `push`/`pop` pair, ...). Built once per `find_matches_with_resolver`
+/// call and shared across every candidate at every position - matching is
+/// single-threaded within one such call, so a `RefCell` is enough; there is
+/// no need for this to survive past that one call (a later edit changes
+/// which instructions even appear, so nothing here would still be valid to
+/// reuse anyway).
+#[derive(Default)]
+pub(crate) struct ByteCostCache(RefCell<HashMap<String, (Option<usize>, Option<u32>)>>);
+
+impl ByteCostCache {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn get(&self, text: &str) -> Option<(Option<usize>, Option<u32>)> {
+        self.0.borrow().get(text).copied()
+    }
+
+    pub(crate) fn insert(&self, text: String, value: (Option<usize>, Option<u32>)) {
+        self.0.borrow_mut().insert(text, value);
+    }
+}
 
 /// One instruction's cycle cost, straight from `cpclib_z80flow::cost`'s own
 /// static table - no assemble needed. `None` (unknown) for anything the
@@ -83,6 +115,44 @@ where T: TokenExt + 'a {
         .try_fold(0usize, |acc, t| Some(acc + t.number_of_bytes().ok()?))
 }
 
+/// [`span_bytes`] and [`span_cycles`] combined, one pass over `tokens`,
+/// going through `cache` keyed by each token's own rendered text
+/// (`Display`) rather than assembling every single token afresh -
+/// `TokenExt::number_of_bytes` builds a real `Env` and runs it through a
+/// full pass loop, which is genuinely expensive to pay for the same literal
+/// instruction over and over. Used for the *original* matched span; a
+/// replacement's own cost is cached separately, by whole rendered line
+/// rather than per-token, since that is the granularity
+/// `engine.rs::replacement_cost` already works in.
+pub(crate) fn span_cost<'a, T>(
+    tokens: impl IntoIterator<Item = &'a T>,
+    cache: &ByteCostCache
+) -> (Option<usize>, Option<u32>)
+where T: TokenExt + std::fmt::Display + 'a {
+    let mut bytes = Some(0usize);
+    let mut cycles = Some(0u32);
+    for token in tokens {
+        let key = token.to_string();
+        let (token_bytes, cycles_for_token) = match cache.get(&key) {
+            Some(cached) => cached,
+            None => {
+                let priced = (token.number_of_bytes().ok(), token_cycles(token));
+                cache.insert(key, priced);
+                priced
+            }
+        };
+        bytes = match (bytes, token_bytes) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None
+        };
+        cycles = match (cycles, cycles_for_token) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None
+        };
+    }
+    (bytes, cycles)
+}
+
 /// How one candidate match at a position compares to another. Mirrors
 /// upstream's own tie-break order exactly: most bytes saved, then most
 /// cycles saved, then fewest constraints, then fewest instructions spanned -
@@ -107,26 +177,28 @@ pub(crate) struct MatchCost {
 impl MatchCost {
     /// `original` is the matched span, in the caller's own token type.
     /// `replacement_bytes`/`replacement_cycles` are pre-computed by
-    /// `engine.rs::replacement_cost` at the point the replacement's parsed
-    /// listing is still alive (see [`span_cycles`]'s own doc comment for
-    /// why the replacement's tokens themselves never reach this far).
+    /// `engine.rs::replacement_cost` (via the same `cache`, at the point the
+    /// replacement's parsed listing is still alive - see `span_cycles`'s
+    /// own doc comment for why the replacement's tokens themselves never
+    /// reach this far).
     pub(crate) fn compute<'a, T>(
         original: impl IntoIterator<Item = &'a T>,
         replacement_bytes: Option<usize>,
         replacement_cycles: Option<u32>,
         constraint_count: usize,
-        span_len: usize
+        span_len: usize,
+        cache: &ByteCostCache
     ) -> Self
     where
-        T: TokenExt + 'a,
+        T: TokenExt + std::fmt::Display + 'a,
         T::DataAccess: DataAccessElem
     {
-        let original: Vec<&T> = original.into_iter().collect();
-        let bytes_saved = match (span_bytes(original.iter().copied()), replacement_bytes) {
+        let (original_bytes, original_cycles) = span_cost(original, cache);
+        let bytes_saved = match (original_bytes, replacement_bytes) {
             (Some(before), Some(after)) => Some(before as i64 - after as i64),
             _ => None
         };
-        let cycles_saved = match (span_cycles(original.iter().copied()), replacement_cycles) {
+        let cycles_saved = match (original_cycles, replacement_cycles) {
             (Some(before), Some(after)) => Some(before as i64 - after as i64),
             _ => None
         };

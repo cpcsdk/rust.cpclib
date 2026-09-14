@@ -539,18 +539,16 @@ impl PeepholeMatch {
     }
 }
 
-/// `try_rule`'s real result: the match itself, plus the replacement's own
-/// byte size/cycle cost - computed once here, while the replacement's
-/// parsed listing is still alive (`LocatedToken::clone` is
-/// `unimplemented!()` in this codebase, so the tokens themselves can never
-/// be carried past this point - see `replacement_cost`). Not part of
-/// `PeepholeMatch` itself: no external consumer needs these, and keeping
-/// them out avoids any API churn for the three real ones (`cpclib-lsp`,
-/// `cpclib-basmopt`, this crate's own `upstream_potests.rs`).
+/// `try_rule`'s real result. A thin wrapper around `PeepholeMatch` today
+/// (rather than just returning that directly) so a field can be added here
+/// later without touching the public type - no external consumer needs
+/// anything beyond `m` today (`cpclib-lsp`, `cpclib-basmopt`, this crate's
+/// own `upstream_potests.rs`). The replacement's own cost is deliberately
+/// *not* computed here - see `replacement_cost`'s own doc comment for why
+/// pricing is deferred to the caller instead of happening eagerly for every
+/// successful match.
 struct RuleAttempt {
-    m: PeepholeMatch,
-    replacement_bytes: Option<usize>,
-    replacement_cycles: Option<u32>
+    m: PeepholeMatch
 }
 
 /// Find every rule match in `tokens`, ranking same-position candidates for
@@ -630,6 +628,12 @@ where
     // so computed here rather than per candidate match.
     let protected = smc::protected_tokens(tokens);
 
+    // Shared across every candidate at every position - see its own doc
+    // comment (`match_cost::ByteCostCache`) for why keying by an
+    // instruction's own text, rather than pricing it fresh every time it
+    // recurs, is what makes a match-dense real file affordable at all.
+    let cost_cache = crate::match_cost::ByteCostCache::new();
+
     /// Does this span really execute from its first instruction to its last?
     ///
     /// Every pattern is written as though it does, and every block-local
@@ -689,16 +693,23 @@ where
         // comment for why file order alone used to decide this, and why
         // that was a real gap rather than a deliberate simplification).
         //
-        // Post-checks (self-modifying-code protection, straight-line
-        // execution) run before cost is computed for each candidate: they
-        // are cheap and decide eligibility, so there is no reason to pay for
-        // `MatchCost::compute`'s real per-token assemble on a candidate that
-        // was never going to be offered anyway. This also fixes a real
-        // pre-existing gap: previously, a position where the *only*
-        // matching rule failed a post-check produced no match at all, even
-        // when a different rule would have passed - now every applicable
-        // rule gets a real chance.
-        let mut best: Option<(PeepholeMatch, MatchCost)> = None;
+        // Two passes, not one: first collect every genuinely eligible rule
+        // (pattern matched, constraints satisfied, post-checks - SMC
+        // protection, straight-line execution - passed) *without* pricing
+        // it, then price and rank only if there's more than one. Pricing
+        // (`MatchCost::compute`) does a real per-candidate assemble, and the
+        // overwhelming common case is exactly one eligible rule at a
+        // position with nothing to rank it against. Measured on a real
+        // match-dense file (12k tokens, ~9000 matches, none of them
+        // genuinely competing): pricing every candidate regardless cost
+        // ~7x more than pricing only on an actual choice (231ms -> 1.65s) -
+        // almost all of that gone once singleton candidates skip
+        // `MatchCost::compute` entirely. This also fixes a real
+        // pre-existing gap as a side effect: previously, a position where
+        // the *only* matching rule failed a post-check produced no match at
+        // all, even when a different rule would have passed - now every
+        // applicable rule gets a real chance.
+        let mut eligible: Vec<(&Rule, RuleAttempt)> = Vec::new();
         for (index, rule) in usable.iter().enumerate() {
             if let Some(expected) = first_mnemonic[index]
                 && here.is_none_or(|actual| !mnemonic_is(expected, actual))
@@ -714,30 +725,49 @@ where
             {
                 continue;
             }
-
-            let cost = MatchCost::compute(
-                tokens[attempt.m.start..attempt.m.end].iter().copied(),
-                attempt.replacement_bytes,
-                attempt.replacement_cycles,
-                rule.constraints.len(),
-                attempt.m.end - attempt.m.start
-            );
-            // Strictly-greater replaces; a tie keeps whichever was found
-            // first (earlier file order) - the same outcome as before this
-            // change when nothing objectively distinguishes two rules.
-            let is_better = match &best {
-                None => true,
-                Some((_, best_cost)) => {
-                    cost.cmp_better(best_cost, goal) == std::cmp::Ordering::Greater
-                }
-            };
-            if is_better {
-                best = Some((attempt.m, cost));
-            }
+            eligible.push((rule, attempt));
         }
 
-        match best {
-            Some((m, _)) => {
+        let winner: Option<PeepholeMatch> = if eligible.len() == 1 {
+            Some(eligible.pop().unwrap().1.m)
+        }
+        else {
+            let mut best: Option<(PeepholeMatch, MatchCost)> = None;
+            for (rule, attempt) in eligible {
+                // Priced only now that there is genuinely something to rank
+                // it against - see `replacement_cost`'s own doc comment.
+                // `unwrap_or((None, None))` is defensive, not expected: this
+                // exact text already parsed successfully in `try_rule`'s own
+                // `is_assemblable` check.
+                let (replacement_bytes, replacement_cycles) =
+                    replacement_cost(&attempt.m.replacement, &cost_cache).unwrap_or((None, None));
+                let cost = MatchCost::compute(
+                    tokens[attempt.m.start..attempt.m.end].iter().copied(),
+                    replacement_bytes,
+                    replacement_cycles,
+                    rule.constraints.len(),
+                    attempt.m.end - attempt.m.start,
+                    &cost_cache
+                );
+                // Strictly-greater replaces; a tie keeps whichever was found
+                // first (earlier file order) - the same outcome as before
+                // this change when nothing objectively distinguishes two
+                // rules.
+                let is_better = match &best {
+                    None => true,
+                    Some((_, best_cost)) => {
+                        cost.cmp_better(best_cost, goal) == std::cmp::Ordering::Greater
+                    }
+                };
+                if is_better {
+                    best = Some((attempt.m, cost));
+                }
+            }
+            best.map(|(m, _)| m)
+        };
+
+        match winner {
+            Some(m) => {
                 start = m.end.max(start + 1);
                 matches.push(m);
             },
@@ -841,12 +871,20 @@ where
     // as an indirection to basm ("invalid LD: wrong source") and would break
     // the file it was meant to improve. Checking here makes "a suggestion
     // never breaks the source" structural rather than something the tests
-    // happen to sample. Also where the replacement's own cost gets priced
-    // (`replacement_cost`), for the caller's own best-of-candidates ranking
-    // - it must happen here, not later, because the parsed listing this
-    // reads from cannot outlive this function (`LocatedToken::clone` is
-    // `unimplemented!()` in this codebase).
-    let (replacement_bytes, replacement_cycles) = replacement_cost(&replacement)?;
+    // happen to sample.
+    //
+    // Deliberately syntax-only, *not* also pricing the replacement here:
+    // this runs for every successful pattern+constraint match, including
+    // the overwhelming majority that turn out to be the only eligible rule
+    // at their position and are never actually ranked against anything (see
+    // the caller's own doc comment on why pricing is deferred). Pricing a
+    // replacement that never needed it was the single largest cost in an
+    // earlier version of this change, measured directly: ~7x slower on a
+    // real match-dense file purely from computing real per-candidate cost
+    // unconditionally.
+    if !replacement.iter().all(|line| is_assemblable(line)) {
+        return None;
+    }
 
     Some(RuleAttempt {
         m: PeepholeMatch {
@@ -858,35 +896,64 @@ where
             replacement,
             bulk_unsafe: rule.is_pure_dead_output_deletion(),
             reasons
-        },
-        replacement_bytes,
-        replacement_cycles
+        }
     })
 }
 
-/// Parse every rendered replacement line and price it: `None` (the outer
-/// `Option`) the moment a line fails to even parse - see `try_rule`'s own
-/// call site for why an unparsable replacement means the whole rule attempt
-/// is discarded. The two inner `Option`s are independent: byte size and
-/// cycle cost can each be unknown without the other being (a fake
-/// instruction, ~30 of them in this corpus, prices in bytes via a real
-/// assemble but has no cycle-table entry - see `match_cost::token_cycles`).
+/// Whether one rendered replacement line is something basm can actually
+/// read - syntax-only, deliberately never assembled (see `try_rule`'s own
+/// call site for why pricing must wait until it's known to be needed). A
+/// comment line (which a preserved region can contain) parses fine and is
+/// accepted.
+fn is_assemblable(line: &str) -> bool {
+    cpclib_asm::parser::parse_z80_str(format!("    {line}\n")).is_ok()
+}
+
+/// Parse every rendered replacement line and price it, using `cache` to
+/// avoid re-assembling a line whose exact text this call has already priced
+/// - real demoscene sources are full of repeated idioms (`ld b,b`, `xor a`,
+/// a save/restore `push`/`pop` pair, ...), and pricing is a real per-line
+/// assemble (`TokenExt::number_of_bytes`), not a cheap lookup. `None` (the
+/// outer `Option`) the moment a line fails to even parse - should not
+/// happen in practice, since `try_rule` already validated this exact text
+/// via `is_assemblable` before ever calling this. The two inner `Option`s
+/// are independent: byte size and cycle cost can each be unknown without
+/// the other being (a fake instruction, ~30 of them in this corpus, prices
+/// in bytes via a real assemble but has no cycle-table entry - see
+/// `match_cost::token_cycles`).
 ///
 /// Flattened with [`flatten_for_analysis`] (not a bare `.iter()`) for the
 /// same reason every other execution-order-sensitive walk in this crate is:
 /// a replacement line is rare but not forbidden from containing a nested
 /// sequential block, and this must see what actually runs, in order.
-fn replacement_cost(lines: &[String]) -> Option<(Option<usize>, Option<u32>)> {
+fn replacement_cost(
+    lines: &[String],
+    cache: &crate::match_cost::ByteCostCache
+) -> Option<(Option<usize>, Option<u32>)> {
     let mut bytes = Some(0usize);
     let mut cycles = Some(0u32);
     for line in lines {
+        if let Some(priced) = cache.get(line) {
+            bytes = match (bytes, priced.0) {
+                (Some(a), Some(b)) => Some(a + b),
+                _ => None
+            };
+            cycles = match (cycles, priced.1) {
+                (Some(a), Some(b)) => Some(a + b),
+                _ => None
+            };
+            continue;
+        }
         let listing = cpclib_asm::parser::parse_z80_str(format!("    {line}\n")).ok()?;
         let line_tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
-        bytes = match (bytes, crate::match_cost::span_bytes(line_tokens.iter().copied())) {
+        let line_bytes = crate::match_cost::span_bytes(line_tokens.iter().copied());
+        let line_cycles = crate::match_cost::span_cycles(line_tokens.iter().copied());
+        cache.insert(line.clone(), (line_bytes, line_cycles));
+        bytes = match (bytes, line_bytes) {
             (Some(a), Some(b)) => Some(a + b),
             _ => None
         };
-        cycles = match (cycles, crate::match_cost::span_cycles(line_tokens.iter().copied())) {
+        cycles = match (cycles, line_cycles) {
             (Some(a), Some(b)) => Some(a + b),
             _ => None
         };
