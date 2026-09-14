@@ -21,6 +21,16 @@ use crate::implementation::tokens::TokenExt;
 pub(crate) fn eval_subscript(target: &ExprResult, indices: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
     match indices {
         [ExprResult::Range { .. }] => list_sublist_by_range(target, &indices[0]),
+        [ExprResult::List(idx_list)] => {
+            // Gather: `target[[0, 2, 4]]` - one recursive single-index
+            // subscript per entry, same as `ExprResult::subscript`'s own
+            // gather arm in the context-free evaluator.
+            let mut out = Vec::with_capacity(idx_list.len());
+            for idx in idx_list.iter() {
+                out.push(eval_subscript(target, std::slice::from_ref(idx))?);
+            }
+            Ok(ExprResult::List(out.into()))
+        },
         [index] => {
             let i = index.int_value().map_err(AssemblerError::ExpressionTypeError)?;
             let i = usize::try_from(i).map_err(|_| {

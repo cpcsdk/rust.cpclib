@@ -75,6 +75,18 @@ fn two_indices_on_a_list_is_an_error() {
 }
 
 #[test]
+fn list_of_indices_gathers_elements() {
+    let bin =
+        cpclib_asm::assemble("org 0x4000\n l = [10,20,30,40,50]\n db l[[0,2,4]]\n").unwrap();
+    assert_eq!(bin, vec![10, 30, 50]);
+}
+
+#[test]
+fn list_of_indices_out_of_range_errors() {
+    assert!(cpclib_asm::assemble("org 0x4000\n l = [10,20,30]\n db l[[0,5]]\n").is_err());
+}
+
+#[test]
 fn subscript_binds_tighter_than_arithmetic() {
     // a[0] + b[1] must be (a[0]) + (b[1]), not something weirder.
     let bin =

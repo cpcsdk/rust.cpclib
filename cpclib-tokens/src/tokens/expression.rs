@@ -1470,6 +1470,17 @@ impl ExprResult {
                     }
                 }
             },
+            [ExprResult::List(idx_list)] => {
+                // Gather: `target[[0, 2, 4]]` picks out several positions at
+                // once, one recursive single-index subscript per entry -
+                // not itself a new access mode, just this same `[index]`
+                // arm below applied N times.
+                let mut out = Vec::with_capacity(idx_list.len());
+                for idx in idx_list.iter() {
+                    out.push(self.subscript(std::slice::from_ref(idx))?);
+                }
+                Ok(Self::List(out.into()))
+            },
             [index] => {
                 let i = as_usize(index)?;
                 match self {
@@ -2998,6 +3009,25 @@ mod range_and_broadcast_tests {
         assert_eq!(
             list.subscript(&[range(1, 3, false)]).unwrap(),
             ExprResult::List(values(&[20, 30]).into())
+        );
+    }
+
+    #[test]
+    fn subscript_list_of_indices_gathers_elements() {
+        let list = ExprResult::List(values(&[10, 20, 30, 40, 50]).into());
+        assert_eq!(
+            list.subscript(&[ExprResult::List(values(&[0, 2, 4]).into())])
+                .unwrap(),
+            ExprResult::List(values(&[10, 30, 50]).into())
+        );
+    }
+
+    #[test]
+    fn subscript_list_of_indices_out_of_range_errors() {
+        let list = ExprResult::List(values(&[10, 20, 30]).into());
+        assert!(
+            list.subscript(&[ExprResult::List(values(&[0, 5]).into())])
+                .is_err()
         );
     }
 

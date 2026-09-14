@@ -173,6 +173,8 @@ notation used to *write* a list literal (`[1, 2, 3]`), applied *after* an existi
   it gives a character.
 - **`target[a..b]`** - a slice, using a [range](#ranges) as the index. Works on lists and strings,
   giving back the same kind of value (a sub-list or a sub-string).
+- **`target[[i, j, ...]]`** - a gather: gives back a new list holding the elements at each of the
+  given positions, in order. Works anywhere `target[i]` does (list, string, range).
 - **`target[x, y]`** - two indices, for a matrix only: `x` is the column, `y` is the row.
 - Indexing a range is constant-time, just like `list_len`/`list_get` on a range - no list is
   materialized to answer `(0..1000000)[500000]`.

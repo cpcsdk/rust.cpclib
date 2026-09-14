@@ -16,6 +16,9 @@ ASSERT r[500000] = 500000
 ASSERT l[1..3] = [20, 30]
 ASSERT s[1..4] = "ell"
 
+; list-of-indices index - gathers several positions at once
+ASSERT l[[0, 2]] = [10, 30]
+
 ; a literal can be subscripted directly, no named variable required
 ASSERT [1, 2, 3][1] = 2
 ASSERT "abc"[2] = 'c'

@@ -9,6 +9,9 @@
     ; target[a..b] - a slice, using a range
     assert numbers[1..3] == [20, 30]
 
+    ; target[[i, j, ...]] - gather several positions into a new list
+    assert numbers[[0, 2]] == [10, 30]
+
     ; the same [i]/[a..b] forms work on strings too
     greeting = "hello world"
     assert greeting[0] == 'h'
