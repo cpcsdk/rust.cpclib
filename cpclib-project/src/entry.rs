@@ -258,6 +258,27 @@ impl ProjectGraph {
             _ => None
         }
     }
+
+    /// Every file reachable from `root` through the include graph (`root`
+    /// itself included) - the program's own file set, as opposed to
+    /// [`reaches`]'s single-target reachability question. Lets a cross-file
+    /// symbol search try the correct program's own files first instead of
+    /// every `.asm` file under the workspace root regardless of which
+    /// program (if any) it belongs to. `root` must already be canonicalized,
+    /// matching this graph's own keys (see [`graph_of`]).
+    pub fn reachable_from(&self, root: &Path) -> HashSet<PathBuf> {
+        let mut seen = HashSet::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            if !seen.insert(current.clone()) {
+                continue;
+            }
+            if let Some(next) = self.includes.get(&current) {
+                stack.extend(next.iter().cloned());
+            }
+        }
+        seen
+    }
 }
 
 pub fn graph_of(workspace: &Workspace) -> ProjectGraph {
@@ -363,6 +384,29 @@ mod tests {
     /// real filesystem.
     fn project(dir: &Path) {
         std::fs::create_dir_all(dir.join(".git")).unwrap();
+    }
+
+    /// `ProjectGraph::reachable_from`'s own transitive closure: A includes B
+    /// includes C - `reachable_from(A)` must contain all three, not just A's
+    /// direct includes.
+    #[test]
+    fn reachable_from_returns_the_full_transitive_closure_including_multi_hop_includes() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        project(tmp.path().as_std_path());
+        let a = write(
+            tmp.path().as_std_path(),
+            "a.asm",
+            "    run start\n    include \"b.asm\"\n"
+        );
+        let b = write(tmp.path().as_std_path(), "b.asm", "    include \"c.asm\"\n");
+        let c = write(tmp.path().as_std_path(), "c.asm", "start\n    ret\n");
+
+        let workspace = scan_workspace(tmp.path().as_std_path());
+        let graph = graph_of(&workspace);
+        let reachable = graph.reachable_from(&a);
+        assert!(reachable.contains(&a), "{reachable:?}");
+        assert!(reachable.contains(&b), "{reachable:?}");
+        assert!(reachable.contains(&c), "{reachable:?}");
     }
 
     /// The reported case in miniature: the document is only ever included, and

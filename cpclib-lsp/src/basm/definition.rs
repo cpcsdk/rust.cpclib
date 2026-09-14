@@ -1202,6 +1202,53 @@ impl AssemblyAnalyzer {
         }
         None
     }
+
+    /// Split `candidates` into (files in the same program as `from_uri`,
+    /// everything else) using the include graph, so a workspace-wide symbol
+    /// search (`server::backend::find_definition_via_workspace_scan`) can
+    /// try the correct program's own files first instead of every `.asm`
+    /// file under the workspace root regardless of which program (if any)
+    /// it belongs to.
+    ///
+    /// `Entry::Unknown` (an ambiguous or orphan document) degrades to
+    /// `(empty, candidates)` - i.e. today's single full scan, unchanged -
+    /// matching every other `Entry` consumer's fail-closed philosophy.
+    pub(crate) fn same_program_split(
+        &self,
+        from_uri: &Url,
+        candidates: Vec<std::path::PathBuf>
+    ) -> (Vec<std::path::PathBuf>, Vec<std::path::PathBuf>) {
+        let Ok(from_path) = from_uri.to_file_path()
+        else {
+            return (Vec::new(), candidates);
+        };
+        let Some(root) = cpclib_project::entry::root_of(&from_path)
+        else {
+            return (Vec::new(), candidates);
+        };
+        let (_, graph) = self.project_graph_cached(&root);
+        let config = self.config();
+        let configured_entry = (!config.entry.is_empty()).then(|| config.entry.as_str());
+        let program_root = match cpclib_project::entry::entry_in_graph(
+            &from_path,
+            configured_entry,
+            &root,
+            &graph
+        ) {
+            cpclib_project::entry::Entry::Standalone => from_path.clone(),
+            cpclib_project::entry::Entry::Project(entry_path) => entry_path,
+            cpclib_project::entry::Entry::Unknown => return (Vec::new(), candidates)
+        };
+        let Ok(program_root) = fs_err::canonicalize(&program_root)
+        else {
+            return (Vec::new(), candidates);
+        };
+        let reachable = graph.reachable_from(&program_root);
+
+        candidates.into_iter().partition(|p| {
+            fs_err::canonicalize(p).is_ok_and(|c| reachable.contains(&c))
+        })
+    }
 }
 
 /// Every ancestor directory of `doc_uri`'s own directory, closest first, up
@@ -1610,6 +1657,73 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
             loc.range.start.line, 0,
             "a different-file location must not be shifted: {loc:?}"
         );
+    }
+
+    fn project_marker(dir: &std::path::Path) {
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+    }
+
+    /// Two sibling programs sharing a workspace, each with their own file -
+    /// `same_program_split` must put the calling document's own program's
+    /// files in the first (`same`) bucket and the unrelated sibling's file
+    /// in the second (`other`), never the reverse.
+    #[test]
+    fn same_program_split_puts_reachable_files_first_and_unrelated_sibling_files_second() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        project_marker(tmp.path().as_std_path());
+        std::fs::write(
+            tmp.path().join("one.asm"),
+            "    run start\n    include \"a.asm\"\n"
+        )
+        .unwrap();
+        let a = tmp.path().join("a.asm");
+        std::fs::write(&a, "start\n    ret\n").unwrap();
+        std::fs::write(
+            tmp.path().join("two.asm"),
+            "    run start\n    include \"b.asm\"\n"
+        )
+        .unwrap();
+        let b = tmp.path().join("b.asm");
+        std::fs::write(&b, "start\n    ret\n").unwrap();
+
+        let a_uri = tower_lsp::lsp_types::Url::from_file_path(&a).unwrap();
+        let analyzer = AssemblyAnalyzer::new();
+        let (same, other) = analyzer.same_program_split(&a_uri, vec![
+            a.clone().into_std_path_buf(),
+            b.clone().into_std_path_buf()
+        ]);
+        assert_eq!(same, vec![a.into_std_path_buf()], "{same:?}");
+        assert_eq!(other, vec![b.into_std_path_buf()], "{other:?}");
+    }
+
+    /// `a.asm` reachable from two sibling programs has no single entry
+    /// (`Entry::Unknown`) - must degrade to `(empty, candidates)`, i.e.
+    /// today's single full scan, rather than guessing either program.
+    #[test]
+    fn same_program_split_degrades_to_the_full_list_when_the_entry_is_ambiguous() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        project_marker(tmp.path().as_std_path());
+        std::fs::write(
+            tmp.path().join("one.asm"),
+            "    run start\n    include \"shared.asm\"\n"
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("two.asm"),
+            "    run start\n    include \"shared.asm\"\n"
+        )
+        .unwrap();
+        let shared = tmp.path().join("shared.asm");
+        std::fs::write(&shared, "start\n    ret\n").unwrap();
+        let other = tmp.path().join("other.asm");
+        std::fs::write(&other, "    nop\n").unwrap();
+
+        let shared_uri = tower_lsp::lsp_types::Url::from_file_path(&shared).unwrap();
+        let analyzer = AssemblyAnalyzer::new();
+        let candidates = vec![shared.into_std_path_buf(), other.into_std_path_buf()];
+        let (same, unchanged) = analyzer.same_program_split(&shared_uri, candidates.clone());
+        assert!(same.is_empty(), "{same:?}");
+        assert_eq!(unchanged, candidates);
     }
 }
 

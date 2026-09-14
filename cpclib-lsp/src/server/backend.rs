@@ -346,14 +346,29 @@ impl CpcLspBackend {
         word_upper: &str
     ) -> Option<Location> {
         let paths = self.candidate_asm_paths(from_uri).await;
+        // Files known to belong to the same program as `from_uri` (via the
+        // include graph) are searched first - both for speed and for
+        // correctness: without this split, `find_map_any` over the full
+        // unordered list returns whichever parallel task finishes first,
+        // which can be a same-named symbol in an unrelated sibling program
+        // sharing the same workspace. `Entry::Unknown` degrades to
+        // `(empty, paths)` - today's single full scan, unchanged.
+        let (same_program, other) = self.asm_analyzer.same_program_split(from_uri, paths);
         let documents = Arc::clone(&self.documents);
         let asm_analyzer = Arc::clone(&self.asm_analyzer);
         let word_upper = word_upper.to_string();
 
         tokio::task::spawn_blocking(move || {
-            paths.par_iter().find_map_any(|path| {
-                find_definition_at_path_with(&documents, &asm_analyzer, path, &word_upper)
-            })
+            same_program
+                .par_iter()
+                .find_map_any(|path| {
+                    find_definition_at_path_with(&documents, &asm_analyzer, path, &word_upper)
+                })
+                .or_else(|| {
+                    other.par_iter().find_map_any(|path| {
+                        find_definition_at_path_with(&documents, &asm_analyzer, path, &word_upper)
+                    })
+                })
         })
         .await
         .unwrap_or(None)
