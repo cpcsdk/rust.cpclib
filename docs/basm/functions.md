@@ -99,6 +99,7 @@ This page documents all built-in functions available in basm expressions.
 - **`list_set(list, index, value)`** - Set element at index (returns new list)
 - **`list_len(list)`** - Length of list
 - **`list_sublist(list, start, end)`** - Extract sublist (end is not included)
+- **`list_sublist(list, a_range)`** - Extract the elements at the positions the range selects
 - **`list_sort(list)`** - Sort list in ascending order (returns new list)
 - **`list_argsort(list)`** - Return indices that would sort the list
 - **`list_push(list, element)`** - Append element to list (returns new list)
@@ -108,6 +109,16 @@ This page documents all built-in functions available in basm expressions.
 - **`list_position(list, predicate)`** (-1 if not found, predicate)
 - **`list_position_value(list, value)`** (-1 if not found, value)
 - **`list_split_by_value(list, value)`**
+
+## Range Functions
+
+`list_len()` and `list_get()` above also accept a range directly (see
+[Ranges](expression-types.md#ranges)) - a range is not itself materialized into a list, so both
+compute in constant time even for a very large range.
+
+- **`range_step_by(a_range, step)`** - Returns a new range that steps by `step` instead of 1. There is
+  no dedicated `a..step..b` syntax - this function, or [broadcasting](expression-types.md#broadcasting)
+  (`base + (0..n) * stride`), are how a strided sequence is built instead.
 
 ## Matrix Functions
 

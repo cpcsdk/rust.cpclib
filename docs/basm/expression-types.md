@@ -100,6 +100,53 @@ Lists support:
 - Nesting: `[[1, 2], [3, 4]]`
 - Functions: `list_len()`, `list_get()`, etc.
 
+## Ranges
+
+A range denotes a sequence of integers without writing every value out by hand. Range syntax matches
+Rust's own exactly:
+
+- **`a..b`** - exclusive of `b`
+- **`a..=b`** - inclusive of `b`
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_ranges.asm"
+```
+
+A range is empty when `a > b` - there is no auto-descending. There is no dedicated stepped-range
+syntax (no `a..step..b`); to step through a range, either call `range_step_by(a_range, step)` or
+combine a range with [broadcasting](#broadcasting), e.g. `base + (0..n) * stride`.
+
+A range behaves like a list wherever a list is expected - `list_len()`, `list_get()`, `DB`/`DEFW`/`STR`
+emission, and `ITERATE ... IN` all accept a range directly, with no conversion needed. Unlike a list
+literal, a range never allocates its elements up front: `db 0..65536` and `list_len(0..65536)` compute
+directly from the range's bounds instead of building a 65536-element list first.
+
+A range used unparenthesized inside arithmetic is a parse error (the range operator has the same low
+precedence Rust's own does) - write `(0..5) * 2`, not `0..5 * 2`.
+
+## Broadcasting
+
+Arithmetic (`+ - * / %`), bitwise (`&`, `|`), and relational (`< > <= >=`) operators apply
+element-wise when one or both operands is a list (or a range):
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_broadcasting.asm"
+```
+
+- **List and scalar, either order**: the scalar combines with every element - `[1,2,3] + 10` and
+  `10 + [1,2,3]` both give `[11,12,13]`.
+- **Two lists of the same length**: elements combine pairwise - `[1,2,3] + [10,20,30]` gives
+  `[11,22,33]`. Lists of different lengths are a hard error.
+- **Nested lists**: broadcast recursively through every level.
+- **A range**: converts to a list first, since a scaled or shifted range (e.g. `(0..1000) * 2`) is no
+  longer a contiguous range.
+- **`==` and `!=` do not broadcast.** They compare the whole list (or range) at once and return a
+  single boolean, exactly as they always have - `[1,2] == [1,2]` is `true`, not `[true,true]`.
+  Broadcasting `==`/`!=` would silently change that shape, breaking anything using such a comparison
+  as an `IF`/`ASSERT` condition.
+- A relational comparison broadcasts into a list of booleans, which - like any other list - cannot be
+  used directly as an `IF`/`ASSERT` condition without picking an element out of it first.
+
 ## Matrices
 
 Matrices are 2D arrays, created via `matrix_new()` or from nested lists:
