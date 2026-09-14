@@ -22,12 +22,20 @@ camino.workspace = true
 fs-err.workspace = true
 thiserror.workspace = true
 clap = { workspace = true, features = ["derive"], optional = true }
+indicatif = { workspace = true, optional = true }
 
 [dev-dependencies]
 camino-tempfile.workspace = true
 
 [features]
 cmdline = ["dep:clap"]
+# Terminal progress bars during a real (possibly slow) analysis - see
+# `analyze_source`'s own doc comment. Kept optional and off the `cmdline`
+# feature, matching `cpclib-asm`/`cpclib-basm`'s own convention: a future
+# library consumer (the LSP, per this crate's own module doc comment) must
+# never have `indicatif` terminal output mixed into its own stdout channel.
+indicatif = ["dep:indicatif", "cpclib-asm/indicatif"]
+default = ["indicatif"]
 
 [[bin]]
 name = "basmopt"

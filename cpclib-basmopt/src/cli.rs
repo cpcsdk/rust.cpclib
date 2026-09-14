@@ -51,7 +51,13 @@ pub struct Cli {
     /// `--goal size`'s `jp2jr`); the default goal never touches `INCLUDE` at
     /// all. Repeatable.
     #[arg(short = 'I', long = "include", value_name = "DIR")]
-    pub include_dirs: Vec<Utf8PathBuf>
+    pub include_dirs: Vec<Utf8PathBuf>,
+
+    /// Show a progress bar. Same flag, same purpose as `basm`'s own
+    /// `--progress` - useful on a real, possibly slow analysis, so the tool
+    /// doesn't look hung while it works.
+    #[arg(long = "progress")]
+    pub progress: bool
 }
 
 impl Cli {
@@ -61,7 +67,8 @@ impl Cli {
             extra_rule_files: self.extra_rules.clone(),
             disabled_rules: self.disabled.clone(),
             no_builtin: self.no_builtin,
-            include_dirs: self.include_dirs.clone()
+            include_dirs: self.include_dirs.clone(),
+            show_progress: self.progress
         }
     }
 }

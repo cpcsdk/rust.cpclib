@@ -48,7 +48,13 @@ pub struct Options {
     /// role as `basm`'s own `-I`/`--include`. Only ever consulted when a
     /// real assemble actually happens - see [`analyze_file`]'s own doc
     /// comment for when that is.
-    pub include_dirs: Vec<Utf8PathBuf>
+    pub include_dirs: Vec<Utf8PathBuf>,
+    /// Show progress while analyzing - same flag, same underlying
+    /// `cpclib_asm::progress` machinery `basm` itself uses (see
+    /// `analyze_source`'s own doc comment for exactly what gets reported
+    /// and why). Off by default, matching `basm`'s own CLI convention: an
+    /// opt-in for a real, possibly slow run, not noise for a quick check.
+    pub show_progress: bool
 }
 
 
@@ -177,12 +183,24 @@ pub fn analyze_file(path: &Utf8Path, options: &Options) -> Result<AnalyzeOutcome
 /// anchors `INCLUDE` resolution and `assemble_dry_run`'s per-token address
 /// recording to a real location on every pass, even though only the first
 /// pass's text came from that location.
+///
+/// When [`Options::show_progress`] is set, this reports through the exact
+/// same `cpclib_asm::progress::Progress` singleton `basm`'s own CLI uses
+/// (a real assemble - the only thing a plain parse-and-match doesn't need
+/// address-aware rules for - reports its own Parse/Pass/... phases from
+/// *inside* the assembler once `ParserOptions::show_progress` is set, same
+/// as `basm` itself; nothing here has to drive that part manually), plus a
+/// spinner around the peephole matching pass, which has no such
+/// infrastructure of its own and, on a real match-dense file, can be the
+/// slower half - see `cpclib-asmoptim::engine`'s own module doc comment for
+/// what makes a candidate's own cost genuinely expensive to compute.
 fn analyze_source(
     source: String,
     path: &Utf8Path,
     options: &Options
 ) -> Result<AnalyzeOutcome, BasmOptError> {
     let mut parser_options = ParserOptions::default();
+    parser_options.show_progress = options.show_progress;
     if let Ok(cwd) = std::env::current_dir()
         && let Ok(cwd) = Utf8PathBuf::from_path_buf(cwd)
     {
@@ -197,16 +215,37 @@ fn analyze_source(
         .clone()
         .context_builder()
         .set_current_filename(path.as_str());
+
+    // Mirrors `basm`'s own `parse()`: the assembler reports Pass/
+    // PassProgress on its own once `show_progress` is set (below, on the
+    // assemble), but *which file* is being parsed is something only the
+    // caller knows, so it wraps the parse call itself.
+    let show_progress =
+        options.show_progress || cpclib_asm::progress::has_progress_sink();
+    let progress_name = cpclib_asm::progress::normalize(path).to_string();
+    if show_progress {
+        cpclib_asm::progress::Progress::instance().add_parse(&progress_name);
+    }
     let listing = parse_z80_with_context_builder(&source, builder).map_err(|cause| {
         BasmOptError::Parse {
             path: path.to_owned(),
             cause: Box::new(cause)
         }
-    })?;
+    });
+    if show_progress {
+        cpclib_asm::progress::Progress::instance().remove_parse(&progress_name);
+    }
+    let listing = listing?;
 
     let rules = build_rule_set(options, path)?;
     let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
 
+    // The matching pass has no progress reporting of its own (unlike the
+    // parse/assemble above) - a plain spinner is enough to say "still
+    // working" rather than nothing at all, without needing engine-level
+    // instrumentation for what is, even on a real match-dense file,
+    // seconds rather than minutes.
+    let matching_bar = start_matching_bar(show_progress);
     let (matches, assemble_warning) = if cpclib_asmoptim::rules_need_addresses(&rules) {
         match assemble_dry_run(&listing, parser_options) {
             Ok(env) => {
@@ -230,6 +269,7 @@ fn analyze_source(
             None
         )
     };
+    finish_matching_bar(matching_bar);
 
     let suggestions = matches
         .into_iter()
@@ -258,6 +298,30 @@ fn assemble_dry_run(listing: &LocatedListing, parse: ParserOptions) -> Result<En
         Err((_, _, e)) => Err(e.to_string())
     }
 }
+
+/// A spinner around the peephole matching pass - see [`analyze_source`]'s own
+/// doc comment for why that pass needs one of its own. Mirrors `cpclib-basm`'s
+/// own `#[cfg(feature = "indicatif")]`-gated bar-around-a-slow-step pattern
+/// (`cpclib-basm/src/lib.rs`, around its `TO_M4` transfers): with the feature
+/// off, `Progress::add_bar` doesn't exist at all, so there is nothing to show
+/// and nothing to gate - only the `show_progress` flag itself survives.
+#[cfg(feature = "indicatif")]
+fn start_matching_bar(show_progress: bool) -> Option<indicatif::ProgressBar> {
+    show_progress.then(|| cpclib_asm::progress::Progress::instance().add_bar("Matching"))
+}
+
+#[cfg(not(feature = "indicatif"))]
+fn start_matching_bar(_show_progress: bool) {}
+
+#[cfg(feature = "indicatif")]
+fn finish_matching_bar(bar: Option<indicatif::ProgressBar>) {
+    if let Some(bar) = bar {
+        cpclib_asm::progress::Progress::instance().remove_bar_ok(&bar);
+    }
+}
+
+#[cfg(not(feature = "indicatif"))]
+fn finish_matching_bar(_bar: ()) {}
 
 /// Build the working rule set: the built-in goal set (unless
 /// [`Options::no_builtin`]), plus every extra rule file, minus every
