@@ -594,3 +594,25 @@ regsNotUsedAfter(0,?reg)
     assert_eq!(found[0].rule_name.as_deref(), Some("unused-ld-any"));
     assert!(found[0].bulk_unsafe, "{found:?}");
 }
+
+#[test]
+fn a_rule_that_would_otherwise_fire_is_vetoed_by_a_trailing_noopt_comment() {
+    // Sanity: the rule fires on the unmarked instruction (both token kinds,
+    // via `matches_for`'s own parity check).
+    assert_eq!(matches_for(" ld a, a\n", LD_SELF).len(), 1);
+    // Marked `; noopt`, the same instruction is vetoed - engine-level, not
+    // just at `noopt::protected_tokens`'s own unit-test level.
+    assert!(matches_for(" ld a, a ; noopt\n", LD_SELF).is_empty());
+}
+
+#[test]
+fn a_rule_inside_a_noopt_block_is_vetoed() {
+    assert!(
+        matches_for("; noopt:begin\n ld a, a\n; noopt:end\n", LD_SELF).is_empty()
+    );
+    // Outside the block, the same rule still fires normally.
+    assert_eq!(
+        matches_for("; noopt:begin\n ret\n; noopt:end\n ld a, a\n", LD_SELF).len(),
+        1
+    );
+}

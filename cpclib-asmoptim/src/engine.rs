@@ -23,6 +23,7 @@ use crate::effects::effects_of;
 use crate::liveness::{self, Liveness};
 use crate::match_cost::MatchCost;
 use crate::stream::AnalysisStream;
+use crate::noopt;
 use crate::smc;
 use crate::dsl::{
     BinOp, Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount,
@@ -625,8 +626,12 @@ where
         .collect();
 
     // Instructions something points *into* - see `smc`. A whole-file property,
-    // so computed here rather than per candidate match.
-    let protected = smc::protected_tokens(tokens);
+    // so computed here rather than per candidate match. Unioned with
+    // `noopt`'s own veto - a human explicitly marking an instruction as
+    // intentional is a different reason to protect it, but the same kind of
+    // whole-file, rule-independent hard veto.
+    let mut protected = smc::protected_tokens(tokens);
+    protected.extend(noopt::protected_tokens(tokens));
 
     // Shared across every candidate at every position - see its own doc
     // comment (`match_cost::ByteCostCache`) for why keying by an
