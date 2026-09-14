@@ -472,7 +472,24 @@ impl ExprEvaluationExt for Expr {
             | Expr::Rnd => Vec::new(),
 
             Expr::Label(label) | Expr::PrefixedLabel(_, label) => {
-                vec![Cow::Borrowed(label.as_str())]
+                // The raw label text is one reference; a `{name}` "labels
+                // generation" segment inside it (e.g. `SCROLLER_{i}`) is a
+                // separate, genuine reference to `name` too - without this,
+                // a loop counter only ever used that way reads as unused.
+                // Re-braced (`{name}`, not bare `name`) because a REPEAT/
+                // FOR/ITERATE counter's own symbol-table key IS its
+                // bracketed form - see `Env::visit_repeat`'s
+                // `format!("{{{counter}}}")` and `warn_if_counter_unused`'s
+                // `is_used(bracketed_counter_name)` check.
+                let mut syms = vec![Cow::Borrowed(label.as_str())];
+                syms.extend(
+                    cpclib_tokens::symbols::SymbolsTable::identifiers_referenced_in_patterns(
+                        label.as_str()
+                    )
+                    .into_iter()
+                    .map(|name| Cow::Owned(format!("{{{name}}}")))
+                );
+                syms
             },
 
             Expr::Paren(a) | Expr::UnaryOperation(_, a) => a.symbols_used(),

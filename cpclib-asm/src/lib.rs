@@ -769,6 +769,61 @@ mod test_super {
         );
     }
 
+    /// A REPEAT counter referenced only through `{i}` "labels generation"
+    /// interpolation inside a larger identifier (e.g. `SCROLLER_{i}`) is a
+    /// genuine use - `warn_if_counter_unused` must not flag it. Previously
+    /// it always did: `Expr::symbols_used()` returned the raw, unexpanded
+    /// label text (`"SCROLLER_PALETTE_{i}"`), never the bare counter name
+    /// nor its bracketed symbol-table key (`"{i}"`), so the real-time
+    /// usage tracker never saw `i` (or `{i}`) as used.
+    #[test]
+    fn repeat_counter_used_only_via_label_interpolation_is_not_flagged_unused() {
+        let code = "\
+            org 0x4000\n\
+            PALETTE_0 = [1,2,3,4,5,6,7,8]\n\
+            PALETTE_1 = [1,2,3,4,5,6,7,8]\n\
+            repeat 2, i\n\
+                assert list_len(PALETTE_{i}) == 8\n\
+            endrepeat\n";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+        assert!(
+            !env.warnings()
+                .iter()
+                .any(|w| format!("{w}").contains("is never used")),
+            "{:?}",
+            env.warnings()
+        );
+    }
+
+    /// Regression guard for the fix above: a REPEAT counter that really is
+    /// unused (no `{i}` interpolation anywhere in the body) must still warn.
+    #[test]
+    fn a_genuinely_unused_repeat_counter_still_warns() {
+        let code = "\
+            org 0x4000\n\
+            repeat 3, i\n\
+                nop\n\
+            endrepeat\n";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+        assert!(
+            env.warnings()
+                .iter()
+                .any(|w| format!("{w}").contains("is never used")),
+            "{:?}",
+            env.warnings()
+        );
+    }
+
     /// Regression test for the parser-level fix: disabling
     /// `RedundantAccumulatorPrefix`/`FakeInstruction` in `ParserOptions`
     /// must prevent `WarningWrapper` from being constructed at all - not

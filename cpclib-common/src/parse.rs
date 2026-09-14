@@ -266,6 +266,26 @@ pub enum PatternExpr {
     }
 }
 
+impl PatternExpr {
+    /// Every bare identifier this pattern expression references, innermost
+    /// first - e.g. `i` for `Identifier("i")`, `i` for `i+1`. Used to feed
+    /// symbol-usage tracking for `{...}` "labels generation" segments (see
+    /// `SymbolsTable::identifiers_referenced_in_patterns`), so a loop
+    /// counter only ever referenced through `foo_{i}`-style interpolation
+    /// isn't flagged as an unused REPEAT/FOR/ITERATE counter.
+    pub fn identifiers_used(&self, out: &mut Vec<String>) {
+        match self {
+            PatternExpr::Number(_) | PatternExpr::Bool(_) | PatternExpr::Char(_) => {},
+            PatternExpr::Identifier(name) => out.push(name.clone()),
+            PatternExpr::Unary { expr, .. } => expr.identifiers_used(out),
+            PatternExpr::Binary { left, right, .. } => {
+                left.identifiers_used(out);
+                right.identifiers_used(out);
+            }
+        }
+    }
+}
+
 pub fn parse_pattern_number_literal(text: &str) -> Option<i32> {
     let text = text.trim();
     if text.is_empty() {

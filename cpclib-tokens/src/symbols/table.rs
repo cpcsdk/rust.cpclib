@@ -409,6 +409,34 @@ impl SymbolsTable {
         BalancedBracedSegmentsIter::new(text)
     }
 
+    /// Every bare identifier referenced inside a `{...}` "labels
+    /// generation" segment of `text` (see `extend_local_and_patterns_for_symbol`'s
+    /// own doc comment) - e.g. `"foo_{i}"` yields `["i"]`, `"foo_{i+1}"`
+    /// also yields `["i"]`. Best-effort and read-only, purely to feed
+    /// symbol-usage tracking (`Env::track_used_symbols`) so a loop counter
+    /// only ever referenced through `{...}` interpolation in a label isn't
+    /// flagged as unused - a segment that fails to parse as a
+    /// `PatternExpr` is silently skipped rather than erroring, since being
+    /// wrong here must never affect real assembly, only that diagnostic's
+    /// accuracy.
+    pub fn identifiers_referenced_in_patterns(text: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for (start, end) in Self::collect_balanced_braced_segments(text) {
+            let inner = &text[start + 1..end - 1];
+            match parse_pattern_expr(inner) {
+                Ok(ast) => ast.identifiers_used(&mut out),
+                // `collect_balanced_braced_segments` only finds top-level
+                // segments (e.g. the outer braces of `{{x}+1}`), so a
+                // segment whose content itself embeds further `{...}`
+                // (nested interpolation) doesn't parse as a bare
+                // `PatternExpr` on its own - recurse into its raw text to
+                // find those instead.
+                Err(_) => out.extend(Self::identifiers_referenced_in_patterns(inner))
+            }
+        }
+        out
+    }
+
     fn eval_pattern_expression(&self, expression: &str) -> Result<ExprResult, SymbolError> {
         let parsed = parse_pattern_expr(expression)
             .map_err(|_| SymbolError::CannotModify(expression.to_string().into()))?;
@@ -1501,5 +1529,55 @@ impl SymbolsTable {
 impl AsRef<SymbolsTable> for SymbolsTable {
     fn as_ref(&self) -> &SymbolsTable {
         self
+    }
+}
+
+#[cfg(test)]
+mod identifiers_referenced_in_patterns_tests {
+    use super::SymbolsTable;
+
+    #[test]
+    fn no_braces_yields_nothing() {
+        assert!(SymbolsTable::identifiers_referenced_in_patterns("plain_label").is_empty());
+    }
+
+    #[test]
+    fn a_bare_identifier_segment_is_found() {
+        assert_eq!(
+            SymbolsTable::identifiers_referenced_in_patterns("SCROLLER_{i}"),
+            vec!["i".to_string()]
+        );
+    }
+
+    #[test]
+    fn an_arithmetic_segment_still_finds_its_identifier() {
+        assert_eq!(
+            SymbolsTable::identifiers_referenced_in_patterns("label{value+2}"),
+            vec!["value".to_string()]
+        );
+    }
+
+    #[test]
+    fn several_segments_all_contribute() {
+        assert_eq!(
+            SymbolsTable::identifiers_referenced_in_patterns("{a}_mid_{b}"),
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_numeric_or_char_segment_yields_no_identifier() {
+        assert!(SymbolsTable::identifiers_referenced_in_patterns("label{5}").is_empty());
+    }
+
+    #[test]
+    fn nested_braces_still_find_the_inner_identifier() {
+        // `collect_balanced_braced_segments` only returns the outer `{...}`
+        // segment for `{{x}+1}` - the inner `{x}` must be found via the
+        // recursive fallback, not silently dropped.
+        assert_eq!(
+            SymbolsTable::identifiers_referenced_in_patterns("label{{x}+1}"),
+            vec!["x".to_string()]
+        );
     }
 }

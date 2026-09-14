@@ -508,7 +508,17 @@ impl ExprEvaluationExt for LocatedExpr {
             | LocatedExpr::Rnd(_) => Vec::new(),
 
             LocatedExpr::Label(label) | LocatedExpr::PrefixedLabel(_, label, _) => {
-                vec![Cow::Borrowed(label.as_str())]
+                // See `Expr::symbols_used`'s own comment - kept in sync per
+                // this impl's "Be sure it is always synchronized" note.
+                let mut syms = vec![Cow::Borrowed(label.as_str())];
+                syms.extend(
+                    cpclib_tokens::symbols::SymbolsTable::identifiers_referenced_in_patterns(
+                        label.as_str()
+                    )
+                    .into_iter()
+                    .map(|name| Cow::Owned(format!("{{{name}}}")))
+                );
+                syms
             },
 
             LocatedExpr::BinaryOperation(_, a, b, _) => {
