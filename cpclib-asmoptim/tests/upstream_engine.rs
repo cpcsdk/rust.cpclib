@@ -130,12 +130,14 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
     // `evenPushPopsSPNotRead`, `memoryNotWritten`, `memoryNotUsed` and
     // `noStackArguments`.
     //
-    // Every constraint any real rule uses is now evaluated. Note "evaluated"
-    // is not "always decidable": three of them answer conservatively where a
-    // sound answer is not available (memory aliasing, and a callee whose stack
+    // Every constraint any real rule uses is now evaluated - `supported.len()`
+    // below equals the full rule count, not a subset. Note "evaluated" is not
+    // "always decidable": three of them answer conservatively where a sound
+    // answer is not available (memory aliasing, and a callee whose stack
     // behaviour cannot be scanned), reporting `Unknown` - which fails, so the
-    // rule stays silent rather than guessing. `regsModified` is the one name
-    // left unimplemented, and no rule in the corpus uses it.
+    // rule stays silent rather than guessing. `regsModified` *is* implemented
+    // (`constraints::SUPPORTED`) - it just happens that no rule in this
+    // corpus uses it, so it can never move this count on its own.
     assert_eq!(
         supported.len(),
         185,

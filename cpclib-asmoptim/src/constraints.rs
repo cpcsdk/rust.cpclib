@@ -19,18 +19,19 @@ use crate::regflag::{Flag, Reg};
 ///
 /// Ordered roughly by how often they appear in the real upstream corpus
 /// (`in` alone accounts for 178 uses of ~500, then `regsNotUsedAfter` at 87
-/// and `flagsNotUsedAfter` at 78). Together these cover 177 of the 185 base
-/// rules.
+/// and `flagsNotUsedAfter` at 78). Every constraint the base 185-rule corpus
+/// actually uses is in this list - see
+/// `upstream_engine.rs::the_supported_rule_count_is_what_we_think_it_is`,
+/// which asserts the supported subset equals the full rule count, not a
+/// subset of it. `regsModified` is the one entry here no rule currently
+/// uses (kept supported anyway, for a `--rules`-supplied file that might).
 ///
-/// What is left, and why:
-///
-/// * `memoryNotWritten`/`memoryNotUsed` (4+2 uses) - would need real memory
-///   aliasing to decide whether two `(IX+d)` accesses overlap. All four rules
-///   needing them are `sdcc-*` patterns aimed at compiler output.
-/// * `atLeastOneCPUOp` + `evenPushPopsSPNotRead` (3+3) - always used together,
-///   by the three `unnecessary-push-pop` rules.
-/// * `noStackArguments` (1) - an SDCC calling-convention question that does
-///   not translate to basm.
+/// "Supported" is not "always decidable", though: `memoryNotWritten`/
+/// `memoryNotUsed` (real memory aliasing between two `(IX+d)` accesses) and
+/// `noStackArguments` (an SDCC calling-convention question with no basm
+/// equivalent) answer conservatively - `Unknown` where a sound answer isn't
+/// available, which fails the constraint rather than guessing, so a rule
+/// needing one of these simply stays silent on the cases it cannot decide.
 pub const SUPPORTED: &[&str] = &[
     "equal",
     "notEqual",
