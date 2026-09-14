@@ -197,7 +197,7 @@ impl AssemblyAnalyzer {
     ///
     /// See `cpclib_project::cache::ProjectCache` for why the key is a
     /// fingerprint rather than a timestamp or a hash of the sources.
-    fn project_env_cached(
+    pub(super) fn project_env_cached(
         &self,
         entry: &std::path::Path,
         fingerprint: u128,
@@ -226,7 +226,7 @@ impl AssemblyAnalyzer {
     }
 
     /// The project's include graph, rebuilt only when the project changed.
-    fn project_graph_cached(&self, root: &std::path::Path) -> (u128, Arc<entry::ProjectGraph>) {
+    pub(super) fn project_graph_cached(&self, root: &std::path::Path) -> (u128, Arc<entry::ProjectGraph>) {
         self.projects.graph_for(root)
     }
 

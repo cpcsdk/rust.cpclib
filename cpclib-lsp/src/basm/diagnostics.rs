@@ -1,7 +1,10 @@
 //! Diagnostics for assembly files: parse/assembly errors mapped to LSP
 //! diagnostics (recursive walk of the `AssemblerError` tree).
 
+use cpclib_asm::assembler::Env;
+use cpclib_asm::parser::obtained::LocatedListing;
 use cpclib_asm::preamble::ListingElement;
+use cpclib_project::entry;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -177,11 +180,13 @@ impl AssemblyAnalyzer {
             && diagnostics.is_empty()
             && let Ok(listing) = self.parse_document(document)
         {
-            // Only `.0` (the `Env`) is needed here: every diagnostic this
+            // The real project's `Env` when this document resolves to one
+            // (see `diagnostics_env`'s own doc comment) - falls back to
+            // today's standalone assemble otherwise. Every diagnostic this
             // block produces is symbolic/text-based, not an address-shaped
-            // question (see `dry_run_env_cached_checked`'s own doc comment
-            // for which callers must check completeness and why).
-            let (mut env, _complete) = self.dry_run_env_cached_checked(document, &listing);
+            // question, so completeness isn't checked here the way an
+            // address-aware caller of `dry_run_env_cached_checked` would.
+            let mut env = self.diagnostics_env(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
             collect_firmware_literal_warnings(document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
@@ -231,6 +236,52 @@ impl AssemblyAnalyzer {
         }
 
         diagnostics
+    }
+
+    /// The `Env` diagnostics should read symbols/warnings from for
+    /// `document` - the real project's `Env` when one resolves, falling
+    /// back to a standalone assemble exactly as before otherwise (unsaved
+    /// buffer, no resolvable project, or the project itself fails to
+    /// assemble). Same shape as `peephole::resolve_peephole_addresses` -
+    /// fails toward today's behavior, matching every other `Entry`
+    /// consumer's own "best-effort, fails toward Unknown" philosophy.
+    ///
+    /// A document that only makes sense as part of a real program (relying
+    /// on constants/macros its real includer defines) used to be diagnosed
+    /// standalone regardless, reporting phantom "undefined symbol" errors
+    /// for code that assembles fine for real - this is what fixes that.
+    fn diagnostics_env(&self, document: &Document, listing: &LocatedListing) -> Env {
+        let own = || self.dry_run_env_cached_checked(document, listing).0;
+
+        let Ok(document_path) = document.uri.to_file_path()
+        else {
+            return own();
+        };
+        // Recorded project byte offsets describe the file *on disk* - an
+        // unsaved edit has already shifted them, so the project route can't
+        // be trusted until the buffer is saved again.
+        let buffer = document.text();
+        let matches_disk = fs_err::read_to_string(&document_path).is_ok_and(|disk| disk == buffer);
+        if !matches_disk {
+            return own();
+        }
+
+        let Some(root) = entry::root_of(&document_path)
+        else {
+            return own();
+        };
+        let (fingerprint, graph) = self.project_graph_cached(&root);
+        let config = self.config();
+        let configured_entry = (!config.entry.is_empty()).then(|| config.entry.as_str());
+        match entry::entry_in_graph(&document_path, configured_entry, &root, &graph) {
+            entry::Entry::Project(entry_path) => {
+                match self.project_env_cached(&entry_path, fingerprint, &config) {
+                    Some(project_env) => (*project_env).clone(),
+                    None => own()
+                }
+            },
+            entry::Entry::Standalone | entry::Entry::Unknown => own()
+        }
     }
 }
 
@@ -662,6 +713,13 @@ pub(super) fn collect_asm_diagnostics(
             collect_asm_diagnostics(inner, Some(span), document, out);
         },
         AssemblerError::RelocatedWarning { warning, span } => {
+            // Same reasoning as the `AlreadyRenderedWarningWithLocation` arm
+            // below: `dry_run_env` follows real `INCLUDE`s at any depth, so
+            // without this check a warning from an included file would show
+            // up in every file that happens to include it.
+            if !warning_belongs_to_document(span.filename(), document) {
+                return;
+            }
             out.push(asm_diag(
                 Some(span),
                 format!("{warning}"),
@@ -1016,6 +1074,86 @@ mod tests {
         assert_eq!(out[0].range.start.line, 1);
         assert_eq!(out[0].range.start.character, 10, "{out:?}");
         assert_eq!(out[0].range.end.character, 13, "{out:?}");
+    }
+
+    /// Regression test for the `RelocatedWarning` arm of `collect_asm_diagnostics`
+    /// missing the same `warning_belongs_to_document` guard
+    /// `AlreadyRenderedWarningWithLocation` already has - a real, currently-
+    /// live bug: `dry_run_env` follows real `INCLUDE`s, and an *incomplete*
+    /// assemble (a real error partway through the file) can hand back a
+    /// partial `Env` whose warnings from *before* the failure point were
+    /// never run through `render_warnings()` (which is what normally
+    /// converts `RelocatedWarning` into the already-filtered
+    /// `AlreadyRenderedWarningWithLocation` shape) - so a still-raw
+    /// `RelocatedWarning` pointing into a different file could leak through
+    /// unfiltered. `Z80Span` isn't hand-constructible outside `cpclib-asm`
+    /// (see `asm_diag_range_is_utf16_aware_with_a_multibyte_char_before_the_span`
+    /// above), so this gets a real one from parsing unrelated text under a
+    /// different filename, the same approach that test uses.
+    #[test]
+    fn relocated_warning_from_a_different_file_is_not_shown_in_this_documents_diagnostics() {
+        use cpclib_asm::MayHaveSpan;
+        let other_uri = Url::parse("file:///other.asm").unwrap();
+        let other_listing =
+            AssemblyAnalyzer::parse_source("nop\n", Some(&other_uri), Default::default())
+                .expect("should parse cleanly");
+        let other_tokens: Vec<_> =
+            super::super::token::flatten_listing(other_listing.iter()).collect();
+        let foreign_span = other_tokens
+            .iter()
+            .find(|t| t.span().as_ref() as &str == "nop")
+            .expect("expected a nop token")
+            .span()
+            .clone();
+
+        let document = Document::new(
+            Url::parse("file:///t.asm").unwrap(),
+            "org 0x4000\n ret\n".to_string(),
+            1
+        );
+        let warning = cpclib_asm::AssemblerError::RelocatedWarning {
+            warning: Box::new(cpclib_asm::AssemblerError::AssemblingError {
+                msg: "test warning".to_string()
+            }),
+            span: foreign_span
+        };
+        let mut out = Vec::new();
+        collect_asm_diagnostics(&warning, None, &document, &mut out);
+        assert!(
+            out.is_empty(),
+            "a RelocatedWarning from a different file must not be shown: {out:?}"
+        );
+    }
+
+    /// Sibling of the test above: the same warning shape, but with a span
+    /// that genuinely belongs to the document - must still be shown, proving
+    /// the new guard filters by file identity, not by variant.
+    #[test]
+    fn relocated_warning_from_this_file_is_still_shown() {
+        use cpclib_asm::MayHaveSpan;
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "org 0x4000\n nop\n ret\n";
+        let listing = AssemblyAnalyzer::parse_source(text, Some(&uri), Default::default())
+            .expect("should parse cleanly");
+        let tokens: Vec<_> = super::super::token::flatten_listing(listing.iter()).collect();
+        let own_span = tokens
+            .iter()
+            .find(|t| t.span().as_ref() as &str == "nop")
+            .expect("expected a nop token")
+            .span()
+            .clone();
+
+        let document = Document::new(uri, text.to_string(), 1);
+        let warning = cpclib_asm::AssemblerError::RelocatedWarning {
+            warning: Box::new(cpclib_asm::AssemblerError::AssemblingError {
+                msg: "test warning".to_string()
+            }),
+            span: own_span
+        };
+        let mut out = Vec::new();
+        collect_asm_diagnostics(&warning, None, &document, &mut out);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].severity, Some(DiagnosticSeverity::WARNING));
     }
 
     /// Regression test for `enrich_fake_instruction_diagnostics`'s read-back:
@@ -1627,6 +1765,168 @@ mod tests {
         // The macro definition is on line 0 (0-indexed) of macros.asm - not
         // wherever line 0 happens to land in main.asm.
         assert_eq!(found[0].range.start.line, 0, "{found:?}");
+    }
+
+    /// The scenario `diagnostics_env` exists to fix, made observable via an
+    /// overflow diagnostic rather than an undefined-symbol one: this basm's
+    /// dry-run assemble resolves a genuinely undefined symbol permissively
+    /// (no diagnostic at all - confirmed directly while writing this test),
+    /// so "no error" can't discriminate "resolved via the real project" from
+    /// "silently defaulted". A value only large enough to overflow when
+    /// resolved to its *real* number can: `MUSIC_CFG` is 300 in the real
+    /// project (via `sna.asm`) but undefined (so treated as 0, no overflow)
+    /// in any standalone fallback - so an overflow diagnostic on
+    /// `demo_code.asm` alone is only possible when the project route was
+    /// actually used. After-only assertion (confirmed acceptable with the
+    /// user): the bug this replaces can't be reproduced without
+    /// `diagnostics_env`'s own plumbing already in place to resolve the
+    /// project in the first place.
+    #[test]
+    fn a_fragment_only_ever_included_by_a_real_program_is_diagnosed_against_the_real_build() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        std::fs::write(
+            tmp.path().join("sna.asm"),
+            "MUSIC_CFG equ 300\n run demo_start\n include \"demo_code.asm\"\n"
+        )
+        .unwrap();
+        let code_text = "demo_start\n org 0x4000\n ld b, MUSIC_CFG\n ret\n";
+        std::fs::write(tmp.path().join("demo_code.asm"), code_text).unwrap();
+
+        let uri = Url::from_file_path(tmp.path().join("demo_code.asm")).unwrap();
+        let document = Document::new(uri, code_text.to_string(), 1);
+        let diags = AssemblyAnalyzer::new().analyze(&document);
+        assert!(
+            diags.iter().any(|d| d.message.contains("does not fit")),
+            "demo_code.asm must be diagnosed with MUSIC_CFG resolved to its \
+             real value (300) from the project it belongs to, not undefined: {diags:?}"
+        );
+    }
+
+    /// A file reachable from two sibling programs has no single entry
+    /// (`Entry::Unknown`) - diagnostics must fall back to a standalone
+    /// assemble, exactly as before this item, rather than guessing either
+    /// program's `Env`. Same overflow-based discriminator as the test above:
+    /// only `one.asm` defines `MUSIC_CFG` (as an overflow-triggering 300) -
+    /// if diagnostics wrongly used `one.asm`'s project `Env`, the overflow
+    /// would show; falling back to a standalone assemble of `shared.asm`
+    /// alone (where `MUSIC_CFG` is undefined, so treated as 0) must not.
+    #[test]
+    fn entry_unknown_falls_back_to_standalone_diagnostics_unchanged() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        std::fs::write(
+            tmp.path().join("one.asm"),
+            "MUSIC_CFG equ 300\n run start\n include \"shared.asm\"\n"
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("two.asm"),
+            "run start\n include \"shared.asm\"\n"
+        )
+        .unwrap();
+        let shared_text = "start\n org 0x4000\n ld b, MUSIC_CFG\n ret\n";
+        std::fs::write(tmp.path().join("shared.asm"), shared_text).unwrap();
+
+        let uri = Url::from_file_path(tmp.path().join("shared.asm")).unwrap();
+        let document = Document::new(uri, shared_text.to_string(), 1);
+        let diags = AssemblyAnalyzer::new().analyze(&document);
+        assert!(
+            !diags.iter().any(|d| d.message.contains("does not fit")),
+            "an ambiguous entry must fall back to shared.asm's own standalone \
+             assemble, where MUSIC_CFG is undefined rather than one.asm's 300: {diags:?}"
+        );
+    }
+
+    /// `Entry::Project` resolves, but the entry file itself fails to
+    /// assemble (an unresolvable `INCLUDE`) - diagnostics for the otherwise-
+    /// clean fragment must still fall back to its own standalone assemble
+    /// rather than silently reporting nothing (or, worse, using a partial/
+    /// stale project `Env`). Same overflow-based discriminator.
+    #[test]
+    fn project_assemble_failure_falls_back_to_standalone_diagnostics() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        std::fs::write(
+            tmp.path().join("sna.asm"),
+            "MUSIC_CFG equ 300\n run demo_start\n include \"demo_code.asm\"\n \
+             include \"does_not_exist.asm\"\n"
+        )
+        .unwrap();
+        let code_text = "demo_start\n org 0x4000\n ld b, MUSIC_CFG\n ret\n";
+        std::fs::write(tmp.path().join("demo_code.asm"), code_text).unwrap();
+
+        let uri = Url::from_file_path(tmp.path().join("demo_code.asm")).unwrap();
+        let document = Document::new(uri, code_text.to_string(), 1);
+        let diags = AssemblyAnalyzer::new().analyze(&document);
+        assert!(
+            !diags.iter().any(|d| d.message.contains("does not fit")),
+            "a project whose entry fails to assemble must fall back to the \
+             fragment's own standalone assemble, where MUSIC_CFG is undefined \
+             rather than the real project's 300: {diags:?}"
+        );
+    }
+
+    /// An unsaved edit means the project's recorded byte offsets no longer
+    /// describe this buffer - must fall back to standalone rather than
+    /// trusting stale project data. Same overflow-based discriminator.
+    #[test]
+    fn unsaved_buffer_edit_falls_back_to_standalone_diagnostics() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        std::fs::write(
+            tmp.path().join("sna.asm"),
+            "MUSIC_CFG equ 300\n run demo_start\n include \"demo_code.asm\"\n"
+        )
+        .unwrap();
+        let code_text = "demo_start\n org 0x4000\n ld b, MUSIC_CFG\n ret\n";
+        std::fs::write(tmp.path().join("demo_code.asm"), code_text).unwrap();
+
+        let uri = Url::from_file_path(tmp.path().join("demo_code.asm")).unwrap();
+        // The buffer carries an unsaved edit (an extra blank line) that
+        // never made it to disk.
+        let unsaved_text = format!("{code_text}\n");
+        let document = Document::new(uri, unsaved_text, 1);
+        let diags = AssemblyAnalyzer::new().analyze(&document);
+        assert!(
+            !diags.iter().any(|d| d.message.contains("does not fit")),
+            "an unsaved buffer must fall back to standalone diagnostics, where \
+             MUSIC_CFG is undefined rather than the real project's 300: {diags:?}"
+        );
+    }
+
+    /// Confirms `enrich_overflow_diagnostics`/`collect_inactive_region_hints`
+    /// stay correctly positioned when `env` comes from the project route,
+    /// not just from a standalone assemble - both walk `listing` (this
+    /// document's own parsed tree) rather than `env`'s contents, so nothing
+    /// about where `env` came from should change their output.
+    #[test]
+    fn overflow_and_inactive_region_diagnostics_still_work_via_the_project_env() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        std::fs::write(
+            tmp.path().join("sna.asm"),
+            "run demo_start\n include \"demo_code.asm\"\n"
+        )
+        .unwrap();
+        let code_text = "demo_start\n org 0x4000\n val equ 300\n ld b, val\n if false\n \
+                          print \"dead\"\n endif\n ret\n";
+        std::fs::write(tmp.path().join("demo_code.asm"), code_text).unwrap();
+
+        let uri = Url::from_file_path(tmp.path().join("demo_code.asm")).unwrap();
+        let document = Document::new(uri, code_text.to_string(), 1);
+        let diags = AssemblyAnalyzer::new().analyze(&document);
+        assert!(
+            diags.iter().any(|d| d.message.contains("does not fit")),
+            "expected an overflow diagnostic: {diags:?}"
+        );
+        assert!(
+            diags.iter().any(|d| d
+                .tags
+                .as_ref()
+                .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))),
+            "expected the dead `if false` branch to be faded: {diags:?}"
+        );
     }
 
     #[test]
