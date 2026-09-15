@@ -565,6 +565,7 @@ fn walk_expr_for_function_calls<'a>(expr: &'a LocatedExpr, out: &mut Vec<&'a Loc
                 walk_expr_for_function_calls(index, out);
             }
         },
+        LocatedExpr::Lambda(_, body, _) => walk_expr_for_function_calls(body, out),
         _ => {}
     }
 }

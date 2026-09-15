@@ -533,12 +533,26 @@ impl ExprEvaluationExt for Expr {
                     syms.extend(index.symbols_used());
                 }
                 syms
+            },
+
+            Expr::Lambda(params, body) => {
+                body.symbols_used()
+                    .into_iter()
+                    .filter(|s| !params.iter().any(|p| p.as_str() == s.as_ref()))
+                    .collect()
             }
         }
     }
 
     fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
-        resolve_impl!(self, env)
+        // See `LocatedExpr::resolve`'s own comment on why `Lambda` is
+        // intercepted here instead of being a `resolve_impl!` branch.
+        if let Expr::Lambda(params, body) = self {
+            env.eval_lambda_standard(params, body)
+        }
+        else {
+            resolve_impl!(self, env)
+        }
     }
 
     fn r#type(&self) -> &str {
@@ -559,6 +573,7 @@ impl ExprEvaluationExt for Expr {
             Expr::Range(..) => "range",
             Expr::Subscript(..) => "subscript",
             Expr::Rnd => "rnd",
+            Expr::Lambda(..) => "lambda",
             _ => "unknown"
         }
     }

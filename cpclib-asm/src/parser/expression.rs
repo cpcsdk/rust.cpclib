@@ -11,6 +11,7 @@ use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext,
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
+use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::FlagValue;
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
@@ -28,7 +29,7 @@ use super::error::Z80ParserError;
 use super::obtained::{LocatedDataAccess, LocatedExpr, LocatedToken, MayHaveSpan, UnescapedString};
 use super::orgams::parse_orgams_expression;
 use super::registers::{parse_indexregister16, parse_register_hl, parse_register16};
-use super::source::SourceString;
+use super::source::{SourceString, Z80Span};
 use crate::InnerZ80Span;
 
 // Include build-time generated forbidden names
@@ -172,6 +173,39 @@ pub fn parens(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErr
 
     let span = build_span(input_offset, &input_start, *input);
     Ok(LocatedExpr::Paren(Box::new(exp), span.into()))
+}
+
+/// `(params) => body` - see [`LocatedExpr::Lambda`]'s own doc comment.
+/// Parens around the parameter list are always required, both to keep the
+/// grammar simple to get right and so this can cleanly backtrack to
+/// `parens` (a plain `(expr)`) when there is no `=>` after the closing
+/// paren - tried before `parens` in `parse_factor` for exactly that
+/// reason.
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_lambda(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+    let input_start = input.checkpoint();
+    let input_offset = input.eof_offset();
+
+    let params: Vec<InnerZ80Span> = delimited(
+        ("(", (my_space0, opt((line_ending, my_space0)))),
+        separated(0.., parse_label(false), parse_comma_multiline),
+        ((my_space0, opt((line_ending, my_space0))), ")")
+    )
+    .parse_next(input)?;
+
+    (my_space0, "=>", my_space0).parse_next(input)?;
+
+    let body = cut_err(located_expr)
+        .context(StrContext::Label("lambda: invalid body"))
+        .parse_next(input)?;
+
+    let span = build_span(input_offset, &input_start, *input);
+    let params = params
+        .into_iter()
+        .map(|p| SmolStr::from(Z80Span::from(p).as_str()))
+        .collect();
+    Ok(LocatedExpr::Lambda(params, Box::new(body), span.into()))
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -367,7 +401,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                         parse_label(false).map(|l| LocatedExpr::Label(l.into()))
                     ))
                     .parse_next(input),
-                    b'(' => parens.parse_next(input),
+                    b'(' => alt((parse_lambda, parens)).parse_next(input),
                     b'[' if !is_orgams => parse_expr_bracketed_list.parse_next(input),
                     b'G'..=b'Z' | b'g'..=b'z' => alt((
                         parse_bool_value,
@@ -426,7 +460,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                         )
                     }),
                 // manage labels
-                parens
+                alt((parse_lambda, parens))
             ))
         )) /* ,
             * my_space0 */

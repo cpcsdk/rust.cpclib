@@ -103,6 +103,11 @@ pub enum LocatedExpr {
     /// Function supposely coded by the user
     AnyFunction(Z80Span, Vec<LocatedExpr>, Z80Span),
 
+    /// `(params) => body` - see [`cpclib_tokens::Expr::Lambda`]'s own doc
+    /// comment for the full rationale (sugar over a synthesized `FUNCTION`,
+    /// no closure/capture).
+    Lambda(Vec<SmolStr>, Box<LocatedExpr>, Z80Span),
+
     /// Random value
     Rnd(Z80Span)
 }
@@ -193,6 +198,9 @@ impl LocatedExpr {
             },
             LocatedExpr::AnyFunction(n, a, _) => {
                 Expr::AnyFunction(n.into(), a.iter().map(|e| e.to_expr_owned()).collect_vec())
+            },
+            LocatedExpr::Lambda(params, body, _) => {
+                Expr::Lambda(params.clone(), Box::new(body.to_expr_owned()))
             },
             LocatedExpr::Rnd(_) => Expr::Rnd
         }
@@ -491,7 +499,20 @@ impl ExprEvaluationExt for LocatedExpr {
     /// case of warning - see `Env::locate_warnings_since`).
     fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
         let nb_warnings = env.warnings_len();
-        let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))?;
+        // Intercepted ahead of `resolve_impl!` rather than added as one of
+        // its predicate-dispatched branches: a lambda has to register a
+        // *`LocatedToken`-flavored* synthesized `FUNCTION` here (a plain
+        // `Expr::Lambda` needs the `Token`-flavored sibling instead - see
+        // `Env::eval_lambda_located`/`eval_lambda_standard`), which the
+        // shared macro has no way to pick between since it is generic
+        // over `Self` only through trait predicate methods.
+        let res = if let LocatedExpr::Lambda(params, body, _) = self {
+            env.eval_lambda_located(params, body)
+        }
+        else {
+            resolve_impl!(self, env)
+        }
+        .map_err(|e| e.locate(self.span().clone()))?;
         env.locate_warnings_since(nb_warnings, self.span().clone());
         ensure_orgams_type(res, env)
     }
@@ -565,6 +586,15 @@ impl ExprEvaluationExt for LocatedExpr {
                     .chain(indices.iter().flat_map(|i| i.symbols_used()))
                     .collect_vec()
             },
+
+            LocatedExpr::Lambda(params, body, _) => {
+                // See `Expr::symbols`'s own comment: the body's own
+                // parameters are not outer-scope symbol references.
+                body.symbols_used()
+                    .into_iter()
+                    .filter(|s| !params.iter().any(|p| p.as_str() == s.as_ref()))
+                    .collect_vec()
+            },
         }
     }
 
@@ -585,6 +615,7 @@ impl ExprEvaluationExt for LocatedExpr {
             | LocatedExpr::Ternary(..) => "expression",
             LocatedExpr::AnyFunction(..) => "function",
             LocatedExpr::UnaryTokenOperation(..) => "token_operation",
+            LocatedExpr::Lambda(..) => "lambda",
             LocatedExpr::Rnd(_) => "rnd"
         }
     }
@@ -618,7 +649,8 @@ impl MayHaveSpan for LocatedExpr {
             | LocatedExpr::AnyFunction(_, _, span)
             | LocatedExpr::Rnd(span) => span,
             LocatedExpr::Range(_, _, _, _, span) => span,
-            LocatedExpr::Subscript(_, _, span) => span
+            LocatedExpr::Subscript(_, _, span) => span,
+            LocatedExpr::Lambda(_, _, span) => span
         }
     }
 }

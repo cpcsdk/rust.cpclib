@@ -74,6 +74,20 @@ pub enum Expr {
     /// Function supposely coded by the user
     AnyFunction(SmolStr, Vec<Expr>),
 
+    /// `(params) => body` - an inline lambda, sugar over the existing
+    /// named-`FUNCTION` machinery (see `Env::eval_lambda_standard`/
+    /// `eval_lambda_located` in `cpclib-asm`): resolving one registers a
+    /// synthesized, ordinarily-scoped `FUNCTION` under the hood and
+    /// evaluates to `ExprResult::String(that name)` - the same value
+    /// `list_map`/`list_filter`/`list_position_predicate`/etc already
+    /// accept as a callback today. Deliberately **not** a closure: the
+    /// body sees only its own parameters plus true globals, exactly like
+    /// a real `FUNCTION` - it cannot see an enclosing caller's locals.
+    /// Parens around the parameter list are always required
+    /// (`(x) => x * 2`, never a bare `x => x * 2`) to avoid any ambiguity
+    /// with a bare identifier starting some other expression.
+    Lambda(Vec<SmolStr>, Box<Expr>),
+
     /// Random value
     Rnd
 }
@@ -967,6 +981,16 @@ impl ExprElement for Expr {
                 for arg in args {
                     symbols.extend(arg.symbols());
                 }
+            },
+            Self::Lambda(params, body) => {
+                // The body's own parameters are not outer-scope symbol
+                // references - exclude them, same reasoning as a real
+                // `FUNCTION`'s params never showing up here.
+                symbols.extend(
+                    body.symbols()
+                        .into_iter()
+                        .filter(|s| !params.iter().any(|p| p.as_str() == s))
+                );
             }
         }
 
@@ -1040,7 +1064,14 @@ impl Display for Expr {
                     indices.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
                 )
             },
-            Expr::Rnd => write!(f, "RND()")
+            Expr::Rnd => write!(f, "RND()"),
+            Expr::Lambda(params, body) => {
+                write!(
+                    f,
+                    "({}) => {body}",
+                    params.iter().map(SmolStr::as_str).collect::<Vec<_>>().join(", ")
+                )
+            }
         }
     }
 }
@@ -1297,7 +1328,9 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                 .collect::<Result<Vec<_>, _>>()?;
             target.subscript(&indices).map_err(PureExprEvalError::from)
         },
-        Expr::Rnd => Err(PureExprEvalError::HasSideEffects)
+        Expr::Rnd => Err(PureExprEvalError::HasSideEffects),
+        // Registers a synthesized FUNCTION into an `Env` - needs one.
+        Expr::Lambda(..) => Err(PureExprEvalError::HasSideEffects)
     }
 }
 

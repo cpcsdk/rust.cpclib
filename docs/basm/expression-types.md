@@ -243,6 +243,24 @@ Functions are called with parentheses:
 
 See the [functions page](functions.md) for a complete list of built-in functions.
 
+## Lambda Expressions
+
+`(params) => expr` is an inline, unnamed function - most useful as a callback for
+`list_map`/`list_filter`/`list_fold`/`list_position_predicate` and similar functions that expect a
+function name:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_lambda.asm"
+```
+
+- The parameter list always needs parentheses, even for a single parameter (`(x) => x * 2`, not
+  `x => x * 2`) - this keeps the grammar unambiguous with a bare identifier starting some other
+  expression.
+- A lambda is sugar over the same machinery as a named [`FUNCTION`](directives.md#function-endfunction), not a
+  real closure: its body only ever sees its own parameters and true global symbols, exactly like a
+  `FUNCTION` would - it cannot see a variable local to whatever is calling it (e.g. an enclosing
+  `FUNCTION`'s own parameter).
+
 ## Special Symbols
 
 - **`$`** - Current program counter (assembly address)

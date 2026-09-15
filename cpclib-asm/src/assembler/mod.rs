@@ -4495,6 +4495,163 @@ impl Env {
 
         f.eval(self, params)
     }
+
+    /// Deterministic, content-addressed name for the `FUNCTION` an
+    /// `Expr::Lambda`/`LocatedExpr::Lambda` synthesizes - same params +
+    /// same body text always produces the same name, so re-resolving the
+    /// same lambda on a later assembler pass finds the already-registered
+    /// entry (via the `contains_key` check in `eval_lambda_standard`/
+    /// `eval_lambda_located` below) instead of erroring on a duplicate
+    /// definition, with no extra per-`Env` counter state needed. Two
+    /// structurally-identical lambdas at different source locations
+    /// sharing one entry is harmless - they behave identically.
+    fn lambda_function_name(params: &[SmolStr], body_repr: &str) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for p in params {
+            p.hash(&mut hasher);
+        }
+        body_repr.hash(&mut hasher);
+        format!("__lambda_{:x}", hasher.finish())
+    }
+
+    /// `Expr::Lambda` resolution - see that variant's own doc comment.
+    /// Synthesizes a `Token::Function` under a deterministic name and
+    /// registers it into `self.functions` exactly once; every resolution
+    /// (including on a later assembler pass) evaluates to
+    /// `ExprResult::String(that name)` - the same value
+    /// `list_map`/`list_filter`/etc already accept as a callback today.
+    ///
+    /// A real `FUNCTION`'s body always references its own parameters
+    /// through the `{name}` bracket form (`AnyFunction::eval` only ever
+    /// binds `{name}` into the call frame, never the bare `name` - e.g.
+    /// `docs`'s own `square(x)` example writes `RETURN {x} * {x}`).
+    /// Forcing lambda bodies to use that same bracket form would defeat
+    /// the whole point of an inline, ergonomic lambda, so `body` is
+    /// rewritten first (`substitute_lambda_params_expr`): every bare
+    /// reference to one of `params` becomes its bracketed form before
+    /// being wrapped in a synthesized `Token::Function`, letting
+    /// `(x) => x * 2` read naturally while still reusing the existing
+    /// binding machinery completely unchanged underneath.
+    pub(crate) fn eval_lambda_standard(
+        &mut self,
+        params: &[SmolStr],
+        body: &Expr
+    ) -> Result<ExprResult, Box<AssemblerError>> {
+        let body = substitute_lambda_params_expr(body, params);
+        let name = Self::lambda_function_name(params, &body.to_string());
+
+        if !self.functions.contains_key(&name) {
+            // SAFETY: leaked, not borrowed from a longer-lived parsed
+            // source tree the way a real `FUNCTION`'s body is - `self.
+            // functions` (and so this `Function`) can genuinely outlive
+            // any borrow of `body` here, so leaking is the only way to
+            // honestly satisfy `FunctionBuilder::build`'s lifetime
+            // contract for a body synthesized on the fly like this.
+            let inner: &'static [Token] =
+                Box::leak(vec![Token::Return(body)].into_boxed_slice());
+            let processed = processed_token::build_processed_tokens_list(
+                inner,
+                Arc::new(RwLock::new(&mut *self))
+            )?;
+            let f = Arc::new(unsafe { FunctionBuilder::build(&name, params, processed)? });
+            self.functions.insert(name.clone(), f);
+        }
+
+        Ok(ExprResult::String(name.into()))
+    }
+
+    /// `LocatedExpr::Lambda` sibling of `eval_lambda_standard` - see that
+    /// method's own doc comment for the shared design. Converts to a plain
+    /// `Expr` first and delegates, rather than keeping its own separate
+    /// `LocatedToken`-flavored registration path: `LocatedExpr::Label`
+    /// stores a real `Z80Span` slice into the parsed source (not an
+    /// arbitrary owned string), so it cannot be renamed to its `{name}`
+    /// bracket form the way `eval_lambda_standard`'s rewrite needs -
+    /// converting once via `to_expr()` sidesteps that entirely. The only
+    /// real cost is reduced error-location precision *inside* the lambda
+    /// body (the outer call site is still properly located, same as any
+    /// other expression's `resolve()`); `eval_any_function`'s own dispatch
+    /// doesn't distinguish `Function::Standard` from `Function::Located`
+    /// at all, so nothing else is lost by always registering the `Token`-
+    /// flavored variant here.
+    pub(crate) fn eval_lambda_located(
+        &mut self,
+        params: &[SmolStr],
+        body: &LocatedExpr
+    ) -> Result<ExprResult, Box<AssemblerError>> {
+        self.eval_lambda_standard(params, body.to_expr().as_ref())
+    }
+}
+
+/// See `Env::eval_lambda_standard`'s own doc comment: rewrites every bare
+/// `Expr::Label` reference to one of `params` into its `{name}` bracket
+/// form, recursively - everywhere except inside a nested `Expr::Lambda`
+/// that shadows the same parameter name (that inner occurrence belongs to
+/// the inner lambda's own, independently-rewritten body instead) and
+/// inside an `Expr::UnaryTokenOperation`'s nested `Token` (e.g.
+/// `duration(...)`/`opcode(...)`) - a lambda param referenced only from
+/// inside one of those is a known, accepted gap, not silently broken: it
+/// surfaces as a plain "unknown symbol" error rather than a wrong value.
+fn substitute_lambda_params_expr(expr: &Expr, params: &[SmolStr]) -> Expr {
+    match expr {
+        Expr::Label(name) if params.contains(name) => Expr::Label(format!("{{{name}}}").into()),
+
+        Expr::List(items) => {
+            Expr::List(items.iter().map(|e| substitute_lambda_params_expr(e, params)).collect())
+        },
+        Expr::Range(start, end, inclusive, step) => {
+            Expr::Range(
+                Box::new(substitute_lambda_params_expr(start, params)),
+                Box::new(substitute_lambda_params_expr(end, params)),
+                *inclusive,
+                step.as_ref().map(|s| Box::new(substitute_lambda_params_expr(s, params)))
+            )
+        },
+        Expr::Subscript(target, indices) => {
+            Expr::Subscript(
+                Box::new(substitute_lambda_params_expr(target, params)),
+                indices.iter().map(|e| substitute_lambda_params_expr(e, params)).collect()
+            )
+        },
+        Expr::Paren(inner) => Expr::Paren(Box::new(substitute_lambda_params_expr(inner, params))),
+        Expr::UnaryOperation(op, inner) => {
+            Expr::UnaryOperation(*op, Box::new(substitute_lambda_params_expr(inner, params)))
+        },
+        Expr::BinaryOperation(op, left, right) => {
+            Expr::BinaryOperation(
+                *op,
+                Box::new(substitute_lambda_params_expr(left, params)),
+                Box::new(substitute_lambda_params_expr(right, params))
+            )
+        },
+        Expr::Ternary(cond, when_true, when_false) => {
+            Expr::Ternary(
+                Box::new(substitute_lambda_params_expr(cond, params)),
+                Box::new(substitute_lambda_params_expr(when_true, params)),
+                Box::new(substitute_lambda_params_expr(when_false, params))
+            )
+        },
+        Expr::AnyFunction(name, args) => {
+            Expr::AnyFunction(
+                name.clone(),
+                args.iter().map(|e| substitute_lambda_params_expr(e, params)).collect()
+            )
+        },
+        Expr::Lambda(inner_params, inner_body) => {
+            let remaining: Vec<SmolStr> =
+                params.iter().filter(|p| !inner_params.contains(p)).cloned().collect();
+            let rewritten = if remaining.is_empty() {
+                inner_body.as_ref().clone()
+            }
+            else {
+                substitute_lambda_params_expr(inner_body, &remaining)
+            };
+            Expr::Lambda(inner_params.clone(), Box::new(rewritten))
+        },
+
+        other => other.clone()
+    }
 }
 
 /// Visit the tokens during several passes by providing a specific symbol table.

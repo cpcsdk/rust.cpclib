@@ -349,7 +349,7 @@ fn operand_tokens(access: Option<&LocatedDataAccess>) -> Tokens<'_> {
     }
 }
 
-/// Expressions, matched on the concrete `LocatedExpr` enum directly (13
+/// Expressions, matched on the concrete `LocatedExpr` enum directly (14
 /// variants, verified exhaustively against real source). Spans are read via
 /// the whole expression's own `MayHaveSpan::span()` (not by attempting to
 /// destructure a variant's inner span field directly) since at least one
@@ -403,6 +403,9 @@ fn expr_tokens(expr: &LocatedExpr) -> Tokens<'_> {
             Box::new(expr_tokens(target).chain(indices.iter().flat_map(expr_tokens)))
         },
         LocatedExpr::AnyFunction(_, args, _) => Box::new(args.iter().flat_map(expr_tokens)),
+        // The lambda's own params are plain identifiers, not sub-
+        // expressions - only the body has anything to recurse into.
+        LocatedExpr::Lambda(_, body, _) => expr_tokens(body),
         // Bool/Rnd/RelativeDelta/UnaryTokenOperation: no clean old-scanner
         // parity target and/or rare in hand-written source - left unclaimed.
         LocatedExpr::Bool(..)
