@@ -818,7 +818,7 @@ REND|ENDR|ENDREPEAT
 ```
 
 Description:
-Repeat a block of code a fixed number of times. Optional counter variable tracks iteration (0-based by default, or from start value).
+Repeat a block of code a fixed number of times. Optional counter variable tracks iteration, **1-based by default** (starts at 1, not 0) unless an explicit `start` value is given - the example below relies on this (`AZERTY1.TXT`/`AZERTY2.TXT`/`AZERTY3.TXT`, not a `0.TXT`). Use `REPEAT count, counter, 0` for a 0-based counter instead.
 
 Aliases: REP, REPT (same as REPEAT)
 
