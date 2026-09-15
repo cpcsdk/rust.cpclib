@@ -28,7 +28,7 @@ This page documents all built-in functions available in basm expressions.
 - **`frac(x)`** - Fractional part
 - **`abs(x)`** - Absolute value
 - **`fmod(x, y)`** - Floating point remainder of x/y
-- **`remainder(x, y)`** - IEEE remainder function
+- **`fremain(x, y)`** - IEEE remainder function
 
 ### Comparison and Utility Functions
 
@@ -60,6 +60,11 @@ This page documents all built-in functions available in basm expressions.
 - **`string_push(string, char_or_string)`** - Append character or string
 - **`string_concat(s1, s2, ...)`** - Concatenate strings (variadic)
 - **`string_from_list(list)`** - Convert list of integers to string
+- **`string_get(string, index)`** - Get character at index (same as `list_get`)
+- **`string_map(string, transform)`** - Apply `transform` (a function name, or an inline
+  [lambda](expression-types.md#lambda-expressions)) to each character (same as `list_map`)
+- **`string_filter(string, predicate)`** - Keep only the characters for which `predicate` returns
+  true (same as `list_filter`)
 - **`string_uppercase(s)`**
 - **`string_format(template, arg0, arg1, ...)`** - Rust/Python-`str.format`-style positional
   substitution: `{0}`, `{1}`, ... in `template` are replaced by `arg0`, `arg1`, ... (0-based); use
@@ -104,6 +109,7 @@ This page documents all built-in functions available in basm expressions.
   [does via brackets](expression-types.md#indexing-and-slicing)
 - **`list_sort(list)`** - Sort list in ascending order (returns new list)
 - **`list_argsort(list)`** - Return indices that would sort the list
+- **`list_reverse(list)`** - Reverse the list (returns new list)
 - **`list_push(list, element)`** - Append element to list (returns new list)
 - **`list_extend(list1, list2)`** - Concatenate two lists (returns new list)
 - **`list_filter(list, predicate)`** - Return a list containing the elements for which `predicate`
@@ -112,7 +118,12 @@ This page documents all built-in functions available in basm expressions.
 - **`list_fold(list, initial, folder)`** - Reduce the list to a single value: `folder(accumulator,
   element)` is called for each element in order, starting from `initial`
 - **`list_position_predicate(list, predicate)`** - Index of the first element for which `predicate`
-  returns true (-1 if none does)
+  returns true (-1 if none does):
+
+  ```z80
+  --8<-- "cpclib-basm/tests/asm/good_document_list_position_predicate.asm"
+  ```
+
 - **`list_position_value(list, value)`** (-1 if not found, value)
 - **`list_split_by_value(list, value)`**
 
