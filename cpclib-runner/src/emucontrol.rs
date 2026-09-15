@@ -1508,6 +1508,22 @@ impl UsedEmulator for AceUsedEmulator {
         });
         Ok(())
     }
+
+    // Deliberately no retry loop here, matching `SugarBoxV2UsedEmulator`'s
+    // own `load_snapshot`/`load_disc` - and doubly so for ACE, whose
+    // `loadFile` has no error signal at all (see `ace_api::load_file`'s own
+    // doc comment): retrying a call that always reports success either way
+    // would only hide a real, silent failure behind a busy-wait, never fix
+    // one.
+    #[cfg(feature = "screenshot")]
+    fn load_snapshot(_robot: &mut RobotImpl<Self>, path: &Utf8Path) -> Result<(), String> {
+        ace_api::load_snapshot(ACE_ROBOT_WEB_API_PORT, path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn load_disc(_robot: &mut RobotImpl<Self>, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        ace_api::load_disc(ACE_ROBOT_WEB_API_PORT, drive, path)
+    }
 }
 
 /// The port `args_for_emu` explicitly passes to a Robot-launched AMSpiriT

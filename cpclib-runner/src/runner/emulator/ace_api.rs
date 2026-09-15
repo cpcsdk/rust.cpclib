@@ -25,6 +25,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
+use cpclib_common::camino::Utf8Path;
 use serde_json::{Value, json};
 
 /// Connects, sends `cmd`, returns the first non-`{"type":"event",...}`
@@ -130,6 +131,37 @@ pub fn write_memory(port: u16, address: u16, data: &[u8]) -> Result<(), String> 
     }
 }
 
+/// `{"cmd":"loadFile","filename":".."}` - confirmed live against a real
+/// instance: loading a hand-assembled `.sna` (`org 0x4000 / loop: jr loop`)
+/// really did land `PC` at `0x4000` with the right bytes read back from
+/// there afterward. Unlike SugarboxV2's `loadSnapshot`/`insertDisk`
+/// (`sugarbox_api.rs`'s own `check_media_response`), there is **no error
+/// signal in the response at all** - it answers `{"status":"file sent"}`
+/// even for a path that does not exist. A caller that needs to know
+/// whether the load actually took has to verify some other way (read
+/// registers/memory back afterward) - this function cannot tell success
+/// from failure on its own, and does not pretend to.
+fn load_file(port: u16, path: &Utf8Path) -> Result<(), String> {
+    send_command(port, json!({"cmd": "loadFile", "filename": path.as_str()}))?;
+    Ok(())
+}
+
+/// ACE takes a `.sna` the same way it takes a `.dsk` - one `loadFile`
+/// command, no separate snapshot-specific verb the way SugarboxV2 has
+/// (`loadSnapshot` vs `insertDisk`).
+pub fn load_snapshot(port: u16, path: &Utf8Path) -> Result<(), String> {
+    load_file(port, path)
+}
+
+/// Not yet confirmed live whether ACE's `loadFile` takes a `drive`
+/// parameter for a `.dsk` the way `sugarbox_api::load_disc` does, or always
+/// targets drive A - `drive` is accepted (matching `UsedEmulator::load_disc`'s
+/// own signature) but unused until that's checked against a real multi-drive
+/// setup.
+pub fn load_disc(port: u16, _drive: u8, path: &Utf8Path) -> Result<(), String> {
+    load_file(port, path)
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{BufRead, BufReader, Write};
@@ -152,6 +184,52 @@ mod tests {
             }
         });
         port
+    }
+
+    #[test]
+    fn load_snapshot_sends_a_loadfile_command_with_the_path() {
+        let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let requests_clone = requests.clone();
+        std::thread::spawn(move || {
+            if let Ok((stream, _)) = listener.accept() {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                let _ = reader.read_line(&mut line);
+                requests_clone.lock().unwrap().push(line);
+                let mut writer = stream;
+                let _ = writer.write_all(b"{\"status\":\"file sent\"}\n");
+            }
+        });
+
+        let path = Utf8Path::new("/tmp/some.sna");
+        load_snapshot(port, path).unwrap();
+
+        let sent = requests.lock().unwrap();
+        let sent_value: Value = serde_json::from_str(sent[0].trim()).unwrap();
+        assert_eq!(sent_value["cmd"], "loadFile");
+        assert_eq!(sent_value["filename"], "/tmp/some.sna");
+    }
+
+    #[test]
+    fn load_disc_sends_the_same_loadfile_command_ignoring_drive() {
+        // Not yet confirmed live whether ACE's `loadFile` takes a drive
+        // parameter - see `load_disc`'s own doc comment. This locks down
+        // today's behavior (drive ignored) so a future protocol discovery
+        // changes this test deliberately, not by accident.
+        let port = fake_server("{\"status\":\"file sent\"}\n");
+        load_disc(port, 1, Utf8Path::new("/tmp/some.dsk")).unwrap();
+    }
+
+    #[test]
+    fn load_file_does_not_error_even_for_a_status_it_does_not_recognize() {
+        // Confirmed live: ACE always answers `{"status":"file sent"}`, even
+        // for a path that does not exist - there is no error status to
+        // check, unlike SugarboxV2's `check_media_response`. `load_file`
+        // must not invent a failure that was never actually reported.
+        let port = fake_server("{\"status\":\"file sent\"}\n");
+        assert!(load_file(port, Utf8Path::new("/does/not/exist.sna")).is_ok());
     }
 
     #[test]
@@ -256,11 +334,55 @@ mod tests {
             write_memory(port, 0x4000, &[1, 2, 3, 4]).expect("writeMemory failed");
             let bytes = read_memory(port, 0x4000, 4).expect("readMemory failed");
             assert_eq!(bytes, vec![1, 2, 3, 4]);
+
+            // load_snapshot: a real assembled .sna, confirmed by reading
+            // its own bytes back afterward - `loadFile`'s response alone
+            // (always `{"status":"file sent"}`) cannot say whether this
+            // worked, see `load_file`'s own doc comment, so this is the
+            // only real way to check.
+            let asm = "org 0x8000\nloop: jr loop\n";
+            let snapshot = assemble_to_snapshot(asm);
+            let sna_path =
+                std::env::temp_dir().join(format!("cpclib-runner-ace-test-{}.sna", std::process::id()));
+            fs_err::write(&sna_path, &snapshot).expect("cannot write the smoke snapshot");
+            let sna_path = cpclib_common::camino::Utf8PathBuf::from_path_buf(sna_path).unwrap();
+
+            load_snapshot(port, &sna_path).expect("load_snapshot failed");
+            let _ = fs_err::remove_file(&sna_path);
+
+            // `jr loop` at 0x8000, targeting itself, assembles to `18 FE`.
+            let bytes = read_memory(port, 0x8000, 2).expect("readMemory after load_snapshot failed");
+            assert_eq!(bytes, vec![0x18, 0xFE], "the snapshot was not actually loaded");
         });
 
         let _ = child.kill();
         let _ = child.wait();
         result.unwrap();
+    }
+
+    /// Trimmed-down assemble-to-`.sna` helper, mirroring
+    /// `cpclib-dap/src/ace.rs`'s own real-instance test - no source map/
+    /// file/config needed for this inline smoke program.
+    fn assemble_to_snapshot(code: &str) -> Vec<u8> {
+        use cpclib_common::event::DiscardObserver;
+
+        let parse = cpclib_asm::parser::context::ParserOptions::default();
+        let listing = cpclib_asm::parser::parse_z80_str(code).unwrap();
+        let assemble = cpclib_asm::AssemblingOptions::default();
+        let (_processed, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+            &listing,
+            cpclib_asm::EnvOptions::new(parse, assemble, std::sync::Arc::new(DiscardObserver))
+        )
+        .map_err(|(_, _, e)| e)
+        .unwrap();
+        env.handle_post_actions(&listing).unwrap();
+        let temp =
+            std::env::temp_dir().join(format!("cpclib-runner-ace-test-src-{}.sna", std::process::id()));
+        let utf8 = cpclib_common::camino::Utf8PathBuf::from_path_buf(temp.clone()).unwrap();
+        env.save_sna(&utf8).unwrap();
+        let bytes = fs_err::read(&temp).unwrap();
+        let _ = fs_err::remove_file(&temp);
+        bytes
     }
 
     #[test]
