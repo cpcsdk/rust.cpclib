@@ -888,12 +888,18 @@ ENDSTRUCT
 ```
 
 Description:
-Structures allow to define data blocks with semantics. In practice, they replace bunches of `DEFB`, `DEFW` directives and enforce checks at assembling (you cannot add more data than expected or forget some). If a label is used before the use of a struct, it is necessary to postfix it by `:`. Otherwise the assembler thinks the label is a macro or structure call.
+Structures allow to define data blocks with semantics. In practice, they replace bunches of `DEFB`, `DEFW` directives and enforce checks at assembling (you cannot add more data than expected or forget some). If a label is used before the use of a struct, it is necessary to postfix it by `:`. Otherwise the assembler thinks the label is a macro or structure call. When a label is used this way, each field becomes addressable as `label.field` (e.g. `Point 10, 20` prefixed by `p:` lets you write `p.x`/`p.y`).
 
 Example:
 
 ```z80
 --8<-- "cpclib-basm/tests/asm/good_document_struct.asm"
+```
+
+An array of struct instances is a [`REPEAT`](#repeat-rep-rept) generating one uniquely-labeled instance per element (REPEAT's own counter is 1-based by default - pass an explicit `0` to start there instead):
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_struct_array.asm"
 ```
 
 ### ENUM
