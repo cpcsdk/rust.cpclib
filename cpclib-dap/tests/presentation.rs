@@ -1332,6 +1332,42 @@ fn the_chip_scopes_share_one_snapshot() {
     );
 }
 
+/// A peer with no way at all to describe a chip - no direct endpoint, and
+/// no `cpclib/machineState` fallback either - gets none of the five chip
+/// scopes offered, rather than five permanently-empty "(unavailable)" rows.
+#[test]
+fn chip_scopes_are_omitted_for_a_peer_that_can_never_answer_them() {
+    let mut session =
+        Session::new(RecordingPeer::new().denying(&["cpclib/machineState"]), map_with(&[]));
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "scopes", "success": true,
+        "body": {"scopes": [{"name": "Registers", "variablesReference": 17}]}
+    }));
+    let scopes = out[0]["body"]["scopes"].as_array().unwrap();
+    let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(names, vec!["Registers"], "no chip scope has any chance of data");
+}
+
+/// A peer with a direct endpoint for exactly one chip (but no
+/// `cpclib/machineState` fallback for the rest) gets only that one chip
+/// scope offered.
+#[test]
+fn only_the_chip_with_a_direct_endpoint_is_offered_without_machine_state() {
+    let mut session = Session::new(
+        RecordingPeer::new()
+            .also_supporting(&["cpclib/crtc"])
+            .denying(&["cpclib/machineState"]),
+        map_with(&[])
+    );
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "scopes", "success": true,
+        "body": {"scopes": [{"name": "Registers", "variablesReference": 17}]}
+    }));
+    let scopes = out[0]["body"]["scopes"].as_array().unwrap();
+    let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(names, vec!["Registers", "CRTC"]);
+}
+
 /// A machine that cannot describe itself says why, in the pane, instead of
 /// showing an empty scope.
 #[test]

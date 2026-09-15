@@ -342,10 +342,12 @@ pub(crate) fn annotate_disassembly(
 /// The scopes we add beside the emulator's registers.
 ///
 /// The CPC's behaviour is decided as much by the CRTC and the Gate Array as by
-/// the Z80, and reading a demo without them is guesswork. The emulator core
-/// does not expose them yet, so they are presented as present-but-unavailable
-/// rather than omitted: the shape is settled, and filling them in later is a
-/// change in one place.
+/// the Z80, and reading a demo without them is guesswork. Returns all five
+/// unconditionally - the caller (`Session`'s own "scopes" handling, via
+/// `chip_scope_has_a_chance`) is what filters this down to the ones the
+/// connected peer can actually answer for, so a chip with no data on this
+/// backend is omitted rather than shown as a permanently-empty
+/// "(unavailable)" row.
 pub fn extra_scopes() -> Vec<Value> {
     // `expensive` is the honest answer and a load-bearing one: none of this is
     // on the emulator's debug API, so reading it means saving a whole snapshot

@@ -1474,12 +1474,27 @@ impl<P: DapPeer> Session<P> {
                 // decide what the Z80's work actually looks like.
                 "scopes" => {
                     let mut annotated = message.clone();
+                    // Only the panes this peer has any real chance of
+                    // answering - see `chip_scope_has_a_chance`'s own doc
+                    // comment for why a chip that can never produce data is
+                    // omitted rather than shown as a permanently-empty
+                    // "(unavailable)" placeholder.
+                    let available: Vec<Value> = crate::inspect::extra_scopes()
+                        .into_iter()
+                        .filter(|scope| {
+                            let reference = scope
+                                .get("variablesReference")
+                                .and_then(Value::as_i64)
+                                .unwrap_or_default();
+                            self.chip_scope_has_a_chance(reference)
+                        })
+                        .collect();
                     if let Some(scopes) = annotated
                         .get_mut("body")
                         .and_then(|b| b.get_mut("scopes"))
                         .and_then(Value::as_array_mut)
                     {
-                        scopes.extend(crate::inspect::extra_scopes());
+                        scopes.extend(available);
                     }
                     return vec![annotated];
                 },
@@ -3057,6 +3072,26 @@ impl<P: DapPeer> Session<P> {
             }
         }
         out
+    }
+
+    /// Whether `reference` names a chip scope this peer has any real chance
+    /// of answering - either directly (`peer.supports(chip_command(..))`,
+    /// the same check `chip_scope` below makes) or by falling back to a
+    /// parsed `.sna` snapshot (`peer.supports("cpclib/machineState")`) -
+    /// every registered chip scope (CRTC/GA/PSG/PPI/Disc) is always
+    /// extractable from a real snapshot once one exists, see
+    /// `chip_variables`, so `cpclib/machineState` support alone is enough
+    /// to promise real data for all five, not just the ones with a direct
+    /// endpoint too.
+    ///
+    /// `false` means this pane would only ever show `chip_placeholder`'s
+    /// "(unavailable)" row - used to omit it from the scopes list entirely
+    /// instead, the same treatment `TAPE_REFERENCE` already gets (see its
+    /// own doc comment), generalized here to be peer-driven instead of
+    /// hardcoded for one chip.
+    fn chip_scope_has_a_chance(&mut self, reference: i64) -> bool {
+        crate::amspiritlite::chip_command(reference).is_some_and(|cmd| self.peer_mut().supports(cmd))
+            || self.peer_mut().supports("cpclib/machineState")
     }
 
     /// Answer a chip scope, fetching the machine's state if we do not have it.

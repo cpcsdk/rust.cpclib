@@ -276,6 +276,12 @@ pub trait DapPeer: Send {
                 // Same: the bridge drives `_poc_key` itself, typing the
                 // requested text as key-matrix events.
                 | "cpclib/autotype"
+                // Same again: the bridge saves and returns a real snapshot -
+                // see `js1984_bridge`'s own module doc comment, which lists
+                // all three of these together. Missing here until now was
+                // an oversight, not a deliberate gap: `RecordingPeer`'s own
+                // separate copy of this list (below) already included it.
+                | "cpclib/machineState"
         )
     }
 }
@@ -291,6 +297,14 @@ pub struct RecordingPeer {
     /// Extra commands this peer claims, for testing a backend that knows more
     /// than 1984js does.
     pub also_supports: Vec<String>,
+    /// Commands this peer claims NOT to support, checked before both
+    /// `also_supports` and the hardcoded defaults below - for testing a
+    /// backend that knows *less* than 1984js does (e.g. no
+    /// `cpclib/machineState` at all, to exercise `chip_scope_has_a_chance`'s
+    /// "omit the pane" path - every other `RecordingPeer` in this test suite
+    /// implicitly claims that support via the hardcoded default, so this is
+    /// the only way to construct one that genuinely does not).
+    pub denies: Vec<String>,
     pub sent: Vec<Value>,
     pub incoming: Vec<Value>,
     /// Everything the session said about the line at `PC`, in order, so a
@@ -307,6 +321,14 @@ impl RecordingPeer {
     /// backend.
     pub fn also_supporting(mut self, commands: &[&str]) -> Self {
         self.also_supports = commands.iter().map(|c| c.to_string()).collect();
+        self
+    }
+
+    /// Claim NOT to support `commands`, even ones the hardcoded default
+    /// list below would otherwise grant - for testing a backend poorer than
+    /// 1984js.
+    pub fn denying(mut self, commands: &[&str]) -> Self {
+        self.denies = commands.iter().map(|c| c.to_string()).collect();
         self
     }
 
@@ -348,6 +370,9 @@ impl DapPeer for RecordingPeer {
     }
 
     fn supports(&self, command: &str) -> bool {
+        if self.denies.iter().any(|denied| denied == command) {
+            return false;
+        }
         self.also_supports.iter().any(|extra| extra == command)
             || matches!(
                 command,
