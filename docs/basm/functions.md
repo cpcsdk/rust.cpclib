@@ -106,9 +106,13 @@ This page documents all built-in functions available in basm expressions.
 - **`list_argsort(list)`** - Return indices that would sort the list
 - **`list_push(list, element)`** - Append element to list (returns new list)
 - **`list_extend(list1, list2)`** - Concatenate two lists (returns new list)
-- **`list_filer(list, predicate`)** - Return a list containing the elements that matchs the predicate is provided as a string that is the name of a function that takes an expression and returns a boolean
+- **`list_filter(list, predicate)`** - Return a list containing the elements for which `predicate`
+  (a function name, or an inline [lambda](expression-types.md#lambda-expressions)) returns true
 - **`list_map(list, transform)`**
-- **`list_position(list, predicate)`** (-1 if not found, predicate)
+- **`list_fold(list, initial, folder)`** - Reduce the list to a single value: `folder(accumulator,
+  element)` is called for each element in order, starting from `initial`
+- **`list_position_predicate(list, predicate)`** - Index of the first element for which `predicate`
+  returns true (-1 if none does)
 - **`list_position_value(list, value)`** (-1 if not found, value)
 - **`list_split_by_value(list, value)`**
 

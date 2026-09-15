@@ -41,15 +41,21 @@ fn two_parameter_lambda() {
 
 #[test]
 fn lambda_used_directly_as_list_position_predicate() {
-    // `list_position_predicate`'s real (pre-existing, lambda-unrelated)
-    // semantics: the position of the first item equal to its own
-    // `predicate(item)` result, not "the first item predicate(item) deems
-    // true" - a constant lambda finds the position of the matching value.
+    // Index of the first element for which the predicate is true.
     let bin = cpclib_asm::assemble(
-        "org 0x4000\n l = [5,6,7,8]\n p = list_position_predicate(l, (x) => 7)\n db p\n"
+        "org 0x4000\n l = [5,6,7,8]\n p = list_position_predicate(l, (x) => x == 7)\n db p\n"
     )
     .unwrap();
     assert_eq!(bin, vec![2]);
+}
+
+#[test]
+fn list_position_predicate_returns_minus_one_when_nothing_matches() {
+    let bin = cpclib_asm::assemble(
+        "org 0x4000\n l = [5,6,7,8]\n p = list_position_predicate(l, (x) => x > 100)\n db p\n"
+    )
+    .unwrap();
+    assert_eq!(bin, vec![0xff]);
 }
 
 #[test]

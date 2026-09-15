@@ -111,7 +111,7 @@ pub fn list_position_predicate(env: &mut Env, list: &ExprResult, predicate: &Exp
     match list {
         ExprResult::List(l) => {
             for (i, item) in l.iter().enumerate() {
-                if item ==  &env.eval_any_function(predicate, &[item])? {
+                if env.eval_any_function(predicate, &[item])?.bool()? {
                     return Ok(ExprResult::Value(i as _));
                 }
             }
@@ -120,9 +120,9 @@ pub fn list_position_predicate(env: &mut Env, list: &ExprResult, predicate: &Exp
 
         ExprResult::String(s) => {
             for (i, c) in s.chars().enumerate() {
-                if ExprResult::Char(c as _) ==  env.eval_any_function(predicate, &[&ExprResult::Char(c as _)])? {
+                if env.eval_any_function(predicate, &[&ExprResult::Char(c as _)])?.bool()? {
                     return Ok(ExprResult::Value(i as _));
-                }       
+                }
             }
             Ok(ExprResult::Value(-1))
         },
