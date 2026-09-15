@@ -2463,6 +2463,23 @@ impl<P: DapPeer> Session<P> {
             return Ok(Vec::new());
         }
 
+        // Same reasoning as `tape_view_command`'s own check: a peer with
+        // neither a direct endpoint nor `cpclib/machineState` has no way to
+        // ever answer this - fail immediately and clearly rather than
+        // queuing a round trip that would come back with nothing to show.
+        // Not a live case today (every backend that reaches this point
+        // genuinely implements `cpclib/machineState`), but the same
+        // "decline rather than guess" discipline the rest of this codebase
+        // already follows.
+        if !self.peer_mut().supports("cpclib/machineState") {
+            let seq = self.next_seq();
+            return Ok(vec![protocol::failure(
+                request,
+                "this emulator cannot describe its machine state",
+                seq
+            )]);
+        }
+
         self.pending_crtc_views.push(request.clone());
         if self.pending_chip_scopes.is_empty()
             && self.pending_chip_prints.is_empty()
@@ -2920,6 +2937,17 @@ impl<P: DapPeer> Session<P> {
             self.pending_simple_chip_views.push((reference, request.clone()));
             self.send_own(command, json!({}), Purpose::MachineState)?;
             return Ok(Vec::new());
+        }
+
+        // Same reasoning as `crtc_view_command`'s own check just above (and
+        // `tape_view_command`'s, which already had this).
+        if !self.peer_mut().supports("cpclib/machineState") {
+            let seq = self.next_seq();
+            return Ok(vec![protocol::failure(
+                request,
+                "this emulator cannot describe its machine state",
+                seq
+            )]);
         }
 
         self.pending_simple_chip_views.push((reference, request.clone()));

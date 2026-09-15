@@ -1783,6 +1783,56 @@ fn psgview_falls_back_to_a_full_snapshot_when_the_peer_has_no_psg_endpoint() {
     assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
 }
 
+/// A peer with neither a direct PSG endpoint nor `cpclib/machineState` -
+/// nothing this session could ever ask that would answer - fails `-psgview`
+/// immediately instead of queuing a round trip that could only ever come
+/// back empty. Same discipline `tape_view_command` already had; extended to
+/// `crtc_view_command`/`simple_chip_view_command` alongside this session's
+/// own hardware-pane visibility work (`Session::chip_scope_has_a_chance`).
+#[test]
+fn psgview_fails_immediately_with_no_direct_endpoint_and_no_machine_state() {
+    let mut session = Session::new(
+        RecordingPeer::new().denying(&["cpclib/machineState"]),
+        map_with(&[])
+    );
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-psgview", "context": "repl"}
+        }))
+        .unwrap();
+    assert_eq!(out[0]["success"], json!(false));
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"cpclib/machineState".to_string()),
+        "must not even try a round trip that could never answer"
+    );
+}
+
+/// Same as above, for `-crtcview`.
+#[test]
+fn crtcview_fails_immediately_with_no_direct_endpoint_and_no_machine_state() {
+    let mut session = Session::new(
+        RecordingPeer::new().denying(&["cpclib/machineState"]),
+        map_with(&[])
+    );
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-crtcview", "context": "repl"}
+        }))
+        .unwrap();
+    assert_eq!(out[0]["success"], json!(false));
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"cpclib/machineState".to_string())
+    );
+}
+
 /// SugarboxV2's real `getPsgState` answer (captured live, 2026-09-06, from
 /// an actual running v2.1.1 instance - `EMULATOR_INTERFACE.md` documents a
 /// `{selectedRegister, registers}` shape that does not match what the
