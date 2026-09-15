@@ -35,13 +35,20 @@
 //!   assuming one `read_line` is always the whole message (this was found
 //!   the hard way, against the real binary, not guessed up front).
 //!
-//! `cpclib/*` hardware-state passthroughs (CRTC/PSG/PPI/FDC/tape/ASIC/GA -
-//! see `sugarbox::PASSTHROUGH_COMMANDS`) are deliberately not implemented
-//! here yet: ACE nests all of that inside `getStatus`'s own sub-objects
-//! rather than exposing one command per subsystem, and none of those
-//! sub-object shapes have been captured/cross-checked against what
-//! `presentation.rs`'s decoders expect. `cpclib/screen` is excluded
-//! outright - `getScreen` is confirmed not yet implemented on ACE's side.
+//! `cpclib/crtc`/`ga`/`psg`/`ppi`/`fdc` (see `HARDWARE_STATE_PANES`) all
+//! read from one shared `getStatus` call, unlike SugarboxV2's own
+//! `PASSTHROUGH_COMMANDS` table (one distinct command per pane) - the raw
+//! sub-object each extracts is reshaped into the DAP client's real
+//! `{name, value, ...}` rows by the *same*, already backend-agnostic
+//! decoders `amspiritlite::chip_variables`/`crtc_pane`/etc. use for the
+//! other two backends (confirmed by reading `session.rs`'s
+//! `complete_machine_state`, which calls them for whichever peer answered),
+//! so this module does not need its own reshaping or its own field-name
+//! knowledge - a field ACE names differently than Sugarbox/AMSpiriT Lite
+//! degrades to a raw row via that shared code's own `flat_pane` fallback,
+//! not to nothing. `cpclib/tape`/`tapeSignal`/`asic`/`memmap`/`screen`
+//! are NOT included - nothing confirmed live covers them, and `getScreen`
+//! specifically is confirmed not yet implemented on ACE's side.
 
 use std::io::{BufRead, Write};
 use std::net::TcpStream;
@@ -77,19 +84,11 @@ pub struct AcePeer {
 }
 
 impl AcePeer {
+    /// No reachability check here - every real caller already goes through
+    /// `wait_until_listening` first (see `launch`/`launch_with_disk` below),
+    /// so an extra check-then-connect here would just be one more TCP round
+    /// trip for nothing; same as `SugarBoxPeer::connect`'s own style.
     pub fn connect(port: u16) -> std::io::Result<Self> {
-        // A quick reachability check up front, rather than only discovering
-        // the port is dead on the first real command - `wait_until_listening`
-        // (below) is what callers use before this, so by the time `connect`
-        // runs the port should already answer; this is just a fast local
-        // failure instead of a confusing first-command timeout if it doesn't.
-        TcpStream::connect_timeout(
-            &format!("127.0.0.1:{port}").parse().map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{e}"))
-            })?,
-            Duration::from_secs(5)
-        )?;
-
         let (outgoing, pending) = mpsc::channel();
         let expecting_stop = Arc::new(AtomicBool::new(false));
 
@@ -293,12 +292,65 @@ fn parse_flexible_int(value: &str) -> Option<u32> {
     }
 }
 
+/// `cpclib/*` hardware-state panes this backend answers - all read from one
+/// shared `getStatus` call rather than a dedicated command per subsystem
+/// (unlike SugarboxV2's own `PASSTHROUGH_COMMANDS`, which has a distinct
+/// command per pane). `cpclib/tape`/`cpclib/tapeSignal`/`cpclib/asic`/
+/// `cpclib/memmap`/`cpclib/screen` are not included - nothing confirmed
+/// live covers them. The pane *reshaping* (raw sub-object -> the DAP
+/// client's actual `{name, value, ...}` rows) happens centrally in
+/// `amspiritlite::chip_variables`/`crtc_pane`/`psg_pane`/etc - shared by
+/// every backend, not reimplemented here - so an ACE field name that
+/// doesn't match one of that decoder's known aliases degrades to a raw row
+/// via its own `flat_pane` fallback, not to nothing; this table doesn't
+/// need its own field-name knowledge to already be useful.
+///
+/// Each entry is a *list* of candidate paths into `getStatus`'s reply, tried
+/// in order - not just one fixed key. Found the hard way, not guessed: this
+/// module's own real-instance test caught `getStatus` nesting `ppi` under
+/// `ay` (`{"ay":{"ppi":{...},"registers":{...}}}`) in a build fetched barely
+/// a day after the one the rest of this module's own doc comment was
+/// originally verified against, which had `ppi` as its own top-level
+/// sibling instead. ACE is evidently still under active development and its
+/// `getStatus` shape is not guaranteed stable release to release - `ppi`
+/// carries both candidate paths for exactly that reason; the others still
+/// have only their one, originally-confirmed path, and would need the same
+/// treatment the moment a future build moves them too.
+const HARDWARE_STATE_PANES: &[(&str, &[&[&str]])] = &[
+    ("cpclib/crtc", &[&["crtc"]]),
+    ("cpclib/ga", &[&["gateArray"]]),
+    ("cpclib/psg", &[&["ay"]]),
+    ("cpclib/ppi", &[&["ppi"], &["ay", "ppi"]]),
+    ("cpclib/fdc", &[&["fdc"]])
+];
+
+/// Walk a chain of object keys, returning the first that resolves - `None`
+/// if any step along the way is missing.
+fn get_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter().try_fold(value, |v, key| v.get(key))
+}
+
+/// The one lookup into `HARDWARE_STATE_PANES` every other use of that table
+/// goes through - `ace_call_for`/`ace_response_for`/`supports()` each only
+/// need "does this command name a pane, and if so what are its candidate
+/// paths", never the raw table itself.
+fn hardware_state_pane_paths(command: &str) -> Option<&'static [&'static [&'static str]]> {
+    HARDWARE_STATE_PANES
+        .iter()
+        .find(|(name, _)| *name == command)
+        .map(|(_, paths)| *paths)
+}
+
 /// Translate one DAP request into ACE's own JSON command shape. `None`
 /// means "nothing to send to the emulator" - `send()` answers such a
 /// request with an empty body itself.
 fn ace_call_for(request: &Value) -> Option<Value> {
     let command = request.get("command").and_then(Value::as_str)?;
     let args = request.get("arguments").cloned().unwrap_or(json!({}));
+
+    if hardware_state_pane_paths(command).is_some() {
+        return Some(json!({"cmd": "getStatus"}));
+    }
 
     Some(match command {
         "continue" => json!({"cmd": "continue"}),
@@ -412,6 +464,14 @@ fn ace_response_for(request: &Value, state: &Value, seq: i64) -> Value {
                 "data": crate::amspiritlite::encode_base64(&bytes)
             })
         },
+        _ if hardware_state_pane_paths(command).is_some() => {
+            hardware_state_pane_paths(command)
+                .unwrap_or_default()
+                .iter()
+                .find_map(|path| get_path(state, path))
+                .cloned()
+                .unwrap_or(json!({}))
+        },
         _ => json!({})
     };
     protocol::response(request, body, seq)
@@ -512,6 +572,14 @@ impl DapPeer for AcePeer {
         }
 
         if command == "pause" {
+            // Cleared *before* the round trip, not just inside
+            // `announce_stop_now` after it - closes a real race where the
+            // poller could observe the exact same halt (a leftover `true`
+            // from an earlier `continue` whose stop the machine had not yet
+            // reached) and announce its own duplicate "breakpoint" stop in
+            // the gap between this halt landing and this function getting
+            // around to reporting it. See this module's own doc comment.
+            self.expecting_stop.store(false, Ordering::Relaxed);
             self.round_trip(json!({"cmd": "halt"}))?;
             let seq = self.next_seq();
             self.push(protocol::response(&message, json!({}), seq));
@@ -521,10 +589,20 @@ impl DapPeer for AcePeer {
 
         // `next`/`stepIn`/`stepOut` all ack synchronously with the step
         // already completed (confirmed live), so the resulting stop is
-        // announced immediately here rather than waiting on the poller.
+        // announced immediately here rather than waiting on the poller. Not
+        // routed through `ace_call_for` - this cluster only needs to agree
+        // with itself, not stay silently in sync with that function's own
+        // separate match arms for the same three commands.
         if matches!(command.as_str(), "next" | "stepIn" | "stepOut") {
-            let call = ace_call_for(&message).unwrap();
-            self.round_trip(call)?;
+            let ace_command = match command.as_str() {
+                "next" => "stepOver",
+                "stepIn" => "stepIn",
+                "stepOut" => "stepOut",
+                _ => unreachable!()
+            };
+            // Same race-closing reasoning as `pause` above.
+            self.expecting_stop.store(false, Ordering::Relaxed);
+            self.round_trip(json!({"cmd": ace_command}))?;
             let seq = self.next_seq();
             self.push(protocol::response(&message, json!({}), seq));
             self.announce_stop_now("step");
@@ -605,7 +683,7 @@ impl DapPeer for AcePeer {
                 | "restart"
                 | "readMemory"
                 | "writeMemory"
-        )
+        ) || hardware_state_pane_paths(command).is_some()
     }
 }
 
@@ -665,18 +743,7 @@ where E: cpclib_common::event::EventObserver + 'static {
 /// form, no `http://` (plain TCP, like SugarboxV2's own `wait_until_listening`,
 /// unlike AMSpiriT Lite's HTTP one).
 pub fn wait_until_listening(endpoint: &str, patience: Duration) -> Result<(), String> {
-    let address: std::net::SocketAddr = endpoint
-        .parse()
-        .map_err(|e| format!("{endpoint} is not an address: {e}"))?;
-
-    let deadline = std::time::Instant::now() + patience;
-    while std::time::Instant::now() < deadline {
-        if TcpStream::connect_timeout(&address, Duration::from_millis(200)).is_ok() {
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(200));
-    }
-    Err(format!("ACE did not start listening on {endpoint} within {} seconds", patience.as_secs()))
+    crate::peer::wait_until_tcp_listening("ACE", endpoint, patience)
 }
 
 /// Start ACE with `snapshot` loaded, ready to run from where it was saved -
@@ -845,6 +912,57 @@ mod tests {
     #[test]
     fn an_unknown_command_has_nothing_to_send() {
         assert!(ace_call_for(&request("completions", json!({}))).is_none());
+    }
+
+    #[test]
+    fn hardware_state_panes_all_translate_to_getstatus() {
+        for (name, _) in HARDWARE_STATE_PANES {
+            let call = ace_call_for(&request(name, json!({}))).unwrap();
+            assert_eq!(call["cmd"], "getStatus", "{name}");
+        }
+    }
+
+    #[test]
+    fn hardware_state_panes_extract_their_own_getstatus_sub_object() {
+        // The layout confirmed against the earliest live build - `ppi` as
+        // its own top-level sibling of `ay`, not nested under it.
+        let status = json!({
+            "crtc": {"registers": {"R0": 63}},
+            "gateArray": {"currentMode": 1},
+            "ay": {"registers": {"R7": 63}},
+            "ppi": {"ppiPortA": 0},
+            "fdc": {"status": 128}
+        });
+        for (name, paths) in HARDWARE_STATE_PANES {
+            let req = request(name, json!({}));
+            let answer = ace_response_for(&req, &status, 1);
+            let expected = paths.iter().find_map(|path| get_path(&status, path)).unwrap();
+            assert_eq!(&answer["body"], expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn ppi_pane_falls_back_to_its_newer_nested_location() {
+        // The layout found in a build fetched barely a day later - `ppi`
+        // moved under `ay` instead of staying a top-level sibling. Both
+        // shapes must resolve to the same pane content.
+        let status = json!({"ay": {"registers": {"R7": 63}, "ppi": {"ppiPortA": 5}}});
+        let req = request("cpclib/ppi", json!({}));
+        let answer = ace_response_for(&req, &status, 1);
+        assert_eq!(answer["body"], json!({"ppiPortA": 5}));
+    }
+
+    #[test]
+    fn hardware_state_panes_are_advertised_as_supported() {
+        // A real `AcePeer` - `connect` no longer probes reachability up
+        // front (that check was redundant with every real caller's own
+        // `wait_until_listening`, see `connect`'s own doc comment), so this
+        // succeeds without a real ACE instance and exercises the actual
+        // `supports()` method rather than a re-typed copy of its logic.
+        let peer = AcePeer::connect(0).unwrap();
+        for (name, _) in HARDWARE_STATE_PANES {
+            assert!(peer.supports(name), "{name}");
+        }
     }
 
     #[test]
@@ -1064,6 +1182,19 @@ mod tests {
         let read = drain_until(&mut peer, 1, Duration::from_secs(5));
         assert_eq!(read.len(), 1, "no answer to readMemory: {read:?}");
         assert!(read[0]["body"]["data"].is_string(), "readMemory returned no data: {read:?}");
+
+        // Hardware-state panes: each answers with the matching non-empty
+        // sub-object of a real getStatus reply.
+        for (i, (pane, _)) in HARDWARE_STATE_PANES.iter().enumerate() {
+            peer.send(json!({"seq": 10 + i as i64, "type": "request", "command": pane, "arguments": {}}))
+                .unwrap();
+            let answer = drain_until(&mut peer, 1, Duration::from_secs(5));
+            assert_eq!(answer.len(), 1, "no answer to {pane}: {answer:?}");
+            assert!(
+                answer[0]["body"].is_object() && !answer[0]["body"].as_object().unwrap().is_empty(),
+                "{pane} returned an empty body: {answer:?}"
+            );
+        }
 
         // Breakpoint + continue: arm a breakpoint at whatever address the
         // machine is currently halted at (read via `stackTrace`, same as

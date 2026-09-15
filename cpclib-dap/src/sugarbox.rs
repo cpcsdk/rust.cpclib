@@ -562,21 +562,7 @@ impl Drop for SugarBoxPeer {
 /// (`amspiritlite::wait_until_listening` insists on that scheme, so it
 /// cannot be reused for this plain-TCP protocol).
 pub fn wait_until_listening(endpoint: &str, patience: Duration) -> Result<(), String> {
-    let address: std::net::SocketAddr = endpoint
-        .parse()
-        .map_err(|e| format!("{endpoint} is not an address: {e}"))?;
-
-    let deadline = std::time::Instant::now() + patience;
-    while std::time::Instant::now() < deadline {
-        if TcpStream::connect_timeout(&address, Duration::from_millis(200)).is_ok() {
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(200));
-    }
-    Err(format!(
-        "SugarboxV2 did not start listening on {endpoint} within {} seconds",
-        patience.as_secs()
-    ))
+    crate::peer::wait_until_tcp_listening("SugarboxV2", endpoint, patience)
 }
 
 fn spawn_sugarbox<E>(port: u16, observer: &E) -> Result<(std::process::Child, u16), String>

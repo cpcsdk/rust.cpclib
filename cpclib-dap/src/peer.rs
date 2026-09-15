@@ -6,10 +6,40 @@
 //! is written against this trait and never against a particular emulator.
 
 use std::collections::HashMap;
+use std::net::TcpStream;
+use std::time::Duration;
 
 use serde_json::Value;
 
 use crate::protocol;
+
+/// Block until a plain-TCP-socket peer (SugarboxV2's debug server, ACE's web
+/// API - anything with no `http://` scheme, unlike AMSpiriT Lite's own HTTP
+/// `wait_until_listening`) answers on `endpoint`, or give up saying so.
+/// `emulator_name` is only for the error message; the polling loop itself is
+/// identical for every plain-TCP backend, so it lives here once rather than
+/// once per backend module.
+pub(crate) fn wait_until_tcp_listening(
+    emulator_name: &str,
+    endpoint: &str,
+    patience: Duration
+) -> Result<(), String> {
+    let address: std::net::SocketAddr = endpoint
+        .parse()
+        .map_err(|e| format!("{endpoint} is not an address: {e}"))?;
+
+    let deadline = std::time::Instant::now() + patience;
+    while std::time::Instant::now() < deadline {
+        if TcpStream::connect_timeout(&address, Duration::from_millis(200)).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    Err(format!(
+        "{emulator_name} did not start listening on {endpoint} within {} seconds",
+        patience.as_secs()
+    ))
+}
 
 /// Where a session's own requests are numbered from.
 ///
