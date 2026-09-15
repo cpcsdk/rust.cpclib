@@ -727,7 +727,15 @@ where E: cpclib_common::event::EventObserver + 'static {
         .arg("-enable_webapi")
         .arg("-web_port")
         .arg(port.to_string())
-        .arg("-borderless")
+        // Deliberately NOT `-borderless` - reported live: a borderless
+        // window cannot be dragged (no title bar), which makes it
+        // impossible to move out of the way of the editor during an actual
+        // debug session. Same reasoning the Robot-driven launch path
+        // already uses (`cpclib-runner::emucontrol`'s own `args_for_emu`
+        // never passes it for `Emulator::Ace`, for the same window-usability
+        // reason) - a native SDL window has no way to live inside a VS Code
+        // tab either, so a movable, normally-decorated window is the only
+        // real option here.
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
@@ -1092,7 +1100,8 @@ mod tests {
     }
 
     /// End-to-end against the real binary: install-if-missing, launch for
-    /// real with `-enable_webapi -web_port <port> -borderless`, drive
+    /// real with `-enable_webapi -web_port <port>` (via the real `spawn_ace`,
+    /// so also exercises that it no longer passes `-borderless`), drive
     /// `initialize`/`attach`/`setInstructionBreakpoints`/`continue`/(stop
     /// via the poller)/`readMemory` through the real `DapPeer` contract, and
     /// assert the DAP-shaped responses/events. `#[ignore]`d like this
