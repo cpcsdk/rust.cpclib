@@ -888,7 +888,7 @@ ENDSTRUCT
 ```
 
 Description:
-Structures allow to define data blocks with semantics. In practice, they replace bunches of `DEFB`, `DEFW` directives and enforce checks at assembling (you cannot add more data than expected or forget some). If a label is used before the use of a struct, it is necessary to postfix it by `:`. Otherwise the assembler thinks the label is a macro or structure call. When a label is used this way, each field becomes addressable as `label.field` (e.g. `Point 10, 20` prefixed by `p:` lets you write `p.x`/`p.y`).
+Structures allow to define data blocks with semantics. In practice, they replace bunches of `DEFB`, `DEFW` directives and enforce checks at assembling (you cannot add more data than expected or forget some). If a label is used before the use of a struct, it is necessary to postfix it by `:`. Otherwise the assembler thinks the label is a macro or structure call. When a label is used this way, each field becomes addressable as `label.field` (e.g. `Point 10, 20` prefixed by `p:` lets you write `p.x`/`p.y`). The struct's own type name evaluates to its total size in bytes (`ASSERT Point == 4`) - useful for `sizeof`-style computations.
 
 Example:
 

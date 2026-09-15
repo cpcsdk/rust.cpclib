@@ -66,6 +66,17 @@ Each time you define a new `_` label, it becomes independent from previous ones.
     - Proximity labels are completely independent from normal labels that contain underscores (e.g., `my_label`)
     - Each `_` definition increments an internal counter, making it distinct from previous `_` labels
 
+### Macro/repeat-local labels
+
+An `@`-prefixed label (e.g. `@loop:`) is local to the specific `MACRO` call or `REPEAT` iteration that
+defines it - calling the same macro twice, or repeating the same body several times, never collides on
+an `@`-label of the same name, unlike an ordinary label (which would need a fresh, unique name each
+time to avoid an "already defined" error).
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_macro_local_labels.asm"
+```
+
 ### SMC offset labels
 
 `BASM` supports `sjasmplus`-style "SMC offset" labels, purpose-built for self-modifying-code runtime

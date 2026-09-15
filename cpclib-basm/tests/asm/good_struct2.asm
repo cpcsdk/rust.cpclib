@@ -16,9 +16,15 @@ zz    db 6
  point 9
 
 
+org 0x4000
+
 ; force values
 ; : after label name allows to disambiguate parser that does not try to check if label is a macro (less errors/faster)
 my_point1: point 1, 2, 3
+assert my_point1.xx == 0x4000
+assert my_point1.yy == 0x4001
+assert my_point1.zz == 0x4002
+assert peek(my_point1.zz) == 3
 
 ; use all default values
 my_point2: point (void)
