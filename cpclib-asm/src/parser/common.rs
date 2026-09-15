@@ -485,7 +485,7 @@ pub fn parse_line_component_standard(
         }
     }
 
-    let _before_let = input.checkpoint();
+    let before_let = input.checkpoint();
     let r#let = terminated(opt(parse_directive_word(b"LET")), my_space0).parse_next(input)?;
     let before_label = input.checkpoint();
     let before_label_span = *input;
@@ -746,6 +746,43 @@ pub fn parse_line_component_standard(
                 // this is a label
                 Ok((build_possible_label(), None))
             }
+        }
+        else if label.is_none() && instruction.is_none() {
+            // Neither a label nor a real instruction/directive was found
+            // here (e.g. a bare reserved word like `NEXTU`/`ENDU`/`CASE`
+            // that `parse_label` correctly refuses as a label name - see
+            // its own "You cannot use a directive or an instruction as a
+            // label" check - and that has no standalone parser of its own
+            // outside the specific block construct that expects it, like
+            // `UNION`'s/`SWITCH`'s own explicit `NEXTU`/`CASE` checks). A
+            // clean backtrack here, not a "successfully parsed nothing"
+            // `Ok((None, None))`, so the caller (`parse_line`'s own
+            // colon-continuation loop) stops cleanly instead of pushing a
+            // vacuous empty component and then failing later at the
+            // trailing eof/line-ending requirement - which used to
+            // silently discard whatever had already been successfully
+            // parsed earlier on the same colon-joined line too (`opt`
+            // around the whole `parse_line` call only catches a genuine
+            // `Backtrack`, and `my_many0_nocollect` resets all the way
+            // back to the start of that failed attempt): confirmed live,
+            // `UNION: db 1: NEXTU: dw 2: ENDU` used to lose even the
+            // already-parsed `db 1` this way.
+            //
+            // A bare leading separator colon is a different, legitimate
+            // case, not a reserved word: a body reached mid-colon-join can
+            // itself start right at a ':' (e.g. `ASMCONTROLENV`'s own
+            // "SET_MAX_NB_OF_PASSES=10: nop : ENDA", or `FOR`'s
+            // "for i, 0, 10 : db {i} : endfor" - `inner_code` starts
+            // parsing right after the header, at that ':'). Tolerate it
+            // exactly as before this fix - return zero-width so
+            // `parse_line`'s own delimiter-check consumes it as the
+            // separator between an (empty) component and the next real
+            // one, instead of treating it as a hard stop.
+            input.reset(&before_let);
+            if peek(opt(':')).parse_next(input)?.is_some() {
+                return Ok((None, None));
+            }
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
         else {
             // this cannot be a macro as there is an instruction
@@ -1051,6 +1088,23 @@ pub fn parse_assign_operator(
     Ok(oper)
 }
 
+/// Repeatable *mid*-block marker keywords - `NEXTU`(`UNION`), `CASE`/
+/// `DEFAULT`/`BREAK` (`SWITCH`), `ELSE`/`ELSEIF*` (`IF`) - checked
+/// alongside `END_DIRECTIVE` by [`parse_forbidden_keyword`] below for
+/// exactly the same reason: none of these are ever valid *statement*
+/// content on their own, only recognized by the specific enclosing
+/// block's own explicit check, so `parse_line` must be able to stop
+/// cleanly right before one without requiring the usual trailing eof/
+/// line-ending, the same as it already does for a real closer. Distinct
+/// from `STAND_ALONE_DIRECTIVE` (`cpclib-asm/build.rs`), which also
+/// contains genuine statement-starting directives (`DB`, `EQU`, `ORG`,
+/// ...) that must *not* get this treatment - `db 1: db 2` is two
+/// perfectly ordinary statements on one line, not an early stop.
+const MID_BLOCK_MARKER: &[&[u8]] = &[
+    b"NEXTU", b"CASE", b"DEFAULT", b"BREAK", b"ELSE", b"ELSEIF", b"ELSEIFDEF", b"ELSEIFEXIST",
+    b"ELSEIFNDEF", b"ELSEIFNOT", b"ELSEIFUSED"
+];
+
 // Fail if we do not read a forbidden keyword
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -1071,8 +1125,9 @@ pub fn parse_forbidden_keyword(
     };
 
     let name = (*input).update_slice(name);
+    let upper = name.to_ascii_uppercase();
 
-    if !end_directive_iter.any(|&a| a == name.to_ascii_uppercase()) {
+    if !end_directive_iter.any(|&a| a == upper) && !MID_BLOCK_MARKER.contains(&upper.as_slice()) {
         input.reset(&start);
         return Err(ErrMode::Backtrack(Z80ParserError::from_input(&name)));
     }

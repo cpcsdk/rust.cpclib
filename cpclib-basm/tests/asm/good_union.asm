@@ -27,11 +27,13 @@ ENDU
 ASSERT $ == s2 + 5
 
 ; rgbds' own canonical example, translated: labels in different members
-; alias the same address.
+; alias the same address. basm's own single-colon label syntax, not
+; rgbds' `::` export marker (basm doesn't parse `::` as part of a label
+; definition).
 UNION
-    wName:: ds 10
+    wName: ds 10
 NEXTU
-    wHealth:: ds 2
+    wHealth: ds 2
     wVideoBuffer: ds 16
 ENDU
 ASSERT wName == wHealth
@@ -60,6 +62,8 @@ NEXTU
     pt: Point(void)
 ENDU
 ASSERT s4 == pt
+ASSERT pt.px == s4
+ASSERT pt.py == s4 + 1
 ASSERT $ == s4 + 4
 
 ; Single member, no NEXTU at all - legal, if pointless (nothing overlaps).

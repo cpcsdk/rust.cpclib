@@ -210,8 +210,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     loop {
         parse_block_error(
             cut_err(
-                repeat::<_, _, (), _, _>(
-                    0..,
+                my_many0_nocollect(
                     alt((
                         my_space1.value(()),
                         line_ending.value(()),
@@ -332,8 +331,7 @@ pub fn parse_union(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
     loop {
         parse_block_error(
             cut_err(
-                repeat::<_, _, (), _, _>(
-                    0..,
+                my_many0_nocollect(
                     alt((
                         my_space1.value(()),
                         line_ending.value(()),
@@ -371,8 +369,7 @@ pub fn parse_union(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
                     // part of finishing the member - skipping only spaces
                     // here would miss that `:` and wrongly report "expected
                     // NEXTU or ENDU".
-                    repeat::<_, _, (), _, _>(
-                        0..,
+                    my_many0_nocollect(
                         alt((
                             my_space1.value(()),
                             line_ending.value(()),
@@ -1666,8 +1663,7 @@ fn parse_enum_fields(
     cut_err(repeat(
         0..,
         delimited(
-            repeat::<_, _, (), _, _>(
-                0..,
+            my_many0_nocollect(
                 alt((
                     my_space1.value(()),
                     parse_comment.value(()),
@@ -1676,8 +1672,7 @@ fn parse_enum_fields(
                 ))
             ),
             parse_enum_field(allow_directives),
-            repeat::<_, _, (), _, _>(
-                0..,
+            my_many0_nocollect(
                 alt((
                     my_space1.value(()),
                     parse_comment.value(()),
@@ -1721,8 +1716,7 @@ pub fn parse_enum(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
     // End keyword: skip any trailing whitespace/comments/newlines/colons first.
     // The ':' is needed for inline (one-line) form where statements are joined with ':'.
     let _ = cut_err(preceded(
-        repeat::<_, _, (), _, _>(
-            0..,
+        my_many0_nocollect(
             alt((
                 my_space1.value(()),
                 parse_comment.value(()),
@@ -1793,8 +1787,7 @@ pub fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, 
         repeat(
             1..,
             delimited(
-                repeat::<_, _, (), _, _>(
-                    0..,
+                my_many0_nocollect(
                     alt((
                         my_space1.value(()),
                         parse_comment.value(()),
@@ -1815,8 +1808,7 @@ pub fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, 
                             .context(StrContext::Label("STRUCT: Invalid operation"))
                     )
                 ),
-                repeat::<_, _, (), _, _>(
-                    0..,
+                my_many0_nocollect(
                     alt((
                         my_space1.value(()),
                         parse_comment.value(()),
@@ -2726,8 +2718,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             conditions.push((condition, code));
 
             let r#else = opt(preceded(
-                repeat::<_, _, (), _, _>(
-                    0..,
+                my_many0_nocollect(
                     alt((my_space1.value(()), line_ending.value(()), ':'.value(())))
                 ),
                 (Caseless(b"ELSE"), my_space0)

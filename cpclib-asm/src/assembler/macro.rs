@@ -4,7 +4,7 @@ use std::ops::Deref;
 use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::winnow::Parser;
-use cpclib_tokens::symbols::{SourceLocation, Struct, ValueMacro};
+use cpclib_tokens::symbols::{SourceLocation, Struct, SymbolsTableTrait, ValueMacro};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
 use crate::Env;
@@ -598,7 +598,29 @@ impl<'a, P: MacroParamElement> Expandable for StructWithArgs<'a, P> {
     fn expand(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>> {
         //        dbg!("{:?} != {:?}", self.args, self.r#struct().content());
 
-        let prefix = ""; // TODO acquire this prefix
+        // An instantiation like `p: Point(void)` is parsed as two
+        // independent tokens (a `Label` and this `MacroCall`/struct-call),
+        // not a single AST node - the only way to recover "p" here is by
+        // noticing the assembler's own `current_global_label` (the same
+        // bookkeeping local-label resolution already relies on) still
+        // names a label sitting at exactly this address, i.e. one was
+        // just defined immediately before this struct call with nothing
+        // emitted in between. Matching on *address*, not just "the most
+        // recently defined label", avoids misattributing fields to a
+        // stale, unrelated label when the struct call has none of its own
+        // (e.g. a bare `Point(void)` with no leading `name:`).
+        let current_label = env.symbols().get_current_label().value().to_owned();
+        let field_label_prefix = if !current_label.is_empty()
+            && env.symbols().int_value(&current_label).ok().flatten()
+                == Some(env.logical_code_address() as i32)
+        {
+            format!("{current_label}.")
+        }
+        else {
+            String::new()
+        };
+
+        let prefix = ""; // TODO acquire this prefix (kept empty for the nested-struct-field MacroCall branch below - see field_label_prefix for the DB/DW instance-field-label case)
 
         // self.args has priority over self.content information
         let mut developped: String = self
@@ -649,7 +671,12 @@ impl<'a, P: MacroParamElement> Expandable for StructWithArgs<'a, P> {
                             };
 
 
-                            Ok(format!(" {prefix}{tok} {elem}"))
+                            if field_label_prefix.is_empty() {
+                                Ok(format!(" {prefix}{tok} {elem}"))
+                            }
+                            else {
+                                Ok(format!(" {field_label_prefix}{name}:\n {prefix}{tok} {elem}"))
+                            }
                         }
 
                         Token::MacroCall(r#macro, current_default_args) => {

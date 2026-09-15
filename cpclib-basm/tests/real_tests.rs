@@ -852,14 +852,6 @@ fn expect_one_line_success(real_fname: &str) {
     // there are labels with ::
     || real_fname.contains("good_opcode.asm")
     // opcode() with multiline cannot be represented as single line with :
-    || (real_fname.contains("union") && real_fname.contains("good_"))
-    // NEXTU/ENDU reached via a mid-line `:` continuation (rather than a
-    // real newline) hits a real, pre-existing parser limitation shared
-    // with other STAND_ALONE_DIRECTIVE-only mid-block markers (confirmed
-    // live: e.g. a bare CASE/DEFAULT inside a colon-joined MODULE body
-    // fails the exact same way, nothing UNION-specific) - not something
-    // this feature can fix on its own, same rationale as good_module.asm/
-    // good_opcode.asm above.
     {
         return;
     }
