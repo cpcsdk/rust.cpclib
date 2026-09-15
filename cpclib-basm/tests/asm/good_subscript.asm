@@ -40,3 +40,27 @@ ASSERT m[0, 0] = 1
 ASSERT m[1, 0] = 2
 ASSERT m[0, 2] = 5
 ASSERT m[1, 2] = 6
+
+; a macro parameter can be indexed too, when the call passes a list literal
+; directly - `{l}` alone still spreads a list argument flat (no brackets),
+; exactly as needed for `DB {l}`, but `{l}[...]` re-wraps it in brackets so
+; indexing works. Both uses of the same parameter can coexist in one body.
+MACRO GET_LIST_ITEM l, idx
+    db {l}[{idx}]
+ENDM
+MACRO SPREAD_LIST l
+    db {l}
+ENDM
+org 0x4000
+GET_LIST_ITEM([10, 20, 30], 1)
+ASSERT peek($ - 1) == 20
+SPREAD_LIST([1, 2, 3])
+ASSERT peek($ - 3) == 1
+ASSERT peek($ - 2) == 2
+ASSERT peek($ - 1) == 3
+
+; a plain identifier argument that merely evaluates to a list needs no
+; wrapping - it already substitutes as valid, directly indexable text.
+mylist = [5, 6, 7]
+GET_LIST_ITEM(mylist, 2)
+ASSERT peek($ - 1) == 7

@@ -93,6 +93,23 @@ fn strip_raw_string_quotes<'a>(
     }
 }
 
+/// `{l}[{idx}]` in a macro body (`followed_by_bracket`, computed once from
+/// the body text by `tokenize_macro_body`) needs its substitution re-wrapped
+/// in `[...]` when the argument actually supplied at `l` is itself a list
+/// (`GET([10,20,30], 1)`) - `expand_param`'s own "list" branch deliberately
+/// flattens a list argument to a bare comma list with no brackets, since
+/// that is what makes `DB {l}` spread a list argument across a data line;
+/// without a body `[` right after it, that flattened form is exactly what
+/// is wanted, so wrapping must not happen there. A single non-list argument
+/// (a plain identifier/expression, even one that evaluates to a list at
+/// runtime) is unaffected either way - `ident[i]` already parses correctly
+/// once substituted verbatim, no wrapping needed or wanted. Returns the
+/// extra byte length (2, for `[`/`]`) the wrapping adds, or 0.
+#[inline]
+fn list_wrap_extra_len<P: MacroParamElement>(followed_by_bracket: bool, argvalue: &P) -> usize {
+    if followed_by_bracket && argvalue.is_list() { 2 } else { 0 }
+}
+
 #[inline]
 fn expand_param<'p, P: MacroParamElement>(
     m: &'p P,
@@ -239,7 +256,12 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     // argument, and then the default stands in for it. The
                     // default is body text, so its length is known without
                     // expanding anything.
-                    MacroSegment::ArgOr { index, start, end } => {
+                    MacroSegment::ArgOr {
+                        index,
+                        start,
+                        end,
+                        followed_by_bracket
+                    } => {
                         if index < self.args.len() {
                             let slot = &mut expanded_args[index];
                             if slot.is_none() {
@@ -249,17 +271,22 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                                 }
                                 let arg_len = expanded.len();
                                 *slot = Some(expanded);
-                                Ok(acc + arg_len)
+                                Ok(acc + arg_len + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
                             }
                             else {
-                                Ok(acc + slot.as_ref().unwrap().len())
+                                Ok(acc
+                                    + slot.as_ref().unwrap().len()
+                                    + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
                             }
                         }
                         else {
                             Ok(acc + (end - start))
                         }
                     },
-                    MacroSegment::Arg { index } => {
+                    MacroSegment::Arg {
+                        index,
+                        followed_by_bracket
+                    } => {
                         // `index` comes from the macro's own body, tokenized
                         // once at declaration time - independent of any
                         // particular call's argument count. A variadic
@@ -284,10 +311,12 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                             }
                             let arg_len = expanded.len();
                             *slot = Some(expanded);
-                            Ok(acc + arg_len)
+                            Ok(acc + arg_len + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
                         }
                         else {
-                            Ok(acc + slot.as_ref().unwrap().len())
+                            Ok(acc
+                                + slot.as_ref().unwrap().len()
+                                + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
                         }
                     }
                 }
@@ -343,10 +372,24 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                         columns.push_piece(cursor.position() as usize, source, false);
                         cursor.write_all(arg_count.as_bytes()).expect(MSG);
                     },
-                    MacroSegment::ArgOr { index, start, end } => {
+                    MacroSegment::ArgOr {
+                        index,
+                        start,
+                        end,
+                        followed_by_bracket
+                    } => {
                         columns.push_piece(cursor.position() as usize, source, false);
                         match expanded_args.get(index).and_then(|slot| slot.as_ref()) {
-                            Some(value) => cursor.write_all(value.as_bytes()).expect(MSG),
+                            Some(value) => {
+                                if list_wrap_extra_len(followed_by_bracket, &self.args[index]) > 0 {
+                                    cursor.write_all(b"[").expect(MSG);
+                                    cursor.write_all(value.as_bytes()).expect(MSG);
+                                    cursor.write_all(b"]").expect(MSG);
+                                }
+                                else {
+                                    cursor.write_all(value.as_bytes()).expect(MSG)
+                                }
+                            },
                             // Emitted verbatim, never re-expanded: a default is
                             // written by whoever wrote the macro, in the macro's
                             // own body, so there is nothing caller-specific in it
@@ -358,14 +401,23 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                             }
                         }
                     },
-                    MacroSegment::Arg { index } => {
+                    MacroSegment::Arg {
+                        index,
+                        followed_by_bracket
+                    } => {
                         columns.push_piece(cursor.position() as usize, source, false);
                         // All in-range arguments were expanded in the first pass
                         // (guaranteed Some) - an out-of-range index already
                         // returned an error there, so this loop never reaches it.
-                        cursor
-                            .write_all(expanded_args[index].as_ref().unwrap().as_bytes())
-                            .expect(MSG);
+                        let value = expanded_args[index].as_ref().unwrap();
+                        if list_wrap_extra_len(followed_by_bracket, &self.args[index]) > 0 {
+                            cursor.write_all(b"[").expect(MSG);
+                            cursor.write_all(value.as_bytes()).expect(MSG);
+                            cursor.write_all(b"]").expect(MSG);
+                        }
+                        else {
+                            cursor.write_all(value.as_bytes()).expect(MSG);
+                        }
                     }
                 }
             }

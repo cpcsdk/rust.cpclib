@@ -183,6 +183,14 @@ notation used to *write* a list literal (`[1, 2, 3]`), applied *after* an existi
   to the result of `a[0]`.
 - A literal can be indexed directly, without a named variable: `[1, 2, 3][1]`, `"abc"[0]`,
   `(0..5)[2]`.
+- A [`MACRO`](directives.md#macro) parameter can be indexed too, when the call passes a list
+  literal directly (`GET_ITEM([1, 2, 3], 0)` with a body of `db {l}[{idx}]`) - the substitution is
+  automatically re-wrapped in brackets so the following `[...]` indexes into it, without disturbing
+  `{l}` alone (no `[...]` after it in the body), which keeps spreading a list argument flat across a
+  data line (`db {l}` with `l=[1,2,3]` still gives `db 1,2,3`, not `db [1,2,3]`) - both forms can be
+  used with the same parameter in the same macro body. A single argument that merely *evaluates* to
+  a list (an identifier, a function call, ...) needs no such handling - it already substitutes as
+  plain text and indexes correctly on its own.
 
 ## Operators
 

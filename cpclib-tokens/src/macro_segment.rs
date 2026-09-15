@@ -73,17 +73,22 @@ pub fn tokenize_macro_body<'l, 'p>(
                 },
                 None => (raw, None)
             };
+            let followed_by_bracket = bytes.get(close + 1) == Some(&b'[');
             if let Some(&idx) = param_names.get(key) {
                 if let Some((start, end)) = default {
                     segments.push(MacroSegment::ArgOr {
                         index: idx,
                         start,
-                        end
+                        end,
+                        followed_by_bracket
                     });
                     cursor = close + 1;
                     continue;
                 }
-                segments.push(MacroSegment::Arg { index: idx });
+                segments.push(MacroSegment::Arg {
+                    index: idx,
+                    followed_by_bracket
+                });
                 cursor = close + 1;
                 continue;
             }
@@ -99,10 +104,16 @@ pub fn tokenize_macro_body<'l, 'p>(
                             MacroSegment::ArgOr {
                                 index: idx,
                                 start,
-                                end
+                                end,
+                                followed_by_bracket
                             }
                         },
-                        None => MacroSegment::Arg { index: idx }
+                        None => {
+                            MacroSegment::Arg {
+                                index: idx,
+                                followed_by_bracket
+                            }
+                        }
                     });
                     cursor = close + 1;
                     continue;
@@ -137,7 +148,21 @@ pub fn tokenize_macro_body<'l, 'p>(
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MacroSegment {
     Lit { start: usize, end: usize },
-    Arg { index: usize },
+    /// `followed_by_bracket` - the macro body's own next byte after this
+    /// placeholder's closing `}` is a literal `[` (e.g. `{l}[{idx}]`),
+    /// computed once here from the body text alone, independent of any
+    /// particular call. A call whose argument at `index` is itself a list
+    /// (`GET([10,20,30], 1)`, as opposed to a plain identifier/expression
+    /// that merely evaluates to one) needs its substitution re-wrapped in
+    /// `[...]` for the following `[...]` to index into it, rather than the
+    /// flattened, bracket-free comma list substitution normally used to
+    /// spread a list argument across a `DB`/`DW` line - see
+    /// `expand_param`/`finish_expand_for_basm` in
+    /// `cpclib-asm/src/assembler/macro.rs`, which decide the actual
+    /// wrapping (this flag alone is not sufficient - it also needs to know
+    /// whether the call's argument is a list, a call-time property this
+    /// body-only tokenizer has no access to).
+    Arg { index: usize, followed_by_bracket: bool },
     /// `{N:=text}` - argument `index`, or `text` when this call did not
     /// supply one.
     ///
@@ -157,10 +182,12 @@ pub enum MacroSegment {
     ///
     /// `start`/`end` bound the default text inside the macro body, like
     /// [`MacroSegment::Lit`]; it is emitted verbatim, never re-expanded.
+    /// `followed_by_bracket` - see [`MacroSegment::Arg`].
     ArgOr {
         index: usize,
         start: usize,
-        end: usize
+        end: usize,
+        followed_by_bracket: bool
     },
     /// `{#}` in a variadic macro's body - the total number of arguments
     /// actually passed at a given call site.
@@ -196,7 +223,7 @@ mod tokenize_macro_body_tests {
         let tokenized = tokenize_macro_body(body, &["a", "b"], true);
         let segments = args(&tokenized);
         assert_eq!(segments.len(), 2, "{segments:?}");
-        let MacroSegment::ArgOr { index, start, end } = segments[1]
+        let MacroSegment::ArgOr { index, start, end, .. } = segments[1]
         else {
             panic!("expected an ArgOr, got {:?}", segments[1]);
         };
@@ -222,7 +249,7 @@ mod tokenize_macro_body_tests {
     fn a_named_reference_can_carry_a_default_too() {
         let body = "dw {b:=7}";
         let tokenized = tokenize_macro_body(body, &["a", "b"], false);
-        let MacroSegment::ArgOr { index, start, end } = args(&tokenized)[1]
+        let MacroSegment::ArgOr { index, start, end, .. } = args(&tokenized)[1]
         else {
             panic!("expected an ArgOr")
         };
@@ -235,7 +262,13 @@ mod tokenize_macro_body_tests {
     #[test]
     fn a_reference_without_a_default_is_untouched() {
         let tokenized = tokenize_macro_body("dw {3}", &[] as &[&str], true);
-        assert_eq!(args(&tokenized)[1], MacroSegment::Arg { index: 3 });
+        assert_eq!(
+            args(&tokenized)[1],
+            MacroSegment::Arg {
+                index: 3,
+                followed_by_bracket: false
+            }
+        );
     }
 
     /// `:=` inside a `{...}` that names nothing is still a literal, as it was
@@ -262,9 +295,15 @@ mod tokenize_macro_body_tests {
         assert_eq!(
             args(&tokenized),
             vec![
-                MacroSegment::Arg { index: 0 },
+                MacroSegment::Arg {
+                    index: 0,
+                    followed_by_bracket: false
+                },
                 MacroSegment::Lit { start: 3, end: 4 },
-                MacroSegment::Arg { index: 1 }
+                MacroSegment::Arg {
+                    index: 1,
+                    followed_by_bracket: false
+                }
             ]
         );
     }
@@ -272,7 +311,13 @@ mod tokenize_macro_body_tests {
     #[test]
     fn numeric_placeholder_is_a_positional_arg_only_when_variadic() {
         let variadic = tokenize_macro_body("{2}", &["a", "b"], true);
-        assert_eq!(args(&variadic), vec![MacroSegment::Arg { index: 2 }]);
+        assert_eq!(
+            args(&variadic),
+            vec![MacroSegment::Arg {
+                index: 2,
+                followed_by_bracket: false
+            }]
+        );
 
         // Same body, non-variadic macro: `{2}` isn't a declared param name,
         // and the variadic-only numeric fallback must not kick in - stays
@@ -303,7 +348,13 @@ mod tokenize_macro_body_tests {
         // still take priority over the variadic `{#}` special case, since
         // named-param resolution happens first.
         let tokenized = tokenize_macro_body("{#}", &["#"], true);
-        assert_eq!(args(&tokenized), vec![MacroSegment::Arg { index: 0 }]);
+        assert_eq!(
+            args(&tokenized),
+            vec![MacroSegment::Arg {
+                index: 0,
+                followed_by_bracket: false
+            }]
+        );
     }
 
     #[test]
@@ -312,13 +363,22 @@ mod tokenize_macro_body_tests {
         assert_eq!(
             args(&tokenized),
             vec![
-                MacroSegment::Arg { index: 0 },
+                MacroSegment::Arg {
+                    index: 0,
+                    followed_by_bracket: false
+                },
                 MacroSegment::Lit { start: 3, end: 4 },
-                MacroSegment::Arg { index: 2 },
+                MacroSegment::Arg {
+                    index: 2,
+                    followed_by_bracket: false
+                },
                 MacroSegment::Lit { start: 7, end: 8 },
                 MacroSegment::ArgCount,
                 MacroSegment::Lit { start: 11, end: 12 },
-                MacroSegment::Arg { index: 1 }
+                MacroSegment::Arg {
+                    index: 1,
+                    followed_by_bracket: false
+                }
             ]
         );
     }
@@ -341,7 +401,10 @@ mod tokenize_macro_body_tests {
             args(&tokenized),
             vec![
                 MacroSegment::Lit { start: 0, end: 1 },
-                MacroSegment::Arg { index: 2 }
+                MacroSegment::Arg {
+                    index: 2,
+                    followed_by_bracket: false
+                }
             ]
         );
     }
@@ -352,13 +415,61 @@ mod tokenize_macro_body_tests {
         assert_eq!(
             args(&tokenized),
             vec![
-                MacroSegment::Arg { index: 0 },
+                MacroSegment::Arg {
+                    index: 0,
+                    followed_by_bracket: false
+                },
                 MacroSegment::Lit { start: 3, end: 5 },
-                MacroSegment::Arg { index: 1 },
+                MacroSegment::Arg {
+                    index: 1,
+                    followed_by_bracket: false
+                },
                 MacroSegment::Lit { start: 8, end: 10 },
                 MacroSegment::ArgCount
             ]
         );
+    }
+
+    /// The new, actual feature: `{l}[{idx}]` - a list-valued argument
+    /// followed immediately by `[` needs re-wrapping in brackets at
+    /// expansion time (see `cpclib-asm/src/assembler/macro.rs`) so the
+    /// following `[...]` indexes into it rather than parsing as a comma
+    /// list spliced into the surrounding statement. That decision needs to
+    /// know the body's own next byte, computed here once regardless of
+    /// what any particular call passes.
+    #[test]
+    fn a_reference_immediately_followed_by_a_bracket_is_flagged() {
+        let tokenized = tokenize_macro_body("db {l}[{idx}]", &["l", "idx"], false);
+        assert_eq!(
+            args(&tokenized),
+            vec![
+                MacroSegment::Lit { start: 0, end: 3 },
+                MacroSegment::Arg {
+                    index: 0,
+                    followed_by_bracket: true
+                },
+                MacroSegment::Lit { start: 6, end: 7 },
+                MacroSegment::Arg {
+                    index: 1,
+                    followed_by_bracket: false
+                },
+                MacroSegment::Lit { start: 12, end: 13 }
+            ]
+        );
+    }
+
+    /// A default-carrying reference (`ArgOr`) gets the same flag.
+    #[test]
+    fn a_default_reference_immediately_followed_by_a_bracket_is_flagged() {
+        let tokenized = tokenize_macro_body("db {l:=[]}[0]", &["l"], false);
+        let MacroSegment::ArgOr {
+            followed_by_bracket,
+            ..
+        } = args(&tokenized)[1]
+        else {
+            panic!("expected an ArgOr, got {:?}", args(&tokenized)[1]);
+        };
+        assert!(followed_by_bracket);
     }
 
     #[test]

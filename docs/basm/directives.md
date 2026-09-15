@@ -863,7 +863,7 @@ name [arg1, arg2, ...]
 ```
 
 Description:
-Define a reusable block of code that can be called with parameters. Macros are expanded inline at each call site.
+Define a reusable block of code that can be called with parameters. Macros are expanded inline at each call site. A parameter can be [indexed](expression-types.md#indexing-and-slicing) with `{name}[i]` when the call passes a list literal.
 
 Example:
 

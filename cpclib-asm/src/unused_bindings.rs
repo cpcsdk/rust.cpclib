@@ -233,7 +233,7 @@ pub fn unused_macro_parameter_indices(
         .iter()
         .filter_map(|segment| {
             match segment {
-                MacroSegment::Arg { index } => Some(*index),
+                MacroSegment::Arg { index, .. } => Some(*index),
                 _ => None
             }
         })
