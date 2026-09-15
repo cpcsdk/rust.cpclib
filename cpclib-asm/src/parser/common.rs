@@ -701,8 +701,23 @@ pub fn parse_line_component_standard(
         // We speculatively parse an instruction first; on failure, restore input so
         // the macro-call fallback sees the original span (e.g. NAME(args)).
         let before_instruction = input.checkpoint();
-        let instruction =
-            opt(alt((parse_z80_directive_with_block, parse_single_token))).parse_next(input)?;
+        // `parse_single_token` already checks `is_accepted` internally for
+        // the directives it dispatches (the `hashed_choice!`-based single-
+        // shot table) - `parse_z80_directive_with_block`'s own custom-loop
+        // block directives (SWITCH, UNION, ...) never went through that
+        // check at all, a real pre-existing gap (e.g. a MODULE inside a
+        // FUNCTION body would have silently been accepted despite not
+        // being in `FunctionLimited`'s allowed list) that UNION's own
+        // FunctionLimited/StructLimited exclusion would otherwise do
+        // nothing - `.verify` here closes it the same way `parse_single_
+        // token` already does for its own dispatch.
+        let parsing_state = input.state.state;
+        let instruction = opt(alt((
+            parse_z80_directive_with_block
+                .verify(move |t: &LocatedToken| t.is_accepted(&parsing_state)),
+            parse_single_token
+        )))
+        .parse_next(input)?;
         if instruction.is_none() {
             input.reset(&before_instruction);
         }

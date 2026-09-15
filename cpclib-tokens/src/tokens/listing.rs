@@ -106,6 +106,13 @@ where Self: Debug + Sized + Sync
     fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_>;
     fn switch_default(&self) -> Option<&[Self]>;
 
+    /// `UNION ... NEXTU ... ENDU` - see [`crate::Token::Union`]'s own doc
+    /// comment. One `&[Self]` per `NEXTU`-delimited member, in order,
+    /// including the first (implicit) one - unlike `switch_cases`, no
+    /// per-member value or break flag, since every member always executes.
+    fn is_union(&self) -> bool;
+    fn union_listings(&self) -> Box<dyn Iterator<Item = &[Self]> + '_>;
+
     fn is_iterate(&self) -> bool;
     fn iterate_listing(&self) -> &[Self];
     fn iterate_counter_name(&self) -> &str;

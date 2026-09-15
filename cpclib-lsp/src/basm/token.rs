@@ -809,7 +809,8 @@ const BLOCK_KEYWORD_PAIRS: &[(&[&str], &[&str])] = &[
     (&["CONFINED"], &["ENDC", "ENDCONFINED"]),
     (&["ENUM"], &["ENDENUM"]),
     (&["WHILE"], &["ENDW", "WEND"]),
-    (&["ASMCONTROLENV"], &["ENDA", "ENDASMCONTROLENV"])
+    (&["ASMCONTROLENV"], &["ENDA", "ENDASMCONTROLENV"]),
+    (&["UNION"], &["ENDU"])
 ];
 
 /// `ELSE`/`ELSEIF`-family keywords - not real closing tokens (an `IF` can
@@ -850,6 +851,21 @@ pub(super) fn matching_opening_line(text: &str, line: u32) -> Option<u32> {
     if IF_ELSE_WORDS.contains(&first_word) {
         let (if_open_words, if_close_words) = BLOCK_KEYWORD_PAIRS[0];
         return block_start_line(text, line, if_open_words, if_close_words);
+    }
+
+    // `NEXTU` is a repeatable mid-block marker for `UNION`, the same
+    // relationship `ELSE`/`ELSEIF` have to `IF` above - not a real closer
+    // (a UNION can have several), but ctrl+click should still jump to the
+    // `UNION` it belongs to. Looked up by content rather than a hardcoded
+    // index (unlike the `IF` case above) since `UNION`'s own position in
+    // the table isn't fixed the way `IF` being first is relied on there.
+    if first_word == "NEXTU"
+        && let Some((union_open_words, union_close_words)) = BLOCK_KEYWORD_PAIRS
+            .iter()
+            .find(|(open, _)| open.contains(&"UNION"))
+            .copied()
+    {
+        return block_start_line(text, line, union_open_words, union_close_words);
     }
 
     for (open_words, close_words) in BLOCK_KEYWORD_PAIRS {

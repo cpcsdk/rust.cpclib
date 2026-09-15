@@ -30,6 +30,10 @@ pub enum ParsingState {
     FunctionLimited,
     /// Parse of the content of a struct
     StructLimited,
+    /// Parse of the content of a `UNION` member - data directives
+    /// (`DB`/`DW`/`STR`/a struct instantiation/`DS`-family reservations)
+    /// and labels only, no real code - see `Token::Union`'s own doc comment.
+    UnionLimited,
     /// Forbid directives
     GeneratedLimited, // TODO rename
     /// Parse of a symbols file
@@ -64,11 +68,18 @@ macro_rules! parsing_state_verified_inner {
                         | Self::Repeat { .. }
                         | Self::Break
                         | Self::Switch { .. }
-                        | Self::Iterate { .. } => true,
+                        | Self::Iterate { .. }
+                        | Self::For { .. }
+                        | Self::While(..) => true,
                         Self::Return(_) => true,
                         Self::Assert(..) | Self::Print(_) | Self::Fail(_) | Self::Comment(_) => {
                             true
                         },
+                        // A FUNCTION body computes a value via RETURN, never
+                        // emits bytes/addresses - UNION's entire purpose is
+                        // byte/address layout, which has no meaning here.
+                        // Deliberate exclusion, unlike SWITCH above (pure
+                        // control flow, legitimately useful in a function).
                         _ => false
                     }
                 },
@@ -77,6 +88,20 @@ macro_rules! parsing_state_verified_inner {
                         Self::Defb(..) | Self::Defw(..) | Self::Str(..) | Self::MacroCall(..) => {
                             true
                         },
+                        // Same reasoning as FunctionLimited above.
+                        _ => false
+                    }
+                },
+                ParsingState::UnionLimited => {
+                    match self {
+                        Self::Defb(..)
+                        | Self::Defw(..)
+                        | Self::Str(..)
+                        | Self::MacroCall(..)
+                        | Self::Defs(..)
+                        | Self::Label(..)
+                        | Self::Comment(..)
+                        | Self::Union(..) => true,
                         _ => false
                     }
                 },

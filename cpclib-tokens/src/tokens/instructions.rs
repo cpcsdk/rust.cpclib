@@ -877,6 +877,21 @@ pub enum Token {
     Struct(SmolStr, Vec<(SmolStr, Token)>),
     Switch(Expr, Vec<(Expr, Listing, bool)>, Option<Listing>),
 
+    /// `UNION ... NEXTU ... NEXTU ... ENDU` - like a C union: every member
+    /// listing starts assembling from the *same* address (`Env::visit_
+    /// org_set_arguments` rewinds both `$` and the physical write cursor
+    /// back to the union's start before each member), and `$` after `ENDU`
+    /// advances by the **max** size any member reached, not their sum.
+    /// Every member always executes (no conditional selection the way
+    /// `Switch`/`If`'s branches have) - one `Listing` per `NEXTU`-delimited
+    /// member, including the first (implicit) one before any `NEXTU`.
+    /// Real data directives inside different members can physically
+    /// disagree at an overlapping address - the assembled result there is
+    /// always whichever member came last; every member's own labels stay
+    /// valid regardless. Member bodies are grammar-restricted at parse time
+    /// (`ParsingState::UnionLimited`) to data directives, not arbitrary code.
+    Union(Vec<Listing>),
+
     Undef(SmolStr),
     WaitNops(Expr),
     /// Emit a warning message (like PRINT but not fatal)
@@ -1685,6 +1700,7 @@ impl Token {
                 | Self::RepeatUntil(..)
                 | Self::Rorg(..)
                 | Self::Switch(..)
+                | Self::Union(..)
                 | Self::While(..)
         )
     }

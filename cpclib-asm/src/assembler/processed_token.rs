@@ -83,6 +83,11 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     While(SimpleListingState<'token, T>),
     Rorg(SimpleListingState<'token, T>),
     Switch(SwitchState<'token, T>),
+    /// `UNION ... NEXTU ... ENDU` - one member per `NEXTU`-delimited
+    /// listing (including the first), no per-member value/`BREAK` unlike
+    /// `Switch` - every member always executes. See `Token::Union`'s own
+    /// doc comment for the full semantics.
+    Union(Vec<SimpleListingState<'token, T>>),
     Warning(Box<ProcessedToken<'token, T>>)
 }
 
@@ -834,6 +839,21 @@ where
                 .map(|l| build_simple_listing_state(l, span.clone(), env))
                 .transpose()?
         }))
+    }
+    else if token.is_union() {
+        let (members, errs): (Vec<_>, Vec<_>) = token
+            .union_listings()
+            .map(|l| build_simple_listing_state(l, span.clone(), env.clone()))
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => either::Either::Left(val),
+                    Err(e) => either::Either::Right(e)
+                }
+            });
+        if !errs.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+        }
+        Some(ProcessedTokenState::Union(members))
     }
     else if token.is_warning() {
         Some(ProcessedTokenState::Warning(Box::new(
@@ -1661,6 +1681,51 @@ where
                         {
                             visit_processed_tokens(&mut default.processed_tokens, env)?;
                         }
+
+                        Ok(())
+                    },
+
+                    Some(ProcessedTokenState::Union(members)) => {
+                        // See `Token::Union`'s own doc comment. Every member
+                        // starts from the same address (`$` and the physical
+                        // write cursor both rewound via the existing
+                        // `visit_org_set_arguments` primitive - the same one
+                        // ORG's two-argument form uses), and `$` after the
+                        // union advances by the MAX size any member reached,
+                        // not their sum.
+                        let start_code = env.logical_code_address();
+                        let start_output = env.logical_output_address();
+                        let mut max_size: u16 = 0;
+
+                        for (i, member) in members.iter_mut().enumerate() {
+                            env.visit_org_set_arguments(start_code, start_output)?;
+
+                            if i == 0 {
+                                // A first member genuinely colliding with
+                                // code written *before* the union (outside
+                                // it) is still a real, reportable bug -
+                                // unlike members 1.., it runs with no
+                                // override suppression.
+                                visit_processed_tokens(&mut member.processed_tokens, env)?;
+                            }
+                            else {
+                                let previously_expected = env.expect_overlapping_writes;
+                                env.expect_overlapping_writes = true;
+                                let result =
+                                    visit_processed_tokens(&mut member.processed_tokens, env);
+                                env.expect_overlapping_writes = previously_expected;
+                                result?;
+                            }
+
+                            let this_size =
+                                env.logical_output_address().wrapping_sub(start_output);
+                            max_size = max_size.max(this_size);
+                        }
+
+                        env.visit_org_set_arguments(
+                            start_code.wrapping_add(max_size),
+                            start_output.wrapping_add(max_size)
+                        )?;
 
                         Ok(())
                     },

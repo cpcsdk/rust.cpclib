@@ -605,6 +605,15 @@ pub struct Env {
     /// BUG: should be stored individually in each bank ?
     byte_written: bool,
 
+    /// Set while assembling a `UNION` member after the first - the write
+    /// cursor has just been rewound to the union's start
+    /// (`visit_org_set_arguments`), so every subsequent member's writes are
+    /// *expected* to physically overlap a prior member's, not a bug to warn
+    /// about. Checked in `output_byte`'s override-decision branch; save/
+    /// restore around each such member (not a blind reset) so nested
+    /// `UNION`s stay correct. See `Token::Union`'s own doc comment.
+    expect_overlapping_writes: bool,
+
     symbols: SymbolsTable,
 
     /// Return value of the currently executed function. Is almost always None
@@ -761,6 +770,7 @@ impl Clone for Env {
             symbol_definition_chains: self.symbol_definition_chains.clone(),
             charset_encoding: self.charset_encoding.clone(),
             byte_written: self.byte_written,
+            expect_overlapping_writes: self.expect_overlapping_writes,
             symbols: self.symbols.clone(),
             run_options: self.run_options,
             pending_smc_label: self.pending_smc_label.clone(),
@@ -2278,13 +2288,23 @@ impl Env {
         };
 
         let r#override = if already_used {
-            let r#override = AssemblerWarning::OverrideMemory(physical_output_address, 1);
-            if self.allow_memory_override() {
-                self.add_warning(r#override);
-                true
+            if self.expect_overlapping_writes {
+                // Intentional (UNION member) overlap - no warning, and no
+                // "override happened" signal either: returning `true` here
+                // with no warning actually added would panic `output_bytes`'
+                // consecutive-override merge logic, which assumes a `true`
+                // always has a matching `OverrideMemory` warning to find.
+                false
             }
             else {
-                return Err(Box::new(r#override));
+                let r#override = AssemblerWarning::OverrideMemory(physical_output_address, 1);
+                if self.allow_memory_override() {
+                    self.add_warning(r#override);
+                    true
+                }
+                else {
+                    return Err(Box::new(r#override));
+                }
             }
         }
         else {
@@ -4359,6 +4379,7 @@ impl Env {
             run_options: None,
             pending_smc_label: None,
             byte_written: false,
+            expect_overlapping_writes: false,
             output_trigger: None,
             expression_depth: 0,
             symbols_output: Default::default(),

@@ -1231,6 +1231,8 @@ pub enum LocatedTokenInner {
         Vec<(LocatedExpr, LocatedListing, bool)>,
         Option<LocatedListing>
     ),
+    /// See [`cpclib_tokens::Token::Union`]'s own doc comment.
+    Union(Vec<LocatedListing>),
     Undef(Z80Span),
 
     WaitNops(LocatedExpr),
@@ -1393,7 +1395,7 @@ impl ListingElement for LocatedToken {
         is_iterate is_for is_repeat_until is_repeat
         is_macro_definition is_if is_include is_incbin
         is_call_macro_or_build_struct is_function_definition
-        is_crunched_section is_confined is_switch
+        is_crunched_section is_confined is_switch is_union
         is_db is_dw is_str is_set is_comment is_org
         is_assembler_control is_while is_assert
         is_run is_breakpoint is_save
@@ -1601,6 +1603,15 @@ impl ListingElement for LocatedToken {
         }
     }
 
+    fn union_listings(&self) -> Box<dyn Iterator<Item = &[Self]> + '_> {
+        match &self.inner {
+            either::Left(LocatedTokenInner::Union(members)) => {
+                Box::new(members.iter().map(|m| m.as_slice()))
+            },
+            _ => unreachable!()
+        }
+    }
+
     fn warning_token(&self) -> &Self {
         match &self.inner {
             either::Either::Left(_) => unreachable!(),
@@ -1706,6 +1717,9 @@ impl LocatedTokenInner {
                         .collect_vec(),
                     d.as_ref().map(|d| d.as_listing())
                 )
+            },
+            Self::Union(members) => {
+                Token::Union(members.iter().map(|m| m.as_listing()).collect_vec())
             },
             Self::While(e, l) => Token::While(e.to_expr_owned(), l.as_listing()),
             Self::Iterate(_name, _values, _code) => {
@@ -2176,6 +2190,10 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn switch_default(&self) -> Option<&[Self]> {
+        todo!()
+    }
+
+    fn union_listings(&self) -> Box<dyn Iterator<Item = &[Self]> + '_> {
         todo!()
     }
 

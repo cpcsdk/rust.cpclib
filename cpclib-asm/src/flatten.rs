@@ -107,6 +107,13 @@ where T: ListingElement + 'a {
     else if token.is_assembler_control() {
         flatten_for_analysis(token.assembler_control_get_listing())
     }
+    else if token.is_union() {
+        // Unlike IF/SWITCH's mutually exclusive branches, every UNION
+        // member genuinely executes - flatten through all of them, same
+        // treatment as MODULE above.
+        let members: Vec<_> = token.union_listings().collect();
+        Box::new(members.into_iter().flat_map(flatten_for_analysis))
+    }
     else {
         Box::new(std::iter::empty())
     };
@@ -167,6 +174,10 @@ where T: ListingElement + 'a {
     }
     else if token.is_assembler_control() {
         flatten_listing(token.assembler_control_get_listing())
+    }
+    else if token.is_union() {
+        let members: Vec<_> = token.union_listings().collect();
+        Box::new(members.into_iter().flat_map(flatten_listing))
     }
     else {
         Box::new(std::iter::empty())

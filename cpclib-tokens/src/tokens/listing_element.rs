@@ -237,6 +237,14 @@ macro_rules! listing_element_impl_most_methods {
         }
 
         #[inline]
+        fn is_union(&self) -> bool {
+            match self.unwrapped() {
+                Self::Union(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
         fn is_if(&self) -> bool {
             match self.unwrapped() {
                 Self::If(..) => true,
@@ -838,6 +846,13 @@ impl ListingElement for Token {
     fn switch_default(&self) -> Option<&[Self]> {
         match self.unwrapped() {
             Self::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
+            _ => unreachable!()
+        }
+    }
+
+    fn union_listings(&self) -> Box<dyn Iterator<Item = &[Self]> + '_> {
+        match self.unwrapped() {
+            Self::Union(members) => Box::new(members.iter().map(|m| m.as_slice())),
             _ => unreachable!()
         }
     }

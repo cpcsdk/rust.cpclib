@@ -69,6 +69,8 @@ const ERR_MODULE_NOT_CLOSED: &str = "MODULE: not closed";
 const ERR_MODULE_ERROR_IN_BLOCK: &str = "MODULE: error in block";
 const ERR_SWITCH_NOT_CLOSED: &str = "SWITCH: not closed";
 const ERR_SWITCH_ERROR_IN_BLOCK: &str = "SWITCH: error in block";
+const ERR_UNION_NOT_CLOSED: &str = "UNION: not closed";
+const ERR_UNION_ERROR_IN_BLOCK: &str = "UNION: error in block";
 const ERR_MACRO_NOT_CLOSED: &str = "MACRO: not closed";
 const ERR_MACRO_ERROR_IN_BLOCK: &str = "MACRO: error in block";
 const ERR_FUNCTION_NOT_CLOSED: &str = "FUNCTION: not closed";
@@ -309,6 +311,91 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
             )
             .parse_next(input)?;
             default_listing = Some(default);
+        }
+    }
+}
+
+/// `UNION ... NEXTU ... NEXTU ... ENDU` - see [`cpclib_tokens::Token::Union`]'s
+/// own doc comment. Structurally a simplified `parse_switch`: no tested
+/// value, no per-member value/`BREAK` - every member is unconditional and
+/// always executes, `NEXTU` just starts a new one. Member bodies parse
+/// under `ParsingState::UnionLimited` (data directives and labels only, not
+/// arbitrary code), not the plain unrestricted `inner_code` every other
+/// block directive uses.
+pub fn parse_union(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    my_many0_nocollect(alt((my_space1.value(()), my_line_ending.value(())))).parse_next(input)?;
+    let union_start = *input;
+    let _ = parse_directive_word(b"UNION")(input)?;
+
+    let mut members = Vec::with_capacity(2);
+
+    loop {
+        parse_block_error(
+            cut_err(
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((
+                        my_space1.value(()),
+                        line_ending.value(()),
+                        ':'.value(()),
+                        parse_comment.value(())
+                    ))
+                )
+                .context(StrContext::Label("UNION: whitespace error"))
+            ),
+            union_start,
+            ERR_UNION_ERROR_IN_BLOCK
+        )
+        .parse_next(input)?;
+
+        let member = parse_block_error(
+            cut_err(
+                inner_code_with_state(context::ParsingState::UnionLimited, false)
+                    .context(StrContext::Label("UNION: error in member"))
+            ),
+            union_start,
+            ERR_UNION_ERROR_IN_BLOCK
+        )
+        .parse_next(input)?;
+        members.push(member);
+
+        let nextu_or_endu = parse_block_error(
+            cut_err(
+                preceded(
+                    // Same skip-set as the loop's own leading whitespace
+                    // check above, not just `my_space0` - in the one-line
+                    // `:`-joined form (`UNION: db 1: NEXTU: ...`, real basm
+                    // syntax where `:` is a statement separator),
+                    // `inner_code_with_state` leaves the `:` right before
+                    // `NEXTU`/`ENDU` unconsumed rather than eating it as
+                    // part of finishing the member - skipping only spaces
+                    // here would miss that `:` and wrongly report "expected
+                    // NEXTU or ENDU".
+                    repeat::<_, _, (), _, _>(
+                        0..,
+                        alt((
+                            my_space1.value(()),
+                            line_ending.value(()),
+                            ':'.value(()),
+                            parse_comment.value(())
+                        ))
+                    ),
+                    alt((
+                        parse_directive_word(b"NEXTU").value(false),
+                        parse_directive_word(b"ENDU").value(true)
+                    ))
+                )
+                .context(StrContext::Label("UNION: expected NEXTU or ENDU"))
+            ),
+            union_start,
+            ERR_UNION_NOT_CLOSED
+        )
+        .parse_next(input)?;
+
+        if nextu_or_endu {
+            let token = LocatedTokenInner::Union(members)
+                .into_located_token_between(&union_start.checkpoint(), *input);
+            return Ok(token);
         }
     }
 }
@@ -2457,7 +2544,8 @@ pub fn parse_z80_directive_with_block(
                 parse_rorg.context(StrContext::Label("Error in rorg")),
                 parse_conditional.context(StrContext::Label("Error in condition")),
                 parse_assembler_control_max_passes_number
-                    .context(StrContext::Label("Error in assembler control"))
+                    .context(StrContext::Label("Error in assembler control")),
+                parse_union.context(StrContext::Label("Error in union"))
             ))
         ))
         .parse_next(input)

@@ -88,6 +88,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"LZUPKR",
     b"MAP",
     b"MODULE",
+    b"NEXTU",
     b"NOEXPORT",
     b"NOLIST",
     b"NOP",
@@ -165,6 +166,7 @@ const START_DIRECTIVE: &[&[u8]] = &[
     b"REPT",
     b"STRUCT",
     b"SWITCH",
+    b"UNION",
     b"WHILE"
 ];
 
@@ -202,6 +204,7 @@ const END_DIRECTIVE: &[&[u8]] = &[
     b"ENDREPEAT",
     b"ENDS",
     b"ENDSWITCH",
+    b"ENDU",
     b"ENDW",
     b"ENDWHILE",
     b"FEND",

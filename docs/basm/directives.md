@@ -740,6 +740,32 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_switch.asm"
 ```
 
+### UNION, NEXTU, ENDU
+
+Synopsis:
+
+```
+UNION
+  ... member 1 ...
+NEXTU
+  ... member 2 ...
+[NEXTU
+  ... member 3 ...]
+ENDU
+```
+
+Description:
+Several alternative "member" listings share the same starting address, like a C union in the CPC's own address space - each `NEXTU` resets the address back to the `UNION`'s start, and `ENDU` advances past it by the **max** size any member reached, not their sum. Typical use: reusing the same scratch RAM for two purposes that never happen at the same time (e.g. a loading buffer, later reused as a sprite table), without hand-computing that they don't overlap.
+
+Member bodies only accept data directives and labels (`DB`/`DW`/`STR`/`DS`/`DEFS`/`FILL`/`RMEM`, a struct instantiation, or a label) - not arbitrary code. This is broadened from [rgbds](https://rgbds.gbdev.io/docs/rgbasm.5)'s own `UNION`, which only allows `DS`. Because real data directives are allowed (not just space reservation), different members' bytes can physically disagree at an overlapping address - the assembled content there is always whichever member came **last**, while every member's own labels stay valid and alias the same address regardless of which one "won" the physical content.
+
+`UNION` is not allowed inside a `FUNCTION` or `STRUCT` body (its whole purpose is byte/address layout, which has no meaning in either).
+
+Example:
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_union.asm"
+```
+
 ## Code duplication directives
 
 ### FOR
