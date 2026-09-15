@@ -132,6 +132,47 @@ fn smart_offset_and_n() {
 }
 
 #[test]
+fn smart_offset_add_a_n() {
+    let bin = cpclib_asm::assemble(
+        "org 0x4000\n s: a+*: add a, 0x12\n assert a == s + 1\n"
+    );
+    assert!(bin.is_ok(), "{bin:?}");
+}
+
+#[test]
+fn smart_offset_adc_a_n() {
+    let bin = cpclib_asm::assemble(
+        "org 0x4000\n s: a+*: adc a, 0x12\n assert a == s + 1\n"
+    );
+    assert!(bin.is_ok(), "{bin:?}");
+}
+
+#[test]
+fn smart_offset_sbc_a_n() {
+    let bin = cpclib_asm::assemble(
+        "org 0x4000\n s: a+*: sbc a, 0x12\n assert a == s + 1\n"
+    );
+    assert!(bin.is_ok(), "{bin:?}");
+}
+
+#[test]
+fn smart_offset_sub_n() {
+    let bin = cpclib_asm::assemble(
+        "org 0x4000\n s: a+*: sub 0x12\n assert a == s + 1\n"
+    );
+    assert!(bin.is_ok(), "{bin:?}");
+}
+
+#[test]
+fn smart_offset_still_rejects_the_fake_16bit_add_form() {
+    // `ADD DE,BC` is a fake pseudo-instruction that expands into several
+    // real instructions - the tail-offset model doesn't apply, unlike the
+    // real, single-instruction `ADD A,n` form covered above.
+    let err = cpclib_asm::assemble("org 0x4000\n a+*: add de, bc\n").unwrap_err();
+    assert!(format!("{err}").contains("smart SMC offset"), "{err}");
+}
+
+#[test]
 fn smart_offset_survives_a_comment_between_label_and_instruction() {
     let bin = cpclib_asm::assemble(
         "org 0x4000\n s: a+*:\n ; a comment\n ld a, 13\n assert a == s + 1\n ret\n"

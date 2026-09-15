@@ -90,13 +90,15 @@ Two forms:
   than a silent guess.
 - Only instructions with a genuine patchable immediate/address operand are supported by `+*` - common
   forms like `LD r,n`, `LD rr,nn`, `LD (nn),x`, `JP`/`CALL`/`JR`/`DJNZ`, `IN`/`OUT (n)`,
-  `AND`/`OR`/`XOR`/`CP n`, and indexed bit-ops like `RLC (IX+d)`. An unsupported instruction (`NOP`,
-  `LD A,B`, ...) is a clear assembling error naming the mnemonic.
-- `ADD`/`ADC`/`SUB`/`SBC` and the `RST`/`JQ` pseudo-instructions are unsupported by `+*` - the whole
-  mnemonic, even an ordinary single-instruction form like `ADD A,n` - because some of their other
-  forms (`ADD DE,BC`-style 16-bit arithmetic, and `RST`/`JQ` themselves) can expand into more than
-  one real instruction, and `+*` only knows how to place a patch point inside a single
-  already-assembled instruction. Use `label+N:` for these instead.
+  `AND`/`OR`/`XOR`/`CP n`, `ADD A,n`/`ADC A,n`/`SBC A,n`/`SUB n`, and indexed bit-ops like
+  `RLC (IX+d)`. An unsupported instruction (`NOP`, `LD A,B`, ...) is a clear assembling error naming
+  the mnemonic.
+- `ADD`/`ADC`/`SBC`/`SUB` have a *fake* 16-bit form too (`ADD DE,rr`, `SBC DE,rr`, `SUB HL,rr`, ...)
+  that isn't supported by `+*`, unlike their real, single-instruction 8-bit-immediate forms above -
+  it expands into more than one real instruction, and `+*` only knows how to place a patch point
+  inside a single already-assembled instruction. The `RST`/`JQ` pseudo-instructions are themselves
+  nothing but such multi-instruction expansions, so they're unsupported outright. Use `label+N:` for
+  any of these instead.
 - `label+N:` has no such requirement - the offset is fixed by hand, so it doesn't need to inspect
   what follows.
 

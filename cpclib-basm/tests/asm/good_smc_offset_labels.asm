@@ -60,9 +60,25 @@ ASSERT a10 == s10 + 2
 s11: a11+*: and 0x12
 ASSERT a11 == s11 + 1
 
+; ADD A,n / ADC A,n / SBC A,n / SUB n - the real, single-instruction
+; 8-bit-immediate forms, same shape as AND/OR/XOR/CP n above. Their fake
+; 16-bit siblings (ADD DE,rr, ...) are still unsupported - see
+; bad_smc_offset_fake_instruction_family.asm.
+s12: a12+*: add a, 0x12
+ASSERT a12 == s12 + 1
+
+s13: a13+*: adc a, 0x12
+ASSERT a13 == s13 + 1
+
+s14: a14+*: sbc a, 0x12
+ASSERT a14 == s14 + 1
+
+s15: a15+*: sub 0x12
+ASSERT a15 == s15 + 1
+
 ; A comment between the label and its instruction doesn't break the link.
-s12:
-a12+*:
+s16:
+a16+*:
 ; a comment
     ld a, 13
-ASSERT a12 == s12 + 1
+ASSERT a16 == s16 + 1

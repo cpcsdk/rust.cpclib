@@ -10,39 +10,34 @@
 //!
 //! Deliberately narrow: covers the common immediate/address-operand shapes
 //! (`LD` in its various forms, `JP`/`CALL`/`JR`/`DJNZ`, `IN`/`OUT (n)`,
-//! `AND`/`OR`/`XOR`/`CP n`, and DDCB/FDCB indexed bit-ops), and returns a
-//! clear error for anything else rather than guessing - matching this
-//! project's established philosophy of declining rather than silently
-//! producing a wrong answer.
+//! `AND`/`OR`/`XOR`/`CP n`, `ADD A,n`/`ADC A,n`/`SBC A,n`/`SUB n`, and
+//! DDCB/FDCB indexed bit-ops), and returns a clear error for anything else
+//! rather than guessing - matching this project's established philosophy of
+//! declining rather than silently producing a wrong answer.
 //!
-//! `ADD`/`ADC`/`SUB`/`SBC` and the `RST`/`JQ` fake-instruction families are
-//! deliberately left out entirely (the *whole* mnemonic, including its
-//! perfectly ordinary single-instruction 8-bit-immediate forms like
-//! `ADD A,n` - not just the ambiguous cases), and not just because nobody
-//! got around to them: `ADD`/`ADC`/`SUB`/`SBC` share their mnemonic with a
-//! *fake* 16-bit form (`ADD DE,BC`, `SBC HL,rr`, ...) that expands into a
-//! whole `Listing` of several real instructions
-//! (`Env::assemble_fake_listing`, dispatched from e.g. `Env::assemble_sub`
-//! whenever `arg1` is `DE`/`HL`), and `RST`/`JQ` are themselves nothing but
-//! such fake, multi-instruction expansions
-//! (`assemble_rst_fake`/`assemble_jq`). This classifier's whole model -
-//! "the immediate sits in the tail of *one* already-assembled instruction,
-//! offset = that instruction's `bytes_len` minus the immediate's width" -
-//! has no meaning once `bytes_len` might span several real instructions
-//! instead of one; there's no single well-defined "the instruction" left to
-//! take a tail-offset of. Excluding the whole family rather than just the
-//! `DE`/`HL`-first shape is the simple, safe choice for now - teasing the
-//! two apart (mirroring `AND`/`OR`/`XOR`/`CP n`'s own arg1-is-`A`-or-real-
-//! operand dispatch, gated on arg1 *not* being `DE`/`HL`/an index register)
-//! would recover `ADD A,n`/`ADC A,n`/`SUB n`/`SBC A,n` support cheaply, but
-//! hasn't been done - a real, scoped follow-up, not something this
-//! comment's "why" should be read as ruling out.
+//! The `RST`/`JQ` fake-instruction families are excluded entirely, and the
+//! same mnemonics as the supported 8-bit `ADD`/`ADC`/`SBC`/`SUB` forms above
+//! also have a *fake* 16-bit sibling (`ADD DE,rr`, `SBC DE,rr`, `SUB DE,rr`/
+//! `SUB HL,rr`) that expands into a whole `Listing` of several real
+//! instructions (`Env::assemble_fake_listing`, dispatched from
+//! `Env::assemble_add_or_adc`/`assemble_sbc`/`assemble_sub` whenever `arg1`
+//! is `DE`/`HL`) - this classifier's whole model ("the immediate sits in
+//! the tail of *one* already-assembled instruction, offset = that
+//! instruction's `bytes_len` minus the immediate's width") has no meaning
+//! once `bytes_len` might span several real instructions instead of one, so
+//! those shapes - and `RST`/`JQ`, which are themselves nothing but such fake
+//! expansions (`assemble_rst_fake`/`assemble_jq`) - are excluded by gating
+//! each arm below on the operand shape actually being the real,
+//! single-instruction form (mirroring `AND`/`OR`/`XOR`/`CP n`'s own
+//! arg1-is-`A`-or-real-operand dispatch), not by excluding the mnemonic
+//! wholesale.
 
 use cpclib_tokens::{DataAccessElem, Mnemonic, Register8};
 
-/// See the module doc comment (including for why `ADD`/`ADC`/`SUB`/`SBC`/
-/// `RST`/`JQ` aren't supported). `bytes_len` is the real, already-encoded
-/// instruction length (`assemble_opcode_impl`'s own `Bytes::len()`).
+/// See the module doc comment (including for why `RST`/`JQ` and the fake
+/// 16-bit `ADD`/`ADC`/`SBC`/`SUB` forms aren't supported). `bytes_len` is
+/// the real, already-encoded instruction length (`assemble_opcode_impl`'s
+/// own `Bytes::len()`).
 pub(crate) fn smart_smc_offset<D: DataAccessElem>(
     mnemonic: Mnemonic,
     arg1: Option<&D>,
@@ -108,6 +103,34 @@ pub(crate) fn smart_smc_offset<D: DataAccessElem>(
         {
             1
         },
+
+        // `ADD A,n` / `ADC A,n` / `SBC A,n` - `Env::assemble_add_or_adc`/
+        // `assemble_sbc` both take `arg2` as the required real operand and
+        // `arg1` as the optional explicit `A,` prefix, exactly like
+        // `AND`/`OR`/`XOR`/`CP n` above - *except* `arg1` can also be
+        // `DE`/`HL` there (the fake 16-bit `ADD DE,rr`/`SBC DE,rr` forms,
+        // or the real `ADD HL,rr`/`SBC HL,rr` instructions), so this must
+        // gate on `arg1` genuinely being the `A,` prefix (or absent), not
+        // just fall back to it - none of those other shapes ever populate
+        // `arg2` with an expression anyway (a register, not an immediate),
+        // but the explicit gate keeps this arm honest about which shape
+        // it's actually classifying rather than relying on that
+        // coincidence.
+        Mnemonic::Add | Mnemonic::Adc | Mnemonic::Sbc
+            if (arg1.is_none() || arg1.is_some_and(|a| a.is_register_a()))
+                && arg2.is_some_and(|a| a.is_expression()) =>
+        {
+            1
+        },
+
+        // `SUB n` - `Env::assemble_sub` takes `arg1` as the optional
+        // explicit `A,` prefix and `arg2` as the real operand, same
+        // "`arg2.or(arg1)`" pattern as `AND`/`OR`/`XOR`/`CP n` (its fake
+        // `SUB DE,rr`/`SUB HL,rr` 16-bit forms never populate either with
+        // an expression, so no extra gate is needed the way `ADD`/`ADC`/
+        // `SBC` above need one - `assemble_sub`'s own fake-form check comes
+        // strictly before this shape is ever reached).
+        Mnemonic::Sub if arg2.or(arg1).is_some_and(|a| a.is_expression()) => 1,
 
         _ => {
             return Err(format!("smart SMC offset not supported for `{mnemonic}`"));
