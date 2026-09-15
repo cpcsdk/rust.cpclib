@@ -13,13 +13,35 @@
 //! `AND`/`OR`/`XOR`/`CP n`, and DDCB/FDCB indexed bit-ops), and returns a
 //! clear error for anything else rather than guessing - matching this
 //! project's established philosophy of declining rather than silently
-//! producing a wrong answer. `ADD`/`ADC`/`SUB`/`SBC` immediate forms and the
-//! `RST`/`JQ` fake-instruction families are deliberately left out (see the
-//! doc comment on `smart_smc_offset` for why).
+//! producing a wrong answer.
+//!
+//! `ADD`/`ADC`/`SUB`/`SBC` and the `RST`/`JQ` fake-instruction families are
+//! deliberately left out entirely (the *whole* mnemonic, including its
+//! perfectly ordinary single-instruction 8-bit-immediate forms like
+//! `ADD A,n` - not just the ambiguous cases), and not just because nobody
+//! got around to them: `ADD`/`ADC`/`SUB`/`SBC` share their mnemonic with a
+//! *fake* 16-bit form (`ADD DE,BC`, `SBC HL,rr`, ...) that expands into a
+//! whole `Listing` of several real instructions
+//! (`Env::assemble_fake_listing`, dispatched from e.g. `Env::assemble_sub`
+//! whenever `arg1` is `DE`/`HL`), and `RST`/`JQ` are themselves nothing but
+//! such fake, multi-instruction expansions
+//! (`assemble_rst_fake`/`assemble_jq`). This classifier's whole model -
+//! "the immediate sits in the tail of *one* already-assembled instruction,
+//! offset = that instruction's `bytes_len` minus the immediate's width" -
+//! has no meaning once `bytes_len` might span several real instructions
+//! instead of one; there's no single well-defined "the instruction" left to
+//! take a tail-offset of. Excluding the whole family rather than just the
+//! `DE`/`HL`-first shape is the simple, safe choice for now - teasing the
+//! two apart (mirroring `AND`/`OR`/`XOR`/`CP n`'s own arg1-is-`A`-or-real-
+//! operand dispatch, gated on arg1 *not* being `DE`/`HL`/an index register)
+//! would recover `ADD A,n`/`ADC A,n`/`SUB n`/`SBC A,n` support cheaply, but
+//! hasn't been done - a real, scoped follow-up, not something this
+//! comment's "why" should be read as ruling out.
 
 use cpclib_tokens::{DataAccessElem, Mnemonic, Register8};
 
-/// See the module doc comment. `bytes_len` is the real, already-encoded
+/// See the module doc comment (including for why `ADD`/`ADC`/`SUB`/`SBC`/
+/// `RST`/`JQ` aren't supported). `bytes_len` is the real, already-encoded
 /// instruction length (`assemble_opcode_impl`'s own `Bytes::len()`).
 pub(crate) fn smart_smc_offset<D: DataAccessElem>(
     mnemonic: Mnemonic,
