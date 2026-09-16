@@ -3,6 +3,29 @@ use std::ops::Deref;
 use cpclib_common::smallvec::SmallVec;
 use memchr::memchr;
 
+/// Find the `]` that closes the `[` already consumed right before `bytes`
+/// starts (i.e. `bytes[0]` is the first byte *after* that `[`) - tracking
+/// `[`/`]` depth so a nested bracket (e.g. a literal list-of-indices,
+/// `{*[[0, 2]]}`) doesn't prematurely end the outer one. Returns the
+/// position of the matching `]`, relative to `bytes`, or `None` if it is
+/// never closed.
+fn find_matching_closing_bracket(bytes: &[u8]) -> Option<usize> {
+    let mut depth = 1i32;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            },
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Tokenize a macro body into MacroSegments.
 ///
 /// `has_variadic` gates the two variadic-macro-only forms - `{N}` (a plain
@@ -55,6 +78,37 @@ pub fn tokenize_macro_body<'l, 'p>(
             });
             cursor = after_open;
             continue;
+        }
+        // `{*}` / `{*[indexes]}` - handled before the generic scan below,
+        // since `indexes` may itself contain nested `{...}` placeholders
+        // (e.g. `{*[{#}-1]}`) whose own `}` would otherwise be mistaken by
+        // a flat `memchr(b'}', ...)` for the end of *this* placeholder.
+        if bytes.get(after_open) == Some(&b'*') {
+            let after_star = after_open + 1;
+            if bytes.get(after_star) == Some(&b'}') {
+                segments.push(MacroSegment::AllArgs);
+                cursor = after_star + 1;
+                continue;
+            }
+            if bytes.get(after_star) == Some(&b'[') {
+                let index_start = after_star + 1;
+                if let Some(rel_index_end) =
+                    find_matching_closing_bracket(&bytes[index_start..])
+                {
+                    let index_end = index_start + rel_index_end;
+                    if bytes.get(index_end + 1) == Some(&b'}') {
+                        segments.push(MacroSegment::SelectedArgs {
+                            start: index_start,
+                            end: index_end
+                        });
+                        cursor = index_end + 2;
+                        continue;
+                    }
+                }
+                // Malformed (`]` never balanced, or not immediately
+                // followed by `}`) - fall through to the generic scan
+                // below, same treatment as any other unrecognized `{...}`.
+            }
         }
         if let Some(rel_close) = memchr(b'}', &bytes[after_open..]) {
             let close = after_open + rel_close;
@@ -191,7 +245,24 @@ pub enum MacroSegment {
     },
     /// `{#}` in a variadic macro's body - the total number of arguments
     /// actually passed at a given call site.
-    ArgCount
+    ArgCount,
+    /// `{*}` - every argument actually passed at a given call site,
+    /// expanded and joined with `,` (like `DB {list_arg}`'s own flat
+    /// spreading, but for *all* of the call's arguments rather than one
+    /// list-valued one). Unlike `{N}`/`{#}`, available unconditionally
+    /// (not gated on `has_variadic`) - `*` can never collide with a
+    /// declared parameter name.
+    AllArgs,
+    /// `{*[indexes]}` - a *subset* of the call's arguments, selected by
+    /// `indexes` (a range or a list of indices), expanded and joined with
+    /// `,` in the order given. `start`/`end` bound the raw index-expression
+    /// text inside the brackets (like `ArgOr`'s default text) - it is
+    /// **not** evaluated here: it may itself reference other placeholders
+    /// (`{#}`, a named parameter, ...), which only have values once a
+    /// specific call is being expanded, so evaluation is deferred to
+    /// `cpclib-asm/src/assembler/macro.rs`'s expansion code, not decided by
+    /// this body-only tokenizer.
+    SelectedArgs { start: usize, end: usize }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -480,6 +551,78 @@ mod tokenize_macro_body_tests {
         assert_eq!(
             args(&tokenized),
             vec![MacroSegment::Lit { start: 0, end: 4 }]
+        );
+    }
+
+    /// `{*}` - all arguments, joined with `,`. Unlike `{N}`/`{#}`, available
+    /// even when the macro is not variadic - `*` cannot collide with a
+    /// declared parameter name.
+    #[test]
+    fn star_alone_is_all_args_non_variadic_too() {
+        let tokenized = tokenize_macro_body("db {*}", &["a"], false);
+        assert_eq!(
+            args(&tokenized),
+            vec![MacroSegment::Lit { start: 0, end: 3 }, MacroSegment::AllArgs]
+        );
+    }
+
+    /// `{*[indexes]}` - the raw text between the brackets is captured, not
+    /// evaluated (see `MacroSegment::SelectedArgs`'s own doc comment).
+    #[test]
+    fn star_with_a_range_selector_captures_the_raw_index_text() {
+        let body = "db {*[0..2]}";
+        let tokenized = tokenize_macro_body(body, &[] as &[&str], false);
+        assert_eq!(
+            args(&tokenized),
+            vec![
+                MacroSegment::Lit { start: 0, end: 3 },
+                MacroSegment::SelectedArgs { start: 6, end: 10 }
+            ]
+        );
+        let MacroSegment::SelectedArgs { start, end } = args(&tokenized)[1]
+        else {
+            unreachable!()
+        };
+        assert_eq!(&body[start..end], "0..2");
+    }
+
+    /// A literal list-of-indices selector (`[[0, 2]]`) nests brackets inside
+    /// the outer `{*[...]}` - the matching-`]` scan must track that depth,
+    /// not stop at the first `]` it sees.
+    #[test]
+    fn star_with_a_nested_bracket_list_selector_tracks_bracket_depth() {
+        let body = "db {*[[0, 2]]}";
+        let tokenized = tokenize_macro_body(body, &[] as &[&str], false);
+        let MacroSegment::SelectedArgs { start, end } = args(&tokenized)[1]
+        else {
+            panic!("expected a SelectedArgs, got {:?}", args(&tokenized)[1]);
+        };
+        assert_eq!(&body[start..end], "[0, 2]");
+    }
+
+    /// The index expression can itself contain a nested `{...}` placeholder
+    /// (e.g. `{#}`) - its own `}` must not be mistaken for the end of the
+    /// outer `{*[...]}`.
+    #[test]
+    fn star_selector_can_contain_a_nested_placeholder() {
+        let body = "db {*[{#}-1]}";
+        let tokenized = tokenize_macro_body(body, &[] as &[&str], true);
+        let MacroSegment::SelectedArgs { start, end } = args(&tokenized)[1]
+        else {
+            panic!("expected a SelectedArgs, got {:?}", args(&tokenized)[1]);
+        };
+        assert_eq!(&body[start..end], "{#}-1");
+    }
+
+    /// An unclosed `{*[...` (no matching `]`) is not a valid selector -
+    /// falls through to a literal, same treatment as any other malformed
+    /// `{...}`.
+    #[test]
+    fn an_unclosed_star_selector_stays_literal() {
+        let tokenized = tokenize_macro_body("{*[abc}", &[] as &[&str], false);
+        assert_eq!(
+            args(&tokenized),
+            vec![MacroSegment::Lit { start: 0, end: 7 }]
         );
     }
 }

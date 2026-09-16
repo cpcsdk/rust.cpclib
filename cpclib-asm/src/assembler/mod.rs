@@ -3276,9 +3276,11 @@ impl Env {
 
         let tokenized_content =
             cpclib_tokens::macro_segment::tokenize_macro_body(code, arguments, has_variadic);
-        for index in
-            crate::unused_bindings::unused_macro_parameter_indices(arguments, &tokenized_content)
-        {
+        for index in crate::unused_bindings::unused_macro_parameter_indices(
+            arguments,
+            code,
+            &tokenized_content
+        ) {
             let msg = format!("'{}' is never used in this macro's body", arguments[index]);
             match source {
                 Some(source_span) => {

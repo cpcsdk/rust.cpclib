@@ -16,6 +16,13 @@ use crate::preamble::{Z80ParserError, Z80Span};
 /// `MacroWithArgs::resolve_referenced_args`.
 type ExpandedMacroArgs<'s> = Vec<Option<beef::lean::Cow<'s, str>>>;
 
+/// Per-*segment* (not per-argument) expansion of a macro call's `{*}`/
+/// `{*[...]}` occurrences - see `MacroWithArgs::resolve_referenced_args`.
+/// Always owned (`Box<str>`, not `Cow`): unlike a plain argument
+/// substitution, this text never borrows directly from the call site - it
+/// is itself built by joining possibly-several expanded arguments together.
+type ExpandedSpecialSegments = Vec<Option<Box<str>>>;
+
 /// Allocates `len` bytes directly as a `Box<[MaybeUninit<u8>]>`, hands
 /// `fill` a byte-oriented cursor over that raw buffer to write through,
 /// then casts the result straight to `Box<str>` once every byte has been
@@ -227,8 +234,127 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         &self,
         env: &mut Env
     ) -> Result<(Box<str>, ExpansionColumnMap), Box<AssemblerError>> {
-        let (expanded_args, capacity) = self.resolve_referenced_args(env)?;
-        self.finish_expand_for_basm(expanded_args, capacity)
+        let (expanded_args, expanded_specials, capacity) = self.resolve_referenced_args(env)?;
+        self.finish_expand_for_basm(expanded_args, expanded_specials, capacity)
+    }
+
+    /// `{*}` - every argument actually passed, expanded and joined with `,`.
+    fn expand_all_args_text(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>> {
+        let mut out = String::new();
+        for (i, arg) in self.args.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&expand_param(arg, env)?);
+        }
+        Ok(out.into_boxed_str())
+    }
+
+    /// `{*[indexes]}` - `raw` is the text between the brackets (not yet
+    /// evaluated - see `MacroSegment::SelectedArgs`'s own doc comment).
+    /// Nested placeholders in `raw` (`{#}`, a named parameter, ...) are
+    /// substituted first - by re-tokenizing `raw` as its own tiny macro
+    /// body and expanding it the normal way, `has_variadic: true`
+    /// unconditionally so `{#}`/`{N}` are always available here regardless
+    /// of whether the *outer* macro itself declared a trailing `...` (there
+    /// is no name collision risk to gate against, unlike the outer body).
+    /// The result is then parsed as a real expression and evaluated - it
+    /// must come out to a single index, a list of indices, or a range.
+    fn expand_selected_args_text(
+        &self,
+        raw: &str,
+        env: &mut Env
+    ) -> Result<Box<str>, Box<AssemblerError>> {
+        let tokenized =
+            cpclib_tokens::macro_segment::tokenize_macro_body(raw, self.r#macro.params(), true);
+        let mut expr_text = String::with_capacity(raw.len());
+        for segment in tokenized.iter() {
+            match *segment {
+                MacroSegment::Lit { start, end } => expr_text.push_str(&raw[start..end]),
+                MacroSegment::ArgCount => {
+                    expr_text.push_str(&self.args.len().to_string());
+                },
+                MacroSegment::Arg { index, .. } => {
+                    let Some(argvalue) = self.args.get(index)
+                    else {
+                        return Err(self.arg_index_out_of_range_error(index));
+                    };
+                    expr_text.push_str(&expand_param(argvalue, env)?);
+                },
+                MacroSegment::ArgOr { index, start, end, .. } => {
+                    match self.args.get(index) {
+                        Some(argvalue) => expr_text.push_str(&expand_param(argvalue, env)?),
+                        None => expr_text.push_str(&raw[start..end])
+                    }
+                },
+                MacroSegment::AllArgs => {
+                    expr_text.push_str(&self.expand_all_args_text(env)?);
+                },
+                MacroSegment::SelectedArgs { start, end } => {
+                    expr_text.push_str(&self.expand_selected_args_text(&raw[start..end], env)?);
+                }
+            }
+        }
+
+        // Parse and evaluate the (now fully substituted) index expression -
+        // mirrors `expand_param`'s own `must_be_evaluated` path.
+        let ctx_builder = env
+            .options()
+            .parse_options()
+            .clone()
+            .context_builder()
+            .remove_filename()
+            .set_context_name("MACRO {*[...]} index expression");
+        let ctx = ctx_builder.build(expr_text.as_str());
+        let src = Z80Span::new_extra(expr_text.as_str(), &ctx);
+        let expr_token = crate::parser::located_expr.parse(src.0).map_err(|e| {
+            let e: &Z80ParserError = e.inner();
+            Box::new(AssemblerError::SyntaxError { error: e.clone() })
+        })?;
+        let value = env
+            .resolve_expr_must_never_fail(&expr_token)
+            .map_err(|e| {
+                Box::new(AssemblerError::AssemblingError { msg: e.to_string() })
+            })?;
+
+        // A single (non-list, non-range) value selects just that one
+        // argument - a convenience so `{*[0]}` needs no list-literal
+        // ceremony for the common "just one index" case.
+        let indices: Vec<cpclib_tokens::ExprResult> = match value.materialize() {
+            cpclib_tokens::ExprResult::List(l) => (*l).clone(),
+            other => vec![other]
+        };
+
+        let mut out = String::new();
+        for (i, idx) in indices.iter().enumerate() {
+            let idx = idx.range_bound().map_err(|e| {
+                Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{{*[{raw}]}}: {e}")
+                })
+            })?;
+            let Ok(idx) = usize::try_from(idx) else {
+                return Err(Box::new(AssemblerError::AssemblingError {
+                    msg: format!(
+                        "{{*[{raw}]}}: index {idx} is negative, {} argument(s) were passed",
+                        self.args.len()
+                    )
+                }));
+            };
+            let Some(argvalue) = self.args.get(idx)
+            else {
+                return Err(Box::new(AssemblerError::AssemblingError {
+                    msg: format!(
+                        "{{*[{raw}]}}: index {idx} is out of range, only {} argument(s) were passed",
+                        self.args.len()
+                    )
+                }));
+            };
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&expand_param(argvalue, env)?);
+        }
+        Ok(out.into_boxed_str())
     }
 
     /// First half of what `expand_for_basm` used to do in one pass: lazily
@@ -241,17 +367,39 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     pub(crate) fn resolve_referenced_args<'s>(
         &'s self,
         env: &mut Env
-    ) -> Result<(ExpandedMacroArgs<'s>, usize), Box<AssemblerError>> {
+    ) -> Result<(ExpandedMacroArgs<'s>, ExpandedSpecialSegments, usize), Box<AssemblerError>> {
         let mut expanded_args: ExpandedMacroArgs<'_> = vec![None; self.args.len()];
+        // `{*}`/`{*[...]}` occurrences - memoized per *segment position*
+        // (not per argument index: unlike `Arg`/`ArgOr`, two occurrences
+        // can select entirely different subsets), so this pass and
+        // `finish_expand_for_basm`'s own walk below never evaluate the same
+        // index expression twice.
+        let mut expanded_specials: ExpandedSpecialSegments =
+            vec![None; self.r#macro.segments().len()];
         let arg_count = self.args.len().to_string();
 
         // First pass: expand all arguments and calculate exact capacity.
-        let capacity = self.r#macro.segments().iter().try_fold(
+        let capacity = self.r#macro.segments().iter().enumerate().try_fold(
             0,
-            |acc, segment| -> Result<usize, Box<AssemblerError>> {
+            |acc, (segment_idx, segment)| -> Result<usize, Box<AssemblerError>> {
                 match *segment {
                     MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
                     MacroSegment::ArgCount => Ok(acc + arg_count.len()),
+                    MacroSegment::AllArgs => {
+                        let text = self.expand_all_args_text(env)?;
+                        let len = text.len();
+                        expanded_specials[segment_idx] = Some(text);
+                        Ok(acc + len)
+                    },
+                    MacroSegment::SelectedArgs { start, end } => {
+                        let text = self.expand_selected_args_text(
+                            &self.r#macro.code()[start..end],
+                            env
+                        )?;
+                        let len = text.len();
+                        expanded_specials[segment_idx] = Some(text);
+                        Ok(acc + len)
+                    },
                     // `{N:=text}`: the call may legitimately not supply this
                     // argument, and then the default stands in for it. The
                     // default is body text, so its length is known without
@@ -323,7 +471,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             }
         )?;
 
-        Ok((expanded_args, capacity))
+        Ok((expanded_args, expanded_specials, capacity))
     }
 
     /// Second half of what `expand_for_basm` used to do in one pass: splice
@@ -337,6 +485,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     pub(crate) fn finish_expand_for_basm(
         &self,
         expanded_args: ExpandedMacroArgs<'_>,
+        expanded_specials: ExpandedSpecialSegments,
         capacity: usize
     ) -> Result<(Box<str>, ExpansionColumnMap), Box<AssemblerError>> {
         let listing = self.r#macro.code();
@@ -359,7 +508,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         let output = build_boxed_str(capacity, |cursor| {
             const MSG: &str = "capacity was computed exactly by resolve_referenced_args";
 
-            for segment in self.r#macro.segments().iter() {
+            for (segment_idx, segment) in self.r#macro.segments().iter().enumerate() {
                 match *segment {
                     MacroSegment::Lit { start, end } => {
                         columns.push_piece(cursor.position() as usize, start, true);
@@ -371,6 +520,14 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     MacroSegment::ArgCount => {
                         columns.push_piece(cursor.position() as usize, source, false);
                         cursor.write_all(arg_count.as_bytes()).expect(MSG);
+                    },
+                    MacroSegment::AllArgs | MacroSegment::SelectedArgs { .. } => {
+                        columns.push_piece(cursor.position() as usize, source, false);
+                        // Computed and memoized by `resolve_referenced_args`
+                        // (guaranteed `Some` - it errors out itself if the
+                        // index expression or selection is invalid).
+                        let value = expanded_specials[segment_idx].as_ref().unwrap();
+                        cursor.write_all(value.as_bytes()).expect(MSG);
                     },
                     MacroSegment::ArgOr {
                         index,

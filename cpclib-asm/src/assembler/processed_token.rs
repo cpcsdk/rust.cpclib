@@ -414,7 +414,16 @@ pub(crate) struct MacroExpansionKey {
     /// struct, a single entry holding the whole post-expansion code text
     /// (structs are cached post-splice, not before - see the doc comment on
     /// the struct branch in `update_macro_or_struct_state`).
-    resolved_args: Vec<Option<Box<str>>>
+    resolved_args: Vec<Option<Box<str>>>,
+    /// One entry per `{*}`/`{*[...]}` occurrence in the macro's body (empty
+    /// for a struct). Not implied by `resolved_args` alone: a `{*[indexes]}`
+    /// selector can reference something beyond the call's own arguments
+    /// (e.g. a global symbol), so - exactly like `resolved_args` itself -
+    /// its *resolved* text, not its raw source, has to be part of the key,
+    /// or two calls with identical arguments could wrongly share a cached
+    /// expansion computed under a different value for that outside
+    /// reference.
+    special_segments: Vec<Option<Box<str>>>
 }
 
 /// Store for each branch (if passed at some point) the test result and the listing
@@ -1099,7 +1108,8 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 
                 match r#macro.flavor() {
                     AssemblerFlavor::Basm => {
-                        let (expanded_args, capacity) = r#macro.resolve_referenced_args(env)?;
+                        let (expanded_args, expanded_specials, capacity) =
+                            r#macro.resolve_referenced_args(env)?;
                         let resolved_args: Vec<Option<Box<str>>> = expanded_args
                             .iter()
                             .map(|a| a.as_ref().map(|c| c.to_string().into_boxed_str()))
@@ -1108,15 +1118,19 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                             kind: MacroOrStruct::Macro,
                             name: SmolStr::from(name),
                             def_location,
-                            resolved_args
+                            resolved_args,
+                            special_segments: expanded_specials.clone()
                         };
 
                         let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();
                         match hit {
                             Some(listing) => listing,
                             None => {
-                                let (code, columns) =
-                                    r#macro.finish_expand_for_basm(expanded_args, capacity)?;
+                                let (code, columns) = r#macro.finish_expand_for_basm(
+                                    expanded_args,
+                                    expanded_specials,
+                                    capacity
+                                )?;
                                 let listing =
                                     parse_expansion(source, true, code, Some(columns))?;
                                 let listing = std::sync::Arc::new(listing);
@@ -1138,7 +1152,11 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                             kind: MacroOrStruct::Macro,
                             name: SmolStr::from(name),
                             def_location,
-                            resolved_args
+                            resolved_args,
+                            // `{*}`/`{*[...]}` are Basm-flavor only (see
+                            // `resolve_all_args_for_orgams`'s own doc
+                            // comment on Orgams' narrower expansion model).
+                            special_segments: Vec::new()
                         };
 
                         let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();
@@ -1177,7 +1195,8 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                     kind: MacroOrStruct::Struct,
                     name: SmolStr::from(name),
                     def_location,
-                    resolved_args: vec![Some(code.clone())]
+                    resolved_args: vec![Some(code.clone())],
+                    special_segments: Vec::new()
                 };
 
                 let hit = env.macro_expansion_cache.read().unwrap().get(&key).cloned();

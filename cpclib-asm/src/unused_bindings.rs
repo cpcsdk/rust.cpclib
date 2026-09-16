@@ -227,17 +227,37 @@ fn references(text: &str, name: &str) -> bool {
 /// merely intend to agree.
 pub fn unused_macro_parameter_indices(
     params: &[impl AsRef<str>],
+    code: &str,
     tokenized: &cpclib_tokens::macro_segment::TokenizedMacroContent
 ) -> Vec<usize> {
-    let used: HashSet<usize> = tokenized
-        .iter()
-        .filter_map(|segment| {
+    // A `{*[indexes]}` occurrence's own `indexes` text is not tokenized
+    // until expansion time (`MacroSegment::SelectedArgs` only records where
+    // it lives, see its own doc comment), so a parameter referenced *only*
+    // inside one (e.g. `{*[{idx}]}`) would otherwise never show up as an
+    // `Arg` segment here at all and get wrongly flagged as unused. Recurse
+    // into it the same way expansion itself eventually will.
+    fn collect_used(
+        code: &str,
+        params: &[impl AsRef<str>],
+        tokenized: &cpclib_tokens::macro_segment::TokenizedMacroContent,
+        used: &mut HashSet<usize>
+    ) {
+        for segment in tokenized.iter() {
             match segment {
-                MacroSegment::Arg { index, .. } => Some(*index),
-                _ => None
+                MacroSegment::Arg { index, .. } => {
+                    used.insert(*index);
+                },
+                MacroSegment::SelectedArgs { start, end } => {
+                    let nested = tokenize_macro_body(&code[*start..*end], params, true);
+                    collect_used(code, params, &nested, used);
+                },
+                _ => {}
             }
-        })
-        .collect();
+        }
+    }
+
+    let mut used = HashSet::new();
+    collect_used(code, params, tokenized, &mut used);
     (0..params.len())
         .filter(|index| !used.contains(index))
         .collect()
@@ -248,14 +268,11 @@ fn check_macro<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<UnusedB
     if params.is_empty() {
         return;
     }
-    let tokenized = tokenize_macro_body(
-        token.macro_definition_code(),
-        &params,
-        token.macro_definition_is_variadic()
-    );
+    let code = token.macro_definition_code();
+    let tokenized = tokenize_macro_body(code, &params, token.macro_definition_is_variadic());
     let (line, column, len) = definition_location(token);
     let owner_name = token.macro_definition_name().to_string();
-    for index in unused_macro_parameter_indices(&params, &tokenized) {
+    for index in unused_macro_parameter_indices(&params, code, &tokenized) {
         out.push(UnusedBinding {
             name: params[index].to_string(),
             kind: UnusedBindingKind::MacroParameter,

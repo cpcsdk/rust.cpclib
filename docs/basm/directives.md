@@ -871,6 +871,18 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_document_macro.asm"
 ```
 
+`{*}` expands *every* argument passed at the call, joined with `,` - like `{name}` alone for a
+list-valued argument (a flat, bracket-free spread, meant for `DB {*}`-style lines), but for the whole
+call rather than one parameter. `{*[indexes]}` expands a *subset* instead: `indexes` can be a single
+index, a list of indices (`[0, 2]`), or a range (`0..2`/`0..=2`). Unlike `{name}`/`{N}`/`{#}`,
+`indexes` is not fixed when the macro is defined - it is itself substituted first (so it can
+reference `{#}` or a named parameter, e.g. `{*[{#}-1]}` always selects the *last* argument, whatever
+a given call's total count is) and only then evaluated as an expression. Both forms work whether or
+not the macro declared a trailing `...` - `*` can never collide with a declared parameter name.
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_macro_star_args.asm"
+```
 
 ### STRUCT
 
