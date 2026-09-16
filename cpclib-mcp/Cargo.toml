@@ -1,0 +1,61 @@
+[package]
+name = "cpclib-mcp"
+version.workspace = true
+description = "MCP (Model Context Protocol) server exposing cpclib's Amstrad CPC democoding tools to AI agents"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "cpclib-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+cpclib-asm.workspace = true
+cpclib-z80flow.workspace = true
+cpclib-lsp.workspace = true
+cpclib-basmopt.workspace = true
+cpclib-dap = { workspace = true, default-features = false }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
+cpclib-disc.workspace = true
+cpclib-sna = { workspace = true, default-features = false }
+cpclib-basic.workspace = true
+cpclib-runner = { workspace = true, default-features = false, features = ["screenshot"] }
+cpclib-image.workspace = true
+cpclib-common = { workspace = true, features = ["cmdline"] }
+cpclib-tokens.workspace = true
+
+# MCP protocol
+rmcp.workspace = true
+schemars.workspace = true
+# Names the `tower_lsp::lsp_types::*` types cpclib-lsp's `AssemblyAnalyzer`
+# API (Document/Position/Range/Diagnostic/Hover/Location) uses directly.
+tower-lsp.workspace = true
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+# Misc
+camino.workspace = true
+fs-err.workspace = true
+thiserror.workspace = true
+base64.workspace = true
+uuid.workspace = true
+
+# Logging - stderr only, stdout is reserved for MCP protocol frames
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[dev-dependencies]
+camino-tempfile.workspace = true
+
+[features]
+default = []
