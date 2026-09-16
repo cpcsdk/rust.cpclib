@@ -117,6 +117,23 @@ fn list_wrap_extra_len<P: MacroParamElement>(followed_by_bracket: bool, argvalue
     if followed_by_bracket && argvalue.is_list() { 2 } else { 0 }
 }
 
+/// `{*}[i]`/`{*[indexes]}[i]` - unlike a plain `{name}` (see
+/// `list_wrap_extra_len`), `{*}`/`{*[indexes]}` always produce a
+/// list-shaped value (even a single selected argument is still logically
+/// "a one-element list" - see `expand_selected_args_text`'s own "a bare
+/// value selects just that one argument" convenience), so wrapping is
+/// unconditional on `followed_by_bracket` alone, no argument-is-a-list
+/// check needed.
+#[inline]
+fn wrap_if_followed_by_bracket(followed_by_bracket: bool, text: Box<str>) -> Box<str> {
+    if followed_by_bracket {
+        format!("[{text}]").into_boxed_str()
+    }
+    else {
+        text
+    }
+}
+
 #[inline]
 fn expand_param<'p, P: MacroParamElement>(
     m: &'p P,
@@ -238,14 +255,46 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         self.finish_expand_for_basm(expanded_args, expanded_specials, capacity)
     }
 
+    /// Resolve argument `index`'s expanded text and append it to `out`,
+    /// sharing the very same per-index memoization the outer body's own
+    /// `Arg`/`ArgOr` segments use (`expanded_args`) - so an argument
+    /// referenced both directly (`{index}`) and via `{*}`/`{*[indexes]}` in
+    /// the same call is only ever evaluated once, even when evaluating it
+    /// has an observable side effect (an `{eval}`-marked argument's
+    /// expression triggering a warning, say). Before this helper existed,
+    /// `{*}`/`{*[...]}` called `expand_param` on their own, bypassing
+    /// `expanded_args` entirely and re-evaluating a `must_be_evaluated`
+    /// argument's expression from scratch on every reference.
+    fn push_memoized_arg<'s>(
+        &'s self,
+        index: usize,
+        expanded_args: &mut ExpandedMacroArgs<'s>,
+        out: &mut String,
+        env: &mut Env
+    ) -> Result<(), Box<AssemblerError>> {
+        if expanded_args[index].is_none() {
+            let mut expanded = expand_param(&self.args[index], env)?;
+            if let Some(argname) = self.r#macro.params().get(index) {
+                expanded = strip_raw_string_quotes(argname, expanded);
+            }
+            expanded_args[index] = Some(expanded);
+        }
+        out.push_str(expanded_args[index].as_ref().unwrap());
+        Ok(())
+    }
+
     /// `{*}` - every argument actually passed, expanded and joined with `,`.
-    fn expand_all_args_text(&self, env: &mut Env) -> Result<Box<str>, Box<AssemblerError>> {
+    fn expand_all_args_text<'s>(
+        &'s self,
+        expanded_args: &mut ExpandedMacroArgs<'s>,
+        env: &mut Env
+    ) -> Result<Box<str>, Box<AssemblerError>> {
         let mut out = String::new();
-        for (i, arg) in self.args.iter().enumerate() {
+        for i in 0..self.args.len() {
             if i > 0 {
                 out.push(',');
             }
-            out.push_str(&expand_param(arg, env)?);
+            self.push_memoized_arg(i, expanded_args, &mut out, env)?;
         }
         Ok(out.into_boxed_str())
     }
@@ -260,9 +309,10 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     /// is no name collision risk to gate against, unlike the outer body).
     /// The result is then parsed as a real expression and evaluated - it
     /// must come out to a single index, a list of indices, or a range.
-    fn expand_selected_args_text(
-        &self,
+    fn expand_selected_args_text<'s>(
+        &'s self,
         raw: &str,
+        expanded_args: &mut ExpandedMacroArgs<'s>,
         env: &mut Env
     ) -> Result<Box<str>, Box<AssemblerError>> {
         let tokenized =
@@ -275,23 +325,28 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     expr_text.push_str(&self.args.len().to_string());
                 },
                 MacroSegment::Arg { index, .. } => {
-                    let Some(argvalue) = self.args.get(index)
-                    else {
+                    if self.args.get(index).is_none() {
                         return Err(self.arg_index_out_of_range_error(index));
-                    };
-                    expr_text.push_str(&expand_param(argvalue, env)?);
+                    }
+                    self.push_memoized_arg(index, expanded_args, &mut expr_text, env)?;
                 },
                 MacroSegment::ArgOr { index, start, end, .. } => {
-                    match self.args.get(index) {
-                        Some(argvalue) => expr_text.push_str(&expand_param(argvalue, env)?),
-                        None => expr_text.push_str(&raw[start..end])
+                    if self.args.get(index).is_some() {
+                        self.push_memoized_arg(index, expanded_args, &mut expr_text, env)?;
+                    }
+                    else {
+                        expr_text.push_str(&raw[start..end]);
                     }
                 },
-                MacroSegment::AllArgs => {
-                    expr_text.push_str(&self.expand_all_args_text(env)?);
+                MacroSegment::AllArgs { .. } => {
+                    expr_text.push_str(&self.expand_all_args_text(expanded_args, env)?);
                 },
-                MacroSegment::SelectedArgs { start, end } => {
-                    expr_text.push_str(&self.expand_selected_args_text(&raw[start..end], env)?);
+                MacroSegment::SelectedArgs { start, end, .. } => {
+                    expr_text.push_str(&self.expand_selected_args_text(
+                        &raw[start..end],
+                        expanded_args,
+                        env
+                    )?);
                 }
             }
         }
@@ -385,17 +440,27 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 match *segment {
                     MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
                     MacroSegment::ArgCount => Ok(acc + arg_count.len()),
-                    MacroSegment::AllArgs => {
-                        let text = self.expand_all_args_text(env)?;
+                    MacroSegment::AllArgs { followed_by_bracket } => {
+                        let text = self.expand_all_args_text(&mut expanded_args, env)?;
+                        // `{*}[i]` needs the spread wrapped in `[...]` to be
+                        // indexable - unconditional here (unlike `Arg`/
+                        // `ArgOr`'s own `list_wrap_extra_len`), since `{*}`
+                        // always produces a list-shaped value, never a bare
+                        // scalar. Baked directly into the stored text so
+                        // `finish_expand_for_basm` needs no extra logic of
+                        // its own for `AllArgs`/`SelectedArgs`.
+                        let text = wrap_if_followed_by_bracket(followed_by_bracket, text);
                         let len = text.len();
                         expanded_specials[segment_idx] = Some(text);
                         Ok(acc + len)
                     },
-                    MacroSegment::SelectedArgs { start, end } => {
+                    MacroSegment::SelectedArgs { start, end, followed_by_bracket } => {
                         let text = self.expand_selected_args_text(
                             &self.r#macro.code()[start..end],
+                            &mut expanded_args,
                             env
                         )?;
+                        let text = wrap_if_followed_by_bracket(followed_by_bracket, text);
                         let len = text.len();
                         expanded_specials[segment_idx] = Some(text);
                         Ok(acc + len)
@@ -521,7 +586,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                         columns.push_piece(cursor.position() as usize, source, false);
                         cursor.write_all(arg_count.as_bytes()).expect(MSG);
                     },
-                    MacroSegment::AllArgs | MacroSegment::SelectedArgs { .. } => {
+                    MacroSegment::AllArgs { .. } | MacroSegment::SelectedArgs { .. } => {
                         columns.push_piece(cursor.position() as usize, source, false);
                         // Computed and memoized by `resolve_referenced_args`
                         // (guaranteed `Some` - it errors out itself if the

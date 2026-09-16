@@ -14,10 +14,17 @@ MACRO LAST_BYTE(...)
     db {*[{#}-1]}
 ENDM
 
+; either {*} or {*[indexes]} can be indexed further with [i], straight into
+; the spread/selected result.
+MACRO SECOND_ARG(...)
+    db {*}[1]
+ENDM
+
 org 0x4000
 ALL_BYTES(1, 2, 3)
 FIRST_TWO(10, 20, 30)
 LAST_BYTE(100, 101, 102)
+SECOND_ARG(7, 8, 9)
 
 ASSERT peek(0x4000) == 1
 ASSERT peek(0x4001) == 2
@@ -25,3 +32,4 @@ ASSERT peek(0x4002) == 3
 ASSERT peek(0x4003) == 10
 ASSERT peek(0x4004) == 20
 ASSERT peek(0x4005) == 102
+ASSERT peek(0x4006) == 8

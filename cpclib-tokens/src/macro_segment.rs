@@ -86,7 +86,9 @@ pub fn tokenize_macro_body<'l, 'p>(
         if bytes.get(after_open) == Some(&b'*') {
             let after_star = after_open + 1;
             if bytes.get(after_star) == Some(&b'}') {
-                segments.push(MacroSegment::AllArgs);
+                segments.push(MacroSegment::AllArgs {
+                    followed_by_bracket: bytes.get(after_star + 1) == Some(&b'[')
+                });
                 cursor = after_star + 1;
                 continue;
             }
@@ -99,7 +101,8 @@ pub fn tokenize_macro_body<'l, 'p>(
                     if bytes.get(index_end + 1) == Some(&b'}') {
                         segments.push(MacroSegment::SelectedArgs {
                             start: index_start,
-                            end: index_end
+                            end: index_end,
+                            followed_by_bracket: bytes.get(index_end + 2) == Some(&b'[')
                         });
                         cursor = index_end + 2;
                         continue;
@@ -252,7 +255,14 @@ pub enum MacroSegment {
     /// list-valued one). Unlike `{N}`/`{#}`, available unconditionally
     /// (not gated on `has_variadic`) - `*` can never collide with a
     /// declared parameter name.
-    AllArgs,
+    ///
+    /// `followed_by_bracket` - as [`MacroSegment::Arg`], but simpler:
+    /// `{*}`/`{*[indexes]}` always produce a list-shaped (possibly
+    /// single-element) comma list, unlike a plain `{name}` which might be
+    /// a scalar - so unlike `Arg`/`ArgOr`, wrapping the substitution in
+    /// `[...]` when this is set is unconditional, no further "is the
+    /// argument actually a list" check needed at expansion time.
+    AllArgs { followed_by_bracket: bool },
     /// `{*[indexes]}` - a *subset* of the call's arguments, selected by
     /// `indexes` (a range or a list of indices), expanded and joined with
     /// `,` in the order given. `start`/`end` bound the raw index-expression
@@ -261,8 +271,12 @@ pub enum MacroSegment {
     /// (`{#}`, a named parameter, ...), which only have values once a
     /// specific call is being expanded, so evaluation is deferred to
     /// `cpclib-asm/src/assembler/macro.rs`'s expansion code, not decided by
-    /// this body-only tokenizer.
-    SelectedArgs { start: usize, end: usize }
+    /// this body-only tokenizer. `followed_by_bracket` - see [`AllArgs`](Self::AllArgs).
+    SelectedArgs {
+        start: usize,
+        end: usize,
+        followed_by_bracket: bool
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -562,7 +576,24 @@ mod tokenize_macro_body_tests {
         let tokenized = tokenize_macro_body("db {*}", &["a"], false);
         assert_eq!(
             args(&tokenized),
-            vec![MacroSegment::Lit { start: 0, end: 3 }, MacroSegment::AllArgs]
+            vec![
+                MacroSegment::Lit { start: 0, end: 3 },
+                MacroSegment::AllArgs {
+                    followed_by_bracket: false
+                }
+            ]
+        );
+    }
+
+    /// `{*}[i]` - indexing straight into the spread of every argument.
+    #[test]
+    fn star_alone_immediately_followed_by_a_bracket_is_flagged() {
+        let tokenized = tokenize_macro_body("db {*}[0]", &[] as &[&str], false);
+        assert_eq!(
+            args(&tokenized)[1],
+            MacroSegment::AllArgs {
+                followed_by_bracket: true
+            }
         );
     }
 
@@ -576,14 +607,32 @@ mod tokenize_macro_body_tests {
             args(&tokenized),
             vec![
                 MacroSegment::Lit { start: 0, end: 3 },
-                MacroSegment::SelectedArgs { start: 6, end: 10 }
+                MacroSegment::SelectedArgs {
+                    start: 6,
+                    end: 10,
+                    followed_by_bracket: false
+                }
             ]
         );
-        let MacroSegment::SelectedArgs { start, end } = args(&tokenized)[1]
+        let MacroSegment::SelectedArgs { start, end, .. } = args(&tokenized)[1]
         else {
             unreachable!()
         };
         assert_eq!(&body[start..end], "0..2");
+    }
+
+    /// `{*[indexes]}[i]` - indexing straight into the selected subset.
+    #[test]
+    fn star_selector_immediately_followed_by_a_bracket_is_flagged() {
+        let tokenized = tokenize_macro_body("db {*[0..2]}[0]", &[] as &[&str], false);
+        let MacroSegment::SelectedArgs {
+            followed_by_bracket,
+            ..
+        } = args(&tokenized)[1]
+        else {
+            panic!("expected a SelectedArgs, got {:?}", args(&tokenized)[1]);
+        };
+        assert!(followed_by_bracket);
     }
 
     /// A literal list-of-indices selector (`[[0, 2]]`) nests brackets inside
@@ -593,7 +642,7 @@ mod tokenize_macro_body_tests {
     fn star_with_a_nested_bracket_list_selector_tracks_bracket_depth() {
         let body = "db {*[[0, 2]]}";
         let tokenized = tokenize_macro_body(body, &[] as &[&str], false);
-        let MacroSegment::SelectedArgs { start, end } = args(&tokenized)[1]
+        let MacroSegment::SelectedArgs { start, end, .. } = args(&tokenized)[1]
         else {
             panic!("expected a SelectedArgs, got {:?}", args(&tokenized)[1]);
         };
@@ -607,7 +656,7 @@ mod tokenize_macro_body_tests {
     fn star_selector_can_contain_a_nested_placeholder() {
         let body = "db {*[{#}-1]}";
         let tokenized = tokenize_macro_body(body, &[] as &[&str], true);
-        let MacroSegment::SelectedArgs { start, end } = args(&tokenized)[1]
+        let MacroSegment::SelectedArgs { start, end, .. } = args(&tokenized)[1]
         else {
             panic!("expected a SelectedArgs, got {:?}", args(&tokenized)[1]);
         };

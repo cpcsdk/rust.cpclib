@@ -879,6 +879,8 @@ index, a list of indices (`[0, 2]`), or a range (`0..2`/`0..=2`). Unlike `{name}
 reference `{#}` or a named parameter, e.g. `{*[{#}-1]}` always selects the *last* argument, whatever
 a given call's total count is) and only then evaluated as an expression. Both forms work whether or
 not the macro declared a trailing `...` - `*` can never collide with a declared parameter name.
+Either can be immediately followed by `[i]` (`{*}[0]`, `{*[0..2]}[1]`) to index straight into the
+spread/selected result.
 
 ```z80
 --8<-- "cpclib-basm/tests/asm/good_document_macro_star_args.asm"

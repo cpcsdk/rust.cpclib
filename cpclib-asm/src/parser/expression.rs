@@ -554,7 +554,10 @@ pub fn negative_number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80
     let result = match exp {
         LocatedExpr::Value(v, _) => {
             let span = build_span(input_offset, &input_start, *input);
-            LocatedExpr::Value(-v, span.into())
+            // Wrapping, not panicking, on a literal at i32::MIN's magnitude
+            // (`-2147483648`) - matches `ExprResult`'s own `Neg`/`Add`/etc.
+            // convention (`cpclib-tokens/src/tokens/expression.rs`).
+            LocatedExpr::Value(v.wrapping_neg(), span.into())
         },
         LocatedExpr::Float(f, _) => {
             let span = build_span(input_offset, &input_start, *input);

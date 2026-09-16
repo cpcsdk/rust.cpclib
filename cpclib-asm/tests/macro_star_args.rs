@@ -15,6 +15,13 @@
 //! Both are available unconditionally (not gated on the macro declaring a
 //! trailing `...`) - `*` can never collide with a declared parameter name,
 //! unlike the positional `{N}`/`{#}` forms.
+//!
+//! Both also support a further `[i]` right after them (`{*}[0]`,
+//! `{*[0..2]}[1]`), indexing straight into the spread/selected result -
+//! mirroring the bracket-rewrapping fix for a plain list-valued `{name}[i]`.
+//! Unlike that case, wrapping here is unconditional (no "is the argument
+//! actually a list" check needed): `{*}`/`{*[indexes]}` always produce a
+//! list-shaped value, even a single selected argument.
 
 #[test]
 fn star_expands_every_argument_joined_with_commas() {
@@ -96,6 +103,21 @@ fn star_selector_can_reference_a_named_parameter() {
 }
 
 #[test]
+fn an_argument_referenced_both_directly_and_via_star_expands_consistently() {
+    // Regression lock: {*}/{*[indexes]} used to call expand_param directly,
+    // bypassing the outer body's own per-argument memoization
+    // (expanded_args) that {index}/{name} segments share - so an argument
+    // referenced both ways got evaluated twice. Both references must still
+    // agree, and (per the fix) only cost one evaluation of the shared
+    // {eval}-marked expression.
+    let bin = cpclib_asm::assemble(
+        "MACRO M(...)\n db {0}\n db {*}\nENDM\n org 0x4000\n M({eval}1+1)\n"
+    )
+    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    assert_eq!(bin, vec![2, 2], "{bin:?}");
+}
+
+#[test]
 fn a_named_parameter_used_only_inside_a_star_selector_is_not_flagged_unused() {
     // Regression lock: `unused_macro_parameter_indices` used to only look
     // at top-level `Arg` segments, so a parameter referenced exclusively
@@ -138,4 +160,34 @@ fn star_alone_still_works_with_only_named_parameters_and_no_variadic_extras() {
     )
     .unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bin, vec![0x34, 0x12, 0x78, 0x56], "{bin:?}");
+}
+
+#[test]
+fn star_alone_can_be_indexed_right_after_it() {
+    let bin = cpclib_asm::assemble(
+        "MACRO FIRST(...)\n db {*}[0]\nENDM\n org 0x4000\n FIRST(11, 22, 33)\n"
+    )
+    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    assert_eq!(bin, vec![11], "{bin:?}");
+}
+
+#[test]
+fn star_selector_result_can_be_indexed_right_after_it() {
+    let bin = cpclib_asm::assemble(
+        "MACRO SEL_FIRST(...)\n db {*[0..2]}[1]\nENDM\n org 0x4000\n SEL_FIRST(11, 22, 33)\n"
+    )
+    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    // {*[0..2]} selects [11, 22]; [1] then picks the second one, 22.
+    assert_eq!(bin, vec![22], "{bin:?}");
+}
+
+#[test]
+fn star_alone_without_a_following_bracket_still_spreads_flat() {
+    // Regression guard for the indexing fix above: `{*}` with no `[...]`
+    // right after it must keep spreading flat, not get wrapped anyway.
+    let bin = cpclib_asm::assemble(
+        "MACRO ALL(...)\n db {*}\nENDM\n org 0x4000\n ALL(1, 2, 3)\n"
+    )
+    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    assert_eq!(bin, vec![1, 2, 3], "{bin:?}");
 }

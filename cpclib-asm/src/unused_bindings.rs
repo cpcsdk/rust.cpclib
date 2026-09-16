@@ -247,7 +247,7 @@ pub fn unused_macro_parameter_indices(
                 MacroSegment::Arg { index, .. } => {
                     used.insert(*index);
                 },
-                MacroSegment::SelectedArgs { start, end } => {
+                MacroSegment::SelectedArgs { start, end, .. } => {
                     let nested = tokenize_macro_body(&code[*start..*end], params, true);
                     collect_used(code, params, &nested, used);
                 },

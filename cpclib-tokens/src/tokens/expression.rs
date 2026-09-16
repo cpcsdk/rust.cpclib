@@ -2067,7 +2067,9 @@ impl std::ops::Neg for ExprResult {
     fn neg(self) -> Self::Output {
         match self {
             ExprResult::Float(f) => Ok(f.neg().into()),
-            ExprResult::Value(i) => Ok(i.neg().into()),
+            // Wrapping, not panicking, on i32::MIN - see the matching
+            // comment on `Add`.
+            ExprResult::Value(i) => Ok(i.wrapping_neg().into()),
             ExprResult::Bool(b) => Ok((!b).into()),
             _ => Err(ExpressionTypeError(format!("Try to substract {self}")))
         }
@@ -2205,10 +2207,21 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             (any @ (ExprResult::Value(_) | ExprResult::Char(_)), ExprResult::Float(f2)) => {
                 Ok((any.float()? + f2.into_inner()).into())
             },
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 + v2).into()),
-            (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok((v1 + v2).into()),
-            (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok((v1 + *v2 as i32).into()),
-            (ExprResult::Char(v1), ExprResult::Value(v2)) => Ok((v1 as i32 + *v2).into()),
+            // Wrapping, not panicking, on overflow - matches this module's
+            // own established convention for arithmetic on the underlying
+            // fixed-width integer (`shr_checked`/`shl_checked` already use
+            // `wrapping_shr`/`wrapping_shl` below), and a Z80 assembler's
+            // own 8/16-bit registers wrap on overflow too, so silently
+            // wrapping a value that doesn't fit is the expected behavior
+            // here, not a bug to guard against with an error.
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok(v1.wrapping_add(*v2).into()),
+            (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok(v1.wrapping_add(*v2).into()),
+            (ExprResult::Value(v1), ExprResult::Char(v2)) => {
+                Ok(v1.wrapping_add(*v2 as i32).into())
+            },
+            (ExprResult::Char(v1), ExprResult::Value(v2)) => {
+                Ok((*v2).wrapping_add(v1 as i32).into())
+            },
 
             (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
@@ -2269,7 +2282,8 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             (any @ ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((any.float()? - f2.into_inner()).into())
             },
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 - v2).into()),
+            // Wrapping, not panicking - see the matching comment on `Add`.
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok(v1.wrapping_sub(*v2).into()),
 
             (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) - rhs.clone()
@@ -2308,10 +2322,13 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? * f2.into_inner()).into())
             },
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((*v1 * *v2).into()),
+            // Wrapping, not panicking - see the matching comment on `Add`.
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok(v1.wrapping_mul(*v2).into()),
 
             (ExprResult::Value(v1), ExprResult::Char(v2))
-            | (ExprResult::Char(v2), ExprResult::Value(v1)) => Ok((*v1 * (*v2 as i32)).into()),
+            | (ExprResult::Char(v2), ExprResult::Value(v1)) => {
+                Ok(v1.wrapping_mul(*v2 as i32).into())
+            },
 
             (..) => {
                 Err(ExpressionTypeError(format!(
@@ -2382,7 +2399,13 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
                 // formula gave different (always-non-negative-ish) results
                 // for negative operands and panicked on a zero divisor; no
                 // test fixture in this workspace was found to depend on it.
-                Ok((v1 % v2).into())
+                // `wrapping_rem`, not the bare `%`: the zero check above
+                // does not cover `i32::MIN % -1`, which the bare operator
+                // still panics on (overflow, since the mathematical
+                // quotient would be out of range) - `wrapping_rem` defines
+                // that one case as `0`, matching `wrapping_div`'s own
+                // "MIN / -1 wraps to MIN" convention.
+                Ok(v1.wrapping_rem(*v2).into())
             },
 
             (..) => {
@@ -3133,6 +3156,74 @@ mod range_and_broadcast_tests {
         assert!(
             list.subscript(&[ExprResult::Value(0), ExprResult::Value(0), ExprResult::Value(0)])
                 .is_err()
+        );
+    }
+}
+
+/// Arithmetic on `ExprResult::Value`/`Char` wraps on overflow instead of
+/// panicking - `i32`/`u8`'s own bare `+`/`-`/`*`/`%`/unary `-` panic in a
+/// debug build (and silently wrap in release, an inconsistency of its own)
+/// when the true mathematical result doesn't fit. A Z80's own registers
+/// wrap on overflow, and `shr_checked`/`shl_checked` already used
+/// `wrapping_shr`/`wrapping_shl` for the shift operators - `+`/`-`/`*`/`%`/
+/// unary `-` used the bare operator instead, so `ASSERT -2147483648 ==
+/// -2147483648` or `ASSERT 2147483647 + 1 == 0` used to crash the whole
+/// assembler process instead of producing the well-defined wrapped value.
+#[cfg(test)]
+mod wrapping_arithmetic_tests {
+    use super::*;
+
+    #[test]
+    fn add_wraps_at_i32_max() {
+        assert_eq!(
+            (ExprResult::Value(i32::MAX) + ExprResult::Value(1)).unwrap(),
+            ExprResult::Value(i32::MIN)
+        );
+    }
+
+    #[test]
+    fn sub_wraps_at_i32_min() {
+        assert_eq!(
+            (ExprResult::Value(i32::MIN) - ExprResult::Value(1)).unwrap(),
+            ExprResult::Value(i32::MAX)
+        );
+    }
+
+    #[test]
+    fn mul_wraps() {
+        assert_eq!(
+            (ExprResult::Value(i32::MAX) * ExprResult::Value(2)).unwrap(),
+            ExprResult::Value(-2)
+        );
+    }
+
+    #[test]
+    fn neg_wraps_i32_min_to_itself() {
+        // i32::MIN has no positive counterpart representable in i32 - two's
+        // complement wraps it back to itself, same as `i32::MIN.wrapping_neg()`.
+        assert_eq!(
+            (-ExprResult::Value(i32::MIN)).unwrap(),
+            ExprResult::Value(i32::MIN)
+        );
+    }
+
+    #[test]
+    fn rem_of_i32_min_by_minus_one_wraps_to_zero() {
+        // The one `%` case that overflows despite a non-zero divisor: the
+        // mathematical quotient (i32::MIN / -1) is out of range. Matches
+        // `wrapping_div`'s own "MIN / -1 wraps to MIN" convention (the
+        // remainder of that wrapped division is 0).
+        assert_eq!(
+            (ExprResult::Value(i32::MIN) % ExprResult::Value(-1)).unwrap(),
+            ExprResult::Value(0)
+        );
+    }
+
+    #[test]
+    fn char_add_wraps_at_u8_max() {
+        assert_eq!(
+            (ExprResult::Char(255) + ExprResult::Char(1)).unwrap(),
+            ExprResult::Char(0)
         );
     }
 }
