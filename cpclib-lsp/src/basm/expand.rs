@@ -136,7 +136,7 @@ pub(super) fn dry_run_env(
     doc_uri: &Url,
     case_sensitive: bool,
     disabled_categories: enumflags2::BitFlags<cpclib_asm::WarningCategory>
-) -> (Env, bool) {
+) -> (Env, bool, Option<Box<cpclib_asm::AssemblerError>>) {
     let mut assemble = AssemblingOptions::default();
     assemble.set_dry_run(true);
     assemble.set_case_sensitive(case_sensitive);
@@ -167,13 +167,19 @@ pub(super) fn dry_run_env(
     // log instead of only being inferable from a gap between other lines.
     let start = std::time::Instant::now();
     let result = match cpclib_asm::assembler::visit_tokens_all_passes_with_options(listing, options) {
-        Ok((_tokens, env)) => (env, true),
+        Ok((_tokens, env)) => (env, true, None),
         // The partial `Env` is still returned: hover and `EQU` resolution use
         // it happily, and a half-built symbol table is better than none for
         // those. But it is flagged, because anything *address*-shaped read
         // from it is fiction - the addresses recorded before the failure
-        // describe a program that was never finished being laid out.
-        Err((_tokens, env, _err)) => (env, false)
+        // describe a program that was never finished being laid out. The
+        // error itself is kept too - a real assembling failure (as opposed
+        // to a syntax error, already caught earlier by the parse-recovery
+        // loop) used to be silently discarded here, so a document that
+        // parsed cleanly but failed to actually assemble (e.g. an unknown
+        // symbol) reported zero diagnostics - `analyze_for_activity` now
+        // surfaces this as a real error via `diagnostics_env`.
+        Err((_tokens, env, err)) => (env, false, Some(err))
     };
     tracing::debug!("dry_run_env for {} took {:?}", doc_uri, start.elapsed());
     result
@@ -265,18 +271,39 @@ impl AssemblyAnalyzer {
         document: &Document,
         listing: &LocatedListing
     ) -> (Env, bool) {
+        let (env, complete, _error) = self.dry_run_env_cached_checked_with_error(document, listing);
+        (env, complete)
+    }
+
+    /// [`Self::dry_run_env_cached_checked`], plus the real assembling error
+    /// when the assemble didn't finish (`None` on success, or when nothing
+    /// has run this document's dry-run assemble yet under the version this
+    /// cache entry was written for - callers that need the error
+    /// specifically, currently only `diagnostics_env`, are the only reason
+    /// this returns a third field instead of `dry_run_env_cached_checked`
+    /// itself growing one, which would have rippled into every existing
+    /// `(env, complete)` caller for a value only one of them needs.
+    pub(super) fn dry_run_env_cached_checked_with_error(
+        &self,
+        document: &Document,
+        listing: &LocatedListing
+    ) -> (Env, bool, Option<Arc<cpclib_asm::AssemblerError>>) {
         let key = (document.version, super::workspace_fingerprint_of(&document.uri));
         if let Some(entry) = self.env_cache.get(&document.uri)
             && entry.0 == key
         {
-            return ((*entry.1).clone(), entry.2);
+            return ((*entry.1).clone(), entry.2, entry.3.clone());
         }
         let config = self.config();
         let disabled = disabled_assembling_warning_categories(&config.warnings);
-        let (env, complete) = dry_run_env(listing, &document.uri, config.case_sensitive, disabled);
-        self.env_cache
-            .insert(document.uri.clone(), (key, Arc::new(env.clone()), complete));
-        (env, complete)
+        let (env, complete, error) =
+            dry_run_env(listing, &document.uri, config.case_sensitive, disabled);
+        let error = error.map(|e| Arc::new(*e));
+        self.env_cache.insert(
+            document.uri.clone(),
+            (key, Arc::new(env.clone()), complete, error.clone())
+        );
+        (env, complete, error)
     }
 
     /// `local_symbols_env`, cached per `(document.uri, document.version)` -

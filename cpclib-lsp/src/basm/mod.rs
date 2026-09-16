@@ -65,8 +65,14 @@ pub(crate) use token::semantic_tokens_legend;
 type ParseCacheEntry = (i32, Result<Arc<LocatedListing>, Arc<LocatedListing>>);
 
 /// `env_cache`'s value: `((document version, workspace fingerprint), env,
-/// whether the assemble actually finished)` - see the field's own doc comment.
-type EnvCacheEntry = ((i32, u128), Arc<Env>, bool);
+/// whether the assemble actually finished, the real assembling error when it
+/// didn't)` - see the field's own doc comment.
+type EnvCacheEntry = (
+    (i32, u128),
+    Arc<Env>,
+    bool,
+    Option<Arc<cpclib_asm::AssemblerError>>
+);
 
 /// `symbols_cache`'s value: `(document version, extracted (name, detail)
 /// pairs)` - see the field's own doc comment.

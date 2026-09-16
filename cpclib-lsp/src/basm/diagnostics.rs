@@ -1,6 +1,8 @@
 //! Diagnostics for assembly files: parse/assembly errors mapped to LSP
 //! diagnostics (recursive walk of the `AssemblerError` tree).
 
+use std::sync::Arc;
+
 use cpclib_asm::assembler::Env;
 use cpclib_asm::parser::obtained::LocatedListing;
 use cpclib_asm::preamble::ListingElement;
@@ -183,10 +185,21 @@ impl AssemblyAnalyzer {
             // The real project's `Env` when this document resolves to one
             // (see `diagnostics_env`'s own doc comment) - falls back to
             // today's standalone assemble otherwise. Every diagnostic this
-            // block produces is symbolic/text-based, not an address-shaped
-            // question, so completeness isn't checked here the way an
-            // address-aware caller of `dry_run_env_cached_checked` would.
-            let mut env = self.diagnostics_env(document, &listing);
+            // block produces from `env` itself is symbolic/text-based, not
+            // an address-shaped question, so completeness isn't checked the
+            // way an address-aware caller of `dry_run_env_cached_checked`
+            // would - but a real assembling *error* (not just an incomplete
+            // address trace) is still worth surfacing: a document that
+            // parses cleanly but fails to actually assemble (e.g. an
+            // unknown symbol) used to report zero diagnostics here, because
+            // nothing downstream of `env.warnings()` ever saw the discarded
+            // error. Reuses `collect_asm_diagnostics`, the same walker real
+            // parse errors go through, so this gets identical formatting/
+            // location handling for free.
+            let (mut env, real_error) = self.diagnostics_env(document, &listing);
+            if let Some(error) = &real_error {
+                collect_asm_diagnostics(error, None, document, &mut diagnostics);
+            }
             collect_assembler_warnings(&env, document, &mut diagnostics);
             collect_firmware_literal_warnings(document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
@@ -250,8 +263,28 @@ impl AssemblyAnalyzer {
     /// on constants/macros its real includer defines) used to be diagnosed
     /// standalone regardless, reporting phantom "undefined symbol" errors
     /// for code that assembles fine for real - this is what fixes that.
-    fn diagnostics_env(&self, document: &Document, listing: &LocatedListing) -> Env {
-        let own = || self.dry_run_env_cached_checked(document, listing).0;
+    ///
+    /// The second element is the real assembling error, when the `Env`
+    /// returned came from a real assemble that didn't finish (the "own"
+    /// standalone-assemble fallback only - the project route currently has
+    /// no way to hand back *which* file among its whole include graph
+    /// actually failed, so it reports `None` here rather than guess; a
+    /// project-level assemble failure still surfaces some other way, this
+    /// just doesn't duplicate it). This is what lets `analyze_for_activity`
+    /// show a real ERROR diagnostic for a document that parses cleanly but
+    /// fails to actually assemble (e.g. an unknown symbol) - previously
+    /// silent, since only `env.warnings()` (never a fatal error) was ever
+    /// read from the `Env` this returns.
+    fn diagnostics_env(
+        &self,
+        document: &Document,
+        listing: &LocatedListing
+    ) -> (Env, Option<Arc<cpclib_asm::AssemblerError>>) {
+        let own = || {
+            let (env, _complete, error) =
+                self.dry_run_env_cached_checked_with_error(document, listing);
+            (env, error)
+        };
 
         let Ok(document_path) = document.uri.to_file_path()
         else {
@@ -276,7 +309,7 @@ impl AssemblyAnalyzer {
         match entry::entry_in_graph(&document_path, configured_entry, &root, &graph) {
             entry::Entry::Project(entry_path) => {
                 match self.project_env_cached(&entry_path, fingerprint, &config) {
-                    Some(project_env) => (*project_env).clone(),
+                    Some(project_env) => ((*project_env).clone(), None),
                     None => own()
                 }
             },
@@ -1015,6 +1048,27 @@ mod tests {
     fn valid_file_yields_no_diagnostics() {
         let text = "org 0x4000\n ld a, 1\n ret\n";
         assert!(diagnostics_for(text).is_empty());
+    }
+
+    /// Regression test: a document that parses cleanly but fails a *real*
+    /// assemble (as opposed to a syntax error, already caught by the
+    /// recovery loop above) used to report zero diagnostics for it - the
+    /// `Box<AssemblerError>` `dry_run_env` produced on failure was discarded
+    /// entirely, and `collect_assembler_warnings` only ever reads
+    /// `env.warnings()`, which is empty for a hard failure. Found via
+    /// `cpclib-mcp`'s `assemble_check` tool reporting `ld a,zzz` as clean
+    /// while the real `basm` CLI correctly rejects it with "Unknown symbol:
+    /// zzz".
+    #[test]
+    fn a_real_assembling_failure_with_no_syntax_error_is_reported_as_an_error() {
+        let text = "org 0x8000\n ld a,zzz\n";
+        let diags = diagnostics_for(text);
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::ERROR)),
+            "expected at least one ERROR diagnostic for an unknown symbol: {diags:?}"
+        );
     }
 
     /// Regression test for `asm_diag` treating `relative_line_and_column`'s
