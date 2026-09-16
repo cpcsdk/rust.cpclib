@@ -1465,8 +1465,25 @@ impl UsedEmulator for AceUsedEmulator {
         // handlekey press
         robot.type_key(HostKey::F10);
 
+        // Bounded, not an infinite wait: confirmed live that a robot-driven
+        // (rather than a human, interactively focused) session can leave
+        // this F10 keypress never reaching ACE at all - e.g. the window
+        // isn't focused the way a real user's own keypress would be - in
+        // which case no new screenshot file ever appears and this used to
+        // spin forever, hanging the whole session with no diagnostic at
+        // all. Same "no better fallback, so panic past a deadline with a
+        // clear message" idiom `retry_native_api_call` already uses
+        // elsewhere in this file for the equivalent native-API-not-
+        // responding case.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
         let mut file = None;
         while file.is_none() {
+            if std::time::Instant::now() >= deadline {
+                panic!(
+                    "ACE screenshot via F10 never produced a new file in {folder} after 10s - \
+                     is the emulator window focused? This is a bug, please report it"
+                );
+            }
             WindowEventsManager::wait_a_bit();
             let after_screenshots = list_screenshots();
             let mut new_screenshots = after_screenshots
@@ -1479,8 +1496,15 @@ impl UsedEmulator for AceUsedEmulator {
         }
 
         let file = file.as_ref().unwrap();
+        let image_deadline = std::time::Instant::now() + Duration::from_secs(5);
         let mut im = xcap::image::open(file);
         while im.is_err() {
+            if std::time::Instant::now() >= image_deadline {
+                panic!(
+                    "ACE screenshot file {file:?} never became readable within 5s. This is a \
+                     bug, please report it"
+                );
+            }
             WindowEventsManager::wait_a_bit();
             im = xcap::image::open(file);
         }
@@ -2496,6 +2520,8 @@ impl Robot {
             fn load_disc(&mut self, drive: u8, path: &Utf8Path) -> Result<(), String>;
             #[cfg(feature = "screenshot")]
             fn save_disc(&mut self, drive: u8) -> Result<Vec<u8>, String>;
+            #[cfg(feature = "screenshot")]
+            fn screenshot(&mut self) -> Screenshot;
             fn close(&mut self);
         }
 
@@ -2554,6 +2580,116 @@ impl Robot {
         let text = &text;
 
         self.type_text(text);
+    }
+}
+
+/// A public, externally-nameable handle onto a live [`Robot`] session -
+/// `Robot`/`RobotImpl`/`WindowEventsManager` are all `pub(crate)` (one
+/// `enum` per emulator backend, with backend-specific variants that come
+/// and go), so an external crate driving an emulator (e.g. an MCP server
+/// wrapping this for an AI agent) has no way to name or construct a
+/// `Robot` directly. This wraps one and re-exposes exactly the operations
+/// `Robot` itself already delegates to its backend, nothing more - the
+/// per-backend enum machinery stays private.
+pub struct RobotHandle(Robot);
+
+impl RobotHandle {
+    /// Launches `emu` per `conf`, waits for its window (when one exists -
+    /// some backends run headless from this crate's point of view), and
+    /// returns a handle ready to drive it.
+    ///
+    /// `start_emulator` itself blocks until the emulator process *exits*
+    /// (`ExternRunner::inner_run_redirected` calls `Child::wait()` - by
+    /// design, for its normal foreground `bndbuild emu` use, where that's
+    /// exactly the expected "run it in the foreground" behavior). A GUI
+    /// emulator never exits on its own, so calling it synchronously here
+    /// would mean this function - and the whole Robot session - could
+    /// never become ready: confirmed live, this made `RobotHandle::launch`
+    /// hang indefinitely for every backend (ACE reproduced directly; the
+    /// same call path is shared by every other backend too). Spawned on
+    /// its own thread and never joined instead, exactly like the CSL
+    /// live-replay path (`handle_csl_script`, elsewhere in this file)
+    /// already has to for the same reason: this call's only useful signal
+    /// is the emulator's own stdout/stderr, already forwarded through `o`,
+    /// not its `Result` - a launch failure (e.g. a missing binary) is
+    /// still visible there, just not as an error returned from `launch`
+    /// itself.
+    pub fn launch<E: EventObserver + Clone + 'static>(
+        emu: &Emulator,
+        conf: &EmulatorConf,
+        o: &E
+    ) -> Result<Self, String> {
+        let (t_emu, t_conf, t_o) = (emu.clone(), conf.clone(), o.clone());
+        std::thread::spawn(move || {
+            if let Err(e) = start_emulator(&t_emu, &t_conf, &t_o) {
+                t_o.emit_stderr(&format!("emulator launch failed: {e}\n"));
+            }
+        });
+        std::thread::sleep(Duration::from_secs(3));
+
+        let window = get_emulator_window(emu, conf, o);
+
+        let enigo_settings = {
+            let mut settings = Settings {
+                linux_delay: 1000 / 10,
+                ..Default::default()
+            };
+            if let Some(EmuWindow::Xvfb(display, _)) = &window {
+                settings.x11_display = Some(format!(":{display}"));
+            }
+            settings
+        };
+        let enigo = Enigo::new(&enigo_settings)
+            .map_err(|e| format!("cannot create the input-injection backend: {e}"))?;
+        let events = enigo.into();
+
+        Ok(Self(Robot::new(emu, window, events)))
+    }
+
+    pub fn type_text(&mut self, s: &str) {
+        self.0.type_text(s);
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn read_memory(&mut self, address: u16, count: u16) -> Result<Vec<u8>, String> {
+        self.0.read_memory(address, count)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn write_memory(&mut self, address: u16, data: &[u8]) -> Result<(), String> {
+        self.0.write_memory(address, data)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn load_snapshot(&mut self, path: &Utf8Path) -> Result<(), String> {
+        self.0.load_snapshot(path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn load_disc(&mut self, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        self.0.load_disc(drive, path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    pub fn save_disc(&mut self, drive: u8) -> Result<Vec<u8>, String> {
+        self.0.save_disc(drive)
+    }
+
+    /// PNG-encoded screenshot bytes - not the raw `image`/`xcap` buffer
+    /// type, so a caller outside this crate never needs to depend on the
+    /// exact same `image`/`xcap` version just to name the return type.
+    #[cfg(feature = "screenshot")]
+    pub fn screenshot(&mut self) -> Result<Vec<u8>, String> {
+        let image = self.0.screenshot();
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut bytes, xcap::image::ImageFormat::Png)
+            .map_err(|e| format!("failed to encode screenshot as PNG: {e}"))?;
+        Ok(bytes.into_inner())
+    }
+
+    pub fn close(&mut self) {
+        self.0.close();
     }
 }
 
