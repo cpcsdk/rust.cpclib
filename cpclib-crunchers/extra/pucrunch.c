@@ -1783,6 +1783,55 @@ int UnPack(int loadAddr, const unsigned char *data, const char *file,
 
 
 
+/*
+ * Library entry point: performs the initialisation `main()` does, which is
+ * compiled out for the FFI build (see the `#if 0` around it), and returns the
+ * default LZ range to pass to PackLz77 as `lzsz`.
+ *
+ * Without it every one of these stayed 0/uninitialised:
+ *  - lrange/maxlzlen: LZ packing was silently disabled ("zero LZ range. Only
+ *    RLE packing used"), so output was RLE-only and could even expand data;
+ *  - maxrlelen: LenRle() does `len -= min(len, maxrlelen)` and never
+ *    terminates for maxrlelen == 0, so any input with a long run of one byte
+ *    (e.g. 256 zeros) hung forever;
+ *  - lenValue[]: the Elias-gamma length table read by LenValue(), all zeros,
+ *    so the optimiser costed every code as free.
+ * The remaining globals are reset too, so a call does not depend on what an
+ * earlier call left behind (PackLz77 may change them).
+ */
+int pucrunch_ffi_init(void) {
+    maxGamma = 7;
+    reservedBytes = 2;
+    escBits = 2;
+    escMask = 0xc0;
+    extraLZPosBits = 0;
+    rleUsed = 15;
+    /* State a previous PackLz77 run leaves behind and the next one reads
+       without resetting: the chosen RLE byte table, the RLE histogram, the
+       output bit position and the statistics/gain counters. */
+    /* The bit writer ORs into outBuffer, so stale bytes from an earlier, longer
+       stream would leak into this one (a real corruption for any process that
+       crunches more than one block). */
+    memset(outBuffer, 0, sizeof(outBuffer));
+    outPointer = 0;
+    memset(rleValues, 0, sizeof(rleValues));
+    rleValues[0] = 1;
+    memset(rleHist, 0, sizeof(rleHist));
+    bitMask = 0x80;
+    lzopt = 0;
+    gainedEscaped = gainedRle = gainedSRle = gainedLRle = 0;
+    gainedLz = gainedRlecode = 0;
+    timesEscaped = timesNormal = timesRle = timesSRle = timesLRle = timesLz = 0;
+#ifdef DELTA
+    gainedDLz = timesDLz = 0;
+#endif
+    lrange = LRANGE;
+    maxlzlen = MAXLZLEN;
+    maxrlelen = MAXRLELEN;
+    InitValueLen();
+    return lrange;
+}
+
 int PackLz77(int lzsz, int flags, int *startEscape,
 	     int endAddr, int memEnd, int type) {
     int i, j, outlen, p, headerSize;

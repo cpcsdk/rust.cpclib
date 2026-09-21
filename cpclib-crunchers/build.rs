@@ -63,6 +63,13 @@ fn build_shrinkler() {
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.cpp");
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.h");
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext");
+    // Declaring any `rerun-if-changed` turns off cargo's default of "rerun when
+    // any file of the package changes", so every other C source has to be
+    // listed too - otherwise editing e.g. `extra/pucrunch.c` silently keeps
+    // linking the previously compiled object (this bit us: a fixed pucrunch
+    // kept hanging in dependent crates).
+    println!("cargo:rerun-if-changed=extra");
+    println!("cargo:rerun-if-changed=build.rs");
 }
 
 #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
