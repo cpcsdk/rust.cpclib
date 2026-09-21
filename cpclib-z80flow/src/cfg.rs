@@ -188,12 +188,19 @@ pub(crate) fn label_indices<T: ListingElement>(tokens: &[&T]) -> HashMap<String,
             if let Some(local) = name.strip_prefix('.') {
                 if let Some(global) = current_global {
                     label_indices.insert(format!("{global}.{local}"), i);
+                    // Deliberately *not* also registered under its bare
+                    // `.name`: many routines reuse `.loop`/`.restart`, and a
+                    // bare key can only ever mean one of them (whichever was
+                    // inserted last), silently sending every other routine's
+                    // `jr .loop` to the wrong code. Local targets are
+                    // resolved with their scope in `resolve_successor`.
+                    continue;
                 }
             }
             else {
                 current_global = Some(name);
             }
-            label_indices.insert(name.to_string(), i);
+            label_indices.entry(name.to_string()).or_insert(i);
         }
     }
     label_indices
@@ -252,7 +259,23 @@ pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String>
     let exit = blocks.len();
 
     let resolve_successor = |label: &str, from_index: usize| -> Successor {
-        let Some(&target_index) = label_indices.get(label)
+        // A local `.name` target belongs to the nearest global label at or
+        // before the jump - see `label_indices`.
+        let scoped;
+        let key = if label.starts_with('.') {
+            let enclosing = tokens[..=from_index.min(tokens.len() - 1)]
+                .iter()
+                .rev()
+                .filter(|t| t.is_label())
+                .map(|t| t.label_symbol())
+                .find(|symbol| !symbol.starts_with('.'));
+            scoped = enclosing.map(|global| format!("{global}{label}"));
+            scoped.as_deref().unwrap_or(label)
+        }
+        else {
+            label
+        };
+        let Some(&target_index) = label_indices.get(key)
         else {
             return Successor::Escapes {
                 label: label.to_string()

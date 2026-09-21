@@ -209,3 +209,33 @@ fn a_flag_tested_by_a_later_branch_is_used() {
         Usage::Used
     );
 }
+
+/// Real bug found on etchy's `engine.asm`: two routines each define a local
+/// `.restart`. The label index kept only the first one, so the second
+/// routine's `jr .restart` was followed into the *first* routine's code -
+/// which overwrites HL - and HL was reported dead when the real target
+/// (`ld a,(hl)`) reads it. That made "remove unused `ld hl,3`" look safe.
+#[test]
+fn a_local_label_reused_in_another_routine_resolves_to_its_own_routine() {
+    let source = "\
+foo
+    ld hl, 1
+    ret
+.restart
+    ld hl, 2
+    ret
+bar
+    ld hl, 3
+.restart
+    ld a, (hl)
+    inc hl
+    cp 5
+    ret z
+    ld hl, 3
+    jr .restart
+";
+    // Instruction indices: 0 ld hl,1 / 1 ret / 2 ld hl,2 / 3 ret / 4 ld hl,3
+    // / 5 ld a,(hl) / 6 inc hl / 7 cp 5 / 8 ret z / 9 ld hl,3 / 10 jr.
+    // After instruction 9 (`ld hl,3`), `jr .restart` lands on `ld a,(hl)`.
+    assert_eq!(usage(source, 9, reg(Reg::H)), Usage::Used);
+}

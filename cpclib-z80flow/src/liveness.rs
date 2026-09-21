@@ -303,12 +303,12 @@ where
         || {
             if mnemonic == Some(Mnemonic::Djnz) {
                 return jump::djnz_target(arg1.as_deref())
-                    .and_then(|name| labels.get(name).copied())
+                    .and_then(|name| resolve_label(ops, labels, name, position))
                     .map(|target| (true, target));
             }
             let (conditional, target) = jump::condition_and_target(arg1.as_deref(), arg2.as_deref())?;
             let name = jump::label_of(target)?;
-            Some((conditional, labels.get(name).copied()?))
+            Some((conditional, resolve_label(ops, labels, name, position)?))
         }
     );
 
@@ -357,16 +357,64 @@ where
     }
 }
 
+/// Whether `name` is a local (dotted) label - one whose meaning depends on
+/// the global label it sits under, so the same `.loop`/`.restart` can
+/// legitimately appear in many routines of one file.
+fn is_local_label(name: &str) -> bool {
+    name.starts_with('.')
+}
+
 /// Index every label in the stream, so jumps can be followed.
+///
+/// A local (`.name`) label is keyed under its enclosing global label
+/// (`routine.name`), never by its bare name: keying by bare name (and keeping
+/// the first) made every later routine's `jr .restart` resolve to the *first*
+/// routine's `.restart`, so a liveness walk followed the wrong code and
+/// reported registers dead that the real target still reads - an unsound
+/// "remove this unused load". Resolve jump targets with [`resolve_label`],
+/// which applies the same scoping from the jump's own position.
 pub fn label_index<T>(stream: &AnalysisStream<'_, T>) -> HashMap<String, usize>
 where T: ListingElement {
     let mut labels = HashMap::new();
+    let mut scope = String::new();
     for (index, op) in stream.ops().iter().enumerate() {
         if op.is_label() {
-            labels
-                .entry(op.origin().label_symbol().to_string())
-                .or_insert(index);
+            let name = op.origin().label_symbol();
+            let key = if is_local_label(name) {
+                format!("{scope}{name}")
+            }
+            else {
+                scope = name.to_string();
+                name.to_string()
+            };
+            labels.entry(key).or_insert(index);
         }
     }
     labels
+}
+
+/// The op index a jump written at `position` to `name` really lands on, or
+/// `None` when it cannot be resolved (unknown label, or a local label used
+/// before any global label). Applies [`label_index`]'s local-label scoping:
+/// a `.name` target belongs to the nearest global label at or before
+/// `position`.
+pub fn resolve_label<T>(
+    ops: &[AnalysisOp<'_, T>],
+    labels: &HashMap<String, usize>,
+    name: &str,
+    position: usize
+) -> Option<usize>
+where
+    T: ListingElement
+{
+    if !is_local_label(name) {
+        return labels.get(name).copied();
+    }
+    let scope = ops[..=position.min(ops.len().saturating_sub(1))]
+        .iter()
+        .rev()
+        .filter(|op| op.is_label())
+        .map(|op| op.origin().label_symbol())
+        .find(|symbol| !is_local_label(symbol))?;
+    labels.get(&format!("{scope}{name}")).copied()
 }

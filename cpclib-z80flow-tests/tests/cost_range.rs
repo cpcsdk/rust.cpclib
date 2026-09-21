@@ -312,3 +312,40 @@ fn the_same_routine_called_twice_is_priced_consistently() {
         "the second call costs the same as the first: {once:?} vs {twice:?}"
     );
 }
+
+/// Same class of bug as the liveness one: a bare `.loop` used to resolve to
+/// whichever routine defined it *last*, so an earlier routine's `jr .loop`
+/// was priced (and its loop detected) against the wrong routine's code.
+#[test]
+fn a_local_label_reused_in_another_routine_is_scoped_to_its_own_routine() {
+    let source = "\
+first
+    ld a, 1
+.loop
+    nop
+    djnz .loop
+    ret
+second
+    ld a, 2
+    nop
+    nop
+    nop
+.loop
+    nop
+    djnz .loop
+    ret
+";
+    let listing = parse_z80_str(source).unwrap();
+    let tokens: Vec<&LocatedToken> = listing.iter().collect();
+    // `first` alone (its 5 tokens: ld, .loop, nop, djnz, ret) vs the same
+    // routine analysed with `second` (and its own `.loop`) after it. Costs
+    // must agree: if `first`'s `djnz .loop` resolved to `second`'s later
+    // `.loop`, the jump would look forward and walk into `second`.
+    let first_only = cost_range(&tokens[..6], &test_cost).expect("first alone");
+    let with_second = cost_range(&tokens, &test_cost).expect("first + second");
+    assert_eq!(
+        (first_only.min, first_only.max),
+        (with_second.min, with_second.max),
+        "each `.loop` must resolve inside its own routine"
+    );
+}
