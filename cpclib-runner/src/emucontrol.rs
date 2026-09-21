@@ -1336,10 +1336,27 @@ fn get_emulator_window_xcap(emu: &Emulator, o: &dyn EventObserver) -> Option<Emu
 
 #[cfg(feature = "screenshot")]
 fn get_emulator_window_xcap_once(emu: &Emulator, o: &dyn EventObserver) -> Option<EmuWindow> {
-    let windows = xcap::Window::all().unwrap();
+    // Both were bare `.unwrap()`s - confirmed live to panic (killing the
+    // whole calling actor thread, not just this one attempt) on a bare
+    // Xvfb with no window manager running: `xcap::Window::all()` itself
+    // fails there ("_NET_CLIENT_LIST_STACKING not supported" - it needs a
+    // window manager to set that EWMH property, which a private, single-
+    // app headless display deliberately has none of), and a window found
+    // despite that could still lack a `_NET_WM_NAME`/`WM_NAME` title.
+    // Neither is a reason to crash: `get_emulator_window_xcap`'s own
+    // caller already retries up to 30 times, exactly for a transient
+    // failure like this - so it's the same "return None, try again" as
+    // "no windows found yet", not a panic.
+    let Ok(windows) = xcap::Window::all()
+    else {
+        return None;
+    };
     let mut windows = windows
         .into_iter()
-        .filter(|win| emu.window_name_corresponds(&win.title().unwrap()))
+        .filter_map(|win| {
+            let title = win.title().ok()?;
+            emu.window_name_corresponds(&title).then_some(win)
+        })
         .collect_vec();
 
     let window = match windows.len() {
@@ -2583,6 +2600,104 @@ impl Robot {
     }
 }
 
+/// A dedicated, private Xvfb display, spawned so a headless [`RobotHandle`]
+/// session never puts a window on the caller's real desktop - Linux only
+/// (Xvfb has no Windows/macOS equivalent; this workspace targets all
+/// three, so [`Self::spawn`] fails cleanly with a clear message on any
+/// other `target_os` rather than silently doing nothing).
+///
+/// Overrides this **whole process's** `DISPLAY` environment variable for
+/// as long as it's alive, restoring the original value on drop - not just
+/// the spawned emulator's own env. `DISPLAY` is read in two different
+/// places: the emulator child process reads it from its own inherited
+/// environment (no extra plumbing needed there - `Command`/`CommandBuilder`
+/// give a child a copy of the parent's env by default), but this crate's
+/// own in-process window-discovery (`get_emulator_window_xcap`, via
+/// `xcap`) and keystroke injection (`Enigo`) also read the *ambient*
+/// `DISPLAY` at call time, from this same process - there is no per-call
+/// override for either. Since env vars are process-wide, not per-thread,
+/// mutating this while any other session (headless or not) might
+/// concurrently be doing its own X11 work would be a real race - reading
+/// or capturing the wrong display. **The caller (`cpclib-mcp`'s
+/// `SessionManager`) is responsible for guaranteeing this handle's whole
+/// lifetime is exclusive with every other session**, headless or not, not
+/// just other headless ones - there is no way to make this safe to share
+/// concurrently without either wrapping every X11-touching call in this
+/// crate with a read/write lock (real, separate engineering, deliberately
+/// out of scope here) or running capture in a dedicated subprocess per
+/// session (likewise). A simple, honest "headless is exclusive with
+/// everything" is the tradeoff made instead.
+struct HeadlessDisplay {
+    xvfb_child: std::process::Child,
+    original_display: Option<String>
+}
+
+impl HeadlessDisplay {
+    #[cfg(target_os = "linux")]
+    fn spawn() -> Result<Self, String> {
+        // The same convention `xvfb-run` itself uses to find a free slot:
+        // a display `:N` is in use iff `/tmp/.X11-unix/XN` exists.
+        let display_number = (1..10_000)
+            .find(|n| !std::path::Path::new(&format!("/tmp/.X11-unix/X{n}")).exists())
+            .ok_or_else(|| "no free X11 display number found under /tmp/.X11-unix".to_string())?;
+
+        let xvfb_child = std::process::Command::new("Xvfb")
+            .arg(format!(":{display_number}"))
+            .arg("-screen")
+            .arg("0")
+            .arg("1024x768x24")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("cannot spawn Xvfb (is it installed?): {e}"))?;
+
+        // No IPC-based "ready" signal from Xvfb itself; a short fixed
+        // settle sleep before anything tries to connect, same tradeoff
+        // `RobotHandle::launch`'s own settle sleep already makes for the
+        // emulator process itself.
+        std::thread::sleep(Duration::from_millis(500));
+
+        let original_display = std::env::var("DISPLAY").ok();
+        // Safety: sound only because the caller guarantees exclusive
+        // access to this whole process's X11-touching code for as long as
+        // this `HeadlessDisplay` (and therefore this env override) is
+        // alive - see this struct's own doc comment.
+        unsafe {
+            std::env::set_var("DISPLAY", format!(":{display_number}"));
+        }
+
+        Ok(Self {
+            xvfb_child,
+            original_display
+        })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn spawn() -> Result<Self, String> {
+        Err(
+            "headless emulator sessions need Xvfb, which only exists on Linux - not supported on \
+             this platform yet"
+                .to_string()
+        )
+    }
+}
+
+impl Drop for HeadlessDisplay {
+    fn drop(&mut self) {
+        // Safety: same as `spawn`'s own override - this process's
+        // DISPLAY is exclusively ours for this handle's whole lifetime,
+        // and this is the end of it.
+        unsafe {
+            match &self.original_display {
+                Some(v) => std::env::set_var("DISPLAY", v),
+                None => std::env::remove_var("DISPLAY")
+            }
+        }
+        let _ = self.xvfb_child.kill();
+        let _ = self.xvfb_child.wait();
+    }
+}
+
 /// A public, externally-nameable handle onto a live [`Robot`] session -
 /// `Robot`/`RobotImpl`/`WindowEventsManager` are all `pub(crate)` (one
 /// `enum` per emulator backend, with backend-specific variants that come
@@ -2591,7 +2706,18 @@ impl Robot {
 /// `Robot` directly. This wraps one and re-exposes exactly the operations
 /// `Robot` itself already delegates to its backend, nothing more - the
 /// per-backend enum machinery stays private.
-pub struct RobotHandle(Robot);
+///
+/// The optional second field is the private Xvfb display for a headless
+/// session (`None` for a normal one) - declared *after* the `Robot` field
+/// deliberately, since Rust drops struct fields in declaration order:
+/// closing the emulator itself (which still wants a working display
+/// connection to shut down cleanly) must happen before `HeadlessDisplay`
+/// tears down the virtual display and restores the real one.
+// The second field is never read - it exists purely to be *held*, so its
+// `Drop` (tear down Xvfb, restore the real `DISPLAY`) runs at the right
+// time. That's a real use, just not one the dead-code lint can see.
+#[allow(dead_code)]
+pub struct RobotHandle(Robot, Option<HeadlessDisplay>);
 
 impl RobotHandle {
     /// Launches `emu` per `conf`, waits for its window (when one exists -
@@ -2614,10 +2740,35 @@ impl RobotHandle {
     /// not its `Result` - a launch failure (e.g. a missing binary) is
     /// still visible there, just not as an error returned from `launch`
     /// itself.
+    ///
+    /// `headless`: when true, spawns a dedicated, private Xvfb display
+    /// first (Linux only) and runs the whole launch against it instead of
+    /// the caller's real desktop - see [`HeadlessDisplay`]'s own doc
+    /// comment for what this actually does and the exclusivity it
+    /// requires from the caller. Use [`Self::launch`] for the normal,
+    /// real-desktop case.
+    pub fn launch_headless<E: EventObserver + Clone + 'static>(
+        emu: &Emulator,
+        conf: &EmulatorConf,
+        o: &E
+    ) -> Result<Self, String> {
+        let headless_display = HeadlessDisplay::spawn()?;
+        Self::launch_inner(emu, conf, o, Some(headless_display))
+    }
+
     pub fn launch<E: EventObserver + Clone + 'static>(
         emu: &Emulator,
         conf: &EmulatorConf,
         o: &E
+    ) -> Result<Self, String> {
+        Self::launch_inner(emu, conf, o, None)
+    }
+
+    fn launch_inner<E: EventObserver + Clone + 'static>(
+        emu: &Emulator,
+        conf: &EmulatorConf,
+        o: &E,
+        headless_display: Option<HeadlessDisplay>
     ) -> Result<Self, String> {
         let (t_emu, t_conf, t_o) = (emu.clone(), conf.clone(), o.clone());
         std::thread::spawn(move || {
@@ -2643,7 +2794,7 @@ impl RobotHandle {
             .map_err(|e| format!("cannot create the input-injection backend: {e}"))?;
         let events = enigo.into();
 
-        Ok(Self(Robot::new(emu, window, events)))
+        Ok(Self(Robot::new(emu, window, events), headless_display))
     }
 
     pub fn type_text(&mut self, s: &str) {
@@ -2680,7 +2831,34 @@ impl RobotHandle {
     /// exact same `image`/`xcap` version just to name the return type.
     #[cfg(feature = "screenshot")]
     pub fn screenshot(&mut self) -> Result<Vec<u8>, String> {
-        let image = self.0.screenshot();
+        let image = if self.1.is_some() {
+            // Headless: capture the private Xvfb's own virtual screen
+            // directly, rather than every per-backend `screenshot()`'s
+            // usual window-discovery/window-capture path (`xcap::Window`,
+            // or ACE's own F10+screenshot-folder mechanism). On a bare
+            // Xvfb with no window manager - deliberately the case here,
+            // see `HeadlessDisplay`'s own doc comment - window-based
+            // capture either has nothing to enumerate (confirmed live:
+            // `xcap::Window::all()` itself fails with "_NET_CLIENT_LIST_
+            // STACKING not supported") or depends on window-manager-
+            // mediated input focus a bare Xvfb never grants (ACE's F10
+            // keystroke). None of that is needed here: with exactly one
+            // app ever running on this private display (headless mode's
+            // whole exclusivity guarantee - see `SessionManager::start`),
+            // capturing the display's own monitor *is* capturing that
+            // app's output, with no window enumeration involved at all.
+            let monitors = xcap::Monitor::all()
+                .map_err(|e| format!("cannot enumerate the private display's monitor: {e}"))?;
+            let monitor = monitors
+                .first()
+                .ok_or_else(|| "the private headless display has no monitor to capture".to_string())?;
+            monitor
+                .capture_image()
+                .map_err(|e| format!("failed to capture the private display: {e}"))?
+        }
+        else {
+            self.0.screenshot()
+        };
         let mut bytes = std::io::Cursor::new(Vec::new());
         image
             .write_to(&mut bytes, xcap::image::ImageFormat::Png)
