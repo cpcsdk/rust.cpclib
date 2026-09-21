@@ -49,6 +49,12 @@ pub struct Options {
     /// real assemble actually happens - see [`analyze_file`]'s own doc
     /// comment for when that is.
     pub include_dirs: Vec<Utf8PathBuf>,
+    /// Symbols to define before assembling, `NAME` (= 1) or `NAME=VALUE`,
+    /// same role as `basm`'s own `-D`/`--define`. Needed whenever the code
+    /// under analysis is conditional on a symbol the build passes on its
+    /// command line (`if LINKED_VERSION`), otherwise the real assemble the
+    /// address-aware rules depend on fails on an unknown symbol.
+    pub defines: Vec<String>,
     /// Show progress while analyzing - same flag, same underlying
     /// `cpclib_asm::progress` machinery `basm` itself uses (see
     /// `analyze_source`'s own doc comment for exactly what gets reported
@@ -247,7 +253,7 @@ fn analyze_source(
     // seconds rather than minutes.
     let matching_bar = start_matching_bar(show_progress);
     let (matches, assemble_warning) = if cpclib_asmoptim::rules_need_addresses(&rules) {
-        match assemble_dry_run(&listing, parser_options) {
+        match assemble_dry_run(&listing, parser_options, &options.defines) {
             Ok(env) => {
                 let resolver = EnvAddressResolver::new(&env);
                 (
@@ -287,8 +293,57 @@ fn analyze_source(
 /// address-aware constraints can be evaluated - mirrors
 /// `cpclib-lsp`'s own `dry_run_env` exactly, so the two tools never disagree
 /// about what's reachable.
-fn assemble_dry_run(listing: &LocatedListing, parse: ParserOptions) -> Result<Env, String> {
+/// Splits a `-D` style definition into its name and value: `NAME` alone
+/// means 1; a value is an integer (decimal, `0x..`, `&..`, `#..`, `0b..`,
+/// optionally negative) or otherwise taken as a string, with one pair of
+/// surrounding quotes removed.
+pub fn parse_define(definition: &str) -> (String, cpclib_tokens::ExprResult) {
+    use cpclib_tokens::ExprResult;
+    let (name, raw) = definition.split_once('=').unwrap_or((definition, "1"));
+    let raw = raw.trim();
+    let (negative, digits) = raw.strip_prefix('-').map_or((false, raw), |d| (true, d));
+    let number = if let Some(hex) = digits.strip_prefix("0x").or_else(|| digits.strip_prefix('&')).or_else(|| digits.strip_prefix('#')) {
+        i32::from_str_radix(hex, 16).ok()
+    }
+    else if let Some(bin) = digits.strip_prefix("0b") {
+        i32::from_str_radix(bin, 2).ok()
+    }
+    else {
+        digits.parse::<i32>().ok()
+    };
+    let value = match number {
+        Some(n) => ExprResult::from(if negative { -n } else { n }),
+        None => {
+            let unquoted = raw
+                .strip_prefix('"')
+                .and_then(|r| r.strip_suffix('"'))
+                .unwrap_or(raw);
+            ExprResult::from(unquoted.to_string())
+        }
+    };
+    (name.trim().to_string(), value)
+}
+
+/// Defines every `NAME[=VALUE]` of `defines` in `assemble`'s symbol table.
+pub fn apply_defines(assemble: &mut AssemblingOptions, defines: &[String]) -> Result<(), String> {
+    use cpclib_tokens::symbols::SymbolsTableTrait;
+    for definition in defines {
+        let (name, value) = parse_define(definition);
+        assemble
+            .symbols_mut()
+            .assign_symbol_to_value(name.as_str(), value)
+            .map_err(|e| format!("cannot define `{definition}`: {e:?}"))?;
+    }
+    Ok(())
+}
+
+fn assemble_dry_run(
+    listing: &LocatedListing,
+    parse: ParserOptions,
+    defines: &[String]
+) -> Result<Env, String> {
     let mut assemble = AssemblingOptions::default();
+    apply_defines(&mut assemble, defines)?;
     assemble.set_dry_run(true);
     assemble.set_record_token_addresses(true);
     let options = EnvOptions::new(parse, assemble, std::sync::Arc::new(()));
@@ -687,3 +742,45 @@ pub fn apply_fixes_in_place_project(root: &Utf8Path, options: &Options) -> Proje
     result
 }
 
+
+#[cfg(test)]
+mod define_tests {
+    use cpclib_tokens::ExprResult;
+
+    use super::*;
+
+    #[test]
+    fn a_define_parses_numbers_bare_names_and_strings() {
+        assert_eq!(parse_define("LINKED_VERSION=1"), ("LINKED_VERSION".to_string(), ExprResult::from(1)));
+        assert_eq!(parse_define("FLAG").1, ExprResult::from(1), "a bare name means 1");
+        assert_eq!(parse_define("A=0x10").1, ExprResult::from(16));
+        assert_eq!(parse_define("A=&ff").1, ExprResult::from(255));
+        assert_eq!(parse_define("A=#20").1, ExprResult::from(32));
+        assert_eq!(parse_define("A=0b101").1, ExprResult::from(5));
+        assert_eq!(parse_define("A=-3").1, ExprResult::from(-3));
+        assert_eq!(parse_define("A=\"hi\"").1, ExprResult::from("hi".to_string()));
+        assert_eq!(parse_define("A=word").1, ExprResult::from("word".to_string()));
+    }
+
+    /// The reason the option exists: without the define, this file cannot
+    /// even be assembled (unknown symbol), so the address-aware rules lose
+    /// the real assemble they need; with it, `jp2jr` resolves and fires.
+    #[test]
+    fn a_define_lets_a_conditional_file_assemble_for_address_aware_rules() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        let path = dir.path().join("cond.asm");
+        fs_err::write(&path, "if LINKED\nstart:\n jp target\ntarget:\n ret\nendif\n").unwrap();
+        let path = camino::Utf8Path::from_path(path.as_std_path()).unwrap().to_owned();
+
+        let goal = Options { goal: cpclib_asmoptim::OptimizationGoal::Size, ..Default::default() };
+        let without = analyze_file(&path, &goal).unwrap();
+        assert!(without.assemble_warning.is_some(), "the unknown symbol must be reported");
+
+        let with = analyze_file(
+            &path,
+            &Options { defines: vec!["LINKED".to_string()], ..goal }
+        )
+        .unwrap();
+        assert!(with.assemble_warning.is_none(), "{:?}", with.assemble_warning);
+    }
+}

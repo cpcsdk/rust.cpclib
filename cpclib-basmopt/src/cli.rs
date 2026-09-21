@@ -53,6 +53,12 @@ pub struct Cli {
     #[arg(short = 'I', long = "include", value_name = "DIR")]
     pub include_dirs: Vec<Utf8PathBuf>,
 
+    /// Define a symbol before assembling, `NAME` (= 1) or `NAME=VALUE`, same
+    /// role as `basm`'s own `-D`. Needed for code that is conditional on a
+    /// symbol the real build passes on its command line. Repeatable.
+    #[arg(short = 'D', long = "define", value_name = "NAME[=VALUE]")]
+    pub defines: Vec<String>,
+
     /// Show a progress bar. Same flag, same purpose as `basm`'s own
     /// `--progress` - useful on a real, possibly slow analysis, so the tool
     /// doesn't look hung while it works.
@@ -80,6 +86,7 @@ impl Cli {
             disabled_rules: self.disabled.clone(),
             no_builtin: self.no_builtin,
             include_dirs: self.include_dirs.clone(),
+            defines: self.defines.clone(),
             show_progress: self.progress
         }
     }
