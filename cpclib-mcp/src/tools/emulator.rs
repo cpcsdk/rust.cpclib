@@ -68,7 +68,14 @@ pub struct StartEmulatorInput {
     /// Disc image for drive A.
     pub drive_a: Option<String>,
     /// Disc image for drive B.
-    pub drive_b: Option<String>
+    pub drive_b: Option<String>,
+    /// Run under a dedicated, private virtual display instead of this
+    /// server's real desktop (Linux only). Because that overrides this
+    /// whole server process's display for as long as the session lives, a
+    /// headless session requires **no other session of any kind** to be
+    /// open, and refuses any other session from starting until it closes -
+    /// see this tool's own description. Default false.
+    pub headless: Option<bool>
 }
 
 /// Backends whose `load_snapshot` is a real API call (`RobotHandle::
@@ -94,7 +101,8 @@ pub(crate) async fn start_emulator(
         .maybe_drive_a(input.drive_a.map(Utf8PathBuf::from))
         .maybe_drive_b(input.drive_b.map(Utf8PathBuf::from))
         .build();
-    let session_id = sessions.start(emulator, label.clone(), conf).await?;
+    let headless = input.headless.unwrap_or(false);
+    let session_id = sessions.start(emulator, label.clone(), conf, headless).await?;
 
     // The launch argument above is the only mechanism a classic, CLI-only
     // emulator has - already handled by `conf`. For an API-driven backend
@@ -153,7 +161,8 @@ pub(crate) fn list_sessions(sessions: &crate::session::SessionManager) -> ToolRe
                 "session_id": s.id,
                 "emulator": s.emulator,
                 "idle_seconds": s.idle_seconds,
-                "age_seconds": s.age_seconds
+                "age_seconds": s.age_seconds,
+                "headless": s.headless
             })
         })
         .collect();
@@ -277,6 +286,69 @@ pub(crate) async fn screenshot(
     Ok(json!({ "png_base64": base64::engine::general_purpose::STANDARD.encode(png) }))
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct HeadlessScreenshotInput {
+    /// One of: ace, amspirit, amspiritlite, cadence, capriceforever,
+    /// cpcemu, cpcec, cpcemupower, emulator1984, retrovm, winape, sugarbox.
+    pub emulator: String,
+    /// `.sna` snapshot to launch with.
+    pub snapshot: Option<String>,
+    /// Disc image for drive A.
+    pub drive_a: Option<String>,
+    /// Disc image for drive B.
+    pub drive_b: Option<String>,
+    /// Text to type once the emulator has settled, before the screenshot
+    /// (e.g. a BASIC command followed by `\n`).
+    pub autorun: Option<String>,
+    /// How long to wait after launch (and after `autorun`, if given)
+    /// before the screenshot. Default 2.
+    pub seconds: Option<f64>
+}
+
+/// The whole "verify headlessly" sequence in one call: launch under a
+/// private virtual display (Linux only - see `start_emulator`'s own
+/// `headless` field), optionally type `autorun`, wait `seconds`,
+/// screenshot, close. Always closes the session before returning, success
+/// or failure, so a caller can never leave a headless session (and its
+/// exclusive hold on this server) open by forgetting `close_emulator`.
+pub(crate) async fn headless_screenshot(
+    sessions: &crate::session::SessionManager,
+    input: HeadlessScreenshotInput
+) -> ToolResult {
+    let (emulator, label) = parse_emulator(&input.emulator)?;
+    let conf = EmulatorConf::builder()
+        .transparent(false)
+        .break_on_bad_vbl(false)
+        .break_on_bad_hbl(false)
+        .maybe_snapshot(input.snapshot.map(Utf8PathBuf::from))
+        .maybe_drive_a(input.drive_a.map(Utf8PathBuf::from))
+        .maybe_drive_b(input.drive_b.map(Utf8PathBuf::from))
+        .build();
+
+    let session_id = sessions.start(emulator, label.clone(), conf, true).await?;
+
+    let run = async {
+        if let Some(text) = &input.autorun {
+            sessions.type_text(&session_id, text.clone()).await?;
+        }
+        let seconds = input.seconds.unwrap_or(2.0).max(0.0);
+        tokio::time::sleep(std::time::Duration::from_secs_f64(seconds)).await;
+        sessions.screenshot(&session_id).await
+    };
+    let result = run.await;
+
+    // Always close, whether the run above succeeded or not - a headless
+    // session left open on error would keep its exclusive hold on this
+    // server indefinitely (until the idle timeout, minutes away).
+    let _ = sessions.close(&session_id).await;
+
+    let png = result?;
+    Ok(json!({
+        "emulator": label,
+        "png_base64": base64::engine::general_purpose::STANDARD.encode(png)
+    }))
+}
+
 fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
     result.map(Json).map_err(|e| Json(e.to_json()))
 }
@@ -285,7 +357,13 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 impl McpServer {
     #[tool(description = "Launch a new emulator session (a dedicated background process/window) \
                            and return its session_id. Window-capture-backed backends need a real \
-                           display.")]
+                           display, unless headless is set (Linux only): runs under a private \
+                           virtual display, never touching the real desktop, but requires \
+                           exclusive access to this whole server - refuses to start while any \
+                           other session is open, and blocks any other session from starting \
+                           until it closes. For a one-shot 'run and screenshot' need, prefer \
+                           headless_screenshot instead - it handles the whole \
+                           start/run/capture/close sequence in one call.")]
     async fn start_emulator(
         &self,
         Parameters(input): Parameters<StartEmulatorInput>
@@ -364,5 +442,20 @@ impl McpServer {
         Parameters(input): Parameters<SessionIdInput>
     ) -> Result<Json<Value>, Json<Value>> {
         ok_or_tool_error(screenshot(&self.sessions, input).await)
+    }
+
+    #[tool(description = "MUTATING (of nothing you'll see again - the session is always closed \
+                           before this returns): a short headless run ending in one screenshot. \
+                           Launches an emulator under a private virtual display (Linux only - no \
+                           window ever touches this server's real desktop), optionally types \
+                           autorun, waits seconds, takes a screenshot, and closes the session - \
+                           the whole start_emulator+type_text+sleep+screenshot+close_emulator \
+                           sequence in one call. Requires exclusive access to this server: \
+                           refuses to run while any other session (headless or not) is open.")]
+    async fn headless_screenshot(
+        &self,
+        Parameters(input): Parameters<HeadlessScreenshotInput>
+    ) -> Result<Json<Value>, Json<Value>> {
+        ok_or_tool_error(headless_screenshot(&self.sessions, input).await)
     }
 }

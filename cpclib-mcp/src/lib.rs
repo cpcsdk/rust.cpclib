@@ -57,6 +57,8 @@ impl McpServer {
                 + Self::disc_router()
                 + Self::sna_router()
                 + Self::basic_router()
+                + Self::crunch_router()
+                + Self::reorder_router()
         }
     }
 

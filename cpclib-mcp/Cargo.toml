@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 # Workspace dependencies
 cpclib-asm.workspace = true
+cpclib-asmoptim.workspace = true
 cpclib-z80flow.workspace = true
 cpclib-lsp.workspace = true
 cpclib-basmopt.workspace = true
@@ -26,6 +27,7 @@ cpclib-sna = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
 cpclib-runner = { workspace = true, default-features = false, features = ["screenshot"] }
 cpclib-image.workspace = true
+cpclib-crunchers = { workspace = true, features = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"] }
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-tokens.workspace = true
 
