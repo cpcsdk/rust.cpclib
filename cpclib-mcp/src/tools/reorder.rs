@@ -80,23 +80,39 @@ pub struct SearchReorderingsInput {
     pub include_dirs: Option<Vec<String>>
 }
 
-/// One `(line, token)` entry only kept when its line held **exactly one**
-/// token - a line with a label plus an instruction, several colon-
-/// separated instructions, or anything else ambiguous is dropped rather
-/// than guessed at, matching every other "fail closed" policy already
-/// established across this crate's static-analysis tools.
-struct LineEntry<'t> {
+/// One instruction and the exact byte range it occupies in the source.
+/// Working on byte ranges rather than whole lines is what lets this handle
+/// `ld a,1 : ld b,2` (several statements on one line, this project family's
+/// usual style) as well as one instruction per line - reordering swaps the
+/// *texts* of the slots and leaves every separator, comment and line break
+/// exactly where it was.
+struct Slot<'t> {
     line: u32,
+    start: usize,
+    end: usize,
     token: &'t cpclib_asm::parser::obtained::LocatedToken
+}
+
+/// Whether `gap` (the source text between two consecutive instructions)
+/// holds nothing but statement separators: whitespace, `:`, and `;`
+/// comments. Anything else - a label, a directive, an include - means the
+/// two instructions are not directly adjacent and no window may span them.
+fn gap_is_only_separators(gap: &str) -> bool {
+    gap.lines().all(|line| {
+        line.split(';').next().unwrap_or("").chars().all(|c| c.is_whitespace() || c == ':')
+    })
 }
 
 /// Every legal reordering found for one window, plus its scored outcome.
 struct Candidate {
     start_line: u32,
     end_line: u32,
-    /// The window's original lines, in their new order (e.g. `[3, 2]` for
-    /// a 2-line window at lines 2-3 with the order flipped).
+    /// The window's source lines in their new order (repeats when several
+    /// instructions share a line).
     new_line_order: Vec<u32>,
+    /// The window's instruction texts as they are, and as reordered.
+    before: Vec<String>,
+    after: Vec<String>,
     crunched_size: Option<u64>,
     error: Option<String>
 }
@@ -121,38 +137,60 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
 
     let text = fs_err::read_to_string(&input.path)
         .map_err(|e| ToolError::io(format!("cannot read {}: {e}", input.path)))?;
-    let lines: Vec<&str> = text.lines().collect();
-
     let listing = parse_z80(text.clone())
         .map_err(|e| ToolError::new(crate::error::ToolErrorKind::Assembler, e.to_string()))?;
 
-    // One token per line, within range, dropping any line that isn't
-    // exactly one token - see `LineEntry`'s own doc comment.
-    let mut per_line: HashMap<u32, Vec<&cpclib_asm::parser::obtained::LocatedToken>> = HashMap::new();
+    // One slot per instruction in range. A token is dropped (fail closed)
+    // when its text cannot be pinned down exactly: it does not line up with
+    // this file's own text (it came from an include), it contains a quote,
+    // or several expanded tokens share one source position (a macro or
+    // REPEAT body).
+    let mut slots: Vec<Slot> = Vec::new();
+    let mut starts_seen: HashMap<usize, usize> = HashMap::new();
     for token in cpclib_asmoptim::flatten_for_analysis(listing.iter()) {
         if !token.has_span() {
             continue;
         }
-        let (line_1, _col) = token.span().relative_line_and_column();
+        let span = token.span();
+        let (line_1, _col) = span.relative_line_and_column();
         let line = line_1 as u32;
         if line < input.start_line || line > input.end_line {
             continue;
         }
-        per_line.entry(line).or_default().push(token);
+        let raw: &str = span.as_ref();
+        let cut = raw.find([':', ';', '\n']).unwrap_or(raw.len());
+        let trimmed = raw[..cut].trim_end();
+        let start = span.offset_from_start();
+        *starts_seen.entry(start).or_default() += 1;
+        if trimmed.is_empty()
+            || trimmed.contains(['"', '\''])
+            || text.get(start..start + trimmed.len()) != Some(trimmed)
+        {
+            continue;
+        }
+        slots.push(Slot {
+            line,
+            start,
+            end: start + trimmed.len(),
+            token
+        });
     }
-    let mut entries: Vec<LineEntry> = per_line
-        .into_iter()
-        .filter_map(|(line, tokens)| (tokens.len() == 1).then(|| LineEntry { line, token: tokens[0] }))
-        .collect();
-    entries.sort_by_key(|e| e.line);
+    slots.retain(|s| starts_seen[&s.start] == 1);
+    slots.sort_by_key(|s| s.start);
 
-    // Maximal runs of consecutive line numbers - a window can't span a
-    // dropped or out-of-range line.
-    let mut runs: Vec<Vec<&LineEntry>> = Vec::new();
-    for entry in &entries {
+    // Maximal runs of directly adjacent instructions - see
+    // `gap_is_only_separators`.
+    let mut runs: Vec<Vec<&Slot>> = Vec::new();
+    for slot in &slots {
         match runs.last_mut() {
-            Some(run) if run.last().unwrap().line + 1 == entry.line => run.push(entry),
-            _ => runs.push(vec![entry])
+            Some(run)
+                if run.last().is_some_and(|prev| {
+                    prev.end <= slot.start && gap_is_only_separators(&text[prev.end..slot.start])
+                }) =>
+            {
+                run.push(slot)
+            },
+            _ => runs.push(vec![slot])
         }
     }
 
@@ -163,14 +201,11 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
                 let window = &run[start..start + window_len];
                 let token_refs: Vec<&cpclib_asm::parser::obtained::LocatedToken> =
                     window.iter().map(|e| e.token).collect();
-                let permutations = legal_reorderings(&token_refs);
-                let window_lines: Vec<u32> = window.iter().map(|e| e.line).collect();
-                for perm in permutations {
-                    let new_line_order: Vec<u32> = perm.iter().map(|&i| window_lines[i]).collect();
+                for perm in legal_reorderings(&token_refs) {
                     candidates.push(build_candidate(
-                        &lines,
-                        &window_lines,
-                        &new_line_order,
+                        &text,
+                        window,
+                        &perm,
                         &input.cruncher,
                         &input.path,
                         &include_dirs
@@ -204,6 +239,8 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
                         "start_line": c.start_line,
                         "end_line": c.end_line,
                         "new_line_order": c.new_line_order,
+                        "before": c.before,
+                        "after": c.after,
                         "crunched_size": size,
                         "delta": baseline_size - size as i64,
                         "ok": true
@@ -214,6 +251,8 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
                         "start_line": c.start_line,
                         "end_line": c.end_line,
                         "new_line_order": c.new_line_order,
+                        "before": c.before,
+                        "after": c.after,
                         "ok": false,
                         "error": c.error
                     })
@@ -233,58 +272,46 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
     }))
 }
 
-/// Builds one candidate: the original source with `window_lines` replaced,
-/// in order, by `new_line_order`'s text, then assembled and crunched.
+/// Builds one candidate: `text` with each of `window`'s slots given the text
+/// of the instruction `perm` puts there (`perm[slot] = original index`),
+/// then assembled and crunched.
 fn build_candidate(
-    lines: &[&str],
-    window_lines: &[u32],
-    new_line_order: &[u32],
+    text: &str,
+    window: &[&Slot],
+    perm: &[usize],
     cruncher: &str,
     source_path: &str,
     include_dirs: &[String]
 ) -> Candidate {
-    let start_line = *window_lines.first().unwrap();
-    let end_line = *window_lines.last().unwrap();
+    let texts: Vec<&str> = window.iter().map(|s| &text[s.start..s.end]).collect();
+    let before: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
+    let after: Vec<String> = perm.iter().map(|&i| texts[i].to_string()).collect();
+    let start_line = window.first().unwrap().line;
+    let end_line = window.last().unwrap().line;
+    let new_line_order: Vec<u32> = perm.iter().map(|&i| window[i].line).collect();
 
-    let mut rebuilt: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
-    for (slot, &source_line) in window_lines.iter().zip(new_line_order) {
-        // Both 1-based; `lines` is 0-indexed.
-        rebuilt[(*slot - 1) as usize] = lines[(source_line - 1) as usize].to_string();
+    // Replace from the last slot backward so earlier offsets stay valid.
+    let mut candidate_text = text.to_string();
+    for (slot, replacement) in window.iter().zip(&after).rev() {
+        candidate_text.replace_range(slot.start..slot.end, replacement);
     }
-    let candidate_text = rebuilt.join("\n");
 
-    match assemble_from(&candidate_text, source_path, include_dirs) {
-        Ok(bytes) => {
-            match compress_with_timeout(cruncher.to_string(), bytes, CRUNCHER_TIMEOUT) {
-                Ok(compressed) => {
-                    Candidate {
-                        start_line,
-                        end_line,
-                        new_line_order: new_line_order.to_vec(),
-                        crunched_size: Some(compressed.stream.len() as u64),
-                        error: None
-                    }
-                },
-                Err(e) => {
-                    Candidate {
-                        start_line,
-                        end_line,
-                        new_line_order: new_line_order.to_vec(),
-                        crunched_size: None,
-                        error: Some(e)
-                    }
-                }
-            }
-        },
-        Err(e) => {
-            Candidate {
-                start_line,
-                end_line,
-                new_line_order: new_line_order.to_vec(),
-                crunched_size: None,
-                error: Some(e)
-            }
-        }
+    let outcome = assemble_from(&candidate_text, source_path, include_dirs).and_then(|bytes| {
+        compress_with_timeout(cruncher.to_string(), bytes, CRUNCHER_TIMEOUT)
+            .map(|c| c.stream.len() as u64)
+    });
+    let (crunched_size, error) = match outcome {
+        Ok(size) => (Some(size), None),
+        Err(e) => (None, Some(e))
+    };
+    Candidate {
+        start_line,
+        end_line,
+        new_line_order,
+        before,
+        after,
+        crunched_size,
+        error
     }
 }
 
@@ -301,9 +328,11 @@ impl McpServer {
                            branch/call/ret/djnz/rst/halt, a hard barrier regardless of \
                            dependencies), rebuilds each candidate, and reports the crunched-size \
                            delta versus the original, best first. Read-only (never writes the \
-                           file). Only considers lines that parse as exactly one plain \
-                           instruction - labels, directives, and multi-statement lines are \
-                           skipped, not guessed at. `baseline_crunched_size` and every \
+                           file). Works at statement level: instructions on one line separated by `:` are \
+                           reordered in place (separators and comments stay put), and a window may \
+                           span line breaks and comments but never a label, directive or include; \
+                           quoted operands and macro/REPEAT-expanded code are skipped, not guessed \
+                           at. Each result lists the `before`/`after` instruction texts. `baseline_crunched_size` and every \
                            `crunched_size`/`delta` are payload-only (this file's bytes crunched \
                            in isolation) - they can differ slightly from a real project's final \
                            linked size when the chosen cruncher adds its own extra bytes at link \
@@ -400,5 +429,45 @@ mod tests {
         })
         .expect_err("start_line > end_line should be rejected before touching the filesystem");
         assert_eq!(err.kind, "invalid_input");
+    }
+
+    /// Real style in etchy: several statements per line (`ld a,1 : ld b,2`).
+    /// Line-based reordering used to drop every such line; slots must find
+    /// the window, swap only the instruction texts, and keep separators and
+    /// comments exactly where they were.
+    #[test]
+    fn colon_separated_statements_and_comments_between_them_are_reordered() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        let path = dir.path().join("colon.asm");
+        fs_err::write(&path, "org 0x8000\n ld a,1 : ld b,2 ; two\n ld c,3\n ret\n").unwrap();
+
+        let result = search_reorderings(SearchReorderingsInput {
+            path: path.to_string(),
+            start_line: 2,
+            end_line: 3,
+            cruncher: "zx0".to_string(),
+            window_size: Some(2),
+            include_dirs: None
+        })
+        .expect("search should succeed");
+        let results = result["results"].as_array().unwrap();
+        assert!(!results.is_empty(), "{result:#}");
+        assert!(
+            results.iter().any(|r| {
+                r["before"] == json!(["ld a,1", "ld b,2"]) && r["after"] == json!(["ld b,2", "ld a,1"])
+            }),
+            "the same-line pair must be found and swapped in place: {result:#}"
+        );
+        assert!(
+            results.iter().any(|r| r["before"] == json!(["ld b,2", "ld c,3"])),
+            "a window spanning a line break and a comment must be found: {result:#}"
+        );
+    }
+
+    #[test]
+    fn a_directive_between_instructions_is_not_spanned() {
+        assert!(gap_is_only_separators(" : \n ; comment\n  "));
+        assert!(!gap_is_only_separators("\n label\n"));
+        assert!(!gap_is_only_separators(" : db 1 : "));
     }
 }
