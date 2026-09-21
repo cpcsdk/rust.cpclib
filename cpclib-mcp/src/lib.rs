@@ -61,6 +61,7 @@ impl McpServer {
                 + Self::reorder_router()
                 + Self::variants_router()
                 + Self::project_router()
+                + Self::sizemap_router()
         }
     }
 
