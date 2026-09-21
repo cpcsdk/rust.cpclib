@@ -25,6 +25,7 @@ pub mod engine;
 pub mod env_resolver;
 mod match_cost;
 pub mod noopt;
+pub mod reorder;
 pub mod smc;
 
 // Re-exported so existing consumers keep one import path for "the optimizer's

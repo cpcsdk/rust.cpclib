@@ -816,6 +816,94 @@ where
     })
 }
 
+/// Whether the instruction at `tokens[start]` sits under a label that is
+/// itself loaded into a 16-bit register somewhere in `tokens` and, within a
+/// short window afterward, block-copied via `LDI`/`LDIR`/`LDD`/`LDDR` - the
+/// shape of code that relocates itself or a jump table at runtime (real
+/// example this guards against: skyline's own interrupt vector installer,
+/// `vector: jp target ... ld hl,vector : ld de,&38 : ldi : ldi : ldi`,
+/// copying the *jump instruction's own bytes* elsewhere before they run).
+///
+/// This is about the label at the matched instruction's own address, not
+/// the jump's target: `reachableByJr` already proves the target is in
+/// range *from the address this instruction assembled to*, but if those
+/// exact bytes get copied somewhere else before they run, a `JR` computed
+/// there would be wrong (its displacement is relative to wherever it
+/// executes, not where it was written) even though the original `JP`
+/// stayed correct regardless of where its bytes end up.
+///
+/// A conservative whole-file text scan rather than a real data-flow proof
+/// - this crate's established policy (see `constraints.rs`'s memory-
+/// aliasing note) is to decline rather than guess when a sound answer
+/// isn't cheaply available, and over-declining `jp2jr` here only costs a
+/// missed optimization, never a wrong one.
+fn instruction_may_be_relocated<T>(tokens: &[&T], start: usize) -> bool
+where T: ListingElement + std::fmt::Display {
+    const COPY_MNEMONICS: [&str; 4] = ["LDI", "LDIR", "LDD", "LDDR"];
+    const LOOKAHEAD: usize = 16;
+
+    // Each token rendered once (`Display` on a generic `T` always builds a
+    // fresh `String` - there is no existing borrowed text to point at
+    // instead, for either `Token` or `LocatedToken`) and upper-cased once;
+    // everything below borrows `&str` slices out of this rather than
+    // re-rendering or re-allocating per token.
+    let lines: Vec<String> = tokens.iter().map(|t| t.to_string().to_ascii_uppercase()).collect();
+
+    // Every label immediately attached to this instruction - walk backward
+    // until a non-label token (an earlier real instruction, or the start of
+    // the file) stops it.
+    let labels: Vec<&str> = tokens[..start]
+        .iter()
+        .zip(lines[..start].iter())
+        .rev()
+        .take_while(|(t, _)| t.is_label())
+        .filter_map(|(_, line)| first_word(line))
+        .collect();
+    if labels.is_empty() {
+        return false;
+    }
+
+    for label in labels {
+        for (i, line) in lines.iter().enumerate() {
+            let loads_label = ["LD HL,", "LD DE,", "LD BC,"].iter().any(|p| line.contains(p))
+                && contains_word(line, label);
+            if !loads_label {
+                continue;
+            }
+            let window_end = (i + LOOKAHEAD).min(lines.len());
+            if lines[i..window_end]
+                .iter()
+                .any(|l| COPY_MNEMONICS.iter().any(|m| contains_word(l, m)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// The first word of `text` (split on anything that isn't alphanumeric or
+/// `_`) - used to pull a bare label name out of its already upper-cased
+/// `Display` rendering (`"VECTOR:"` -> `"VECTOR"`) without needing a
+/// dedicated `ListingElement` accessor for it. Borrows from `text` rather
+/// than allocating - `text` is expected to already be upper-cased (see
+/// this function's only caller), so there is no case-folding left to do
+/// here.
+fn first_word(text: &str) -> Option<&str> {
+    text.split(|c: char| !c.is_alphanumeric() && c != '_')
+        .find(|w| !w.is_empty())
+}
+
+/// Whether `needle` appears in `haystack` as a whole word (split on
+/// anything that isn't alphanumeric or `_`) - a plain `contains` would
+/// also match `LDIR` inside `LDIRX` or a label that is a substring of a
+/// longer one.
+fn contains_word(haystack: &str, needle: &str) -> bool {
+    haystack
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .any(|word| word == needle)
+}
+
 /// Attempt one rule at one starting position.
 fn try_rule<'t, T, R>(
     rule: &Rule,
@@ -891,6 +979,14 @@ where
         return None;
     }
 
+    // `jp2jr` (`jp ?const1` -> `jr ?const1`, the *only* rule this hazard
+    // applies to today - see `instruction_may_be_relocated`'s own doc
+    // comment) is unsafe for a jump whose own bytes get copied elsewhere
+    // at runtime, regardless of what `reachableByJr` already proved about
+    // the target's distance *from where the instruction was assembled*.
+    let relocation_unsafe =
+        rule.name.as_deref() == Some("jp2jr") && instruction_may_be_relocated(tokens, start);
+
     Some(RuleAttempt {
         m: PeepholeMatch {
             rule_name: rule.name.clone(),
@@ -899,7 +995,7 @@ where
             end,
             anchor,
             replacement,
-            bulk_unsafe: rule.is_pure_dead_output_deletion(),
+            bulk_unsafe: rule.is_pure_dead_output_deletion() || relocation_unsafe,
             reasons
         }
     })

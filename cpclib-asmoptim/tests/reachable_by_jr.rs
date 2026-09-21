@@ -47,6 +47,48 @@ fn a_jp_to_a_nearby_label_becomes_jr() {
         .find(|m| m.rule_name.as_deref() == Some("jp2jr"))
         .unwrap_or_else(|| panic!("expected jp2jr to fire: {found:?}"));
     assert_eq!(hit.replacement, vec!["jr target".to_string()]);
+    assert!(!hit.bulk_unsafe, "an ordinary jp2jr should not be flagged unsafe: {hit:?}");
+}
+
+/// Real bug report: `jp2jr` proposed `jp INTERx -> jr INTERx` for a 3-byte
+/// `jp` vector table the program `ldi`-copies to address `&38` at runtime
+/// (skyline's own interrupt vector installer). A `jr`'s displacement is
+/// relative to wherever it *executes*, not where it was assembled, so a
+/// rewrite computed against the vector table's own address would compute
+/// the wrong offset once relocated to `&38` - still in `jr` range from the
+/// table, irrelevant once copied. The match must still fire (it may be
+/// correct depending on how the caller actually uses the copy), but must
+/// come back `bulk_unsafe: true` so an unreviewed bulk-apply skips it.
+#[test]
+fn a_jp_whose_bytes_are_copied_elsewhere_is_flagged_bulk_unsafe() {
+    let found = suggestions(
+        "vector:\n    jp target\ntarget:\n    ret\n\
+         installer:\n    ld hl,vector\n    ld de,&38\n    ldi\n    ldi\n    ldi\n",
+        OptimizationGoal::Size
+    );
+    let hit = found
+        .iter()
+        .find(|m| m.rule_name.as_deref() == Some("jp2jr"))
+        .unwrap_or_else(|| panic!("expected jp2jr to still fire: {found:?}"));
+    assert!(hit.bulk_unsafe, "a relocated jump table must be flagged unsafe: {hit:?}");
+}
+
+/// The relocation check must not over-fire on ordinary code that merely
+/// happens to load the target label's address for an unrelated reason
+/// (printing it, computing a size, ...) with no block-copy anywhere near
+/// it - `ldi`/`ldir`/`ldd`/`lddr` must actually be present.
+#[test]
+fn loading_a_labels_address_without_a_block_copy_is_not_flagged() {
+    let found = suggestions(
+        "vector:\n    jp target\ntarget:\n    ret\n\
+         elsewhere:\n    ld hl,vector\n    ld a,(hl)\n",
+        OptimizationGoal::Size
+    );
+    let hit = found
+        .iter()
+        .find(|m| m.rule_name.as_deref() == Some("jp2jr"))
+        .unwrap_or_else(|| panic!("expected jp2jr to fire: {found:?}"));
+    assert!(!hit.bulk_unsafe, "no block copy is nearby, so this should not be flagged: {hit:?}");
 }
 
 #[test]
