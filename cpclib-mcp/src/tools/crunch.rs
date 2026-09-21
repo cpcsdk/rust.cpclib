@@ -61,42 +61,25 @@ pub(crate) const CRUNCHER_TIMEOUT: Duration = Duration::from_secs(90);
 /// `zx0`/`zx0_backward`. No `aplib` - the crate has no separate
 /// implementation, only `apultra` (LZAPU), confirmed against the real enum.
 ///
-/// **No `pucrunch` or `shrinkler` here, deliberately** - both confirmed
-/// live to write straight to this process's real stdout, which would
-/// corrupt the MCP protocol stream (`main.rs`'s own stdout-is-reserved
-/// contract):
-/// - `pucrunch`'s vendored C (`extra/pucrunch.c`) writes a verbose per-byte
-///   trace via bare `printf` (lines ~2509-2693), completely unconditional -
-///   no verbosity flag exists anywhere in that file to disable it. It also
-///   hangs indefinitely on a degenerate, maximally-repetitive input (see
-///   [`CRUNCHER_TIMEOUT`]), a second, independent problem.
-/// - `shrinkler`'s vendored C++ (`extra/Shrinkler4.6NoParityContext/
-///   basm_bridge.cpp`) looked fixable at first - its `compress_for_basm`
-///   takes a `log` parameter, and setting it `false` does silence two
-///   `printf` lines in that bridge file - but live-tested against a real
-///   project's real-sized data (not just this crate's own small test
-///   input, which never actually exercised the progress path), the
-///   multi-pass progress bar ("After 1st pass ... After 9th pass") prints
-///   regardless: it comes from inside the underlying compression engine
-///   itself, gated by nothing this bridge exposes (there's even a dead,
-///   hardcoded `bool show_progress = true; // TODO set to false ASAP` in
-///   that same file - unused by the compiler's own account, i.e. not
-///   actually wired to anything). Properly fixing this needs either
-///   patching the vendored engine's own progress-printing calls (real,
-///   separate C++ surgery) or running the call in a subprocess with its
-///   own stdout (the only way to redirect output that's actually safe
-///   under concurrency - see `resolve_cruncher`'s own note on why a
-///   process-wide fd redirect here would risk corrupting a *different*,
-///   concurrent tool call's real response) - both deliberately out of
-///   scope for this pass.
+/// Every format is in the default list. Two used to be excluded and no longer
+/// need to be:
 ///
-/// `resolve_cruncher` still accepts both names by explicit request (the
-/// tool's own description warns about this), since bounding the hang and
-/// trimming what output there is are still real, if partial, improvements
-/// - but shipping either silently in the default list is not safe.
+/// - `shrinkler` `printf`s progress straight to the real stdout, which corrupts
+///   the MCP protocol stream. Fixed at the process level: `main.rs` moves the
+///   protocol to a private file descriptor and points fd 1 at stderr (Unix; the
+///   Windows equivalent is implemented the same way but untested).
+/// - `pucrunch` hung forever on any input with a long run of one byte. Root
+///   cause was in the vendored C, not the input: the FFI bypasses `main()`,
+///   which is what initialised `maxrlelen`/`lrange`/`maxlzlen` and the
+///   Elias-gamma length table, so `LenRle` never terminated for a run and LZ
+///   packing was silently disabled for everything (output could even expand).
+///   Fixed in `cpclib-crunchers/extra/pucrunch.c` (`pucrunch_ffi_init`).
+///
+/// The per-format [`CRUNCHER_TIMEOUT`] stays as a safety net for any other
+/// native cruncher misbehaving.
 const ALL_FORMATS: &[&str] = &[
-    "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa1", "lzsa2", "upkr", "zx0", "zx0_backward",
-    "zx7"
+    "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa1", "lzsa2", "pucrunch", "shrinkler", "upkr",
+    "zx0", "zx0_backward", "zx7"
 ];
 
 pub(crate) fn resolve_cruncher(name: &str) -> Result<CompressMethod, ToolError> {
@@ -115,10 +98,9 @@ pub(crate) fn resolve_cruncher(name: &str) -> Result<CompressMethod, ToolError> 
             let version = cpclib_crunchers::lzsa::LzsaVersion::V2;
             Ok(CompressMethod::Lzsa(version, Some(version.default_minmatch())))
         },
-        // `log: false` still trims two `printf` lines even though it
-        // doesn't stop the real problem (the engine's own progress bar -
-        // see `ALL_FORMATS`'s own doc comment for the full story), so it's
-        // worth keeping regardless of `Default::default()`'s `log: true`.
+        // `log: false` trims two of Shrinkler's `printf` lines; the rest of
+        // its progress output is handled process-wide (see `ALL_FORMATS`'s
+        // doc comment), so this is only about less noise on stderr.
         "shrinkler" => {
             Ok(CompressMethod::Shrinkler(cpclib_crunchers::shrinkler::ShrinklerConfiguration {
                 iterations: 9,
@@ -132,8 +114,7 @@ pub(crate) fn resolve_cruncher(name: &str) -> Result<CompressMethod, ToolError> 
         "zx7" => Ok(CompressMethod::Zx7),
         other => {
             Err(ToolError::invalid_input(format!(
-                "unknown cruncher '{other}' - expected one of: none, pucrunch/shrinkler \
-                 (excluded by default, see tool description), {}",
+                "unknown cruncher '{other}' - expected one of: none, {}",
                 ALL_FORMATS.join(", ")
             )))
         }
@@ -148,24 +129,36 @@ pub(crate) fn resolve_cruncher(name: &str) -> Result<CompressMethod, ToolError> 
 /// this call still returns on time, with a clear per-format error instead
 /// of hanging the whole tool call.
 pub(crate) fn compress_with_timeout(name: String, data: Vec<u8>, timeout: Duration) -> Result<cpclib_crunchers::CompressionResult, String> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let result = match resolve_cruncher(&name) {
+    run_with_timeout(timeout, move || {
+        match resolve_cruncher(&name) {
             Ok(method) => {
                 method
                     .compress(&data)
                     .map_err(|CrunchersError::CompressionFailed| "compression failed".to_string())
             },
             Err(e) => Err(e.message)
-        };
+        }
+    })
+}
+
+/// Runs `work` on its own thread and waits up to `timeout` for its result;
+/// on expiry the thread is leaked (unavoidable in safe Rust) and a clear
+/// timeout error is returned instead. Generic so the bound itself can be
+/// tested without needing a cruncher that really hangs.
+fn run_with_timeout<T: Send + 'static>(
+    timeout: Duration,
+    work: impl FnOnce() -> Result<T, String> + Send + 'static
+) -> Result<T, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
         // The receiver may already be gone if `recv_timeout` below already
         // gave up - that's fine, nothing left to deliver to.
-        let _ = tx.send(result);
+        let _ = tx.send(work());
     });
     rx.recv_timeout(timeout).unwrap_or_else(|_| {
         Err(format!(
-            "timed out after {timeout:?} - this cruncher appears to hang on this input \
-             (confirmed live for pucrunch on a maximally-repetitive block)"
+            "timed out after {timeout:?} - this cruncher did not finish in time (a genuine hang, \
+             or simply more work than the bound allows for this input)"
         ))
     })
 }
@@ -284,16 +277,10 @@ impl McpServer {
                            still take tens of seconds on real-sized data. Compares this block in \
                            isolation only - does not account for a project's real final linked \
                            size when a decruncher stub's own size differs per format, or when \
-                           multiple crunch sites are selected independently. `pucrunch`/`shrinkler` \
-                           are excluded from the default format list: both write debug/progress \
-                           output straight to this server's real stdout on every call, confirmed \
-                           live to corrupt the MCP protocol stream on real-sized data (small test \
-                           inputs can misleadingly look clean) - pucrunch also hangs indefinitely \
-                           on degenerate input. Request either explicitly via `formats` only if \
-                           you understand the risk. A per-format 90s timeout applies to every \
-                           format, to give legitimately slow (but finishing) crunchers like \
-                           `upkr` room on larger real assets without waiting forever on a genuine \
-                           hang.")]
+                           multiple crunch sites are selected independently. A per-format 90s timeout \
+                           applies to every format, to give legitimately slow (but finishing) \
+                           crunchers like `upkr` room on larger real assets without waiting \
+                           forever on a genuine hang.")]
     async fn compare_crunchers(
         &self,
         Parameters(input): Parameters<CompareCrunchersInput>
@@ -357,23 +344,31 @@ mod tests {
         assert_eq!(sizes, sorted, "{results:#?}");
     }
 
+    /// The bound must actually fire. (This used to be tested with pucrunch
+    /// on 256 zero bytes, which hung forever until its uninitialised
+    /// `maxrlelen` was fixed - see `cpclib-crunchers/extra/pucrunch.c`.)
     #[test]
-    fn compress_with_timeout_gives_up_instead_of_hanging() {
-        // Regression test for a real, live-confirmed bug: `pucrunch`
-        // hangs indefinitely ("Optimizing LZ77 and RLE lengths..." then
-        // never returns) on a maximally-repetitive input (256 zero
-        // bytes) - this used to hang `cargo test` itself for the better
-        // part of two hours before being tracked down. A short timeout
-        // here (not `CRUNCHER_TIMEOUT`'s real 90s) keeps this test fast
-        // while still proving the bound actually fires.
+    fn run_with_timeout_gives_up_instead_of_hanging() {
         let start = std::time::Instant::now();
-        let result = compress_with_timeout(
-            "pucrunch".to_string(),
-            vec![0u8; 256],
-            Duration::from_millis(200)
-        );
+        let result: Result<u32, String> = run_with_timeout(Duration::from_millis(200), || {
+            std::thread::sleep(Duration::from_secs(30));
+            Ok(1)
+        });
         assert!(start.elapsed() < Duration::from_secs(2), "{:?}", start.elapsed());
-        let err = result.expect_err("pucrunch on 256 zero bytes should time out, not succeed");
-        assert!(err.contains("timed out"), "{err}");
+        assert!(result.unwrap_err().contains("timed out"));
+    }
+
+    #[test]
+    fn run_with_timeout_returns_the_result_when_in_time() {
+        assert_eq!(run_with_timeout(Duration::from_secs(5), || Ok::<_, String>(7)), Ok(7));
+    }
+
+    /// Regression for the real bug: a long run of one byte used to hang
+    /// pucrunch forever.
+    #[test]
+    fn pucrunch_finishes_on_a_maximally_repetitive_block() {
+        let result = compress_with_timeout("pucrunch".to_string(), vec![0u8; 256], Duration::from_secs(20))
+            .expect("pucrunch must finish, not time out");
+        assert!(result.stream.len() < 32, "{}", result.stream.len());
     }
 }

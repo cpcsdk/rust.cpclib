@@ -2805,6 +2805,7 @@ dependencies = [
  "cpclib-tokens",
  "cpclib-z80flow",
  "fs-err",
+ "libc",
  "rmcp",
  "schemars 1.2.0",
  "serde",
@@ -2815,6 +2816,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

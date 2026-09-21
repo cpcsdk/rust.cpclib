@@ -74,7 +74,7 @@ fn build_error(e: BndBuilderError) -> ToolError {
     ToolError::new(ToolErrorKind::Build, e.to_string())
 }
 
-fn open_builder(bnd_path: &str) -> Result<(Utf8PathBuf, BndBuilder), ToolError> {
+pub(crate) fn open_builder(bnd_path: &str) -> Result<(Utf8PathBuf, BndBuilder), ToolError> {
     // `false` = do not force every nested `bndbuild` task to add `--serial`
     // (this crate's own "rayon" feature is enabled - see Cargo.toml - so
     // `from_path` takes this extra argument).
@@ -287,6 +287,31 @@ fn filtered_log(log: &[String], verbose: bool) -> Vec<String> {
     log.iter().filter(|line| !is_basm_warning_noise(line)).cloned().collect()
 }
 
+/// Builds `target` (or the default one) with output captured rather than
+/// written to this process's stdout, returning the build time in ms. The
+/// plain building block for tools that only care whether a build worked.
+pub(crate) fn run_target_quiet(bnd_path: &str, target: Option<&str>) -> Result<u128, ToolError> {
+    let (_path, mut builder) = open_builder(bnd_path)?;
+    let target = match target {
+        Some(t) => Utf8PathBuf::from(t),
+        None => {
+            builder
+                .default_target()
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    ToolError::new(
+                        ToolErrorKind::Build,
+                        "no target given and the build file declares no default target"
+                    )
+                })?
+        }
+    };
+    builder.add_observer(BndBuilderObserverRc::new(LogObserver::default()));
+    let start = std::time::Instant::now();
+    builder.execute(&target).map_err(build_error)?;
+    Ok(start.elapsed().as_millis())
+}
+
 /// **MUTATING**: runs a build exactly like `run_build`, then reads back the
 /// `.sym` file it produced for structured per-section crunch sizes and the
 /// total linked size - instead of a caller grepping colored build-log text
@@ -369,9 +394,9 @@ pub(crate) fn report_build(input: ReportBuildInput) -> ToolResult {
 /// report to from a `Drop` impl, so it is silently swallowed rather than
 /// panicking during unwind - the alternative is losing the original
 /// content entirely, which is strictly worse.
-struct RestoreFileOnDrop<'a> {
-    path: &'a str,
-    original: String
+pub(crate) struct RestoreFileOnDrop<'a> {
+    pub(crate) path: &'a str,
+    pub(crate) original: String
 }
 
 impl Drop for RestoreFileOnDrop<'_> {
@@ -388,11 +413,42 @@ impl Drop for RestoreFileOnDrop<'_> {
 /// alternatives). Returns `None` when no such line is found, rather than
 /// guessing at one - a caller must treat that as "this file does not use
 /// this convention", never silently build the file unmodified.
+/// Where the *value* of an assignment to `variable_name` sits on `line`:
+/// `(value_start, value_end)` byte offsets, with the value ending at a
+/// trailing `;` comment or the end of the line. Accepts the three spellings
+/// basm projects use for a constant: `NAME = v`, `NAME equ v`, `NAME set v`
+/// (operator keywords case-insensitive). `None` for a comment line or any
+/// other line.
+fn assignment_value_range(line: &str, variable_name: &str) -> Option<(usize, usize)> {
+    let indent = line.len() - line.trim_start().len();
+    let after_name = line[indent..].strip_prefix(variable_name)?;
+    let name_end = indent + variable_name.len();
+    if after_name.chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+        return None; // a longer identifier that merely starts with the name
+    }
+    let operator_start = name_end + (after_name.len() - after_name.trim_start().len());
+    let rest = &line[operator_start..];
+    let operator_len = if rest.starts_with('=') && !rest.starts_with("==") {
+        1
+    }
+    else if rest
+        .get(..3)
+        .is_some_and(|kw| kw.eq_ignore_ascii_case("equ") || kw.eq_ignore_ascii_case("set"))
+        && rest[3..].starts_with(char::is_whitespace)
+    {
+        3
+    }
+    else {
+        return None;
+    };
+    let value_start = operator_start + operator_len;
+    let value_end = line[value_start..].find(';').map_or(line.len(), |i| value_start + i);
+    Some((value_start, value_end))
+}
+
 fn find_active_assignment(lines: &[&str], variable_name: &str) -> Option<usize> {
     lines.iter().position(|line| {
-        let trimmed = line.trim_start();
-        !trimmed.starts_with(';')
-            && trimmed.strip_prefix(variable_name).is_some_and(|rest| rest.trim_start().starts_with('='))
+        !line.trim_start().starts_with(';') && assignment_value_range(line, variable_name).is_some()
     })
 }
 
@@ -401,8 +457,8 @@ fn find_active_assignment(lines: &[&str], variable_name: &str) -> Option<usize> 
 fn current_assignment_value(source: &str, variable_name: &str) -> Option<String> {
     let lines: Vec<&str> = source.lines().collect();
     let line = lines[find_active_assignment(&lines, variable_name)?];
-    let rest = &line[line.find('=')? + 1..];
-    Some(rest.split(';').next().unwrap_or("").trim().to_string())
+    let (start, end) = assignment_value_range(line, variable_name)?;
+    Some(line[start..end].trim().to_string())
 }
 
 fn rewrite_variable_assignment(source: &str, variable_name: &str, new_value: &str) -> Option<String> {
@@ -410,10 +466,8 @@ fn rewrite_variable_assignment(source: &str, variable_name: &str, new_value: &st
     let target = find_active_assignment(&lines, variable_name)?;
 
     let line = lines[target];
-    let eq = line.find('=')?;
-    let (prefix, rest) = line.split_at(eq + 1);
-    let trailing_comment = rest.find(';').map(|i| &rest[i..]).unwrap_or("");
-    let rewritten = format!("{prefix} {new_value} {trailing_comment}");
+    let (start, end) = assignment_value_range(line, variable_name)?;
+    let rewritten = format!("{} {new_value} {}", &line[..start], &line[end..]);
     let rewritten_trimmed = rewritten.trim_end().to_string();
     lines[target] = &rewritten_trimmed;
     Some(lines.join("\n"))
@@ -436,7 +490,7 @@ struct LinkRow {
 /// stripped, whitespace collapsed, `|` neutralised, and - since the useful
 /// part of a build failure is usually the last `error:` in it, not the
 /// wrapper text - starting from there when one exists.
-fn one_line_error(message: &str) -> String {
+pub(crate) fn one_line_error(message: &str) -> String {
     let mut plain = String::with_capacity(message.len());
     let mut chars = message.chars().peekable();
     while let Some(c) = chars.next() {
@@ -989,6 +1043,25 @@ last equ #2900
             current_assignment_value(REAL_LINK_SKY_EXCERPT, "SELECTED_CRUNCHER").as_deref(),
             Some("CRUNCHER_ZX0_BACKWARD")
         );
+    }
+
+    /// etchy spells its switches `NAME equ VALUE` (and skyline `NAME = VALUE`);
+    /// both, and `set`, must be recognised, comments kept, and a longer
+    /// identifier that merely starts with the name left alone.
+    #[test]
+    fn equ_and_set_assignments_are_recognised_like_equals() {
+        let src = "SELECTED_DATA_ENCODING_OLD equ 9\nSELECTED_DATA_ENCODING EQU DATA_ENCODING3 ; the good one\n";
+        assert_eq!(
+            current_assignment_value(src, "SELECTED_DATA_ENCODING").as_deref(),
+            Some("DATA_ENCODING3")
+        );
+        assert_eq!(
+            rewrite_variable_assignment(src, "SELECTED_DATA_ENCODING", "DATA_ENCODING1").unwrap(),
+            "SELECTED_DATA_ENCODING_OLD equ 9\nSELECTED_DATA_ENCODING EQU DATA_ENCODING1 ; the good one"
+        );
+        assert_eq!(current_assignment_value("X set 5\n", "X").as_deref(), Some("5"));
+        assert_eq!(current_assignment_value("X == 5\n", "X"), None);
+        assert_eq!(current_assignment_value("Xequ 5\n", "X"), None);
     }
 
     #[test]

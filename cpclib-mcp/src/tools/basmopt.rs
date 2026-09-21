@@ -62,7 +62,11 @@ pub struct SuggestInput {
     pub disabled_rules: Option<Vec<String>>,
     /// Extra `INCLUDE` search directories, for rules that need a real
     /// assemble (currently only `jp2jr`) to resolve addresses.
-    pub include_dirs: Option<Vec<String>>
+    pub include_dirs: Option<Vec<String>>,
+    /// Symbols to define before assembling, `NAME` (= 1) or `NAME=VALUE`,
+    /// like `basm -D` - for code conditional on a symbol the real build
+    /// passes on its command line (e.g. `LINKED_VERSION=1`).
+    pub defines: Option<Vec<String>>
 }
 
 /// Peephole-optimization suggestions for a source file - each with the
@@ -79,6 +83,7 @@ pub(crate) fn suggest_optimizations(input: SuggestInput) -> ToolResult {
             .into_iter()
             .map(camino::Utf8PathBuf::from)
             .collect(),
+        defines: input.defines.unwrap_or_default(),
         ..Default::default()
     };
     let outcome = cpclib_basmopt::analyze_file(path, &options).map_err(|e| {
@@ -98,6 +103,8 @@ pub struct ApplyInput {
     pub goal: Option<String>,
     pub disabled_rules: Option<Vec<String>>,
     pub include_dirs: Option<Vec<String>>,
+    /// Symbols to define before assembling - see `suggest_optimizations`.
+    pub defines: Option<Vec<String>>,
     /// Must be `true` - this tool rewrites `path` in place (up to 2 passes,
     /// bulk-safe suggestions only). There is no dry-run output distinct
     /// from `suggest_optimizations`; ask that first if you only want to see
@@ -125,6 +132,7 @@ pub(crate) fn apply_optimizations(input: ApplyInput) -> ToolResult {
             .into_iter()
             .map(camino::Utf8PathBuf::from)
             .collect(),
+        defines: input.defines.unwrap_or_default(),
         ..Default::default()
     };
     let outcome = cpclib_basmopt::apply_fixes_in_place(path, &options).map_err(|e| {

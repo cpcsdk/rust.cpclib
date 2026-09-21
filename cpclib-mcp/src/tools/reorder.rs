@@ -37,7 +37,12 @@ use crate::tools::crunch::{CRUNCHER_TIMEOUT, compress_with_timeout, resolve_crun
 /// to resolve - this adds `source_path`'s own directory as a search path
 /// first, exactly like `cpclib-lsp`'s own `dry_run_env` does for the same
 /// reason (`ParserOptions::add_search_path_from_file`).
-fn assemble_from(code: &str, source_path: &str, include_dirs: &[String]) -> Result<Vec<u8>, String> {
+fn assemble_from(
+    code: &str,
+    source_path: &str,
+    include_dirs: &[String],
+    defines: &[String]
+) -> Result<Vec<u8>, String> {
     let mut parse = ParserOptions::default();
     parse
         .add_search_path_from_file(source_path)
@@ -50,7 +55,9 @@ fn assemble_from(code: &str, source_path: &str, include_dirs: &[String]) -> Resu
             .add_search_path(dir)
             .map_err(|e| format!("cannot add include dir {dir}: {e}"))?;
     }
-    let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(DiscardObserver));
+    let mut assemble = AssemblingOptions::default();
+    cpclib_basmopt::apply_defines(&mut assemble, defines)?;
+    let options = EnvOptions::new(parse, assemble, Arc::new(DiscardObserver));
     assemble_with_options(code, options)
         .map(|(bytes, _symbols)| bytes)
         .map_err(|e| e.to_string())
@@ -77,7 +84,10 @@ pub struct SearchReorderingsInput {
     /// Extra `INCLUDE` search directories, for projects whose includes
     /// resolve relative to the build's working directory rather than the
     /// file's own (same meaning as `suggest_optimizations`' field).
-    pub include_dirs: Option<Vec<String>>
+    pub include_dirs: Option<Vec<String>>,
+    /// Symbols to define before assembling, `NAME` (= 1) or `NAME=VALUE`,
+    /// like `basm -D` (e.g. `LINKED_VERSION=1`).
+    pub defines: Option<Vec<String>>
 }
 
 /// One instruction and the exact byte range it occupies in the source.
@@ -134,6 +144,7 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
     // whole call on a typo rather than reporting it per-candidate.
     resolve_cruncher(&input.cruncher)?;
     let include_dirs = input.include_dirs.clone().unwrap_or_default();
+    let defines = input.defines.clone().unwrap_or_default();
 
     let text = fs_err::read_to_string(&input.path)
         .map_err(|e| ToolError::io(format!("cannot read {}: {e}", input.path)))?;
@@ -208,7 +219,8 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
                         &perm,
                         &input.cruncher,
                         &input.path,
-                        &include_dirs
+                        &include_dirs,
+                        &defines
                     ));
                 }
             }
@@ -223,7 +235,7 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
     // which this isolated compress-the-bytes call never sees. The relative
     // ranking between candidates stays valid either way; only the absolute
     // numbers can be off by whatever a project's own link step adds.
-    let baseline_bytes = assemble_from(&text, &input.path, &include_dirs)
+    let baseline_bytes = assemble_from(&text, &input.path, &include_dirs, &defines)
         .map_err(|e| ToolError::new(crate::error::ToolErrorKind::Assembler, e))?;
     let baseline_size = match compress_with_timeout(input.cruncher.clone(), baseline_bytes, CRUNCHER_TIMEOUT) {
         Ok(compressed) => compressed.stream.len() as i64,
@@ -281,7 +293,8 @@ fn build_candidate(
     perm: &[usize],
     cruncher: &str,
     source_path: &str,
-    include_dirs: &[String]
+    include_dirs: &[String],
+    defines: &[String]
 ) -> Candidate {
     let texts: Vec<&str> = window.iter().map(|s| &text[s.start..s.end]).collect();
     let before: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
@@ -296,7 +309,7 @@ fn build_candidate(
         candidate_text.replace_range(slot.start..slot.end, replacement);
     }
 
-    let outcome = assemble_from(&candidate_text, source_path, include_dirs).and_then(|bytes| {
+    let outcome = assemble_from(&candidate_text, source_path, include_dirs, defines).and_then(|bytes| {
         compress_with_timeout(cruncher.to_string(), bytes, CRUNCHER_TIMEOUT)
             .map(|c| c.stream.len() as u64)
     });
@@ -363,7 +376,8 @@ mod tests {
             end_line: 4,
             cruncher: "lz4".to_string(),
             window_size: None,
-            include_dirs: None
+            include_dirs: None,
+            defines: None
         })
         .expect("three independent instructions should search cleanly");
 
@@ -393,7 +407,8 @@ mod tests {
             end_line: 3,
             cruncher: "lz4".to_string(),
             window_size: None,
-            include_dirs: None
+            include_dirs: None,
+            defines: None
         })
         .expect("a dependent pair should still search cleanly, just find nothing");
         assert_eq!(result["legal_reorderings_found"], 0, "{result:#}");
@@ -411,7 +426,8 @@ mod tests {
             end_line: 3,
             cruncher: "not_a_real_cruncher".to_string(),
             window_size: None,
-            include_dirs: None
+            include_dirs: None,
+            defines: None
         })
         .expect_err("an unknown cruncher name should be rejected");
         assert_eq!(err.kind, "invalid_input");
@@ -425,7 +441,8 @@ mod tests {
             end_line: 2,
             cruncher: "lz4".to_string(),
             window_size: None,
-            include_dirs: None
+            include_dirs: None,
+            defines: None
         })
         .expect_err("start_line > end_line should be rejected before touching the filesystem");
         assert_eq!(err.kind, "invalid_input");
@@ -447,7 +464,8 @@ mod tests {
             end_line: 3,
             cruncher: "zx0".to_string(),
             window_size: Some(2),
-            include_dirs: None
+            include_dirs: None,
+            defines: None
         })
         .expect("search should succeed");
         let results = result["results"].as_array().unwrap();
