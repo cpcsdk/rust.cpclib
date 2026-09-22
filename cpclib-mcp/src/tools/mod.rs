@@ -7,6 +7,7 @@
 
 pub mod asm;
 pub mod basic;
+pub mod behavior;
 pub mod basmopt;
 pub mod build;
 pub mod common;

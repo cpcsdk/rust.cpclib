@@ -68,6 +68,7 @@ impl McpServer {
                 + Self::project_router()
                 + Self::sizemap_router()
                 + Self::sandbox_router()
+                + Self::behavior_router()
         }
     }
 

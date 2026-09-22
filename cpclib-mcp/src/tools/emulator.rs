@@ -28,7 +28,7 @@ use serde_json::{Value, json};
 use crate::McpServer;
 use crate::error::{ToolError, ToolResult};
 
-fn parse_emulator(name: &str) -> Result<(Emulator, String), ToolError> {
+pub(crate) fn parse_emulator(name: &str) -> Result<(Emulator, String), ToolError> {
     let label = name.to_ascii_lowercase();
     let emulator = match label.as_str() {
         "ace" => Emulator::Ace(AceVersion::default()),
