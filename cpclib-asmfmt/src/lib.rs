@@ -731,4 +731,103 @@ label_definition_postfix_with_column = "NoColumn"
             "double space after DB not collapsed: {out:?}"
         );
     }
+
+    // ── one-instruction-per-line splitting is token-driven, not text-guessed ──
+    //
+    // Found via a real project's own source (birthtro), and specifically the
+    // reason each of these is real: a text-only "is this `:` a label colon"
+    // heuristic cannot fully disambiguate itself no matter how many special
+    // cases it grows (confirmed by needing four rounds of them) - the real
+    // parser already knows the answer for every one of these, from its own
+    // grammar, with no guessing. `format_simple`/`format_label` now split
+    // purely from each token's own span instead.
+
+    /// A chain of zero-operand mnemonics with no spaces at all - a real,
+    /// deliberate idiom in cycle-exact code (NOP padding for timing), and
+    /// this project's own "timing in NOPs" convention. `NOP` is the first
+    /// word of its own statement and starts with a letter - lexically
+    /// indistinguishable from a label unless the *word itself* is checked
+    /// against the real mnemonic set the parser already enforces.
+    #[test]
+    fn test_nop_chain_splits_into_separate_lines() {
+        let out = fmt("NOP:NOP:NOP:NOP");
+        let count = out.lines().filter(|l| l.trim() == "NOP").count();
+        assert_eq!(count, 4, "expected 4 separate NOP lines: {out:?}");
+    }
+
+    /// A numeric operand immediately followed by `:` (no space) - can never
+    /// be a label (labels are identifiers, not bare numbers), so the `:`
+    /// is a real instruction separator.
+    #[test]
+    fn test_numeric_operand_before_colon_still_splits() {
+        let out = fmt("org 0x4000\n\tld bc, 0x7F54: xor a");
+        assert!(out.lines().any(|l| l.trim() == "LD BC, 0x7F54"), "{out:?}");
+        assert!(out.lines().any(|l| l.trim() == "XOR A"), "{out:?}");
+    }
+
+    /// An identifier-shaped operand (not the first word of its statement)
+    /// immediately followed by `:` - lexically shaped just like a label, but
+    /// it's `AND`'s operand, not a label definition; a label can only be the
+    /// first word of a statement.
+    #[test]
+    fn test_operand_identifier_before_colon_still_splits() {
+        let out = fmt("org 0x4000\n\tAND SOME_CONST: ld (HL), A");
+        assert!(out.lines().any(|l| l.trim() == "AND SOME_CONST"), "{out:?}");
+        assert!(out.lines().any(|l| l.trim() == "LD (HL), A"), "{out:?}");
+    }
+
+    /// `:` immediately closed by `)` on its left - can never be a label
+    /// colon (a label is an identifier, `)` isn't one), so this still splits
+    /// even though nothing but a macro call precedes it.
+    #[test]
+    fn test_colon_after_closing_paren_still_splits() {
+        let out = fmt("org 0x4000\n\tfoo (void): ld de,4");
+        assert!(out.lines().any(|l| l.trim() == "foo (void)"), "{out:?}");
+        assert!(out.lines().any(|l| l.trim() == "LD DE,4"), "{out:?}");
+    }
+
+    /// A genuine label immediately followed by an instruction on the same
+    /// line, with no `:` between them at all - the real parser still
+    /// produces two separate tokens (a label definition, then an
+    /// instruction), so this splits correctly with no text-side "does this
+    /// look like label-then-instruction" guessing at all.
+    #[test]
+    fn test_label_with_trailing_instruction_no_colon() {
+        let out = fmt("org 0x4000\nmyloop ld a,0");
+        let lines: Vec<&str> = out.lines().collect();
+        assert!(lines.iter().any(|l| l.trim() == "myloop:"), "{out:?}");
+        assert!(lines.iter().any(|l| l.trim() == "LD A,0"), "{out:?}");
+    }
+
+    /// A trailing comment after a label+instruction pair on one source line
+    /// attaches to the instruction (the real last content on the line), not
+    /// the label.
+    #[test]
+    fn test_trailing_comment_attaches_to_the_real_last_token() {
+        let out = fmt("org 0x4000\nmyloop: ld a,0 ; hello");
+        let instr_line = out.lines().find(|l| l.contains("LD A,0")).unwrap();
+        assert!(instr_line.contains("; hello"), "{instr_line:?}");
+        let label_line = out.lines().find(|l| l.trim() == "myloop:").unwrap();
+        assert!(!label_line.contains(';'), "comment leaked onto the label line: {label_line:?}");
+    }
+
+    /// Round-trip sanity: formatting must be idempotent - running it twice
+    /// must produce the same output as running it once. (This is what
+    /// surfaced every case above in the first place: some of them left a
+    /// growing phantom blank line behind instead of splitting.)
+    #[test]
+    fn test_formatting_is_idempotent_on_every_case_above() {
+        for src in [
+            "NOP:NOP:NOP:NOP",
+            "org 0x4000\n\tld bc, 0x7F54: xor a",
+            "org 0x4000\n\tAND SOME_CONST: ld (HL), A",
+            "org 0x4000\n\tfoo (void): ld de,4",
+            "org 0x4000\nmyloop ld a,0",
+            "org 0x4000\nmyloop: ld a,0 ; hello"
+        ] {
+            let once = fmt(src);
+            let twice = format(&once, &AsmFormatOptions::default()).unwrap();
+            assert_eq!(once, twice, "not idempotent for {src:?}");
+        }
+    }
 }

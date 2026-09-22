@@ -40,6 +40,32 @@ impl<'src> Formatter<'src> {
         }
     }
 
+    // Whatever the real parser says comes right after `own_text` (this token's
+    // own already-trimmed content, e.g. a label's name or an instruction's own
+    // span) on its source line: a genuine trailing `;comment` if that really is
+    // all that remains (a leading `:` separator, if any, is skipped first, since
+    // it belongs to whatever follows, not to this token) - or `None` if further
+    // non-comment text follows, meaning a *different* token on this same line
+    // owns that trailing comment instead, whenever its own turn comes.
+    //
+    // Finds `own_text` by searching for it in the source line (from the start of
+    // the line, matching the leftmost occurrence) rather than trusting a byte
+    // offset computed from `relative_line_and_column()`: `MayHaveSpan` spans in
+    // this codebase are the substring the parser actually matched, which is
+    // reliable content but not always reliably positioned relative to the raw
+    // source line's own bytes once macro/struct expansion is involved. A
+    // substring search is slightly more conservative but never misattributes a
+    // comment to the wrong token, which a wrong offset could.
+    fn trailing_comment_for_span(&self, own_text: &str, line_0: usize) -> Option<String> {
+        let src_line = self.source_lines.get(line_0).copied()?;
+        let start = src_line.find(own_text)?;
+        let after = &src_line[start + own_text.len()..];
+        let after = after.trim_start();
+        let after = after.strip_prefix(':').unwrap_or(after).trim_start();
+        let (rest, comment) = Self::split_comment(after);
+        if rest.trim().is_empty() { comment.map(str::to_string) } else { None }
+    }
+
     fn format_token(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
         if token.is_warning() {
             self.format_token(token.warning_token(), depth, line_0);
@@ -57,12 +83,6 @@ impl<'src> Formatter<'src> {
             self.output.push('\n');
             self.current_line = line_0 + 1;
             return;
-        }
-
-        // Pre-split the source line into `:` segments so label and instruction branches
-        // can consume them in order.
-        if self.one_instruction_per_line {
-            self.init_segments_for_line(line_0);
         }
 
         if token.is_label() {
@@ -182,34 +202,14 @@ impl<'src> Formatter<'src> {
         };
 
         if self.one_instruction_per_line {
-            // The segment at seg_idx may contain "label_name [trailing_instruction]"
-            // (when a label and an instruction are on the same line without a `:` between them).
-            // Consume the segment but re-inject any trailing instruction content.
-            let seg_text = self
-                .seg_items
-                .get(self.seg_idx)
-                .cloned()
-                .unwrap_or_default();
-            let trimmed = seg_text.trim_start();
-            let after_label = trimmed
-                .strip_prefix(name)
-                .map(|rest| rest.trim_start_matches(':').trim())
-                .unwrap_or("");
-
-            self.seg_idx += 1;
-
-            if !after_label.is_empty() {
-                // Re-inject the trailing instruction as the next segment to consume.
-                self.seg_items.insert(self.seg_idx, after_label.to_string());
-            }
-
-            // Emit trailing comment only if nothing more follows on this line.
-            let comment = if self.seg_idx >= self.seg_items.len() {
-                self.seg_trailing.clone()
-            }
-            else {
-                None
-            };
+            // A trailing instruction sharing this source line (`myloop: ld a,0`,
+            // or even `myloop ld a,0` with no `:` at all - the real parser can
+            // tell those apart from a label's own name whether or not a colon is
+            // there) is simply the *next* token the real parser already produced
+            // - it will be visited on its own right after this call returns, and
+            // rendered by `format_simple` from its own span, landing on a new
+            // output line automatically. Nothing to extract or re-inject here.
+            let comment = self.trailing_comment_for_span(name, line_0);
             self.emit_line(0, &label_str, comment.as_deref());
         }
         else {
@@ -239,20 +239,27 @@ impl<'src> Formatter<'src> {
     // Format a non-block, non-label token.
     fn format_simple(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
         let (content, comment) = if self.one_instruction_per_line {
-            let idx = self.seg_idx;
-            self.seg_idx += 1;
-            let is_last = idx + 1 >= self.seg_items.len();
-            let seg = self.seg_items.get(idx).map(|s| s.as_str()).unwrap_or("");
-            let (c, inline_cmt) = Self::split_comment(seg);
-            let trailing_cmt = if is_last {
-                self.seg_trailing.as_deref()
+            // The token's own span *is* its content - the real parser already
+            // resolved every ambiguity a text scan would otherwise have to
+            // guess at (a bare `NOP` before `:` is the mnemonic, not a label; a
+            // numeric operand butting against `:` is not a label either; an
+            // identifier operand that happens to be spelled like one isn't a
+            // label just because nothing but the type checker could tell the
+            // difference from text alone). No separate split pass, no segment
+            // cache - each token here renders from exactly the text the parser
+            // says belongs to it.
+            let raw: &str = token.span().as_ref();
+            let content = raw.lines().next().unwrap_or(raw).trim().to_string();
+            let comment = if raw.contains('\n') {
+                // A multi-line token's trailing comment (if any) belongs on its
+                // last physical line, handled with the verbatim continuation
+                // lines below, not here.
+                None
             }
             else {
-                None
+                self.trailing_comment_for_span(&content, line_0)
             };
-            // Inline comment on this segment takes priority; fall back to line-level trailing comment.
-            let comment = inline_cmt.or(trailing_cmt).map(str::to_string);
-            (c.to_string(), comment)
+            (content, comment)
         }
         else {
             // Without splitting: skip tokens that land on an already-emitted source line.
