@@ -110,8 +110,10 @@ where
     else {
         let hint_palette = params.hint.as_palette().clone();
         let pinned = hint_palette.colors();
-        let max_colors =
-            params.max_colors.unwrap_or_else(|| mode.max_colors()).min(mode.max_colors());
+        let max_colors = params
+            .max_colors
+            .unwrap_or_else(|| mode.max_colors())
+            .min(mode.max_colors());
 
         let chosen = palette_select::auto_select_palette::<C>(&resized, max_colors, &pinned);
 
@@ -144,8 +146,10 @@ mod tests {
 
     #[test]
     fn end_to_end_over_budget_image_fits_mode_budget() {
-        let path = std::env::temp_dir()
-            .join(format!("cpclib_image_convert_test_{}.png", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "cpclib_image_convert_test_{}.png",
+            std::process::id()
+        ));
 
         let img = image::RgbImage::from_fn(16, 16, |x, y| {
             Rgb([(x * 16) as u8, (y * 16) as u8, ((x + y) * 8) as u8])

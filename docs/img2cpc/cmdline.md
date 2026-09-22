@@ -136,6 +136,53 @@ img2cpc --mode 0 --colb0 4,10,5 --colb1 0xF0F --unlock-pens artwork.png sna PLUS
 img2cpc --mode 0 --kit artwork.kit artwork.png sprite -o artwork.spr
 ```
 
+### True-Color Conversion
+
+By default, `img2cpc` *transfers* an image: it assumes the source is already
+at the exact target CPC pixel resolution and already uses (near enough) CPC
+hardware colors, and it fails if the image has more distinct colors than the
+mode allows. The flags below switch a run to genuine true-color conversion
+instead - resizing an arbitrary-size, arbitrary-color source to the target
+resolution, then reducing it to a CPC palette using dithering. There is no
+single master flag: giving any one of them is enough to enable it.
+
+- `--dither <ALGO>` - dither into the target palette using this algorithm,
+  instead of a flat nearest-color match. One of `ordered` (the default once
+  true-color conversion is enabled - an ordered/Bayer dither generalized to
+  work with irregular palettes, since CPC inks are not evenly spaced),
+  `floyd-steinberg`, `false-floyd-steinberg`, `jarvis-judice-ninke`, `stucki`,
+  `atkinson`, `burkes`, `sierra-3`, `sierra-2`, or `sierra-lite` (the classic
+  error-diffusion family)
+- `--resize-filter <FILTER>` - resampling filter used to fit the source to
+  the target resolution. One of `nearest`, `triangle`, `catmullrom`,
+  `gaussian`, or `lanczos3` (the default once true-color conversion is
+  enabled)
+- `--colors <N>` - cap automatic palette selection to at most `N` colors
+  (still bounded by the mode's own budget). Has no effect on pens already
+  pinned by `--penN` without `--unlock-pens`
+- `--out-width <PIXELS>`, `--out-height <PIXELS>` (`sprite`/`tile` only) -
+  resize the source to this pixel resolution first. Defaults to the source
+  image's own dimensions. `scr`/`sna`/`dsk`/`exec`/`m4` don't need this: their
+  target resolution already comes from `--mode` and
+  `--standard`/`--overscan`/`--fullscreen`
+
+When no fixed palette is given (no `--pal`/`--ga-pal`/`--kit`/`--penN`/`--pens`),
+the palette is chosen automatically by clustering the image's colors. The
+existing partial-palette mechanism (`--penN` plus `--unlock-pens`) still
+works exactly as before: pens pinned that way keep exactly the ink given, and
+automatic selection only fills whatever pens remain, built around them.
+
+```bash
+# Convert a real photo to a mode 0 screen, picking its own 16-color palette
+img2cpc --mode 0 --dither floyd-steinberg photo.png scr -o photo.scr
+
+# Same, but keep pen 0 pinned to black and let the rest be chosen
+img2cpc --mode 0 --pen0 0 --unlock-pens --dither ordered photo.png scr -o photo.scr
+
+# Resize an arbitrary-size photo down to a 32x32 sprite with at most 4 colors
+img2cpc --mode 1 --colors 4 photo.png sprite -o photo.spr --out-width 32 --out-height 32
+```
+
 ### Other Options
 - `-h, --help` - Print help
 - `-V, --version` - Print version

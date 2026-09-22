@@ -93,7 +93,11 @@ fn colors_flag_caps_the_automatically_selected_palette_size() {
             &["--dither", "ordered", "--colors", &n.to_string()],
             &format!("colors_{n}")
         );
-        assert!(inks.len() <= n as usize, "asked for <= {n}, got {}", inks.len());
+        assert!(
+            inks.len() <= n as usize,
+            "asked for <= {n}, got {}",
+            inks.len()
+        );
     }
 }
 
@@ -108,23 +112,47 @@ fn a_fully_specified_fixed_palette_runs_no_automatic_selection() {
     );
     let mut inks = inks;
     inks.sort();
-    assert_eq!(inks, vec![Ink::from(0u8), Ink::from(1u8), Ink::from(2u8), Ink::from(3u8)]);
+    assert_eq!(
+        inks,
+        vec![
+            Ink::from(0u8),
+            Ink::from(1u8),
+            Ink::from(2u8),
+            Ink::from(3u8)
+        ]
+    );
 }
 
 #[test]
 fn a_partial_palette_keeps_the_pinned_pen_and_auto_fills_the_rest() {
     let inks = sprite_inks(
-        &["--mode", "1", "--pen0", "0", "--unlock-pens", "--dither", "ordered"],
+        &[
+            "--mode",
+            "1",
+            "--pen0",
+            "0",
+            "--unlock-pens",
+            "--dither",
+            "ordered"
+        ],
         "partial_palette"
     );
     assert_eq!(inks.len(), 4, "mode 1's full budget should have been used");
-    assert_eq!(inks[0], Ink::from(0u8), "pen 0 must stay exactly the pinned ink");
+    assert_eq!(
+        inks[0],
+        Ink::from(0u8),
+        "pen 0 must stay exactly the pinned ink"
+    );
     assert!(
         inks[1..].iter().all(|&i| i != Ink::from(0u8)),
         "the auto-filled pens must not duplicate the pinned one: {inks:?}"
     );
     let distinct: std::collections::HashSet<_> = inks.iter().collect();
-    assert_eq!(distinct.len(), 4, "all 4 pens must end up distinct: {inks:?}");
+    assert_eq!(
+        distinct.len(),
+        4,
+        "all 4 pens must end up distinct: {inks:?}"
+    );
 }
 
 #[test]
@@ -158,6 +186,12 @@ fn out_width_and_out_height_resize_before_conversion() {
     let _ = std::fs::remove_file(&conf_out);
     let _ = std::fs::remove_file(&sprite_out);
 
-    assert!(conf.contains("_WIDTH equ 4"), "expected a 4-byte-wide sprite, got: {conf}");
-    assert!(conf.contains("_HEIGHT equ 6"), "expected a 6-line-tall sprite, got: {conf}");
+    assert!(
+        conf.contains("_WIDTH equ 4"),
+        "expected a 4-byte-wide sprite, got: {conf}"
+    );
+    assert!(
+        conf.contains("_HEIGHT equ 6"),
+        "expected a 6-line-tall sprite, got: {conf}"
+    );
 }

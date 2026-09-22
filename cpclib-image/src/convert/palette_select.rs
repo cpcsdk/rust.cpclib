@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use image::RgbImage;
 
-use super::lab::{LabF32, SnapToHardware, lab_distance, rgb8_to_lab};
+use super::lab::{lab_distance, rgb8_to_lab, LabF32, SnapToHardware};
 use crate::color::AmstradColor;
 
 /// Weighted, deterministic k-means (generalized Lloyd's algorithm) in Lab
@@ -43,10 +43,14 @@ pub fn auto_select_palette<C: AmstradColor + SnapToHardware>(
     for p in img.pixels() {
         *counts.entry(*p).or_insert(0) += 1;
     }
-    let mut uniques: Vec<(LabF32, u32)> =
-        counts.into_iter().map(|(rgb, w)| (rgb8_to_lab(rgb), w)).collect();
+    let mut uniques: Vec<(LabF32, u32)> = counts
+        .into_iter()
+        .map(|(rgb, w)| (rgb8_to_lab(rgb), w))
+        .collect();
     uniques.sort_by(|(a, _), (b, _)| {
-        a.l.total_cmp(&b.l).then(a.a.total_cmp(&b.a)).then(a.b.total_cmp(&b.b))
+        a.l.total_cmp(&b.l)
+            .then(a.a.total_cmp(&b.a))
+            .then(a.b.total_cmp(&b.b))
     });
 
     let pinned_lab: Vec<LabF32> = pinned.iter().map(|&c| rgb8_to_lab(c.color())).collect();
@@ -72,8 +76,14 @@ pub fn auto_select_palette<C: AmstradColor + SnapToHardware>(
 /// the k-means loop and the dedup weighting below, which need the same
 /// "what does this pixel actually get served by" notion.
 fn nearest_distance(lab: LabF32, pinned_lab: &[LabF32], free: &[LabF32]) -> f32 {
-    let d_pinned = pinned_lab.iter().map(|&c| lab_distance(lab, c)).fold(f32::MAX, f32::min);
-    let d_free = free.iter().map(|&c| lab_distance(lab, c)).fold(f32::MAX, f32::min);
+    let d_pinned = pinned_lab
+        .iter()
+        .map(|&c| lab_distance(lab, c))
+        .fold(f32::MAX, f32::min);
+    let d_free = free
+        .iter()
+        .map(|&c| lab_distance(lab, c))
+        .fold(f32::MAX, f32::min);
     d_pinned.min(d_free)
 }
 
@@ -81,7 +91,10 @@ fn nearest_distance(lab: LabF32, pinned_lab: &[LabF32], free: &[LabF32]) -> f32 
 /// closer.
 fn nearest_free(lab: LabF32, pinned_lab: &[LabF32], free: &[LabF32]) -> Option<usize> {
     let mut best_idx = None;
-    let mut best_d = pinned_lab.iter().map(|&c| lab_distance(lab, c)).fold(f32::MAX, f32::min);
+    let mut best_d = pinned_lab
+        .iter()
+        .map(|&c| lab_distance(lab, c))
+        .fold(f32::MAX, f32::min);
     for (j, &c) in free.iter().enumerate() {
         let d = lab_distance(lab, c);
         if d < best_d {
@@ -203,8 +216,12 @@ fn snap_and_dedup<C: AmstradColor + SnapToHardware>(
     let mut snapped: Vec<Option<C>> = vec![None; free_centroids.len()];
     for j in order {
         let direct = C::snap_from_lab(free_centroids[j]);
-        let candidate =
-            if claimed.contains(&direct) { C::snap_excluding_from_lab(free_centroids[j], claimed) } else { direct };
+        let candidate = if claimed.contains(&direct) {
+            C::snap_excluding_from_lab(free_centroids[j], claimed)
+        }
+        else {
+            direct
+        };
         claimed.insert(candidate);
         snapped[j] = Some(candidate);
     }

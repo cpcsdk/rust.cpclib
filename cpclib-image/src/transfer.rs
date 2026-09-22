@@ -23,7 +23,6 @@ use crate::image::*;
 // arguments would be repeated across ~24 signatures below, none of which is
 // making a decision - they are all just downstream of this one.
 
-
 /// Encode the position of a line or column to transform in the source image
 #[derive(Copy, Clone, Debug)]
 pub enum TransformationPosition {
@@ -1914,12 +1913,12 @@ mod tests {
         let colors = [Ink::BLACK, Ink::RED, Ink::BRIGHTWHITE, Ink::BLUE];
         let matrix = ColorMatrix::from(vec![
             vec![colors[0], colors[1], colors[2], colors[3]],
-            vec![colors[3], colors[2], colors[1], colors[0]]
+            vec![colors[3], colors[2], colors[1], colors[0]],
         ]);
         let locked = LockablePalette::<Ink>::locked(colors.to_vec().into());
 
-        let path = std::env::temp_dir()
-            .join(format!("cpclib_transfer_test_{}.png", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("cpclib_transfer_test_{}.png", std::process::id()));
         matrix.as_image().save(&path).unwrap();
         let utf8_path = Utf8Path::from_path(&path).unwrap();
 

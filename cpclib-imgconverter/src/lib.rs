@@ -2,9 +2,9 @@ use std::io::Write;
 
 use anyhow::{self, Error};
 use camino_tempfile as tempfile;
-use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use cpclib::asm::preamble::defb_elements;
-use cpclib::asm::{ListingExt, assemble, assemble_to_amsdos_file};
+use cpclib::asm::{assemble, assemble_to_amsdos_file, ListingExt};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib::common::event::EventObserver;
 use cpclib::common::itertools::Itertools;
@@ -13,8 +13,8 @@ use cpclib::common::{clap, clap_parse_any_positive_number};
 use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
-use cpclib::image::transfer::*;
 use cpclib::image::image::Mode;
+use cpclib::image::transfer::*;
 
 // Most of this tool is Gate Array work: 27 inks, written through the GA ports.
 // The Plus path is a *choice made at the command line* and travels as an
@@ -30,10 +30,10 @@ use cpclib::image::color::AmstradColor;
 use cpclib::image::ga::{AnyLockablePalette, AnyPalette};
 use cpclib::image::kit::Kit;
 use cpclib::image::ocp::{self, OcpPalette};
-use cpclib::{Palette, sna::*};
+use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-use cpclib::{ExtendedDsk, Ink, Pen, sna};
+use cpclib::{sna, ExtendedDsk, Ink, Palette, Pen};
 use cpclib_image::color::AnyColor;
 use fs_err::File;
 #[cfg(feature = "watch")]
@@ -48,15 +48,19 @@ pub fn clap_parse_ink_or_color(arg: &str) -> Result<AnyColor, String> {
     let nb = dbg!(clap_parse_any_positive_number(arg))?;
 
     if let Some('&' | '0' | '#') = arg.chars().next() {
-        if nb > 0xfff {
-            Err(format!("{nb} is not a valid 12-bit colour value for Amstrad plus"))
-        } else {
-                        let red = ((nb >> 8) & 0xf) as u8;
-            let green = ((nb >> 4) & 0xf) as u8;
-            let blue = (nb & 0xf) as u8;
+        if nb > 0xFFF {
+            Err(format!(
+                "{nb} is not a valid 12-bit colour value for Amstrad plus"
+            ))
+        }
+        else {
+            let red = ((nb >> 8) & 0xF) as u8;
+            let green = ((nb >> 4) & 0xF) as u8;
+            let blue = (nb & 0xF) as u8;
             Ok(AsicColor::new(red, green, blue).into())
         }
-    } else {
+    }
+    else {
         if nb > 27 {
             Err(format!("{nb} is not a valid ink value for CPC"))
         }
@@ -67,12 +71,10 @@ pub fn clap_parse_ink_or_color(arg: &str) -> Result<AnyColor, String> {
 }
 
 fn any_color_to_amstrad_color<C>(color: AnyColor) -> Result<C, String>
-where
-    C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
-{
+where C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String> {
     match color {
         AnyColor::GateArray(ink) if C::is_plus() => Ok(C::from(ink)),
-        color => C::try_from(color),
+        color => C::try_from(color)
     }
 }
 
@@ -84,19 +86,18 @@ pub fn pen_indices() -> std::ops::RangeInclusive<u8> {
 /// clap wants `&'static str` for names and flags, so the generated ones are
 /// built once into a static table rather than leaked afresh on every call -
 /// `specify_palette!` runs for each subcommand that takes a palette.
-static PALETTE_ARG_NAMES: std::sync::LazyLock<Vec<[String; 4]>> =
-    std::sync::LazyLock::new(|| {
-        pen_indices()
-            .map(|i| {
-                [
-                    format!("PEN{i}"),
-                    format!("pen{i}"),
-                    format!("COLB{i}"),
-                    format!("colb{i}")
-                ]
-            })
-            .collect()
-    });
+static PALETTE_ARG_NAMES: std::sync::LazyLock<Vec<[String; 4]>> = std::sync::LazyLock::new(|| {
+    pen_indices()
+        .map(|i| {
+            [
+                format!("PEN{i}"),
+                format!("pen{i}"),
+                format!("COLB{i}"),
+                format!("colb{i}")
+            ]
+        })
+        .collect()
+});
 
 fn arg_names(index: u8) -> &'static [String; 4] {
     &PALETTE_ARG_NAMES[index as usize]
@@ -268,12 +269,12 @@ fn true_color_pipeline_requested(matches: &ArgMatches) -> bool {
     ["DITHER", "RESIZE_FILTER", "COLORS"]
         .iter()
         .any(|id| explicitly_passed(matches, id))
-        || matches
-            .subcommand_matches("sprite")
-            .is_some_and(|m| explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT"))
-        || matches
-            .subcommand_matches("tile")
-            .is_some_and(|m| explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT"))
+        || matches.subcommand_matches("sprite").is_some_and(|m| {
+            explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT")
+        })
+        || matches.subcommand_matches("tile").is_some_and(|m| {
+            explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT")
+        })
 }
 
 /// The palette the user asked for, on whichever machine they asked for.
@@ -444,15 +445,19 @@ macro_rules! do_export_palette {
                     )
                     .asic_bytes()
                     .unwrap()
-                }
+                },
             };
             let mut file = File::create(kit_fname).expect("Unable to create the kit file");
             file.write_all(&bytes).unwrap();
         }
 
-        let gate_array_only = ["EXPORT_PALETTE_FADEOUT", "EXPORT_INKS", "EXPORT_INK_FADEOUT"]
-            .iter()
-            .find(|id| $arg.get_one::<Utf8PathBuf>(*id).is_some());
+        let gate_array_only = [
+            "EXPORT_PALETTE_FADEOUT",
+            "EXPORT_INKS",
+            "EXPORT_INK_FADEOUT"
+        ]
+        .iter()
+        .find(|id| $arg.get_one::<Utf8PathBuf>(*id).is_some());
         if let Some(id) = gate_array_only {
             let palette = any.gate_array().ok_or_else(|| {
                 anyhow::anyhow!(
@@ -475,7 +480,8 @@ macro_rules! do_export_palette {
 
                 assert_eq!(palettes.len() * 17, bytes.len());
 
-                let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
+                let mut file =
+                    File::create(fade_fname).expect("Unable to create the fade out file");
                 file.write_all(&bytes).unwrap();
             }
 
@@ -498,7 +504,8 @@ macro_rules! do_export_palette {
                         acc.extend(&x);
                         acc
                     });
-                let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
+                let mut file =
+                    File::create(fade_fname).expect("Unable to create the fade out file");
                 file.write_all(&bytes).unwrap();
             }
         }
@@ -606,9 +613,7 @@ fn palette_installation_code(palette: &AnyPalette) -> (String, String) {
                 .expect("a Gate Array palette must produce its ink values");
             let mut code = String::from("\tld bc, 0x7f00\n");
             for ink in inks.iter().take(16) {
-                code += &format!(
-                    "\tld a, {ink}\n\t out (c), c\n\tout (c), a\n\t inc c\n"
-                );
+                code += &format!("\tld a, {ink}\n\t out (c), c\n\tout (c), a\n\t inc c\n");
             }
             (code, String::new())
         },
@@ -730,9 +735,7 @@ fn parse_int(repr: &str) -> usize {
 
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format<C>(matches: &ArgMatches) -> Result<OutputFormat<C>, String>
-where
-    C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
-{
+where C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String> {
     let res = if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         // Get the format for the sprite encoding
         let sprite_format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
@@ -745,9 +748,14 @@ where
 
         // eventually handle sprite masking
         if sprite_matches.contains_id("MASK_FNAME") {
-            let mask_color = sprite_matches.get_one::<AnyColor>("MASK_COLOR").cloned().unwrap();
+            let mask_color = sprite_matches
+                .get_one::<AnyColor>("MASK_COLOR")
+                .cloned()
+                .unwrap();
             let replacement_color = sprite_matches
-                .get_one::<AnyColor>("REPLACEMENT_COLOR").cloned().unwrap();
+                .get_one::<AnyColor>("REPLACEMENT_COLOR")
+                .cloned()
+                .unwrap();
 
             OutputFormat::MaskedSprite {
                 sprite_format,
@@ -844,9 +852,8 @@ fn convert_with_palette<C>(
 where
     C: AmstradColor
         + std::convert::TryFrom<AnyColor, Error = String>
-        + cpclib::image::convert::lab::SnapToHardware,
+        + cpclib::image::convert::lab::SnapToHardware
 {
-
     o.emit_stdout(&format!(
         "Loading palette: ({}) {}\n",
         if palette.is_plus() {
@@ -857,8 +864,6 @@ where
         },
         palette_ansi_colors_repr(&palette)
     ));
-
-
 
     let input_file = matches.get_one::<Utf8PathBuf>("SOURCE").unwrap();
     let output_mode = matches
@@ -929,7 +934,12 @@ where
         let (target_width, target_height) = match &output_format {
             OutputFormat::CPCMemory {
                 output_dimension, ..
-            } => (output_dimension.width(mode) as u32, output_dimension.height() as u32),
+            } => {
+                (
+                    output_dimension.width(mode) as u32,
+                    output_dimension.height() as u32
+                )
+            },
             _ => {
                 let (source_width, source_height) = image::image_dimensions(input_file)?;
                 let sub = sub_sprite.or(sub_tile);
@@ -1042,8 +1052,8 @@ where
                 }
 
                 if let Some(conf_fname) = sub_sprite.get_one::<String>("CONFIGURATION") {
-                    let mut file = File::create(conf_fname)
-                        .expect("Unable to create the configuration file");
+                    let mut file =
+                        File::create(conf_fname).expect("Unable to create the configuration file");
                     let fname = Utf8Path::new(conf_fname)
                         .file_stem()
                         .unwrap()
@@ -1325,403 +1335,275 @@ where
 }
 
 pub fn build_cpc2img_args_parser() -> clap::Command {
-    specify_palette!(
-        clap::Command::new("cpc2png")
-            .about("Generate PNG from CPC files")
-            //           .subcommand_required(true) # too write seems seems to forbid the use of --help
-            .arg(
-                Arg::new("MODE")
-                    .short('m')
-                    .long("mode")
-                    .help("Screen mode of the image to convert.")
-                    .value_name("MODE")
-                    .value_parser(0..=2)
-                    .action(clap::ArgAction::Set)
-                    .default_value("0")
-            )
-            .arg(
-                Arg::new("MODE0RATIO")
-                    .long("mode0ratio")
-                    .help("Horizontally double the pixels")
-                    .action(ArgAction::SetTrue)
-            )
-            .subcommand(
-                Command::new("OCPPALETTECMD")
-                    .about("Load an ocp palette file")
-                    .name("palette")
-            )
-            .subcommand(
-                Command::new("SPRITECMD")
-                    .about("Load from a linear sprite data")
-                    .name("sprite")
-                    .arg(
-                        Arg::new("WIDTH")
-                            .long("width")
-                            .required(true)
-                            .help("Width of the sprite in pixels")
-                    )
-            )
-            .subcommand(
-                Command::new("SCREENCMD")
-                    .about("Load from a 16kb screen data")
-                    .name("screen")
-                    .arg(
-                        Arg::new("WIDTH")
-                            .long("width")
-                            .default_value("80")
-                            .help("Width of the screen in bytes")
-                    )
-            )
-            .arg(
-                Arg::new("INPUT")
-                    .help("File to Read. Can be a .scr, a .pal")
-                    .required(true)
-            )
-            .arg(Arg::new("OUTPUT").required(true))
-    )
+    specify_palette!(clap::Command::new("cpc2png")
+        .about("Generate PNG from CPC files")
+        //           .subcommand_required(true) # too write seems seems to forbid the use of --help
+        .arg(
+            Arg::new("MODE")
+                .short('m')
+                .long("mode")
+                .help("Screen mode of the image to convert.")
+                .value_name("MODE")
+                .value_parser(0..=2)
+                .action(clap::ArgAction::Set)
+                .default_value("0")
+        )
+        .arg(
+            Arg::new("MODE0RATIO")
+                .long("mode0ratio")
+                .help("Horizontally double the pixels")
+                .action(ArgAction::SetTrue)
+        )
+        .subcommand(
+            Command::new("OCPPALETTECMD")
+                .about("Load an ocp palette file")
+                .name("palette")
+        )
+        .subcommand(
+            Command::new("SPRITECMD")
+                .about("Load from a linear sprite data")
+                .name("sprite")
+                .arg(
+                    Arg::new("WIDTH")
+                        .long("width")
+                        .required(true)
+                        .help("Width of the sprite in pixels")
+                )
+        )
+        .subcommand(
+            Command::new("SCREENCMD")
+                .about("Load from a 16kb screen data")
+                .name("screen")
+                .arg(
+                    Arg::new("WIDTH")
+                        .long("width")
+                        .default_value("80")
+                        .help("Width of the screen in bytes")
+                )
+        )
+        .arg(
+            Arg::new("INPUT")
+                .help("File to Read. Can be a .scr, a .pal")
+                .required(true)
+        )
+        .arg(Arg::new("OUTPUT").required(true)))
 }
 
 pub fn build_img2cpc_args_parser() -> clap::Command {
     let args = specify_palette!(Command::new("CPC image conversion tool")
-                    .version(built_info::PKG_VERSION)
-                    .author("Krusty/Benediction")
-                    .about("Simple CPC image conversion tool")
+                        .version(built_info::PKG_VERSION)
+                        .author("Krusty/Benediction")
+                        .about("Simple CPC image conversion tool")
+                        .arg(
+                            Arg::new("SOURCE")
+                                .help("Filename to convert")
+    //                            .last(true)
+                                .required(true)
+                                .value_parser(|source: &str| {
+                                  let p = Utf8PathBuf::from(source);
+                                  if p.exists() {
+                                      Ok(p)
+                                  }
+                                  else {
+                                      Err(format!("{source} does not exists!"))
+                                  }
+                                })
+                       )
+
                     .arg(
-                        Arg::new("SOURCE")
-                            .help("Filename to convert")
-//                            .last(true)
-                            .required(true)
-                            .value_parser(|source: &str| {
-                              let p = Utf8PathBuf::from(source);
-                              if p.exists() {
-                                  Ok(p)
-                              }
-                              else {
-                                  Err(format!("{source} does not exists!"))
-                              }
-                            })
-                   )
-
-                .arg(
-                    Arg::new("MODE")
-                        .short('m')
-                        .long("mode")
-                        .help("Screen mode of the image to convert.")
-                        .value_name("MODE")
-                        .default_value("0")
-                        .value_parser(["0", "1", "2"])
-                )
-                .arg(
-                    Arg::new("MISSING_PEN")
-                        .long("missing-pen")
-                        .help("Pen to use when the byte is too small")
-                        .value_parser(value_parser!(u8))
-                )
-                .arg(
-                    Arg::new("CROP_IF_TOO_LARGE")
-                        .long("crop")
-                        .help("Crop the picture if it is too large according  to the destination")
-                        .action(ArgAction::SetTrue)
-                )
-                .arg(
-                    Arg::new("FULLSCREEN")
-                        .long("fullscreen")
-                        .action(ArgAction::SetTrue)
-                        .help("Specify a full screen displayed using 2 non consecutive banks.")
-                        .conflicts_with("OVERSCAN")
-                )
-                .arg(
-                    Arg::new("OVERSCAN")
-                        .long("overscan")
-                        .action(ArgAction::SetTrue)
-                        .help("Specify an overscan screen (crtc meaning).")
-                )
-                .arg(
-                    Arg::new("STANDARD")
-                        .long("standard")
-                        .action(ArgAction::SetTrue)
-                        .help("Specify a standard screen manipulation.")
-                        .conflicts_with("OVERSCAN")
-                        .conflicts_with("FULLSCREEN")
-                )
-                .arg(
-                    Arg::new("SKIP_ODD_PIXELS")
-                        .long("skipoddpixels")
-                        .short('s')
-                        .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
-                        .action(ArgAction::SetTrue)
-                )
-                .arg(
-                    Arg::new("PIXEL_COLUMN_START")
-                    .long("columnstart")
-                    .required(false)
-                    .help("Number of pixel columns to skip on the left.")
-                )
-                .arg(
-                    Arg::new("PIXEL_COLUMNS_KEPT")
-                    .long("columnskept")
-                    .required(false)
-                    .help("Number of pixel columns to keep.")
-                )
-                .arg(
-                    Arg::new("PIXEL_LINE_START")
-                    .long("linestart")
-                    .required(false)
-                    .help("Number of pixel lines to skip.")
-                )
-                .arg(
-                    Arg::new("PIXEL_LINES_KEPT")
-                    .long("lineskept")
-                    .required(false)
-                    .help("Number of pixel lines to keep.")
-                )
-                .arg(
-                    Arg::new("DITHER")
-                    .long("dither")
-                    .help("Enable true-color conversion (resize + automatic palette selection if none is given) and dither into the target palette with this algorithm, instead of the default exact-transfer behaviour.")
-                    .value_parser([
-                        "ordered", "floyd-steinberg", "false-floyd-steinberg",
-                        "jarvis-judice-ninke", "stucki", "atkinson", "burkes",
-                        "sierra-3", "sierra-2", "sierra-lite"
-                    ])
-                )
-                .arg(
-                    Arg::new("RESIZE_FILTER")
-                    .long("resize-filter")
-                    .help("Enable true-color conversion and use this resampling filter when resizing to the target resolution. Defaults to lanczos3 once true-color conversion is enabled.")
-                    .value_parser(["nearest", "triangle", "catmullrom", "gaussian", "lanczos3"])
-                )
-                .arg(
-                    Arg::new("COLORS")
-                    .long("colors")
-                    .help("Enable true-color conversion and cap automatic palette selection to this many colors (still bounded by the mode's own budget). Has no effect on pens already pinned by --penN without --unlock-pens.")
-                    .value_parser(value_parser!(u8).range(1..=16))
-                )
-                    .subcommand(
-                        Command::new("sna")
-                            .about("Generate a snapshot with the converted image.")
-                            .arg(
-                                Arg::new("SNA")
-                                    .help("snapshot filename to generate")
-                                    .required(true)
-                                    .value_parser(|sna: &str| {
-                                        if sna.to_lowercase().ends_with("sna") {
-                                            Ok(sna.to_owned())
-                                        }
-                                        else {
-                                            Err(format!("{sna} has not a snapshot extension."))
-                                        }
-                                    })
-                            )
-                    )
-
-                    .subcommand(
-                        Command::new("dsk")
-                        .about("Generate a DSK with an executable of the converted image.")
-                        .arg(
-                            Arg::new("DSK")
-                            .help("dsk filename to generate")
-                            .required(true)
-                            .value_parser(|dsk: &str|{
-                                if dsk.to_lowercase().ends_with("dsk") {
-                                    Ok(dsk.to_owned())
-                                }
-                                else {
-                                    Err(format!("{dsk} has not a dsk extention."))
-                                }
-                            })
-                        )
-                    )
-
-                    .subcommand(
-                        export_palette!(Command::new("scr")
-                        .about("Generate an OCP SCR file")
-                        .arg(
-                            Arg::new("COMPRESSED")
-                                .help("Request a compressed screen")
-                                .long("compress")
-                                .short('c')
-                                .required(false)
-                        )
-                        .arg(
-                            Arg::new("R1")
-                                .help("Screen width in number of chars")
-                                .long("r1")
-                                .alias("horizontal-displayed-character-number")
-                                .alias("width")
-                                .alias("R1")
-                                .value_parser(clap::value_parser!(u8))
-                        )
-                        .arg(
-                            Arg::new("R6")
-                                .help("Screen height in number of chars")
-                                .long("r6")
-                                .alias("vertical-displayed-character-number")
-                                .alias("height")
-                                .value_parser(clap::value_parser!(u8))
-                        )
-                        .arg(
-                            Arg::new("SCR")
-                            .long("output")
-                            .short('o')
-                            .help("Filename to generate")
-                            .required(true)
-                        )
-                    ))
-
-                    .subcommand(
-                        Command::new("exec")
-                        .about("Generate a binary file to manually copy in a DSK or M4 folder.")
-                        .arg(
-                            Arg::new("FILENAME")
-                            .help("executable to generate")
-                            .required(true)
-                            .value_parser(|fname: &str|{
-                                let fname = Utf8PathBuf::from(fname);
-                                if let Some(ext) = fname.extension()
-                                    && ext.len() > 3 {
-                                        return Err(format!("{ext} is not a valid amsdos extension."));
-                                    }
-
-                                if let Some(stem) = fname.file_stem()
-                                    && stem.len() > 8 {
-                                        return Err(format!("{stem} is not a valid amsdos file stem."))
-                                    }
-
-                                Ok(fname)
-                            })
-                        )
-                    )
-
-                    .subcommand(
-                        export_palette!(Command::new("sprite")
-                        .about("Generate a sprite file to be included inside an application")
-                        .arg(
-                            Arg::new("CONFIGURATION")
-                            .long("configuration")
-                            .short('c')
-                            .required(false)
-                            .help("Name of the assembly file that contains the size of the sprite")
-                        )
-                        .arg(
-                            Arg::new("FORMAT")
-                            .long("format")
-                            .short('f')
-                            .default_value("linear")
-                            .value_parser(["linear", "graycoded", "zigzag+graycoded"])
-                        )
-
-                        .arg(
-                            Arg::new("SPRITE_FNAME")
-                            .long("output")
-                            .short('o')
-                            .help("Filename where the sprite is stored")
-                            .required_unless_present("SPRITE_ASM")
-                        )
-
-                        .arg(Arg::new("R1")
-                                .help("Screen width in number of chars")
-                                .long("r1")
-                                .alias("horizontal-displayed-character-number")
-                                .alias("width")
-                                .alias("R1")
-                                .value_parser(clap::value_parser!(u8))
-                                .requires("SPRITE_ASM")
-                        )
-
-                        .arg(
-                            Arg::new("SPRITE_ASM")
-                            .long("code")
-                            .help("Filename where to store the Z80 display code")
-                            .required_unless_present("SPRITE_FNAME")
-                            .requires("MASK_COLOR")
-                            .requires("REPLACEMENT_COLOR")
-                        )
-
-                        .arg(
-                            Arg::new("SPRITE_ASM_KIND")
-                            .long("kind")
-                            .help("The kind of code to generate")
-                            .requires("SPRITE_ASM")
-                            .value_parser(["masked", "backup+masked"])
-                            .default_value("masked")
-                        )
-
-
-                        .arg(
-                            Arg::new("SPRITE_ASM_LABEL")
-                            .long("label")
-                            .short('l')
-                            .help("Label for the generated asm code")
-                        )
-
-                        .arg(
-                            Arg::new("MASK_FNAME")
-                            .long("mask")
+                        Arg::new("MODE")
                             .short('m')
-                            .help("Filename where the mask is stored")
-                            .requires("MASK_COLOR")
-                            .requires("REPLACEMENT_COLOR")
+                            .long("mode")
+                            .help("Screen mode of the image to convert.")
+                            .value_name("MODE")
+                            .default_value("0")
+                            .value_parser(["0", "1", "2"])
+                    )
+                    .arg(
+                        Arg::new("MISSING_PEN")
+                            .long("missing-pen")
+                            .help("Pen to use when the byte is too small")
+                            .value_parser(value_parser!(u8))
+                    )
+                    .arg(
+                        Arg::new("CROP_IF_TOO_LARGE")
+                            .long("crop")
+                            .help("Crop the picture if it is too large according  to the destination")
+                            .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("FULLSCREEN")
+                            .long("fullscreen")
+                            .action(ArgAction::SetTrue)
+                            .help("Specify a full screen displayed using 2 non consecutive banks.")
+                            .conflicts_with("OVERSCAN")
+                    )
+                    .arg(
+                        Arg::new("OVERSCAN")
+                            .long("overscan")
+                            .action(ArgAction::SetTrue)
+                            .help("Specify an overscan screen (crtc meaning).")
+                    )
+                    .arg(
+                        Arg::new("STANDARD")
+                            .long("standard")
+                            .action(ArgAction::SetTrue)
+                            .help("Specify a standard screen manipulation.")
+                            .conflicts_with("OVERSCAN")
+                            .conflicts_with("FULLSCREEN")
+                    )
+                    .arg(
+                        Arg::new("SKIP_ODD_PIXELS")
+                            .long("skipoddpixels")
+                            .short('s')
+                            .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
+                            .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("PIXEL_COLUMN_START")
+                        .long("columnstart")
+                        .required(false)
+                        .help("Number of pixel columns to skip on the left.")
+                    )
+                    .arg(
+                        Arg::new("PIXEL_COLUMNS_KEPT")
+                        .long("columnskept")
+                        .required(false)
+                        .help("Number of pixel columns to keep.")
+                    )
+                    .arg(
+                        Arg::new("PIXEL_LINE_START")
+                        .long("linestart")
+                        .required(false)
+                        .help("Number of pixel lines to skip.")
+                    )
+                    .arg(
+                        Arg::new("PIXEL_LINES_KEPT")
+                        .long("lineskept")
+                        .required(false)
+                        .help("Number of pixel lines to keep.")
+                    )
+                    .arg(
+                        Arg::new("DITHER")
+                        .long("dither")
+                        .help("Enable true-color conversion (resize + automatic palette selection if none is given) and dither into the target palette with this algorithm, instead of the default exact-transfer behaviour.")
+                        .value_parser([
+                            "ordered", "floyd-steinberg", "false-floyd-steinberg",
+                            "jarvis-judice-ninke", "stucki", "atkinson", "burkes",
+                            "sierra-3", "sierra-2", "sierra-lite"
+                        ])
+                    )
+                    .arg(
+                        Arg::new("RESIZE_FILTER")
+                        .long("resize-filter")
+                        .help("Enable true-color conversion and use this resampling filter when resizing to the target resolution. Defaults to lanczos3 once true-color conversion is enabled.")
+                        .value_parser(["nearest", "triangle", "catmullrom", "gaussian", "lanczos3"])
+                    )
+                    .arg(
+                        Arg::new("COLORS")
+                        .long("colors")
+                        .help("Enable true-color conversion and cap automatic palette selection to this many colors (still bounded by the mode's own budget). Has no effect on pens already pinned by --penN without --unlock-pens.")
+                        .value_parser(value_parser!(u8).range(1..=16))
+                    )
+                        .subcommand(
+                            Command::new("sna")
+                                .about("Generate a snapshot with the converted image.")
+                                .arg(
+                                    Arg::new("SNA")
+                                        .help("snapshot filename to generate")
+                                        .required(true)
+                                        .value_parser(|sna: &str| {
+                                            if sna.to_lowercase().ends_with("sna") {
+                                                Ok(sna.to_owned())
+                                            }
+                                            else {
+                                                Err(format!("{sna} has not a snapshot extension."))
+                                            }
+                                        })
+                                )
                         )
 
-                        //TODO fix the documentation as the parameters has been renamed to allow asic color
-                        .arg(
-                            Arg::new("MASK_COLOR")
-                            .long("mask-color")
-                            .alias("mask-ink")
-                            .help("Color that represents the mask in the input image (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
-                            .value_parser(clap_parse_ink_or_color)
+                        .subcommand(
+                            Command::new("dsk")
+                            .about("Generate a DSK with an executable of the converted image.")
+                            .arg(
+                                Arg::new("DSK")
+                                .help("dsk filename to generate")
+                                .required(true)
+                                .value_parser(|dsk: &str|{
+                                    if dsk.to_lowercase().ends_with("dsk") {
+                                        Ok(dsk.to_owned())
+                                    }
+                                    else {
+                                        Err(format!("{dsk} has not a dsk extention."))
+                                    }
+                                })
+                            )
                         )
-                        .arg(
-                            Arg::new("REPLACEMENT_COLOR")
-                            .long("replacement-color")
-                            .alias("replacement-ink")
-                            .help("Color that replaces the mask color in the sprite data (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
-                            .value_parser(clap_parse_ink_or_color)
-                        )
-                        .arg(
-                            Arg::new("OUT_WIDTH")
-                            .long("out-width")
-                            .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel width first. Defaults to the source image's own width.")
-                            .value_parser(value_parser!(u32))
-                        )
-                        .arg(
-                            Arg::new("OUT_HEIGHT")
-                            .long("out-height")
-                            .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel height first. Defaults to the source image's own height.")
-                            .value_parser(value_parser!(u32))
-                        )
-                    ))
 
-                    .subcommand(
-                        export_palette!(Command::new("tile")
-                            .about("Generate a list of sprites")
+                        .subcommand(
+                            export_palette!(Command::new("scr")
+                            .about("Generate an OCP SCR file")
                             .arg(
-                                Arg::new("WIDTH")
-                                .long("width")
-                                .short('W')
+                                Arg::new("COMPRESSED")
+                                    .help("Request a compressed screen")
+                                    .long("compress")
+                                    .short('c')
+                                    .required(false)
+                            )
+                            .arg(
+                                Arg::new("R1")
+                                    .help("Screen width in number of chars")
+                                    .long("r1")
+                                    .alias("horizontal-displayed-character-number")
+                                    .alias("width")
+                                    .alias("R1")
+                                    .value_parser(clap::value_parser!(u8))
+                            )
+                            .arg(
+                                Arg::new("R6")
+                                    .help("Screen height in number of chars")
+                                    .long("r6")
+                                    .alias("vertical-displayed-character-number")
+                                    .alias("height")
+                                    .value_parser(clap::value_parser!(u8))
+                            )
+                            .arg(
+                                Arg::new("SCR")
+                                .long("output")
+                                .short('o')
+                                .help("Filename to generate")
                                 .required(true)
-                                .help("Width (in bytes) of a tile")
                             )
+                        ))
+
+                        .subcommand(
+                            Command::new("exec")
+                            .about("Generate a binary file to manually copy in a DSK or M4 folder.")
                             .arg(
-                                Arg::new("HEIGHT")
-                                .long("height")
-                                .short('H')
+                                Arg::new("FILENAME")
+                                .help("executable to generate")
                                 .required(true)
-                                .help("Height (in lines) of a tile")
+                                .value_parser(|fname: &str|{
+                                    let fname = Utf8PathBuf::from(fname);
+                                    if let Some(ext) = fname.extension()
+                                        && ext.len() > 3 {
+                                            return Err(format!("{ext} is not a valid amsdos extension."));
+                                        }
+
+                                    if let Some(stem) = fname.file_stem()
+                                        && stem.len() > 8 {
+                                            return Err(format!("{stem} is not a valid amsdos file stem."))
+                                        }
+
+                                    Ok(fname)
+                                })
                             )
-                            .arg(
-                                Arg::new("HORIZ_COUNT")
-                                .long("horiz_count")
-                                .required(false)
-                                .help("Horizontal number of tiles to extract. Extra tiles are ignored")
-                            )
-                            .arg(
-                                Arg::new("VERT_COUNT")
-                                .long("vert_count")
-                                .required(false)
-                                .help("Vertical number of tiles to extract. Extra tiles are ignored")
-                            )
+                        )
+
+                        .subcommand(
+                            export_palette!(Command::new("sprite")
+                            .about("Generate a sprite file to be included inside an application")
                             .arg(
                                 Arg::new("CONFIGURATION")
                                 .long("configuration")
@@ -1733,15 +1615,77 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                                 Arg::new("FORMAT")
                                 .long("format")
                                 .short('f')
-                                .value_parser(["linear", "graycoded", "zigzag+graycoded"])
                                 .default_value("linear")
+                                .value_parser(["linear", "graycoded", "zigzag+graycoded"])
                             )
+
                             .arg(
                                 Arg::new("SPRITE_FNAME")
-                                .short('o')
                                 .long("output")
-                                .help("Filename to generate. Will be postfixed by the number")
-                                .required(true)
+                                .short('o')
+                                .help("Filename where the sprite is stored")
+                                .required_unless_present("SPRITE_ASM")
+                            )
+
+                            .arg(Arg::new("R1")
+                                    .help("Screen width in number of chars")
+                                    .long("r1")
+                                    .alias("horizontal-displayed-character-number")
+                                    .alias("width")
+                                    .alias("R1")
+                                    .value_parser(clap::value_parser!(u8))
+                                    .requires("SPRITE_ASM")
+                            )
+
+                            .arg(
+                                Arg::new("SPRITE_ASM")
+                                .long("code")
+                                .help("Filename where to store the Z80 display code")
+                                .required_unless_present("SPRITE_FNAME")
+                                .requires("MASK_COLOR")
+                                .requires("REPLACEMENT_COLOR")
+                            )
+
+                            .arg(
+                                Arg::new("SPRITE_ASM_KIND")
+                                .long("kind")
+                                .help("The kind of code to generate")
+                                .requires("SPRITE_ASM")
+                                .value_parser(["masked", "backup+masked"])
+                                .default_value("masked")
+                            )
+
+
+                            .arg(
+                                Arg::new("SPRITE_ASM_LABEL")
+                                .long("label")
+                                .short('l')
+                                .help("Label for the generated asm code")
+                            )
+
+                            .arg(
+                                Arg::new("MASK_FNAME")
+                                .long("mask")
+                                .short('m')
+                                .help("Filename where the mask is stored")
+                                .requires("MASK_COLOR")
+                                .requires("REPLACEMENT_COLOR")
+                            )
+
+                            //TODO fix the documentation as the parameters has been renamed to allow asic color
+                            .arg(
+                                Arg::new("MASK_COLOR")
+                                .long("mask-color")
+                                .alias("mask-ink")
+                                .help("Color that represents the mask in the input image (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
+                                .value_parser(clap_parse_ink_or_color)
+                            )
+                            .arg(
+                                Arg::new("REPLACEMENT_COLOR")
+                                .long("replacement-color")
+                                .alias("replacement-ink")
+                                .help("Color that replaces the mask color in the sprite data (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
+                                .value_parser(clap_parse_ink_or_color)
                             )
                             .arg(
                                 Arg::new("OUT_WIDTH")
@@ -1755,11 +1699,75 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                                 .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel height first. Defaults to the source image's own height.")
                                 .value_parser(value_parser!(u32))
                             )
+                        ))
 
-                    ))
+                        .subcommand(
+                            export_palette!(Command::new("tile")
+                                .about("Generate a list of sprites")
+                                .arg(
+                                    Arg::new("WIDTH")
+                                    .long("width")
+                                    .short('W')
+                                    .required(true)
+                                    .help("Width (in bytes) of a tile")
+                                )
+                                .arg(
+                                    Arg::new("HEIGHT")
+                                    .long("height")
+                                    .short('H')
+                                    .required(true)
+                                    .help("Height (in lines) of a tile")
+                                )
+                                .arg(
+                                    Arg::new("HORIZ_COUNT")
+                                    .long("horiz_count")
+                                    .required(false)
+                                    .help("Horizontal number of tiles to extract. Extra tiles are ignored")
+                                )
+                                .arg(
+                                    Arg::new("VERT_COUNT")
+                                    .long("vert_count")
+                                    .required(false)
+                                    .help("Vertical number of tiles to extract. Extra tiles are ignored")
+                                )
+                                .arg(
+                                    Arg::new("CONFIGURATION")
+                                    .long("configuration")
+                                    .short('c')
+                                    .required(false)
+                                    .help("Name of the assembly file that contains the size of the sprite")
+                                )
+                                .arg(
+                                    Arg::new("FORMAT")
+                                    .long("format")
+                                    .short('f')
+                                    .value_parser(["linear", "graycoded", "zigzag+graycoded"])
+                                    .default_value("linear")
+                                )
+                                .arg(
+                                    Arg::new("SPRITE_FNAME")
+                                    .short('o')
+                                    .long("output")
+                                    .help("Filename to generate. Will be postfixed by the number")
+                                    .required(true)
+                                )
+                                .arg(
+                                    Arg::new("OUT_WIDTH")
+                                    .long("out-width")
+                                    .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel width first. Defaults to the source image's own width.")
+                                    .value_parser(value_parser!(u32))
+                                )
+                                .arg(
+                                    Arg::new("OUT_HEIGHT")
+                                    .long("out-height")
+                                    .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel height first. Defaults to the source image's own height.")
+                                    .value_parser(value_parser!(u32))
+                                )
+
+                        ))
 
 
-                );
+                    );
 
     if cfg!(feature = "xferlib") {
         let subcommand = Command::new("m4")
@@ -2179,9 +2187,7 @@ fn palette_ansi_colors<C: AmstradColor>(palette: &Palette<C>) -> Vec<DynColors> 
     palette
         .colors()
         .into_iter()
-        .map(|color| {
-            color.owo_color()
-        })
+        .map(|color| color.owo_color())
         .collect_vec()
 }
 
@@ -2192,10 +2198,7 @@ fn palette_ansi_colors_repr<C: AmstradColor>(palette: &Palette<C>) -> String {
         .join(" ")
 }
 
-fn fade_display_preview<C: AmstradColor>(
-    palettes: &[Palette<C>],
-    o: &dyn EventObserver
-) {
+fn fade_display_preview<C: AmstradColor>(palettes: &[Palette<C>], o: &dyn EventObserver) {
     for palette in palettes {
         o.emit_stdout(&format!("{}\n", palette_ansi_colors_repr(palette)));
     }
@@ -2273,8 +2276,12 @@ mod plus_display_code_tests {
     #[test]
     fn the_asic_palette_bytes_come_after_the_final_jump() {
         let code = fullscreen_display_code(0, 48, &asic_palette());
-        let jump = code.rfind("jp frame_loop").expect("the display loop must end with its jump");
-        let table = code.find("\npalette_tab\n").expect("the bytes must be labelled");
+        let jump = code
+            .rfind("jp frame_loop")
+            .expect("the display loop must end with its jump");
+        let table = code
+            .find("\npalette_tab\n")
+            .expect("the bytes must be labelled");
         assert!(
             table > jump,
             "palette_tab is emitted before the routine's final jump:\n{code}"

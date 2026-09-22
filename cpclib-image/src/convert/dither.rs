@@ -8,14 +8,17 @@
 
 use image::RgbImage;
 
-use super::lab::{LabF32, lab_distance, nearest_in_palette, rgb8_to_lab};
+use super::lab::{lab_distance, nearest_in_palette, rgb8_to_lab, LabF32};
 use crate::color::AmstradColor;
 use crate::image::ColorMatrix;
 
 /// Classic recursive Bayer matrix construction. `n` must be a power of two.
 /// Values range over `0..n*n`, each exactly once.
 pub fn bayer_matrix(n: usize) -> Vec<Vec<u32>> {
-    assert!(n.is_power_of_two(), "Bayer matrix size must be a power of two, got {n}");
+    assert!(
+        n.is_power_of_two(),
+        "Bayer matrix size must be a power of two, got {n}"
+    );
 
     if n == 1 {
         return vec![vec![0]];
@@ -83,7 +86,12 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
             }
 
             let threshold = bayer[(y as usize) % bayer_size][(x as usize) % bayer_size];
-            let chosen = if threshold < best_level { best_color } else { c0 };
+            let chosen = if threshold < best_level {
+                best_color
+            }
+            else {
+                c0
+            };
             out.set_color(x as usize, y as usize, chosen);
         }
     }
@@ -101,7 +109,12 @@ pub struct DiffusionKernel {
 
 pub static FLOYD_STEINBERG: DiffusionKernel = DiffusionKernel {
     name: "floyd-steinberg",
-    taps: &[(1, 0, 7.0 / 16.0), (-1, 1, 3.0 / 16.0), (0, 1, 5.0 / 16.0), (1, 1, 1.0 / 16.0)]
+    taps: &[
+        (1, 0, 7.0 / 16.0),
+        (-1, 1, 3.0 / 16.0),
+        (0, 1, 5.0 / 16.0),
+        (1, 1, 1.0 / 16.0)
+    ]
 };
 
 pub static FALSE_FLOYD_STEINBERG: DiffusionKernel = DiffusionKernel {
@@ -230,8 +243,11 @@ pub fn error_diffuse<C: AmstradColor>(
             let (chosen, chosen_lab) = nearest_in_palette(target, palette);
             out.set_color(x as usize, y as usize, chosen);
 
-            let (rl, ra, rb) =
-                (target.l - chosen_lab.l, target.a - chosen_lab.a, target.b - chosen_lab.b);
+            let (rl, ra, rb) = (
+                target.l - chosen_lab.l,
+                target.a - chosen_lab.a,
+                target.b - chosen_lab.b
+            );
             for &(dx, dy, weight) in kernel.taps {
                 let (nx, ny) = (x + dx, y + dy);
                 if nx >= 0 && nx < w && ny >= 0 && ny < h {

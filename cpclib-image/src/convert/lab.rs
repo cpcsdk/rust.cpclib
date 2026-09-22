@@ -47,11 +47,12 @@ pub fn lab_distance(a: LabF32, b: LabF32) -> f32 {
 /// 27 real inks at indices 0-26, plus 5 duplicate aliases at 27-31 mapping
 /// back to 13/7/25/1/19 (see `Ink::duplicate`) - so only the first 27 are
 /// needed here.
-static INK_LAB: LazyLock<[(Ink, LabF32); 27]> =
-    LazyLock::new(|| std::array::from_fn(|i| {
+static INK_LAB: LazyLock<[(Ink, LabF32); 27]> = LazyLock::new(|| {
+    std::array::from_fn(|i| {
         let ink = Ink::INKS[i];
         (ink, rgb8_to_lab(ink.color()))
-    }));
+    })
+});
 
 /// Nearest of the 27 Gate Array inks to `target`, by perceptual distance.
 pub fn nearest_ink_lab(target: LabF32) -> Ink {
@@ -152,14 +153,14 @@ impl SnapToHardware for AsicColor {
 /// table above, which is only used during automatic palette selection's snap
 /// step.
 pub fn palette_lab<C: AmstradColor>(colors: &[C]) -> Vec<(C, LabF32)> {
-    colors.iter().map(|&c| (c, rgb8_to_lab(c.color()))).collect()
+    colors
+        .iter()
+        .map(|&c| (c, rgb8_to_lab(c.color())))
+        .collect()
 }
 
 /// Nearest palette entry to `target`, by perceptual distance.
-pub fn nearest_in_palette<C: AmstradColor>(
-    target: LabF32,
-    palette: &[(C, LabF32)]
-) -> (C, LabF32) {
+pub fn nearest_in_palette<C: AmstradColor>(target: LabF32, palette: &[(C, LabF32)]) -> (C, LabF32) {
     *palette
         .iter()
         .min_by(|(_, a), (_, b)| lab_distance(target, *a).total_cmp(&lab_distance(target, *b)))
@@ -184,7 +185,10 @@ mod tests {
             let back = lab_to_rgb8(lab);
             for i in 0..3 {
                 let diff = (rgb[i] as i32 - back[i] as i32).abs();
-                assert!(diff <= 2, "component {i} of {rgb:?} round-tripped to {back:?}");
+                assert!(
+                    diff <= 2,
+                    "component {i} of {rgb:?} round-tripped to {back:?}"
+                );
             }
         }
     }

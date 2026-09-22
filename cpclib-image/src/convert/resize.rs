@@ -1,8 +1,8 @@
 //! Resizing a true-color source image to the exact target CPC pixel
 //! resolution, before any color quantization/dithering runs.
 
-use image::RgbImage;
 use image::imageops::FilterType;
+use image::RgbImage;
 
 /// `--resize-filter` values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
