@@ -84,6 +84,10 @@ nav:
       - Command Line: 'crunch/cmdline.md'
       - Examples: 'crunch/examples.md'
   - 'Development Tools':
+    - 'BASM-FMT (Assembly Formatter)':
+      - Overview: 'basmfmt/index.md'
+      - Command Line: 'basmfmt/cmdline.md'
+      - Examples: 'basmfmt/examples.md'
     - 'BASMDOC (Doc Generator)':
       - Overview: 'basmdoc/index.md'
       - Command Line: 'basmdoc/cmdline.md'
