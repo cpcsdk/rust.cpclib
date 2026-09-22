@@ -8,6 +8,7 @@ use crate::options::{
 mod case;
 mod emit;
 mod numeric;
+mod pragma;
 mod splitting;
 mod tokens;
 
@@ -32,7 +33,11 @@ pub(super) struct Formatter<'src> {
     // (>0 while inside one, however deeply nested inside further IF/REPEAT/...
     // wrapping within it - those don't open their own scope, see
     // `tokens::Formatter::assign_depth`'s own doc comment).
-    pub(super) function_nesting: usize
+    pub(super) function_nesting: usize,
+    // 0-based, inclusive `(start, end)` source-line ranges where formatting is
+    // suppressed - between a `; fmt: off` line and its matching `; fmt: on`
+    // (both marker lines included) - see `pragma`'s own doc comment.
+    pub(super) disabled_ranges: Vec<(usize, usize)>
 }
 
 impl<'src> Formatter<'src> {
@@ -54,7 +59,8 @@ impl<'src> Formatter<'src> {
             label_definition_postfix_with_column: opt.label_definition_postfix_with_column,
             current_line: 0,
             output: String::new(),
-            function_nesting: 0
+            function_nesting: 0,
+            disabled_ranges: pragma::disabled_ranges(source)
         }
     }
 }

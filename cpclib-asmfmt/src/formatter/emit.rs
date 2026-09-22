@@ -21,6 +21,21 @@ impl<'src> Formatter<'src> {
         }
     }
 
+    // Copy source lines through completely unchanged, from wherever we left
+    // off up to and including `end_line_0` - the mechanism behind `; fmt: off`
+    // .. `; fmt: on` (see `pragma`'s own doc comment). A no-op if we're
+    // already past `end_line_0` (an earlier token inside the same disabled
+    // range already covered it).
+    pub(super) fn emit_verbatim_through(&mut self, end_line_0: usize) {
+        while self.current_line <= end_line_0 {
+            if let Some(src) = self.source_lines.get(self.current_line) {
+                self.output.push_str(src);
+                self.output.push('\n');
+            }
+            self.current_line += 1;
+        }
+    }
+
     pub(super) fn emit_line(&mut self, depth: usize, content: &str, comment: Option<&str>) {
         let indent = self.indent(depth);
         self.output.push_str(&indent);

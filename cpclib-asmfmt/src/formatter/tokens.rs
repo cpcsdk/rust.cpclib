@@ -67,6 +67,18 @@ impl<'src> Formatter<'src> {
     }
 
     fn format_token(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
+        // `; fmt: off` .. `; fmt: on` - pass the whole range through verbatim
+        // and skip every token whose line falls in it entirely (comments,
+        // labels, instructions, blocks alike - see `pragma`'s own doc
+        // comment for why). `current_line` already past `end` here just
+        // means an earlier token in the same disabled range already handled
+        // it - the loop below then does nothing, so a range is never emitted
+        // twice no matter how many tokens sit inside it.
+        if let Some(&(_, end)) = self.disabled_ranges.iter().find(|&&(start, end)| line_0 >= start && line_0 <= end) {
+            self.emit_verbatim_through(end);
+            return;
+        }
+
         if token.is_warning() {
             self.format_token(token.warning_token(), depth, line_0);
             return;

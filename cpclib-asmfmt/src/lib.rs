@@ -811,6 +811,31 @@ label_definition_postfix_with_column = "NoColumn"
         assert!(!label_line.contains(';'), "comment leaked onto the label line: {label_line:?}");
     }
 
+    // ── `; fmt: off` / `; fmt: on` ──────────────────────────────────────────
+
+    /// The region between the markers passes through completely unchanged -
+    /// case, spacing, indentation, all of it - while code outside it still
+    /// gets formatted normally. `pragma`'s own unit tests cover marker
+    /// recognition/range-finding in isolation; this pins the end-to-end
+    /// behavior through the public `format` entry point.
+    #[test]
+    fn test_fmt_off_on_preserves_the_region_verbatim() {
+        let src = "org 0x4000\nld a,0\n; fmt: off\nFONT_CREATE_CHAR( dot,\n\t\"..\" ,\n      \"##\" )\n; fmt: on\nld   b,1\n";
+        let out = fmt(src);
+        assert!(out.contains("FONT_CREATE_CHAR( dot,\n\t\"..\" ,\n      \"##\" )"), "region not preserved verbatim: {out:?}");
+        assert!(out.contains("LD A,0"), "code before the region should still be formatted: {out:?}");
+        assert!(out.contains("LD B,1"), "code after the region should still be formatted: {out:?}");
+    }
+
+    /// An unclosed `; fmt: off` disables formatting for the rest of the file
+    /// rather than silently reformatting past it.
+    #[test]
+    fn test_unclosed_fmt_off_disables_to_end_of_file() {
+        let out = fmt("org 0x4000\nld a,0\n; fmt: off\nld   b,1");
+        assert!(out.contains("LD A,0"));
+        assert!(out.contains("ld   b,1"), "unclosed fmt:off must still suppress everything after it: {out:?}");
+    }
+
     /// Round-trip sanity: formatting must be idempotent - running it twice
     /// must produce the same output as running it once. (This is what
     /// surfaced every case above in the first place: some of them left a
