@@ -166,6 +166,25 @@ single master flag: giving any one of them is enough to enable it.
   target resolution already comes from `--mode` and
   `--standard`/`--overscan`/`--fullscreen`
 
+Two further flags tune the true-color pipeline for cases the defaults don't
+handle as well. Both are opt-in - each is a genuine trade-off, not a strict
+improvement, so neither changes behavior unless asked for:
+
+- `--prefer-neutral-palette` - bias automatic palette selection away from
+  fully-saturated inks when a less colorful hardware match would do almost as
+  well. The Gate Array has only 3 truly neutral inks (black, medium grey,
+  white), so for a grayscale or pastel photo, unbiased selection can end up
+  spending most of the color budget on saturated substitutes once those three
+  are taken. Not recommended for a vividly colorful source, where it can fit
+  some hues less precisely than the unbiased nearest match would.
+- `--dither-edge-aware` (with `--dither ordered` only) - relax the ordered
+  dither's usual rule against mixing very different hues, in proportion to
+  local detail in the source image: still suppressed in flat regions (where
+  it reads as colored speckle), but relaxed near real edges and fine lines
+  (where the same mismatch can help represent genuine sub-pixel
+  anti-aliasing). Can reintroduce a little color fringing right at edges in
+  exchange for crisper fine detail there.
+
 When no fixed palette is given (no `--pal`/`--ga-pal`/`--kit`/`--penN`/`--pens`),
 the palette is chosen automatically by clustering the image's colors. The
 existing partial-palette mechanism (`--penN` plus `--unlock-pens`) still

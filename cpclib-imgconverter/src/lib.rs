@@ -266,9 +266,15 @@ fn explicitly_passed(matches: &ArgMatches, id: &str) -> bool {
 /// this run from the exact-transfer pipeline to the true-color one - there
 /// is no single master flag.
 fn true_color_pipeline_requested(matches: &ArgMatches) -> bool {
-    ["DITHER", "RESIZE_FILTER", "COLORS"]
-        .iter()
-        .any(|id| explicitly_passed(matches, id))
+    [
+        "DITHER",
+        "RESIZE_FILTER",
+        "COLORS",
+        "PREFER_NEUTRAL_PALETTE",
+        "DITHER_EDGE_AWARE"
+    ]
+    .iter()
+    .any(|id| explicitly_passed(matches, id))
         || matches.subcommand_matches("sprite").is_some_and(|m| {
             explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT")
         })
@@ -991,6 +997,8 @@ where
         };
 
         let max_colors = matches.get_one::<u8>("COLORS").map(|&n| n as usize);
+        let prefer_neutral_palette = matches.get_flag("PREFER_NEUTRAL_PALETTE");
+        let edge_aware_dither = matches.get_flag("DITHER_EDGE_AWARE");
 
         let (matrix, built_palette) = cpclib::image::convert::convert_true_color::<C, _>(
             input_file,
@@ -1002,7 +1010,9 @@ where
                 hint: palette,
                 target_width,
                 target_height,
-                bayer_size: 8
+                bayer_size: 8,
+                prefer_neutral_palette,
+                edge_aware_dither
             }
         )?;
 
@@ -1504,6 +1514,18 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                         .long("colors")
                         .help("Enable true-color conversion and cap automatic palette selection to this many colors (still bounded by the mode's own budget). Has no effect on pens already pinned by --penN without --unlock-pens.")
                         .value_parser(value_parser!(u8).range(1..=16))
+                    )
+                    .arg(
+                        Arg::new("PREFER_NEUTRAL_PALETTE")
+                        .long("prefer-neutral-palette")
+                        .help("Enable true-color conversion and bias automatic palette selection away from fully-saturated inks when a less colorful hardware match would do almost as well. The Gate Array has only 3 truly neutral inks (black, medium grey, white), so an unbiased selection can otherwise waste most of a grayscale or pastel photo's color budget on saturated substitutes once those three are taken. Not a strict improvement for a vividly colorful source, where it can fit some hues less precisely - hence opt-in.")
+                        .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("DITHER_EDGE_AWARE")
+                        .long("dither-edge-aware")
+                        .help("With --dither ordered, relax the ordered dither's usual rule against mixing very different hues in proportion to local detail in the source image: suppressed in flat regions (where it would look like colored speckle), relaxed near real edges and fine lines (where the same color mismatch can help represent genuine sub-pixel anti-aliasing). A deliberate trade-off, not a strict improvement - can reintroduce a little color fringing at edges - so opt-in and ignored by every dither algorithm other than ordered.")
+                        .action(ArgAction::SetTrue)
                     )
                         .subcommand(
                             Command::new("sna")

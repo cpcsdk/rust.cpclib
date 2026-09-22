@@ -77,7 +77,15 @@ pub struct TrueColorParams<C: AmstradColor> {
     pub target_height: u32,
     /// Bayer matrix size for [`DitherAlgorithm::OrderedArbitrary`] (must be
     /// a power of two - 2, 4 or 8). Unused by every other algorithm.
-    pub bayer_size: usize
+    pub bayer_size: usize,
+    /// `--prefer-neutral-palette`: see
+    /// [`palette_select::auto_select_palette`]'s own doc comment. Has no
+    /// effect when `hint` is locked (no auto-selection runs at all).
+    pub prefer_neutral_palette: bool,
+    /// `--dither-edge-aware`, [`DitherAlgorithm::OrderedArbitrary`] only:
+    /// see [`dither::ordered_arbitrary_dither`]'s own doc comment. Ignored
+    /// by every other algorithm.
+    pub edge_aware_dither: bool
 }
 
 /// Resize -> resolve palette -> dither/quantize in Lab space. The returned
@@ -115,7 +123,12 @@ where
             .unwrap_or_else(|| mode.max_colors())
             .min(mode.max_colors());
 
-        let chosen = palette_select::auto_select_palette::<C>(&resized, max_colors, &pinned);
+        let chosen = palette_select::auto_select_palette::<C>(
+            &resized,
+            max_colors,
+            &pinned,
+            params.prefer_neutral_palette
+        );
 
         let mut palette = hint_palette;
         for &color in &chosen[pinned.len()..] {
@@ -130,7 +143,12 @@ where
     let matrix = match params.dither.kernel() {
         None => {
             let pal = lab::palette_lab_and_linear(&palette.colors());
-            dither::ordered_arbitrary_dither(&resized, &pal, params.bayer_size)
+            dither::ordered_arbitrary_dither(
+                &resized,
+                &pal,
+                params.bayer_size,
+                params.edge_aware_dither
+            )
         },
         Some(kernel) => {
             let pal_lab = lab::palette_lab(&palette.colors());
@@ -172,7 +190,9 @@ mod tests {
                 hint: LockablePalette::empty(),
                 target_width: 16,
                 target_height: 16,
-                bayer_size: 8
+                bayer_size: 8,
+                prefer_neutral_palette: false,
+                edge_aware_dither: false
             }
         )
         .unwrap();

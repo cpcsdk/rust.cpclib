@@ -81,6 +81,12 @@ pub fn nearest_ink_lab(target: LabF32) -> Ink {
         .unwrap()
 }
 
+/// Distance of a Lab color from the neutral axis (a=b=0) - how saturated it
+/// is, independent of lightness.
+pub fn chroma(lab: LabF32) -> f32 {
+    (lab.a * lab.a + lab.b * lab.b).sqrt()
+}
+
 /// Snap an arbitrary Lab point to the nearest color the target hardware can
 /// actually display - the last step of automatic palette selection, and the
 /// only place the Gate Array and the Plus genuinely differ in this pipeline.
@@ -92,6 +98,30 @@ pub trait SnapToHardware: AmstradColor {
     /// already in `claimed` - used to resolve collisions when automatic
     /// palette selection snaps two different clusters onto the same color.
     fn snap_excluding_from_lab(lab: LabF32, claimed: &std::collections::HashSet<Self>) -> Self;
+
+    /// Like [`Self::snap_from_lab`], but when `prefer_neutral` is set, avoids
+    /// introducing more chroma (saturation) than `lab` itself already has -
+    /// see the `--prefer-neutral-palette` option this backs. Default: same
+    /// as `snap_from_lab`, ignoring the flag. Only [`Ink`] overrides this
+    /// meaningfully; the Plus's near-continuous ASIC gamut has a genuinely
+    /// neutral color at every lightness level already, so it never needs to
+    /// trade accuracy for chroma the way the Gate Array's sparse 27-ink
+    /// gamut does.
+    fn snap_from_lab_biased(lab: LabF32, prefer_neutral: bool) -> Self {
+        let _ = prefer_neutral;
+        Self::snap_from_lab(lab)
+    }
+
+    /// Biased counterpart to [`Self::snap_excluding_from_lab`] - see
+    /// [`Self::snap_from_lab_biased`].
+    fn snap_excluding_from_lab_biased(
+        lab: LabF32,
+        claimed: &std::collections::HashSet<Self>,
+        prefer_neutral: bool
+    ) -> Self {
+        let _ = prefer_neutral;
+        Self::snap_excluding_from_lab(lab, claimed)
+    }
 }
 
 impl SnapToHardware for Ink {
@@ -109,6 +139,53 @@ impl SnapToHardware for Ink {
             .map(|&(ink, _)| ink)
             .expect("mode.max_colors() <= 16 < 27, so claimed can never exhaust the 27 inks")
     }
+
+    fn snap_from_lab_biased(lab: LabF32, prefer_neutral: bool) -> Self {
+        if !prefer_neutral {
+            return Self::snap_from_lab(lab);
+        }
+        INK_LAB
+            .iter()
+            .min_by(|(_, a), (_, b)| {
+                neutral_biased_score(lab, *a).total_cmp(&neutral_biased_score(lab, *b))
+            })
+            .map(|&(ink, _)| ink)
+            .unwrap()
+    }
+
+    fn snap_excluding_from_lab_biased(
+        lab: LabF32,
+        claimed: &std::collections::HashSet<Self>,
+        prefer_neutral: bool
+    ) -> Self {
+        if !prefer_neutral {
+            return Self::snap_excluding_from_lab(lab, claimed);
+        }
+        INK_LAB
+            .iter()
+            .filter(|(ink, _)| !claimed.contains(ink))
+            .min_by(|(_, a), (_, b)| {
+                neutral_biased_score(lab, *a).total_cmp(&neutral_biased_score(lab, *b))
+            })
+            .map(|&(ink, _)| ink)
+            .expect("mode.max_colors() <= 16 < 27, so claimed can never exhaust the 27 inks")
+    }
+}
+
+/// Match score used by [`Ink`]'s `_biased` snap methods: the ordinary
+/// perceptual distance, plus a penalty for any chroma a candidate adds
+/// beyond what the target itself already has. A perfectly neutral target
+/// (typical of a grayscale photo) pays no penalty for choosing another
+/// neutral ink, but pays for every hardware candidate that is *more*
+/// saturated than it needs - which is what stops automatic palette
+/// selection from spending most of a 16-color budget on fully-saturated
+/// primaries (the Gate Array has only 3 truly neutral inks: black, medium
+/// grey, white) just because they happen to be the nearest *unclaimed*
+/// option once the few genuinely neutral ones are taken.
+fn neutral_biased_score(target: LabF32, candidate: LabF32) -> f32 {
+    const EXCESS_CHROMA_WEIGHT: f32 = 1.5;
+    let excess_chroma = (chroma(candidate) - chroma(target)).max(0.0);
+    lab_distance(target, candidate) + excess_chroma * EXCESS_CHROMA_WEIGHT
 }
 
 impl SnapToHardware for AsicColor {

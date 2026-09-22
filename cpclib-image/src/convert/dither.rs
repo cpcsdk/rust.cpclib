@@ -73,10 +73,24 @@ pub fn bayer_matrix(n: usize) -> Vec<Vec<u32>> {
 ///   high-threshold -> lighter, regardless of which of the two happened to
 ///   be nearest, so neighboring pixels' dither patterns stay tonally
 ///   consistent instead of fighting each other.
+///
+/// `edge_aware` (`--dither-edge-aware`) is an opt-in, non-standard extra on
+/// top of Yliluoma's algorithm: the chroma-dissimilarity penalty above is a
+/// purely per-pixel rule, so it cannot tell a flat region (where a
+/// chroma-mismatched pair reads as unwanted colored speckle) from a fine
+/// edge or line (where the same mismatched pair can actually help represent
+/// genuine sub-pixel anti-aliasing detail from the source image). When
+/// enabled, the penalty is relaxed in proportion to local lightness
+/// contrast in the *source* image, so mismatched pairs stay suppressed in
+/// flat areas but are allowed again near real detail. Off by default
+/// because it is a deliberate trade-off, not a strict improvement: it can
+/// reintroduce a little color fringing right at edges in exchange for
+/// crisper-looking fine detail there.
 pub fn ordered_arbitrary_dither<C: AmstradColor>(
     img: &RgbImage,
     palette: &[(C, LabF32, LinRgbF32)],
-    bayer_size: usize
+    bayer_size: usize,
+    edge_aware: bool
 ) -> ColorMatrix<C> {
     /// Weight of a candidate pair's own chroma dissimilarity in its score,
     /// relative to how well the pair's blend fits the target pixel (the fit
@@ -88,15 +102,33 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
     /// pairs (black+white for a wide tonal range).
     const PAIR_DISSIMILARITY_WEIGHT: f32 = 0.05;
 
+    /// Local lightness contrast (see `local_edge_strength`) at or above
+    /// which the pair-dissimilarity penalty is fully relaxed, in `--dither
+    /// -edge-aware` mode. Lab L units; picked empirically as "a real edge,
+    /// not just quantization noise between two very similar tones."
+    const EDGE_STRENGTH_FOR_FULL_RELAXATION: f32 = 15.0;
+
     let bayer = bayer_matrix(bayer_size);
     let levels = (bayer_size * bayer_size) as u32;
     let mut out = ColorMatrix::<C>::new(img.width() as usize, img.height() as usize);
+
+    let edge_strength = edge_aware.then(|| local_edge_strength(img));
 
     for y in 0..img.height() {
         for x in 0..img.width() {
             let target_rgb = *img.get_pixel(x, y);
             let target = rgb8_to_lab(target_rgb);
             let target_lin = rgb8_to_linear(target_rgb);
+
+            let pair_dissimilarity_weight = match &edge_strength {
+                Some(strength) => {
+                    let relaxation = (strength[(y * img.width() + x) as usize]
+                        / EDGE_STRENGTH_FOR_FULL_RELAXATION)
+                        .clamp(0.0, 1.0);
+                    PAIR_DISSIMILARITY_WEIGHT * (1.0 - relaxation)
+                },
+                None => PAIR_DISSIMILARITY_WEIGHT
+            };
 
             // (color_a, lab_a, color_b, lab_b, fraction toward b, distance).
             // a == b is the "no blend improves on the nearest single color"
@@ -133,7 +165,7 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
                     // blend adjacent pixels finely enough for that to read
                     // as anything but colored speckle. Without this term
                     // the fit score alone would happily pick such a pair.
-                    let score = fit + chroma_distance(labi, labj) * PAIR_DISSIMILARITY_WEIGHT;
+                    let score = fit + chroma_distance(labi, labj) * pair_dissimilarity_weight;
 
                     if best.is_none_or(|(.., bs)| score < bs) {
                         best = Some((ci, labi, cj, labj, t, score));
@@ -178,6 +210,33 @@ fn chroma_distance(a: LabF32, b: LabF32) -> f32 {
     let da = a.a - b.a;
     let db = a.b - b.b;
     (da * da + db * db).sqrt()
+}
+
+/// Per-pixel local detail measure for `--dither-edge-aware`: the largest
+/// absolute Lab-lightness difference between a pixel and its four direct
+/// neighbors in the *source* image (missing neighbors at the image's edges
+/// are just skipped). Near zero in a flat region; larger wherever the
+/// source has a real edge or fine line.
+fn local_edge_strength(img: &RgbImage) -> Vec<f32> {
+    let (w, h) = (img.width() as i32, img.height() as i32);
+    let lightness: Vec<f32> = img.pixels().map(|p| rgb8_to_lab(*p).l).collect();
+    let idx = |x: i32, y: i32| (y * w + x) as usize;
+
+    let mut strength = vec![0.0f32; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let center = lightness[idx(x, y)];
+            let mut max_diff = 0.0f32;
+            for &(dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx >= 0 && nx < w && ny >= 0 && ny < h {
+                    max_diff = max_diff.max((lightness[idx(nx, ny)] - center).abs());
+                }
+            }
+            strength[idx(x, y)] = max_diff;
+        }
+    }
+    strength
 }
 
 /// Closed-form mixing ratio (fraction toward `b`) that best approximates
@@ -414,6 +473,67 @@ mod tests {
         }
     }
 
+    #[test]
+    fn local_edge_strength_is_zero_in_flat_regions_and_high_at_edges() {
+        // Left half dark, right half bright - a sharp vertical edge down
+        // the middle of an otherwise flat image.
+        let img = RgbImage::from_fn(8, 4, |x, _| {
+            if x < 4 {
+                Rgb([0, 0, 0])
+            }
+            else {
+                Rgb([255, 255, 255])
+            }
+        });
+        let strength = local_edge_strength(&img);
+        let idx = |x: usize, y: usize| y * 8 + x;
+
+        assert_eq!(
+            strength[idx(1, 2)],
+            0.0,
+            "deep in the dark half, no local contrast"
+        );
+        assert_eq!(
+            strength[idx(6, 2)],
+            0.0,
+            "deep in the bright half, no local contrast"
+        );
+        assert!(
+            strength[idx(3, 2)] > 50.0,
+            "right at the edge, large local contrast"
+        );
+        assert!(
+            strength[idx(4, 2)] > 50.0,
+            "right at the edge, large local contrast"
+        );
+    }
+
+    /// `edge_aware` must be a true no-op when there is no edge anywhere -
+    /// the whole point is that it only relaxes the chroma penalty near real
+    /// detail, so a fully flat image (its main use case: a photo's smooth
+    /// background) must dither identically whether it's on or off.
+    #[test]
+    fn edge_aware_matches_default_on_a_fully_flat_image() {
+        let img = mid_gray_gradient(8, 8);
+        let palette = super::super::lab::palette_lab_and_linear(&[
+            Ink::BLACK,
+            Ink::BRIGHTWHITE,
+            Ink::RED,
+            Ink::BRIGHTGREEN
+        ]);
+        let without = ordered_arbitrary_dither(&img, &palette, 8, false);
+        let with = ordered_arbitrary_dither(&img, &palette, 8, true);
+        for y in 0..8 {
+            for x in 0..8 {
+                assert_eq!(
+                    without.get_color(x, y),
+                    with.get_color(x, y),
+                    "pixel ({x},{y}) differed with no edges anywhere in the source"
+                );
+            }
+        }
+    }
+
     /// A real regression: with only a lightness-based guard, a candidate
     /// pair whose two colors are nowhere near each other in hue (e.g. red
     /// and green) can still average to something numerically close to a
@@ -430,7 +550,7 @@ mod tests {
             Ink::RED,
             Ink::BRIGHTGREEN
         ]);
-        let out = ordered_arbitrary_dither(&img, &palette, 8);
+        let out = ordered_arbitrary_dither(&img, &palette, 8, false);
 
         for y in 0..out.height() as usize {
             for x in 0..out.width() as usize {
@@ -448,7 +568,7 @@ mod tests {
     fn ordered_dither_uses_only_palette_colors() {
         let img = mid_gray_gradient(16, 16);
         let palette = black_white_palette_linear();
-        let out = ordered_arbitrary_dither(&img, &palette, 8);
+        let out = ordered_arbitrary_dither(&img, &palette, 8, false);
         assert_only_palette_colors(&out, &black_white_palette());
     }
 

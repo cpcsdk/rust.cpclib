@@ -25,10 +25,21 @@ use crate::color::AmstradColor;
 ///
 /// Returns `pinned` followed by the resolved free colors, all distinct,
 /// length at most `max_colors`.
+///
+/// `prefer_neutral` (`--prefer-neutral-palette`) makes the final
+/// hardware-snapping step avoid introducing more chroma than each cluster
+/// centroid already has, rather than accepting whatever unclaimed ink is
+/// nearest overall. It's opt-in because it's a genuine trade-off, not a
+/// strict improvement: it helps a lot for a photo that's mostly grayscale
+/// or pastel (fewer of the 16 pens end up wasted on fully-saturated
+/// substitutes once the few genuinely neutral inks are taken), but for a
+/// vividly colorful source it will make some clusters fit their target hue
+/// less precisely than the unbiased nearest-match would have.
 pub fn auto_select_palette<C: AmstradColor + SnapToHardware>(
     img: &RgbImage,
     max_colors: usize,
-    pinned: &[C]
+    pinned: &[C],
+    prefer_neutral: bool
 ) -> Vec<C> {
     let k = max_colors.saturating_sub(pinned.len());
     if k == 0 {
@@ -65,7 +76,13 @@ pub fn auto_select_palette<C: AmstradColor + SnapToHardware>(
     };
 
     let mut claimed: HashSet<C> = pinned.iter().copied().collect();
-    let resolved = snap_and_dedup::<C>(&free_centroids, &uniques, &pinned_lab, &mut claimed);
+    let resolved = snap_and_dedup::<C>(
+        &free_centroids,
+        &uniques,
+        &pinned_lab,
+        &mut claimed,
+        prefer_neutral
+    );
 
     let mut result = pinned.to_vec();
     result.extend(resolved);
@@ -199,7 +216,8 @@ fn snap_and_dedup<C: AmstradColor + SnapToHardware>(
     free_centroids: &[LabF32],
     uniques: &[(LabF32, u32)],
     pinned_lab: &[LabF32],
-    claimed: &mut HashSet<C>
+    claimed: &mut HashSet<C>,
+    prefer_neutral: bool
 ) -> Vec<C> {
     let weight_of = |j: usize| -> u32 {
         uniques
@@ -215,9 +233,9 @@ fn snap_and_dedup<C: AmstradColor + SnapToHardware>(
 
     let mut snapped: Vec<Option<C>> = vec![None; free_centroids.len()];
     for j in order {
-        let direct = C::snap_from_lab(free_centroids[j]);
+        let direct = C::snap_from_lab_biased(free_centroids[j], prefer_neutral);
         let candidate = if claimed.contains(&direct) {
-            C::snap_excluding_from_lab(free_centroids[j], claimed)
+            C::snap_excluding_from_lab_biased(free_centroids[j], claimed, prefer_neutral)
         }
         else {
             direct
@@ -252,10 +270,50 @@ mod tests {
     #[test]
     fn exact_fit_round_trips_unchanged() {
         let img = image_with_colors(&[(0, 0, 0, 5), (255, 255, 255, 5)]);
-        let palette = auto_select_palette::<Ink>(&img, 4, &[]);
+        let palette = auto_select_palette::<Ink>(&img, 4, &[], false);
         assert_eq!(palette.len(), 2);
         assert!(palette.contains(&Ink::BLACK));
         assert!(palette.contains(&Ink::BRIGHTWHITE));
+    }
+
+    /// A real complaint from converting an actual grayscale photo: the Gate
+    /// Array has only 3 truly neutral inks (black, medium grey, white), so
+    /// once those are claimed, unbiased selection for the remaining gray
+    /// levels of a photo like this one falls back to whatever fully-
+    /// saturated ink is nearest overall - wasting most of the budget on
+    /// colors a human would never call "gray". `prefer_neutral_palette`
+    /// exists specifically to fix this.
+    #[test]
+    fn prefer_neutral_reduces_average_chroma_for_a_grayscale_source() {
+        // A dozen distinct near-neutral gray levels spanning the tonal
+        // range - deliberately more shades than the Gate Array has real
+        // grays for for, so budget has to be spent on approximations.
+        let grays: Vec<(u8, u8, u8, u32)> = (0..12)
+            .map(|i| {
+                let v = (i * 23) as u8;
+                (v, v, v, 10)
+            })
+            .collect();
+        let img = image_with_colors(&grays);
+
+        let unbiased = auto_select_palette::<Ink>(&img, 8, &[], false);
+        let biased = auto_select_palette::<Ink>(&img, 8, &[], true);
+
+        let avg_chroma = |palette: &[Ink]| -> f32 {
+            let total: f32 = palette
+                .iter()
+                .map(|&c| super::super::lab::chroma(rgb8_to_lab(c.color())))
+                .sum();
+            total / palette.len() as f32
+        };
+
+        let unbiased_chroma = avg_chroma(&unbiased);
+        let biased_chroma = avg_chroma(&biased);
+        assert!(
+            biased_chroma < unbiased_chroma,
+            "prefer_neutral_palette should lower average chroma for a grayscale source: \
+             unbiased={unbiased_chroma}, biased={biased_chroma}"
+        );
     }
 
     #[test]
@@ -271,7 +329,7 @@ mod tests {
             (0, 0, 255, 10),
             (128, 128, 0, 5)
         ]);
-        let palette = auto_select_palette::<Ink>(&img, 3, &[]);
+        let palette = auto_select_palette::<Ink>(&img, 3, &[], false);
         assert_eq!(palette.len(), 3);
         assert_eq!(palette.iter().collect::<HashSet<_>>().len(), 3);
     }
@@ -287,8 +345,8 @@ mod tests {
             (128, 128, 0, 5),
             (30, 60, 90, 7)
         ]);
-        let a = auto_select_palette::<Ink>(&img, 4, &[]);
-        let b = auto_select_palette::<Ink>(&img, 4, &[]);
+        let a = auto_select_palette::<Ink>(&img, 4, &[], false);
+        let b = auto_select_palette::<Ink>(&img, 4, &[], false);
         assert_eq!(a, b);
     }
 
@@ -304,7 +362,7 @@ mod tests {
             (10, 200, 10, 5)
         ]);
         let pinned = [Ink::RED];
-        let palette = auto_select_palette::<Ink>(&img, 3, &pinned);
+        let palette = auto_select_palette::<Ink>(&img, 3, &pinned, false);
         assert_eq!(palette.len(), 3);
         assert_eq!(palette[0], Ink::RED);
         // The other 2 pens are free and must not duplicate the pin.
@@ -315,7 +373,7 @@ mod tests {
     fn fully_pinned_budget_runs_no_clustering() {
         let img = image_with_colors(&[(0, 0, 0, 10), (255, 255, 255, 10), (255, 0, 0, 10)]);
         let pinned = [Ink::BLACK, Ink::BRIGHTWHITE];
-        let palette = auto_select_palette::<Ink>(&img, 2, &pinned);
+        let palette = auto_select_palette::<Ink>(&img, 2, &pinned, false);
         assert_eq!(palette, vec![Ink::BLACK, Ink::BRIGHTWHITE]);
     }
 }
