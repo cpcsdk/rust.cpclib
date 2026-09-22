@@ -25,6 +25,18 @@ pub struct Cli {
     #[arg(short = 'c', long)]
     pub check: bool,
 
+    /// Print a diff of what would change instead of the formatted output (or rewriting
+    /// in place). Implies the same non-zero exit code as `--check` when anything differs.
+    #[arg(long)]
+    pub diff: bool,
+
+    /// Format only lines START:END (1-based, inclusive); everything else is left
+    /// untouched, the same mechanism `; fmt: off`/`on` uses internally. Ignored for stdin
+    /// input given without a matching single file (each file in a multi-file run would
+    /// need its own range, so this only applies when exactly one source is given).
+    #[arg(long, value_name = "START:END")]
+    pub lines: Option<String>,
+
     #[command(flatten)]
     pub options: AsmFormatOptions
 }

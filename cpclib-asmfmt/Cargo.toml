@@ -20,9 +20,11 @@ serde = { workspace = true, features = ["derive"] }
 toml.workspace = true
 bon.workspace = true
 clap = { workspace = true, features = ["derive"], optional = true }
+prettydiff = { workspace = true, optional = true }
+globset = { workspace = true, optional = true }
 
 [features]
-cmdline = ["dep:clap"]
+cmdline = ["dep:clap", "dep:prettydiff", "dep:globset"]
 
 [[bin]]
 name = "basm-fmt"

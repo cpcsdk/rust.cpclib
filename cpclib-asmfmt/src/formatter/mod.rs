@@ -49,7 +49,19 @@ pub(super) struct Formatter<'src> {
 }
 
 impl<'src> Formatter<'src> {
-    fn new(source: &'src str, opt: &AsmFormatOptions) -> Self {
+    // Additional 0-based inclusive line ranges (`extra_disabled`, empty for
+    // the ordinary whole-file path) are folded into `disabled_ranges`
+    // alongside whatever `; fmt: off`/`on` already contributes - the
+    // mechanism `format_range` uses to leave everything outside the caller's
+    // requested range untouched, without needing a second, parallel "don't
+    // touch this" concept of its own.
+    fn new_with_extra_disabled(
+        source: &'src str,
+        opt: &AsmFormatOptions,
+        extra_disabled: &[(usize, usize)]
+    ) -> Self {
+        let mut disabled_ranges = pragma::disabled_ranges(source);
+        disabled_ranges.extend_from_slice(extra_disabled);
         Self {
             source_lines: source.lines().collect(),
             indent_size: opt.indent_size,
@@ -71,7 +83,7 @@ impl<'src> Formatter<'src> {
             current_line: 0,
             output: String::new(),
             function_nesting: 0,
-            disabled_ranges: pragma::disabled_ranges(source),
+            disabled_ranges,
             opt: opt.clone()
         }
     }
@@ -83,7 +95,17 @@ pub fn format_listing(
     depth: usize,
     opt: &AsmFormatOptions
 ) -> String {
-    let mut fmt = Formatter::new(source, opt);
+    format_listing_with_extra_disabled(listing, source, depth, opt, &[])
+}
+
+fn format_listing_with_extra_disabled(
+    listing: &LocatedListing,
+    source: &str,
+    depth: usize,
+    opt: &AsmFormatOptions,
+    extra_disabled: &[(usize, usize)]
+) -> String {
+    let mut fmt = Formatter::new_with_extra_disabled(source, opt, extra_disabled);
     if let Some(first) = listing.iter().next() {
         let (line_1, _) = first.span().relative_line_and_column();
         fmt.current_line = line_1.saturating_sub(1);
@@ -106,4 +128,31 @@ pub fn format_listing(
 pub fn format(asm: &str, opt: &AsmFormatOptions) -> Result<String, Box<AssemblerError>> {
     let listing = parse_z80_str(asm)?;
     Ok(format_listing(&listing, asm, 1, opt))
+}
+
+// Format only 1-based, inclusive lines `[start_line, end_line]` of `asm`,
+// leaving everything before and after untouched - reuses the exact
+// `disabled_ranges`/`emit_verbatim_through` machinery `; fmt: off`/`on`
+// already relies on (see `pragma`'s own doc comment), just driven by a
+// caller-given range instead of inline markers. `end_line` past the end of
+// the file is clamped rather than treated as an error.
+pub fn format_range(
+    asm: &str,
+    opt: &AsmFormatOptions,
+    start_line: usize,
+    end_line: usize
+) -> Result<String, Box<AssemblerError>> {
+    let listing = parse_z80_str(asm)?;
+    let total_lines = asm.lines().count();
+    let last_line_0 = total_lines.saturating_sub(1);
+    let start_0 = start_line.saturating_sub(1);
+    let end_0 = end_line.saturating_sub(1).min(last_line_0);
+    let mut extra_disabled = Vec::new();
+    if start_0 > 0 {
+        extra_disabled.push((0, start_0 - 1));
+    }
+    if end_0 < last_line_0 {
+        extra_disabled.push((end_0 + 1, last_line_0));
+    }
+    Ok(format_listing_with_extra_disabled(&listing, asm, 1, opt, &extra_disabled))
 }

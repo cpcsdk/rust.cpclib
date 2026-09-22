@@ -4,8 +4,10 @@ mod config;
 mod formatter;
 mod options;
 
-pub use config::{CONFIG_FILE_NAME, find_config_file, load_config, load_config_from};
-pub use formatter::{format, format_listing};
+pub use config::{
+    CONFIG_FILE_NAME, find_config_file, load_config, load_config_from, load_ignore_patterns_from
+};
+pub use formatter::{format, format_listing, format_range};
 pub use options::{
     AsmFormatOptions, BinaryEncoding, CaseStyle, HexEncoding, LabelPostfix, OctalEncoding,
     QuoteStyle, SpaceAroundColumn
@@ -984,5 +986,30 @@ label_definition_postfix_with_column = "NoColumn"
         let once = format("org 0x4000\ndb \"a,b\",1,2\ncall list_new(2,-1)\n", &opt).unwrap();
         let twice = format(&once, &opt).unwrap();
         assert_eq!(once, twice, "not idempotent: {once:?} -> {twice:?}");
+    }
+
+    // ── `format_range` ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_format_range_only_touches_the_requested_lines() {
+        let src = "org 0x4000\npush   af\npop  bc\n";
+        // Line 2 (1-based) is `push   af` - only that line should change.
+        let out = format_range(src, &AsmFormatOptions::default(), 2, 2).unwrap();
+        assert_eq!(out, "org 0x4000\n    PUSH AF\npop  bc\n", "got: {out:?}");
+    }
+
+    #[test]
+    fn test_format_range_covering_the_whole_file_matches_format() {
+        let src = "org 0x4000\npush   af\npop  bc\n";
+        let whole = fmt(src);
+        let ranged = format_range(src, &AsmFormatOptions::default(), 1, 3).unwrap();
+        assert_eq!(whole, ranged);
+    }
+
+    #[test]
+    fn test_format_range_end_past_eof_is_clamped_not_an_error() {
+        let src = "org 0x4000\npush   af\n";
+        let out = format_range(src, &AsmFormatOptions::default(), 2, 999).unwrap();
+        assert!(out.contains("PUSH AF"), "got: {out:?}");
     }
 }

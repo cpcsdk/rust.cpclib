@@ -2206,6 +2206,8 @@ dependencies = [
  "cpclib-asm",
  "cpclib-common",
  "fs-err",
+ "globset",
+ "prettydiff",
  "serde",
  "toml 1.1.5+spec-1.1.0",
 ]
