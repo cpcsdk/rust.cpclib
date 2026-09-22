@@ -10,5 +10,9 @@ pub mod asic;
 pub mod color;
 pub mod kit;
 
+/// True-color-to-CPC conversion: resize + automatic palette selection +
+/// dithering, feeding into `transfer` for the actual byte encoding.
+pub mod convert;
+
 /// PC to CPC image transfer: exact resolution, exact/near hardware colors already. WIP
 pub mod transfer;

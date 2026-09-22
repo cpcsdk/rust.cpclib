@@ -1250,6 +1250,18 @@ pub struct ConvertParams<'o, C: AmstradColor> {
     pub o: &'o dyn EventObserver
 }
 
+/// Where the initial [`ColorMatrix<C>`] for a conversion comes from - a raw
+/// image file (the "transfer" pipeline's only source today), or one already
+/// resized/dithered/quantized by the true-color pipeline
+/// (`crate::convert::convert_true_color`). Only [`ImageConverter::load_color_matrix`]
+/// branches on this; every later stage (transformations, `as_sprite`, byte
+/// encoding) is unaware of the difference.
+#[derive(Clone)]
+enum ImageSource<'a, C: AmstradColor> {
+    File(&'a Utf8Path),
+    PreparedMatrix(ColorMatrix<C>)
+}
+
 #[allow(missing_docs)]
 impl<C: AmstradColor> ImageConverter<C> {
     /// Create the object that will be used to make the conversion
@@ -1261,11 +1273,31 @@ impl<C: AmstradColor> ImageConverter<C> {
     where
         P: AsRef<Utf8Path>
     {
-        Self::convert_impl(input_file.as_ref(), params, output)
+        Self::convert_impl(ImageSource::File(input_file.as_ref()), params, output)
+    }
+
+    /// The true-color pipeline's handoff into byte-encoding: `matrix` must
+    /// already be resized to the target and every one of its colors must be
+    /// a member of `params.palette`, which MUST be [`LockablePalette::locked`]
+    /// - the same contract [`ColorMatrix::as_sprite`] already enforces for
+    /// any other locked palette (e.g. the [`OutputFormat::MaskedSprite`] mask
+    /// branch below). Violating this panics in `colors_to_pens`, exactly as
+    /// an unrelated locked-palette mismatch already does today - no new
+    /// failure mode is introduced.
+    pub fn convert_from_matrix(
+        matrix: ColorMatrix<C>,
+        params: ConvertParams<C>,
+        output: OutputFormat<C>
+    ) -> anyhow::Result<Output<C>> {
+        debug_assert!(
+            params.palette.is_locked(),
+            "convert_from_matrix requires a locked palette"
+        );
+        Self::convert_impl(ImageSource::PreparedMatrix(matrix), params, output)
     }
 
     fn convert_to_sprite(
-        input_file: &Utf8Path,
+        source: ImageSource<C>,
         params: ConvertParams<C>,
         encoding: SpriteEncoding
     ) -> anyhow::Result<SpriteOutput<C>> {
@@ -1288,7 +1320,7 @@ impl<C: AmstradColor> ImageConverter<C> {
                     crop_if_too_large
                 };
 
-                let sprite = converter.load_sprite(input_file, missing_pen);
+                let sprite = converter.load_sprite(&source, missing_pen);
                 converter
                     .apply_sprite_conversion(&sprite, o)
                     .map(|output| output.sprite().unwrap())
@@ -1303,7 +1335,7 @@ impl<C: AmstradColor> ImageConverter<C> {
                     encoding,
                     mode
                 } = Self::convert_impl(
-                    input_file,
+                    source,
                     ConvertParams {
                         palette,
                         mode,
@@ -1345,7 +1377,7 @@ impl<C: AmstradColor> ImageConverter<C> {
             SpriteEncoding::GrayCoded => {
                 // get the linear version
                 let linear = Self::convert_impl(
-                    input_file,
+                    source,
                     ConvertParams {
                         palette,
                         mode,
@@ -1390,7 +1422,7 @@ impl<C: AmstradColor> ImageConverter<C> {
     }
 
     fn convert_impl(
-        input_file: &Utf8Path,
+        source: ImageSource<C>,
         params: ConvertParams<C>,
         output: OutputFormat<C>
     ) -> anyhow::Result<Output<C>> {
@@ -1412,7 +1444,7 @@ impl<C: AmstradColor> ImageConverter<C> {
         };
 
         if let OutputFormat::LinearEncodedChuncky = &output {
-            let mut matrix = converter.load_color_matrix(input_file);
+            let mut matrix = converter.load_color_matrix(&source);
             matrix.double_horizontally();
             let sprite = matrix.as_sprite(mode, LockablePalette::<C>::empty(), None);
             Ok(Output::<C>::LinearEncodedChuncky {
@@ -1424,7 +1456,7 @@ impl<C: AmstradColor> ImageConverter<C> {
         }
         else if let OutputFormat::Sprite(sprite_output_format) = &output {
             Self::convert_to_sprite(
-                input_file,
+                source,
                 ConvertParams {
                     palette,
                     mode,
@@ -1446,7 +1478,7 @@ impl<C: AmstradColor> ImageConverter<C> {
             let sprite_transformations =
                 transformations.clone().replace(*mask_ink, *replacement_ink);
             let sprite = Self::convert_to_sprite(
-                input_file,
+                source.clone(),
                 ConvertParams {
                     palette,
                     mode,
@@ -1465,7 +1497,7 @@ impl<C: AmstradColor> ImageConverter<C> {
             mask_palette[0] = <C as AmstradColor>::mask_foreground(); // at the position with all bits reset
             mask_palette[mode.max_colors() - 1] = <C as AmstradColor>::mask_background(); // at the position with all bits set up
             let mask = Self::convert_to_sprite(
-                input_file,
+                source,
                 ConvertParams {
                     palette: LockablePalette::<C>::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */
                     mode,
@@ -1488,7 +1520,7 @@ impl<C: AmstradColor> ImageConverter<C> {
             Ok(Output::<C>::SpriteAndMask { sprite, mask })
         }
         else {
-            let sprite = converter.load_sprite(input_file, missing_pen);
+            let sprite = converter.load_sprite(&source, missing_pen);
             converter.apply_sprite_conversion(&sprite, o)
         }
     }
@@ -1513,18 +1545,23 @@ impl<C: AmstradColor> ImageConverter<C> {
     /// Load the initial image
     /// TODO make compatibility tests are alike
     /// TODO propagate errors when needed
-    fn load_sprite(&mut self, input_file: &Utf8Path, missing_pen: Option<Pen>) -> Sprite<C> {
-        let matrix = self.load_color_matrix(input_file);
+    fn load_sprite(&mut self, source: &ImageSource<C>, missing_pen: Option<Pen>) -> Sprite<C> {
+        let matrix = self.load_color_matrix(source);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
         self.palette = LockablePalette::<C>::locked(sprite.palette().unwrap());
 
         sprite
     }
 
-    fn load_color_matrix(&self, input_file: &Utf8Path) -> ColorMatrix<C> {
-        let img = im::open(input_file)
-            .unwrap_or_else(|e| panic!("Unable to convert {input_file:?} properly. {e}"));
-        let mat = ColorMatrix::<C>::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels);
+    fn load_color_matrix(&self, source: &ImageSource<C>) -> ColorMatrix<C> {
+        let mat = match source {
+            ImageSource::File(input_file) => {
+                let img = im::open(input_file)
+                    .unwrap_or_else(|e| panic!("Unable to convert {input_file:?} properly. {e}"));
+                ColorMatrix::<C>::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels)
+            },
+            ImageSource::PreparedMatrix(matrix) => matrix.clone()
+        };
         self.transformations.apply(&mat)
     }
 
@@ -1865,5 +1902,86 @@ mod tests {
 
         assert_eq!(mask, mask2);
         assert_eq!(sprite, sprite2);
+    }
+
+    /// `convert_from_matrix` must be a thin, behavior-preserving wrapper: fed
+    /// a matrix already containing exactly a locked palette's own colors, it
+    /// should produce byte-for-byte the same output as `convert` loading an
+    /// equivalent PNG through the file path - proving the `ImageSource`
+    /// refactor changed nothing observable about the existing pipeline.
+    #[test]
+    fn convert_from_matrix_matches_convert_from_an_equivalent_file() {
+        let colors = [Ink::BLACK, Ink::RED, Ink::BRIGHTWHITE, Ink::BLUE];
+        let matrix = ColorMatrix::from(vec![
+            vec![colors[0], colors[1], colors[2], colors[3]],
+            vec![colors[3], colors[2], colors[1], colors[0]]
+        ]);
+        let locked = LockablePalette::<Ink>::locked(colors.to_vec().into());
+
+        let path = std::env::temp_dir()
+            .join(format!("cpclib_transfer_test_{}.png", std::process::id()));
+        matrix.as_image().save(&path).unwrap();
+        let utf8_path = Utf8Path::from_path(&path).unwrap();
+
+        let from_matrix = ImageConverter::convert_from_matrix(
+            matrix,
+            ConvertParams {
+                palette: locked.clone(),
+                mode: Mode::One,
+                transformations: TransformationsList::default(),
+                crop_if_too_large: false,
+                missing_pen: None,
+                o: &()
+            },
+            OutputFormat::Sprite(SpriteEncoding::Linear)
+        )
+        .unwrap();
+
+        let from_file = ImageConverter::convert(
+            utf8_path,
+            ConvertParams {
+                palette: locked,
+                mode: Mode::One,
+                transformations: TransformationsList::default(),
+                crop_if_too_large: false,
+                missing_pen: None,
+                o: &()
+            },
+            OutputFormat::Sprite(SpriteEncoding::Linear)
+        )
+        .unwrap();
+
+        let _ = fs_err::remove_file(&path);
+
+        let from_matrix = from_matrix.sprite().unwrap();
+        let from_file = from_file.sprite().unwrap();
+        assert_eq!(from_matrix.data(), from_file.data());
+        assert_eq!(from_matrix.bytes_width(), from_file.bytes_width());
+        assert_eq!(from_matrix.height(), from_file.height());
+        assert_eq!(from_matrix.palette().colors(), from_file.palette().colors());
+    }
+
+    /// A matrix containing a color absent from a locked palette must panic,
+    /// exactly as it already does today for any other locked-palette
+    /// mismatch (`colors_to_pens`) - `convert_from_matrix` introduces no new
+    /// failure mode.
+    #[test]
+    #[should_panic]
+    fn convert_from_matrix_panics_on_color_outside_locked_palette() {
+        let matrix = ColorMatrix::from(vec![vec![Ink::BLACK, Ink::GREEN]]);
+        let locked = LockablePalette::<Ink>::locked(vec![Ink::BLACK, Ink::RED].into());
+
+        let _ = ImageConverter::convert_from_matrix(
+            matrix,
+            ConvertParams {
+                palette: locked,
+                mode: Mode::One,
+                transformations: TransformationsList::default(),
+                crop_if_too_large: false,
+                missing_pen: None,
+                o: &()
+            },
+            OutputFormat::Sprite(SpriteEncoding::Linear)
+        );
     }
 }

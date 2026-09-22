@@ -2675,6 +2675,7 @@ dependencies = [
  "log",
  "nutype",
  "owo-colors",
+ "palette",
  "rayon",
  "serde",
 ]
@@ -8610,6 +8611,7 @@ dependencies = [
  "fast-srgb8",
  "libm",
  "palette_derive",
+ "phf 0.11.3",
 ]
 
 [[package]]
