@@ -27,6 +27,24 @@ fn parse_goal(goal: Option<&str>) -> Result<OptimizationGoal, ToolError> {
     }
 }
 
+/// The `Options` construction every one of this module's tools shares -
+/// only `defines`/`disabled_rules`/`include_dirs` differ per input struct,
+/// which the caller still owns (so it can move them without cloning).
+fn build_options(
+    goal: Option<&str>,
+    disabled_rules: Vec<String>,
+    include_dirs: Vec<String>,
+    defines: Vec<String>
+) -> Result<Options, ToolError> {
+    Ok(Options {
+        goal: parse_goal(goal)?,
+        disabled_rules,
+        include_dirs: include_dirs.into_iter().map(Utf8PathBuf::from).collect(),
+        defines,
+        ..Default::default()
+    })
+}
+
 fn reason_to_json(r: &SuggestionReason) -> Value {
     json!({ "text": r.text, "line": r.line, "column": r.column })
 }
@@ -85,18 +103,12 @@ pub struct SuggestInput {
 /// apply automatically. Read-only.
 pub(crate) fn suggest_optimizations(input: SuggestInput) -> ToolResult {
     let path = Utf8Path::new(&input.path);
-    let options = Options {
-        goal: parse_goal(input.goal.as_deref())?,
-        disabled_rules: input.disabled_rules.unwrap_or_default(),
-        include_dirs: input
-            .include_dirs
-            .unwrap_or_default()
-            .into_iter()
-            .map(camino::Utf8PathBuf::from)
-            .collect(),
-        defines: input.defines.unwrap_or_default(),
-        ..Default::default()
-    };
+    let options = build_options(
+        input.goal.as_deref(),
+        input.disabled_rules.unwrap_or_default(),
+        input.include_dirs.unwrap_or_default(),
+        input.defines.unwrap_or_default()
+    )?;
 
     if input.include_project.unwrap_or(false) {
         let outcomes = cpclib_basmopt::analyze_project(path, &options).map_err(|e| {
@@ -173,18 +185,12 @@ pub(crate) fn apply_optimizations(input: ApplyInput) -> ToolResult {
         ));
     }
     let path = Utf8Path::new(&input.path);
-    let options = Options {
-        goal: parse_goal(input.goal.as_deref())?,
-        disabled_rules: input.disabled_rules.unwrap_or_default(),
-        include_dirs: input
-            .include_dirs
-            .unwrap_or_default()
-            .into_iter()
-            .map(camino::Utf8PathBuf::from)
-            .collect(),
-        defines: input.defines.unwrap_or_default(),
-        ..Default::default()
-    };
+    let options = build_options(
+        input.goal.as_deref(),
+        input.disabled_rules.unwrap_or_default(),
+        input.include_dirs.unwrap_or_default(),
+        input.defines.unwrap_or_default()
+    )?;
     let outcome = cpclib_basmopt::apply_fixes_in_place(path, &options).map_err(|e| {
         ToolError::with_details(
             ToolErrorKind::Assembler,
@@ -200,6 +206,61 @@ pub(crate) fn apply_optimizations(input: ApplyInput) -> ToolResult {
         "total_applied": outcome.total_applied,
         "remaining_skipped": outcome.remaining_skipped,
         "assemble_warning": outcome.assemble_warning
+    }))
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ApplyProjectInput {
+    /// Directory to rewrite every `.asm` file under (recursively,
+    /// respecting `.gitignore`) - not one file.
+    pub project_dir: String,
+    pub goal: Option<String>,
+    pub disabled_rules: Option<Vec<String>>,
+    pub include_dirs: Option<Vec<String>>,
+    /// Symbols to define before assembling - see `suggest_optimizations`.
+    pub defines: Option<Vec<String>>,
+    /// Must be `true` - this tool rewrites every matching file under
+    /// `project_dir` in place. There is no sandboxed/dry-run variant:
+    /// every fix it applies already went through the same bulk-safety
+    /// check `apply_optimizations` trusts for a single file - call
+    /// `suggest_optimizations` with `include_project: true` first if you
+    /// want to see what it would find before committing to a rewrite.
+    pub in_place: bool
+}
+
+/// Rewrites every `.asm` file under `project_dir` in place with its own
+/// bulk-safe, non-address-aware peephole suggestions applied (up to 2
+/// passes per file). **Mutating** - requires `in_place: true`.
+///
+/// Address-aware rules (`jp2jr`) are never applied this way, regardless of
+/// `goal`: rewriting one file mid-run can shift another's real addresses
+/// via a shared `INCLUDE`, which could invalidate an address-aware match
+/// found before that rewrite happened - see
+/// `cpclib_basmopt::apply_fixes_in_place_project`'s own doc comment. Ask
+/// `suggest_optimizations` with `include_project: true` for those; apply
+/// them individually with `apply_optimizations` on the file that actually
+/// needs them.
+pub(crate) fn apply_optimizations_project(input: ApplyProjectInput) -> ToolResult {
+    if !input.in_place {
+        return Err(ToolError::invalid_input(
+            "apply_optimizations_project is a mutating tool - pass in_place: true to confirm              you want to rewrite every matching file under project_dir, or call              suggest_optimizations with include_project: true for a read-only preview"
+        ));
+    }
+    let path = Utf8Path::new(&input.project_dir);
+    let options = build_options(
+        input.goal.as_deref(),
+        input.disabled_rules.unwrap_or_default(),
+        input.include_dirs.unwrap_or_default(),
+        input.defines.unwrap_or_default()
+    )?;
+    let outcome = cpclib_basmopt::apply_fixes_in_place_project(path, &options);
+    Ok(json!({
+        "project_dir": input.project_dir,
+        "files_touched": outcome.files_touched,
+        "files_with_errors": outcome.files_with_errors,
+        "total_applied": outcome.total_applied,
+        "total_skipped_for_review": outcome.total_skipped_for_review,
+        "total_address_aware_skipped": outcome.total_address_aware_skipped
     }))
 }
 
@@ -230,6 +291,21 @@ impl McpServer {
         Parameters(input): Parameters<ApplyInput>
     ) -> Result<Json<Value>, Json<Value>> {
         ok_or_tool_error(apply_optimizations(input))
+    }
+
+    #[tool(description = "MUTATING: rewrites every .asm file under project_dir in place with \
+                           its own bulk-safe, non-address-aware peephole suggestions applied \
+                           (respects .gitignore). Requires in_place: true. Never applies an \
+                           address-aware rule (e.g. jp2jr) regardless of goal - rewriting one \
+                           file can shift another's real addresses via a shared INCLUDE, which \
+                           could invalidate an address-aware match found earlier in the same \
+                           run; total_address_aware_skipped reports how many were left for \
+                           apply_optimizations on the individual file instead.")]
+    async fn apply_optimizations_project(
+        &self,
+        Parameters(input): Parameters<ApplyProjectInput>
+    ) -> Result<Json<Value>, Json<Value>> {
+        ok_or_tool_error(apply_optimizations_project(input))
     }
 }
 
@@ -278,5 +354,40 @@ mod tests {
             files.iter().any(|f| f["path"].as_str().unwrap().ends_with("code.asm")),
             "the included file must be listed: {out}"
         );
+    }
+
+    fn project_base(project_dir: &str) -> ApplyProjectInput {
+        ApplyProjectInput {
+            project_dir: project_dir.to_string(),
+            goal: None,
+            disabled_rules: None,
+            include_dirs: None,
+            defines: None,
+            in_place: false
+        }
+    }
+
+    #[test]
+    fn apply_optimizations_project_requires_in_place() {
+        let err = apply_optimizations_project(project_base(".")).unwrap_err();
+        assert_eq!(err.kind, "invalid_input");
+    }
+
+    /// Real rewrite across two files under a directory - the actual point
+    /// of this tool over calling `apply_optimizations` file by file.
+    #[test]
+    fn apply_optimizations_project_rewrites_every_matching_file() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        fs_err::write(dir.path().join("a.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
+        fs_err::write(dir.path().join("b.asm"), "\tld b,1\n\tld b,1\n\tret\n").unwrap();
+        let project_dir = dir.path().to_string();
+
+        let out = apply_optimizations_project(ApplyProjectInput { in_place: true, ..project_base(&project_dir) }).unwrap();
+        assert_eq!(out["files_touched"], 2, "{out}");
+        assert_eq!(out["files_with_errors"], 0, "{out}");
+        assert!(out["total_applied"].as_u64().unwrap() >= 2, "{out}");
+
+        assert_eq!(fs_err::read_to_string(dir.path().join("a.asm")).unwrap(), "\tld a, 0\n\tret\n");
+        assert_eq!(fs_err::read_to_string(dir.path().join("b.asm")).unwrap(), "\tld b, 1\n\tret\n");
     }
 }
