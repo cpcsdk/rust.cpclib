@@ -11,10 +11,33 @@ description= "Cruncher for Amstrad CPC projects."
 
 [dependencies]
 cpclib-common = {workspace = true, features = ["cmdline"]}
-cpclib-crunchers = {workspace = true}
+# `resolve`/`sizemap` (unlike `CrunchArgs`/`Cruncher` above, which respect
+# this crate's own a-la-carte `[features]`) always need this exact format
+# set - the same one `cpclib-mcp` enables for the identical reason: they
+# name every format by a fixed string list (`resolve::ALL_FORMATS`) that
+# does not vary with a downstream's feature selection.
+cpclib-crunchers = {workspace = true, features = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"]}
 cpclib-files = {workspace = true}
 cpclib-disc = {workspace = true}
-cpclib-asm = {workspace = true}
+# `sizemap` needs `cpclib-asm` itself able to *execute* a source's crunched
+# sections (`LZ48`/`LZSHRINKLER`/...), which is its own separate cargo
+# feature set (defaults to off workspace-wide) - same fixed list as
+# `cpclib-crunchers` just above, for the same reason.
+cpclib-asm = {workspace = true, features = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"]}
+cpclib-basmopt = {workspace = true}
+cpclib-tokens = {workspace = true}
+fs-err.workspace = true
+serde = {workspace = true, features = ["derive"]}
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Threading"] }
+
+[dev-dependencies]
+camino-tempfile.workspace = true
 
 [build-dependencies]
 built = { workspace = true, features = ["chrono"] }

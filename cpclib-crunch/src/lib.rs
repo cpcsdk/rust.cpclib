@@ -13,6 +13,19 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
+/// Resolve a cruncher by name and run it bounded and cached - the piece of
+/// this crate's logic other tools (this crate's own `size_map` CLI,
+/// `cpclib-mcp`'s crunching tools) actually want to call directly.
+pub mod resolve;
+/// Where do the bytes go? Assemble a source and report its memory map,
+/// optionally with measured crunched costs - see the module's own doc
+/// comment. Used by this crate's `size_map` binary and by `cpclib-mcp`'s
+/// `size_map` tool, which serializes [`sizemap::SizeMapReport`] to JSON.
+pub mod sizemap;
+/// Keep a native cruncher's raw `printf` out of a CLI's own stdout report -
+/// see the module's own doc comment.
+pub mod stdio_guard;
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct CrunchArgs {

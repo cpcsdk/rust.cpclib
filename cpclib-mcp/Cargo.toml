@@ -28,6 +28,9 @@ cpclib-basic.workspace = true
 cpclib-runner = { workspace = true, default-features = false, features = ["screenshot"] }
 cpclib-image.workspace = true
 cpclib-crunchers = { workspace = true, features = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"] }
+# resolve_cruncher/compress_with_timeout/the size-map logic itself - shared
+# with cpclib-crunch's own `size_map` CLI binary so both stay in sync.
+cpclib-crunch = { workspace = true, default-features = false }
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-tokens.workspace = true
 
