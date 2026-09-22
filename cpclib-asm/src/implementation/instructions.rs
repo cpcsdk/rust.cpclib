@@ -1,8 +1,8 @@
 use std::ops::Deref;
 
-use cpclib_common::smol_str::SmolStr;
 use cpclib_crunchers::CompressMethod;
-use cpclib_tokens::{CrunchType as CompressionType, Expr};
+use cpclib_tokens::symbols::SymbolsTableTrait;
+use cpclib_tokens::{CrunchType as CompressionType, ExprResult};
 
 use crate::Env;
 use crate::error::AssemblerError;
@@ -45,22 +45,21 @@ impl AssemblerCompressionResult {
 
     pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         let to_be_set = [
+            ("BASM_LATEST_CRUNCH_INPUT_DATA_SIZE", self.input_len() as i32),
+            ("BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE", self.compressed_len() as i32),
             (
-                "BASM_LATEST_CRUNCH_INPUT_DATA_SIZE".to_string(),
-                Expr::Value(self.input_len() as _)
-            ),
-            (
-                "BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE".to_string(),
-                Expr::Value(self.compressed_len() as _)
-            ),
-            (
-                "BASM_LATEST_CRUNCH_DELTA_SIZE".to_string(),
-                Expr::Value(self.compressed_delta().map(|v| v as i32).unwrap_or(-1)) as _
+                "BASM_LATEST_CRUNCH_DELTA_SIZE",
+                self.compressed_delta().map(|v| v as i32).unwrap_or(-1)
             )
         ];
 
-        for (name, expr) in to_be_set.into_iter() {
-            env.visit_assign(SmolStr::from(name), &expr, None)?;
+        // Straight into the symbol table rather than through `visit_assign`:
+        // that is what an `x = expr` line does, and it also re-labels the
+        // listing row being recorded with the assigned value as its address -
+        // so the row of the crunched section itself ended up at `0xffffffff`
+        // (the `-1` delta) in the listing and the source map.
+        for (name, value) in to_be_set {
+            env.symbols_mut().assign_symbol_to_value(name, ExprResult::from(value))?;
         }
 
         Ok(())

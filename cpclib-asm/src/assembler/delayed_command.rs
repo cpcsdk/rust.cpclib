@@ -23,7 +23,14 @@ trait DelayedCommand {}
 pub struct PrintCommand {
     pub(crate) prefix: Option<String>,
     pub(crate) span: Option<Z80Span>,
-    pub(crate) print_or_error: either::Either<PreprocessedFormattedString, Box<AssemblerError>>
+    pub(crate) print_or_error: either::Either<PreprocessedFormattedString, Box<AssemblerError>>,
+    /// Keeps alive whichever macro/struct-expansion buffer(s) `span` points
+    /// into - see `FailedAssertCommand::_keep_alive`, the same hazard: a
+    /// `PRINT` is only formatted once assembling is over, and a `PRINT` in a
+    /// macro body holds a span into a buffer that a later pass (or the end of
+    /// the token tree) has dropped by then. Formatting it dereferenced freed
+    /// memory: a nondeterministic panic in the line/column lookup, or garbage.
+    pub(crate) _keep_alive: Vec<Arc<LocatedListing>>
 }
 
 impl PrintCommand {

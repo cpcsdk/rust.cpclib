@@ -1006,3 +1006,67 @@ fn other_data_directives_are_still_marked_as_data() {
         assert!(data_row.is_data, "{name}: {rows:?}");
     }
 }
+
+/// A crunched section is recorded twice, on purpose: its *inputs* (the code as
+/// it will be once decrunched, at the decrunch address, with a scratch-buffer
+/// physical offset) and its *output* (the crunched bytes actually in the file,
+/// where logical and physical agree).
+const CRUNCHED: &str = "\torg 0x4000\n\tnop\n\tLZ49\n\tdb 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16\n\tld a,0\n\tLZCLOSE\n\tret\n";
+
+/// The output rows of a crunched section used to sit at `0xffffffff`: the
+/// symbols the crunch publishes (`BASM_LATEST_CRUNCH_DELTA_SIZE` is `-1` here)
+/// were assigned through `visit_assign`, which re-addresses the listing row
+/// being recorded with the assigned value.
+#[test]
+fn a_crunched_section_output_is_recorded_at_its_real_address() {
+    let (emitted, rows) = rows(CRUNCHED);
+    let placed: Vec<_> = rows.iter().filter(|r| r.logical == r.physical).collect();
+    assert!(placed.iter().all(|r| r.logical < 0x10000), "{placed:?}");
+    assert_eq!(
+        placed.iter().map(|r| r.len as usize).sum::<usize>(),
+        emitted,
+        "the rows placed in the image account for every emitted byte: {placed:?}"
+    );
+    // contiguous, in order, starting right after the `nop`
+    let mut expected = 0x4000u32;
+    for r in placed {
+        assert_eq!(r.logical, expected, "{r:?}");
+        expected += r.len as u32;
+    }
+}
+
+/// The last token of a crunched section is assembled in a cloned `Env` whose
+/// listing trigger is dropped with it: it has to be flushed first, or the last
+/// instruction of the section has no row at all.
+#[test]
+fn the_last_instruction_of_a_crunched_section_has_a_row() {
+    let (_, rows) = rows(CRUNCHED);
+    assert!(
+        rows.iter().any(|r| r.line == 5 && r.len == 2),
+        "`ld a,0` (line 5) is missing: {rows:?}"
+    );
+}
+
+/// What went into a crunched section is available after the assemble: that is
+/// what lets a tool measure the cost of each part of the section.
+#[test]
+fn crunched_sections_expose_their_decrunched_bytes() {
+    let listing = cpclib_asm::parser::parse_z80_str(CRUNCHED).expect("parses");
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let (_p, env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(
+            parse,
+            cpclib_asm::AssemblingOptions::default(),
+            Arc::new(DiscardObserver)
+        )
+    )
+    .expect("assembles");
+    let sections = env.crunched_sections();
+    assert_eq!(sections.len(), 1, "{sections:?}");
+    assert_eq!(sections[0].address, 0x4001);
+    assert_eq!(sections[0].decrunched.len(), 16 + 2);
+    assert_eq!(&sections[0].decrunched[..3], &[1, 2, 3]);
+    assert_eq!(sections[0].crunched_len, 21);
+}

@@ -328,6 +328,23 @@ impl Visited for LocatedToken {
 
 type AssemblerWarning = AssemblerError;
 
+/// What one crunched section turned out to be, for tools that want to look
+/// inside the compressed bytes of a finished assemble
+/// (see [`Env::crunched_sections`]).
+#[derive(Debug, Clone)]
+pub struct CrunchedSectionInfo {
+    /// The cruncher the section asked for.
+    pub kind: CrunchType,
+    /// What `$` was where the section began - the base of the addresses (and
+    /// so of the labels) inside it, whatever the code there does after being
+    /// decrunched.
+    pub address: u32,
+    /// The bytes that went into the cruncher.
+    pub decrunched: Vec<u8>,
+    /// What came out - what the section really costs in the output.
+    pub crunched_len: usize
+}
+
 /// Store all the necessary information when handling a crunched section
 #[derive(Clone)]
 struct CrunchedSectionState {
@@ -513,6 +530,12 @@ pub struct Env {
 
     /// Check if we are assembling a crunched section as there are some limitations
     crunched_section_state: Option<CrunchedSectionState>,
+
+    /// The crunched sections of the latest pass that had any, innermost first,
+    /// and that pass. (Not cleared when a pass starts: the last "pass" to start
+    /// is the one that says everything is finished, and must not wipe them.)
+    crunched_sections: Vec<CrunchedSectionInfo>,
+    crunched_sections_pass: Option<AssemblingPass>,
 
     /// Stable counter of nops
     stable_counters: StableTickerCounters,
@@ -755,6 +778,10 @@ impl Clone for Env {
             pass: self.pass,
             real_nb_passes: self.real_nb_passes,
             crunched_section_state: self.crunched_section_state.clone(),
+            // A clone is what assembles a crunched section: it starts its own
+            // list, merged back once the section is done.
+            crunched_sections: Vec::new(),
+            crunched_sections_pass: None,
             stable_counters: self.stable_counters.clone(),
             ga_mmr: self.ga_mmr,
             output_address: self.output_address,
@@ -1535,6 +1562,12 @@ impl Env {
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
+    ///
+    /// **The processed tokens `visit_tokens_all_passes_with_options` returned
+    /// must still be alive** (bind them, do not write `Ok((_, env))`): the
+    /// `PRINT`s, asserts and listing rows formatted here hold spans into the
+    /// listings those tokens own - included files' in particular. Dropping
+    /// them first is a use-after-free, seen as a nondeterministic panic.
     pub fn handle_post_actions<'token, T>(
         &mut self,
         tokens: &'token [T]
@@ -2131,6 +2164,13 @@ impl Env {
     }
 
     /// Return the address of dollar
+    /// Every crunched section of the last pass, with what went into the
+    /// cruncher and what came out - so a caller can measure what each part of
+    /// a section costs once crunched, which the output bytes alone can't say.
+    pub fn crunched_sections(&self) -> &[CrunchedSectionInfo] {
+        &self.crunched_sections
+    }
+
     pub fn logical_code_address(&self) -> u16 {
         self.active_page_info().logical_codeadr
     }
@@ -3416,7 +3456,9 @@ impl Env {
             let _ = PrintCommand {
                 prefix: Some(format!("[PASS{}] ", self.pass)),
                 span: span.cloned(),
-                print_or_error
+                print_or_error,
+                // executed right here, while the expansion is still alive
+                _keep_alive: Vec::new()
             }
             .execute(self.observer().deref()); // TODO use the true one
         }
@@ -3829,6 +3871,23 @@ impl Env {
         PreprocessedFormattedString::try_new(info, self)
     }
 
+    /// The macro/struct-expansion buffers currently being visited. A command
+    /// that holds a `Z80Span` until after assembling (an `assert` failure, a
+    /// `print`) stores these next to it: the span points into one of them,
+    /// and a later pass or the end of the token tree would otherwise drop it.
+    /// `Include` frames need no keep-alive (see `IncludeFrame`'s doc comment).
+    fn expansion_keep_alive(&self) -> Vec<Arc<LocatedListing>> {
+        self.active_frames
+            .iter()
+            .filter_map(|frame| {
+                match frame {
+                    ActiveFrame::Expansion(expansion) => Some(expansion.listing.clone()),
+                    ActiveFrame::Include(_) => None
+                }
+            })
+            .collect()
+    }
+
     /// Print the evaluation of the expression in the 2nd pass
     pub fn visit_print(&mut self, info: &[FormattedExpr], span: Option<&Z80Span>) {
         let print_or_error = match self.prepropress_string_formatted_expression(info) {
@@ -3836,10 +3895,12 @@ impl Env {
             Err(error) => either::Either::Right(error)
         };
 
+        let keep_alive = self.expansion_keep_alive();
         self.active_page_info_mut().add_print_command(PrintCommand {
             prefix: None,
             span: span.cloned(),
-            print_or_error
+            print_or_error,
+            _keep_alive: keep_alive
         })
     }
 
@@ -4183,6 +4244,7 @@ impl Env {
         // for this reason everything is done in a cloned environnement
         // TODO to have a more stable memory function, see if we can keep some steps between the passes
         // TODO OR play all the passes directly now
+        let section_address = self.logical_code_address() as u32;
         let mut crunched_env = self.build_crunched_section_env(span);
 
         if let Some(t) = self.listing_trigger() {
@@ -4225,6 +4287,11 @@ impl Env {
             }
         }
 
+        // The clone that assembled the section is dropped below, and takes
+        // its last pending token with it unless it is handed over now.
+        if let Some(t) = crunched_env.listing_trigger() {
+            t.flush_pending()
+        }
         if let Some(t) = self.listing_trigger() {
             t.leave_crunched_section()
         }
@@ -4298,6 +4365,20 @@ impl Env {
         *self.request_additional_pass.write().unwrap() = request_additional_pass;
 
         self.macro_seed = crunched_env.macro_seed;
+
+        // Sections nested in this one first, then this one.
+        if self.crunched_sections_pass != Some(self.pass) {
+            self.crunched_sections.clear();
+            self.crunched_sections_pass = Some(self.pass);
+        }
+        self.crunched_sections
+            .append(&mut crunched_env.crunched_sections);
+        self.crunched_sections.push(CrunchedSectionInfo {
+            kind: *kind,
+            address: section_address,
+            crunched_len: crunched_bytes.compressed_len(),
+            decrunched: new_bytes_to_crunch
+        });
 
         // TODO display ONLY if:
         // - no LIMIT/PROTECT has been used in the crunched area
@@ -4387,6 +4468,8 @@ impl Env {
             symbols_output: Default::default(),
 
             crunched_section_state: None,
+            crunched_sections: Vec::new(),
+            crunched_sections_pass: None,
 
             warnings: Vec::new(),
             warning_push_count: 0,
@@ -8454,21 +8537,9 @@ impl Env {
             }
 
             // Keep whichever macro/struct-expansion buffer(s) `assert_error`'s
-            // spans point into alive for as long as this command lives (i.e.
-            // as long as `self` lives) - see `Env::active_frames` and
-            // `FailedAssertCommand`. `Include` frames need no such keep-alive
-            // (see `IncludeFrame`'s doc comment), so only `Expansion` frames
-            // contribute here.
-            let keep_alive = self
-                .active_frames
-                .iter()
-                .filter_map(|frame| {
-                    match frame {
-                        ActiveFrame::Expansion(expansion) => Some(expansion.listing.clone()),
-                        ActiveFrame::Include(_) => None
-                    }
-                })
-                .collect();
+            // spans point into alive for as long as this command lives - see
+            // `FailedAssertCommand`.
+            let keep_alive = self.expansion_keep_alive();
             self.active_page_info_mut()
                 .add_failed_assert_command(FailedAssertCommand {
                     failure: assert_error,

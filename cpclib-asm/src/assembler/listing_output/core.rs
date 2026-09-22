@@ -1382,6 +1382,27 @@ impl ListingOutputTrigger {
         self.physical_address = address;
     }
 
+    /// Hand the token still waiting for its bytes over to the listing, without
+    /// closing the listing.
+    ///
+    /// A token is only recorded when the *next* one arrives, so whoever owns a
+    /// trigger that is about to be dropped has to say so, or its last token is
+    /// silently lost - which is what happened to the last instruction of a
+    /// crunched section, assembled in a cloned `Env`.
+    pub fn flush_pending(&mut self) {
+        if let Some(token) = self.token.take() {
+            self.builder.write().unwrap().add_token(
+                unsafe { &*token },
+                &self.bytes,
+                self.start,
+                AddressKind::Address,
+                self.physical_address,
+                self.symbols
+            );
+            self.bytes.clear();
+        }
+    }
+
     pub fn finish(&mut self) {
         if let Some(token) = &self.token {
             self.builder.write().unwrap().add_token(

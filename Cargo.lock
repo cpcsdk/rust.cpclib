@@ -2805,6 +2805,7 @@ dependencies = [
  "cpclib-tokens",
  "cpclib-z80flow",
  "fs-err",
+ "futures-util",
  "libc",
  "rmcp",
  "schemars 1.2.0",
