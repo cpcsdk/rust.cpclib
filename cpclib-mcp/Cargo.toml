@@ -39,6 +39,7 @@ schemars.workspace = true
 tower-lsp.workspace = true
 
 # Async runtime
+futures-util.workspace = true
 tokio = { workspace = true, features = ["full"] }
 
 # Serialization

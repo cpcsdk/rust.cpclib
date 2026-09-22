@@ -20,3 +20,4 @@ pub mod sna;
 pub mod variants;
 pub mod project;
 pub mod sizemap;
+pub mod sandbox;

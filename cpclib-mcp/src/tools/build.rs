@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 
 use crate::McpServer;
 use crate::error::{ToolError, ToolErrorKind, ToolResult};
+use crate::tools::sandbox::{Sandbox, project_dir_of};
 
 /// Captures every `BndBuilderEvent`'s text into an ordered log, rather than
 /// letting a build write to this process's own stdout (reserved for MCP
@@ -572,7 +573,7 @@ fn render_comparison_table(rows: &[LinkRow], with_budget: bool) -> String {
     out
 }
 
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
 pub struct CompareLinkSizesInput {
     /// Path to the build file (e.g. `build.bnd`) or a directory containing
     /// one.
@@ -613,10 +614,19 @@ pub struct CompareLinkSizesInput {
     pub target_size: Option<i64>,
     /// Bytes `target_size` also has to cover (e.g. 128 for an AMSDOS
     /// header). Default 0.
-    pub overhead_bytes: Option<i64>
+    pub overhead_bytes: Option<i64>,
+    /// By default the project is copied to a scratch directory and every
+    /// rewrite and build happens there, so the real files are never touched.
+    /// Every path given must be inside it; its root is the build file's
+    /// directory unless `project_dir` says otherwise.
+    pub project_dir: Option<String>,
+    /// Rewrite and restore the real file instead. Not crash-safe.
+    pub in_place: Option<bool>,
+    /// Keep the scratch copy afterwards (its path is in the result).
+    pub keep_sandbox: Option<bool>
 }
 
-/// **MUTATING (transiently only - always restored)**: re-links a project
+/// Re-links a project
 /// once per candidate value of a single source-level cruncher-selection
 /// variable, rewriting and rebuilding for each, and reports each attempt's
 /// real total linked size (the same `.sym`-derived `last - first` computed
@@ -636,10 +646,36 @@ pub struct CompareLinkSizesInput {
 /// tool does not attempt to guess at one - `rewrite_variable_assignment`
 /// returning `None` for any candidate fails the whole call rather than
 /// silently building some candidates unmodified.
-pub(crate) fn compare_link_sizes(input: CompareLinkSizesInput) -> ToolResult {
+pub(crate) fn compare_link_sizes(mut input: CompareLinkSizesInput) -> ToolResult {
     if input.crunchers.is_empty() {
         return Err(ToolError::invalid_input("`crunchers` must not be empty"));
     }
+    if input.in_place.unwrap_or(false) {
+        return compare_link_sizes_in_place(input);
+    }
+    let origin = input
+        .project_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| project_dir_of(&input.bnd_path));
+    let sandbox = Sandbox::create(&origin, input.keep_sandbox.unwrap_or(false))?;
+    let mapped_bnd_path = sandbox.map(&input.bnd_path)?;
+    let original_bnd_path = std::mem::replace(&mut input.bnd_path, mapped_bnd_path);
+    input.sym_path = sandbox.map(&input.sym_path)?;
+    input.cruncher_source_path = sandbox.map(&input.cruncher_source_path)?;
+    let mut result = compare_link_sizes_in_place(input)?;
+    if result.get("bnd_path").is_some() {
+        result["bnd_path"] = json!(original_bnd_path);
+    }
+    result["sandbox"] = json!({
+        "used": true,
+        "original_untouched": true,
+        "kept_at": sandbox.keep_path()
+    });
+    Ok(result)
+}
+
+fn compare_link_sizes_in_place(input: CompareLinkSizesInput) -> ToolResult {
 
     let original = fs_err::read_to_string(&input.cruncher_source_path)
         .map_err(|e| ToolError::io(format!("cannot read {}: {e}", input.cruncher_source_path)))?;
@@ -789,9 +825,8 @@ impl McpServer {
         ok_or_tool_error(report_build(input))
     }
 
-    #[tool(description = "MUTATING (transiently only - the rewritten source file is always \
-                           restored to its original content before this call returns, even on \
-                           error): answers 'which cruncher gives the smallest real linked \
+    #[tool(description = "Works on a scratch COPY of the project by default (the real files are \
+                           never touched; `in_place: true` opts out): answers 'which cruncher gives the smallest real linked \
                            output', not just the smallest payload - compare_crunchers compares \
                            raw bytes in isolation and ignores each format's own decruncher stub \
                            size, which compare_link_sizes does not: it rewrites a single \
@@ -1075,7 +1110,8 @@ last equ #2900
             crunchers: vec![],
             extra_lines: None,
             target_size: None,
-            overhead_bytes: None
+            overhead_bytes: None,
+            ..Default::default()
         })
         .expect_err("an empty candidate list should be rejected up front");
         assert_eq!(err.kind, "invalid_input");
@@ -1100,7 +1136,8 @@ last equ #2900
             crunchers: vec!["CRUNCHER_ZX7".to_string()],
             extra_lines: None,
             target_size: None,
-            overhead_bytes: None
+            overhead_bytes: None,
+            ..Default::default()
         })
         .expect_err("a file without the convention must be rejected, not guessed at");
         assert_eq!(err.kind, "invalid_input");

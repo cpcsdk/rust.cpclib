@@ -16,6 +16,7 @@
 //! does each format do to this exact block", not "what would my final ROM
 //! look like".
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use cpclib_crunchers::{CompressMethod, CrunchersError};
@@ -129,7 +130,11 @@ pub(crate) fn resolve_cruncher(name: &str) -> Result<CompressMethod, ToolError> 
 /// this call still returns on time, with a clear per-format error instead
 /// of hanging the whole tool call.
 pub(crate) fn compress_with_timeout(name: String, data: Vec<u8>, timeout: Duration) -> Result<cpclib_crunchers::CompressionResult, String> {
-    run_with_timeout(timeout, move || {
+    let key = CacheKey::new(&name, &data);
+    if let Some(hit) = cache_lookup(&key) {
+        return Ok(hit);
+    }
+    let result = run_with_timeout(timeout, move || {
         match resolve_cruncher(&name) {
             Ok(method) => {
                 method
@@ -138,7 +143,57 @@ pub(crate) fn compress_with_timeout(name: String, data: Vec<u8>, timeout: Durati
             },
             Err(e) => Err(e.message)
         }
-    })
+    });
+    if let Ok(done) = &result {
+        cache_store(key, done);
+    }
+    result
+}
+
+/// What a crunch was asked to do: cruncher name and content. Searches
+/// (`search_reorderings`, `measure_variants`' proxy, `size_map`'s
+/// leave-one-out) keep asking for the same block - every candidate that
+/// leaves a region alone, every baseline - and a Shrinkler run is seconds.
+/// The content is identified by its length plus two independent 64-bit
+/// hashes rather than kept, so the cache stays small.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CacheKey {
+    name: String,
+    len: usize,
+    hashes: (u64, u64)
+}
+
+impl CacheKey {
+    fn new(name: &str, data: &[u8]) -> Self {
+        use std::hash::{Hash, Hasher};
+        let mut a = std::collections::hash_map::DefaultHasher::new();
+        data.hash(&mut a);
+        let mut b = std::collections::hash_map::DefaultHasher::new();
+        0x9e37_79b9_7f4a_7c15u64.hash(&mut b);
+        data.hash(&mut b);
+        Self { name: name.to_string(), len: data.len(), hashes: (a.finish(), b.finish()) }
+    }
+}
+
+const CACHE_LIMIT: usize = 512;
+
+fn cache() -> &'static std::sync::Mutex<HashMap<CacheKey, cpclib_crunchers::CompressionResult>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<CacheKey, cpclib_crunchers::CompressionResult>>> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+fn cache_lookup(key: &CacheKey) -> Option<cpclib_crunchers::CompressionResult> {
+    cache().lock().ok()?.get(key).cloned()
+}
+
+fn cache_store(key: CacheKey, result: &cpclib_crunchers::CompressionResult) {
+    if let Ok(mut cache) = cache().lock() {
+        if cache.len() >= CACHE_LIMIT {
+            cache.clear();
+        }
+        cache.insert(key, result.clone());
+    }
 }
 
 /// Runs `work` on its own thread and waits up to `timeout` for its result;
@@ -292,6 +347,21 @@ impl McpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_identical_crunch_is_answered_from_the_cache() {
+        let data: Vec<u8> = (0..2000u32).map(|i| (i * 7 % 251) as u8).collect();
+        let first = compress_with_timeout("zx0".into(), data.clone(), CRUNCHER_TIMEOUT).unwrap();
+        assert!(cache_lookup(&CacheKey::new("zx0", &data)).is_some());
+        let second = compress_with_timeout("zx0".into(), data.clone(), CRUNCHER_TIMEOUT).unwrap();
+        assert_eq!(first.stream, second.stream);
+        // another cruncher or other content is a different entry
+        assert!(cache_lookup(&CacheKey::new("zx7", &data)).is_none());
+        let mut other = data;
+        other[0] ^= 1;
+        assert!(cache_lookup(&CacheKey::new("zx0", &other)).is_none());
+    }
+
 
     #[test]
     fn compare_crunchers_requires_path_or_code() {

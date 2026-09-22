@@ -18,9 +18,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use cpclib_lsp::basm::AssemblyAnalyzer;
+use futures_util::FutureExt;
 use rmcp::handler::server::router::tool::ToolRouter;
-use rmcp::model::{ServerCapabilities, ServerConfig};
-use rmcp::{ServerHandler, tool_handler};
+use rmcp::handler::server::tool::ToolCallContext;
+use rmcp::model::{
+    CallToolRequestParams, CallToolResponse, CallToolResult, ServerCapabilities, ServerConfig
+};
+use rmcp::service::RequestContext;
+use rmcp::{ErrorData, RoleServer, ServerHandler, tool_handler};
 
 use crate::session::SessionManager;
 
@@ -62,6 +67,7 @@ impl McpServer {
                 + Self::variants_router()
                 + Self::project_router()
                 + Self::sizemap_router()
+                + Self::sandbox_router()
         }
     }
 
@@ -82,6 +88,39 @@ impl Default for McpServer {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for McpServer {
+    /// Tool dispatch, with a panic guard.
+    ///
+    /// A panic inside a tool (an arithmetic overflow on odd input, say) would
+    /// otherwise unwind the request's task and leave the client waiting for a
+    /// reply that never comes - indistinguishable from a hang. It is reported
+    /// as a normal tool error instead, and the server keeps serving.
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>
+    ) -> Result<CallToolResponse, ErrorData> {
+        let name = request.name.to_string();
+        let context = ToolCallContext::new(self, request, context);
+        match std::panic::AssertUnwindSafe(self.tool_router.call(context))
+            .catch_unwind()
+            .await
+        {
+            Ok(response) => response,
+            Err(payload) => {
+                let what = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "unknown panic".to_string());
+                let error = error::ToolError::new(
+                    error::ToolErrorKind::Internal,
+                    format!("tool '{name}' panicked: {what}")
+                );
+                Ok(CallToolResult::structured_error(error.to_json()).into())
+            }
+        }
+    }
+
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Amstrad CPC democoding tools: assemble/diagnose basm sources, count Z80 NOP \

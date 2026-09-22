@@ -25,7 +25,9 @@ pub enum ToolErrorKind {
     Disc,
     Robot,
     Io,
-    InvalidInput
+    InvalidInput,
+    /// The tool itself panicked - a bug in the server, not in the request.
+    Internal
 }
 
 impl ToolErrorKind {
@@ -39,7 +41,8 @@ impl ToolErrorKind {
             Self::Disc => "disc",
             Self::Robot => "robot",
             Self::Io => "io",
-            Self::InvalidInput => "invalid_input"
+            Self::InvalidInput => "invalid_input",
+            Self::Internal => "internal"
         }
     }
 }

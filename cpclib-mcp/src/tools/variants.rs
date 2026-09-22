@@ -19,6 +19,7 @@ use serde_json::{Value, json};
 
 use crate::McpServer;
 use crate::error::{ToolError, ToolResult};
+use crate::tools::sandbox::{Sandbox, project_dir_of};
 use crate::tools::build::{
     ReportBuildInput, RestoreFileOnDrop, one_line_error, report_build, run_target_quiet
 };
@@ -42,7 +43,7 @@ pub struct Variant {
     pub edits: Vec<TextEdit>
 }
 
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
 pub struct MeasureVariantsInput {
     /// Path to the build file (e.g. `build.bnd`/`bndbuild.yml`) or a
     /// directory containing one.
@@ -60,7 +61,18 @@ pub struct MeasureVariantsInput {
     pub variants: Vec<Variant>,
     /// Also build and measure the unmodified project first, as the row
     /// every other row is compared against. Default true.
-    pub include_baseline: Option<bool>
+    pub include_baseline: Option<bool>,
+    /// By default the project is copied to a scratch directory and every
+    /// build and edit happens there: the real files are never touched (see
+    /// `clone_project`). Every path given here must be inside that project;
+    /// its root is the build file's directory unless `project_dir` says
+    /// otherwise.
+    pub project_dir: Option<String>,
+    /// Work on the real files instead, editing and restoring them. Not
+    /// crash-safe: only for a project that is itself disposable.
+    pub in_place: Option<bool>,
+    /// Keep the scratch copy afterwards (its path is in the result).
+    pub keep_sandbox: Option<bool>
 }
 
 #[derive(Debug, Clone)]
@@ -165,7 +177,42 @@ fn measure_once(input: &MeasureVariantsInput) -> Result<(i64, u128), ToolError> 
     }
 }
 
-pub(crate) fn measure_variants(input: MeasureVariantsInput) -> ToolResult {
+pub(crate) fn measure_variants(mut input: MeasureVariantsInput) -> ToolResult {
+    // Validate before copying anything.
+    if input.output_file.is_some() == input.sym_path.is_some() {
+        return Err(ToolError::invalid_input("give exactly one of `output_file` / `sym_path`"));
+    }
+    if input.variants.is_empty() {
+        return Err(ToolError::invalid_input("`variants` must not be empty"));
+    }
+    if input.in_place.unwrap_or(false) {
+        return measure_variants_in_place(input);
+    }
+
+    let origin = input
+        .project_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| project_dir_of(&input.bnd_path));
+    let sandbox = Sandbox::create(&origin, input.keep_sandbox.unwrap_or(false))?;
+    let mapped_bnd_path = sandbox.map(&input.bnd_path)?;
+    let original_bnd_path = std::mem::replace(&mut input.bnd_path, mapped_bnd_path);
+    input.output_file = input.output_file.as_deref().map(|p| sandbox.map(p)).transpose()?;
+    input.sym_path = input.sym_path.as_deref().map(|p| sandbox.map(p)).transpose()?;
+    for edit in input.variants.iter_mut().flat_map(|v| v.edits.iter_mut()) {
+        edit.path = sandbox.map(&edit.path)?;
+    }
+    let mut result = measure_variants_in_place(input)?;
+    result["bnd_path"] = json!(original_bnd_path);
+    result["sandbox"] = json!({
+        "used": true,
+        "original_untouched": true,
+        "kept_at": sandbox.keep_path()
+    });
+    Ok(result)
+}
+
+fn measure_variants_in_place(input: MeasureVariantsInput) -> ToolResult {
     if input.output_file.is_some() == input.sym_path.is_some() {
         return Err(ToolError::invalid_input("give exactly one of `output_file` / `sym_path`"));
     }
@@ -273,8 +320,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = variants_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "MUTATING (transiently only - every touched file is always restored, \
-                           even on error): rebuilds the real project once per variant (a named \
+    #[tool(description = "Works on a scratch COPY of the project by default (the real files are \
+                           never touched; `in_place: true` opts out): rebuilds the project once per variant (a named \
                            set of exact-text edits across any files) and measures a real size \
                            - the size of an output file such as the final .RAN/.BIN \
                            (`output_file`), or the .sym-derived linked size (`sym_path`) - \
@@ -349,7 +396,8 @@ mod tests {
                 name: "v".to_string(),
                 edits: vec![]
             }],
-            include_baseline: None
+            include_baseline: None,
+            ..Default::default()
         };
         assert_eq!(measure_variants(base(None, None)).unwrap_err().kind, "invalid_input");
         assert_eq!(measure_variants(base(Some("o"), Some("s"))).unwrap_err().kind, "invalid_input");
