@@ -242,6 +242,7 @@ impl<'src> Formatter<'src> {
                 // struct/macro names as mnemonics and applying the wrong case.
                 self.emit_line(0, &label_str, None);
                 let after = Self::normalize_colon_spacing(after_label, self.space_around_column);
+                let after = self.apply_comma_and_quote_style(&after);
                 self.emit_line(depth, &after, comment);
             }
         }
@@ -288,11 +289,13 @@ impl<'src> Formatter<'src> {
         if token.mnemonic().is_some() {
             let out = Self::apply_mnemonic_case(&content, self.mnemonic_case, self.register_case);
             let out = self.reformat_numeric_literals(&out);
+            let out = self.apply_comma_and_quote_style(&out);
             self.emit_line(depth, &out, comment.as_deref());
         }
         else if token.is_call_macro_or_build_struct() {
             // Macro names are user-defined: preserve casing; only reformat numeric literals.
             let out = self.reformat_numeric_literals(&content);
+            let out = self.apply_comma_and_quote_style(&out);
             self.emit_line(depth, &out, comment.as_deref());
         }
         else if token.is_assign() {
@@ -301,6 +304,7 @@ impl<'src> Formatter<'src> {
             // else distinction this depends on.
             let out = Self::normalize_assignment_spacing(&content, self.space_around_assignment);
             let out = self.reformat_numeric_literals(&out);
+            let out = self.apply_comma_and_quote_style(&out);
             self.emit_line(self.assign_depth(depth), &out, comment.as_deref());
         }
         else if token.is_equ() {
@@ -308,6 +312,7 @@ impl<'src> Formatter<'src> {
             // directive_case only to the keyword (second word).
             let out = Self::apply_case_to_second_word(&content, self.directive_case);
             let out = self.reformat_numeric_literals(&out);
+            let out = self.apply_comma_and_quote_style(&out);
             self.emit_line(self.assign_depth(depth), &out, comment.as_deref());
         }
         else {
@@ -327,12 +332,14 @@ impl<'src> Formatter<'src> {
                 // Label-first directives: label is a top-level symbol name → column 0.
                 let out = Self::apply_case_to_second_word(&content, self.directive_case);
                 let out = self.reformat_numeric_literals(&out);
+                let out = self.apply_comma_and_quote_style(&out);
                 self.emit_line(0, &out, comment.as_deref());
             }
             else {
                 // All other directives: keyword is the first word.
                 let out = Self::apply_case_to_first_word(&content, self.directive_case);
                 let out = self.reformat_numeric_literals(&out);
+                let out = self.apply_comma_and_quote_style(&out);
                 self.emit_line(depth, &out, comment.as_deref());
             }
         }

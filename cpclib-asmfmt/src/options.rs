@@ -171,6 +171,33 @@ impl std::fmt::Display for LabelPostfix {
     }
 }
 
+/// Controls the quote character used for string literals (`'x'` vs `"x"`).
+/// A literal is only converted when its own content does not contain the
+/// target quote character - converting `"it's here"` to single quotes would
+/// need an escape this format has no defined syntax for, so that literal is
+/// left exactly as written rather than guessed at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "cmdline", derive(clap::ValueEnum))]
+pub enum QuoteStyle {
+    #[cfg_attr(feature = "cmdline", value(name = "single"))]
+    Single,
+    #[cfg_attr(feature = "cmdline", value(name = "double"))]
+    Double,
+    #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
+    Untouched
+}
+
+#[cfg(feature = "cmdline")]
+impl std::fmt::Display for QuoteStyle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use clap::ValueEnum;
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
+    }
+}
+
 fn default_indent_size() -> usize {
     4
 }
@@ -194,6 +221,15 @@ fn default_space_around_column() -> SpaceAroundColumn {
 }
 fn default_space_around_assignment() -> SpaceAroundColumn {
     SpaceAroundColumn::Untouched
+}
+fn default_space_around_comma() -> SpaceAroundColumn {
+    SpaceAroundColumn::Untouched
+}
+fn default_quote_style() -> QuoteStyle {
+    QuoteStyle::Untouched
+}
+fn default_max_consecutive_blank_lines() -> Option<usize> {
+    None
 }
 fn default_hexadecimal_case() -> CaseStyle {
     CaseStyle::Untouched
@@ -262,6 +298,27 @@ pub struct AsmFormatOptions {
     #[cfg_attr(feature = "cmdline", arg(long, default_value_t = SpaceAroundColumn::Untouched))]
     pub space_around_assignment: SpaceAroundColumn,
 
+    /// Spacing around `,` inside an instruction's operand list (`ld a,b` vs `ld a, b`).
+    /// Never touches a comma inside a string literal (`db "a,b"`).
+    #[serde(default = "default_space_around_comma")]
+    #[builder(default = default_space_around_comma())]
+    #[cfg_attr(feature = "cmdline", arg(long, default_value_t = SpaceAroundColumn::Untouched))]
+    pub space_around_comma: SpaceAroundColumn,
+
+    /// Quote character used for string literals (`'x'` vs `"x"`). A literal whose own
+    /// content contains the target quote character is left untouched (see `QuoteStyle`).
+    #[serde(default = "default_quote_style")]
+    #[builder(default = default_quote_style())]
+    #[cfg_attr(feature = "cmdline", arg(long, default_value_t = QuoteStyle::Untouched))]
+    pub quote_style: QuoteStyle,
+
+    /// Collapse a run of more than this many consecutive blank lines down to exactly
+    /// this many. `None` (default): blank lines are preserved exactly as written, however
+    /// many there are.
+    #[serde(default = "default_max_consecutive_blank_lines")]
+    #[cfg_attr(feature = "cmdline", arg(long))]
+    pub max_consecutive_blank_lines: Option<usize>,
+
     /// Case applied to A-F letters inside hex literals.
     #[serde(default = "default_hexadecimal_case")]
     #[builder(default = default_hexadecimal_case())]
@@ -304,6 +361,9 @@ impl Default for AsmFormatOptions {
             one_instruction_per_line: default_one_instruction_per_line(),
             space_around_column: default_space_around_column(),
             space_around_assignment: default_space_around_assignment(),
+            space_around_comma: default_space_around_comma(),
+            quote_style: default_quote_style(),
+            max_consecutive_blank_lines: default_max_consecutive_blank_lines(),
             hexadecimal_case: default_hexadecimal_case(),
             hexadecimal_encoding: default_hexadecimal_encoding(),
             octal_encoding: default_octal_encoding(),

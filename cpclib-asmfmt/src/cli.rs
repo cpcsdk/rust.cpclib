@@ -88,6 +88,24 @@ pub fn apply_cli_overrides(base: AsmFormatOptions, matches: &clap::ArgMatches) -
         else {
             base.space_around_assignment
         },
+        space_around_comma: if explicit("space_around_comma") {
+            cli.space_around_comma
+        }
+        else {
+            base.space_around_comma
+        },
+        quote_style: if explicit("quote_style") {
+            cli.quote_style
+        }
+        else {
+            base.quote_style
+        },
+        max_consecutive_blank_lines: if explicit("max_consecutive_blank_lines") {
+            cli.max_consecutive_blank_lines
+        }
+        else {
+            base.max_consecutive_blank_lines
+        },
         hexadecimal_case: if explicit("hexadecimal_case") {
             cli.hexadecimal_case
         }

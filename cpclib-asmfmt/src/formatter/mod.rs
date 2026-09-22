@@ -2,7 +2,7 @@ use cpclib_asm::{AssemblerError, LocatedListing, MayHaveSpan, parse_z80_str};
 
 use crate::options::{
     AsmFormatOptions, BinaryEncoding, CaseStyle, HexEncoding, LabelPostfix, OctalEncoding,
-    SpaceAroundColumn
+    QuoteStyle, SpaceAroundColumn
 };
 
 mod case;
@@ -22,6 +22,9 @@ pub(super) struct Formatter<'src> {
     pub(super) one_instruction_per_line: bool,
     pub(super) space_around_column: SpaceAroundColumn,
     pub(super) space_around_assignment: SpaceAroundColumn,
+    pub(super) space_around_comma: SpaceAroundColumn,
+    pub(super) quote_style: QuoteStyle,
+    pub(super) max_consecutive_blank_lines: Option<usize>,
     pub(super) hexadecimal_case: CaseStyle,
     pub(super) hexadecimal_encoding: HexEncoding,
     pub(super) octal_encoding: OctalEncoding,
@@ -57,6 +60,9 @@ impl<'src> Formatter<'src> {
             one_instruction_per_line: opt.one_instruction_per_line,
             space_around_column: opt.space_around_column,
             space_around_assignment: opt.space_around_assignment,
+            space_around_comma: opt.space_around_comma,
+            quote_style: opt.quote_style,
+            max_consecutive_blank_lines: opt.max_consecutive_blank_lines,
             hexadecimal_case: opt.hexadecimal_case,
             hexadecimal_encoding: opt.hexadecimal_encoding,
             octal_encoding: opt.octal_encoding,

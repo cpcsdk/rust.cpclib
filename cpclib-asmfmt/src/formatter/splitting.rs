@@ -1,5 +1,5 @@
 use super::Formatter;
-use crate::options::SpaceAroundColumn;
+use crate::options::{QuoteStyle, SpaceAroundColumn};
 
 impl<'src> Formatter<'src> {
     // Split "content ; comment" → (content.trim_end(), Option<"; comment">)
@@ -215,4 +215,107 @@ impl<'src> Formatter<'src> {
         format!("{}{}{}{}{}", label, sp_before, op, sp_after, value)
     }
 
+    // Reformat spacing around `,` in `content` (operand lists, macro-call
+    // arguments, `DB`/`DW` data lists, ...) according to `spacing`. A comma
+    // inside a string literal (`'` or `"`, matched against itself - real Z80
+    // asm has no escape syntax for a quote inside its own kind of string) is
+    // never touched: `db "a,b", 5` must only ever have its *second* comma
+    // reformatted. Parentheses are deliberately not tracked - unlike
+    // `split_instructions`' `:` handling, a comma inside `(...)` (macro/struct
+    // call arguments, e.g. `list_new(2, -1)`) is exactly the kind of comma
+    // this option should normalize too, not skip.
+    pub(super) fn normalize_comma_spacing(content: &str, spacing: SpaceAroundColumn) -> String {
+        if matches!(spacing, SpaceAroundColumn::Untouched) {
+            return content.to_string();
+        }
+        let (before, after) = match spacing {
+            SpaceAroundColumn::None => ("", ""),
+            SpaceAroundColumn::Before => (" ", ""),
+            SpaceAroundColumn::After => ("", " "),
+            SpaceAroundColumn::Both => (" ", " "),
+            SpaceAroundColumn::Untouched => unreachable!()
+        };
+        let mut out = String::with_capacity(content.len());
+        let mut in_string: Option<char> = None;
+        let mut last_copied = 0usize;
+        for (idx, c) in content.char_indices() {
+            if let Some(q) = in_string {
+                if c == q {
+                    in_string = None;
+                }
+                continue;
+            }
+            match c {
+                '"' | '\'' => in_string = Some(c),
+                ',' => {
+                    out.push_str(content[last_copied..idx].trim_end_matches(' '));
+                    out.push_str(before);
+                    out.push(',');
+                    out.push_str(after);
+                    let mut next = idx + 1;
+                    while content[next..].starts_with(' ') {
+                        next += 1;
+                    }
+                    last_copied = next;
+                },
+                _ => {}
+            }
+        }
+        out.push_str(&content[last_copied..]);
+        out
+    }
+
+    // Convert string-literal delimiters in `content` between `'` and `"`
+    // according to `style`. A literal is only converted when doing so doesn't
+    // need an escape this format has no syntax for: `"it's"` is left as
+    // double-quoted even when `style` asks for single quotes, since the
+    // apostrophe inside it would otherwise collide with the new delimiter. An
+    // unterminated literal (an odd number of the opening quote character from
+    // some point on) stops the scan rather than guessing at where it ends.
+    pub(super) fn normalize_quote_style(content: &str, style: QuoteStyle) -> String {
+        let from = match style {
+            QuoteStyle::Single => '"',
+            QuoteStyle::Double => '\'',
+            QuoteStyle::Untouched => return content.to_string()
+        };
+        let to = match style {
+            QuoteStyle::Single => '\'',
+            QuoteStyle::Double => '"',
+            QuoteStyle::Untouched => unreachable!()
+        };
+        let mut out = String::with_capacity(content.len());
+        let mut last_copied = 0usize;
+        let mut search_from = 0usize;
+        while let Some(rel_start) = content[search_from..].find(from) {
+            let start = search_from + rel_start;
+            let literal_start = start + from.len_utf8();
+            let Some(rel_end) = content[literal_start..].find(from)
+            else {
+                // Unterminated - nothing further in `content` can be trusted
+                // to be outside a string; stop scanning.
+                break;
+            };
+            let end = literal_start + rel_end;
+            let literal = &content[literal_start..end];
+            if !literal.contains(to) {
+                out.push_str(&content[last_copied..start]);
+                out.push(to);
+                out.push_str(literal);
+                out.push(to);
+                last_copied = end + from.len_utf8();
+            }
+            search_from = end + from.len_utf8();
+        }
+        out.push_str(&content[last_copied..]);
+        out
+    }
+
+    // Both comma-spacing and quote-style normalization, chained - the pairing
+    // every `format_simple` call site below actually wants right after
+    // `reformat_numeric_literals`, folded into one call so those sites don't
+    // each have to remember both.
+    pub(super) fn apply_comma_and_quote_style(&self, content: &str) -> String {
+        let out = Self::normalize_comma_spacing(content, self.space_around_comma);
+        Self::normalize_quote_style(&out, self.quote_style)
+    }
 }

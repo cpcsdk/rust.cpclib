@@ -8,7 +8,7 @@ pub use config::{CONFIG_FILE_NAME, find_config_file, load_config, load_config_fr
 pub use formatter::{format, format_listing};
 pub use options::{
     AsmFormatOptions, BinaryEncoding, CaseStyle, HexEncoding, LabelPostfix, OctalEncoding,
-    SpaceAroundColumn
+    QuoteStyle, SpaceAroundColumn
 };
 
 #[cfg(test)]
@@ -901,5 +901,88 @@ label_definition_postfix_with_column = "NoColumn"
             let twice = format(&once, &AsmFormatOptions::default()).unwrap();
             assert_eq!(once, twice, "not idempotent for {src:?}");
         }
+    }
+
+    // ── comma spacing ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_comma_spacing_both() {
+        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::Both, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\nld a,b\ndb 1,2 ,3\n", &opt).unwrap();
+        assert!(out.contains("LD A , B"), "got: {out:?}");
+        assert!(out.contains("DB 1 , 2 , 3"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_comma_spacing_none_strips_existing_whitespace() {
+        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::None, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\nld a, b\ndb 1, 2 , 3\n", &opt).unwrap();
+        assert!(out.contains("LD A,B"), "got: {out:?}");
+        assert!(out.contains("DB 1,2,3"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_comma_spacing_leaves_commas_inside_string_literals_alone() {
+        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::Both, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\ndb \"a,b\", 5\n", &opt).unwrap();
+        assert!(out.contains("\"a,b\""), "comma inside the string literal must not move: {out:?}");
+        assert!(out.contains("\"a,b\" , 5"), "the real operand-separator comma must still be spaced: {out:?}");
+    }
+
+    #[test]
+    fn test_comma_spacing_normalizes_commas_inside_parentheses_too() {
+        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::After, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\ncall list_new(2,-1)\n", &opt).unwrap();
+        assert!(out.contains("list_new(2, -1)"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_comma_spacing_untouched_by_default() {
+        let out = fmt("org 0x4000\ndb 1,  2 ,3\n");
+        assert!(out.contains("DB 1,  2 ,3"), "default must not touch comma spacing: {out:?}");
+    }
+
+    // ── quote style ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_quote_style_double_to_single() {
+        let opt = AsmFormatOptions { quote_style: QuoteStyle::Single, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\ndb \"hello\", \"world\"\n", &opt).unwrap();
+        assert!(out.contains("'hello', 'world'"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_quote_style_single_to_double() {
+        let opt = AsmFormatOptions { quote_style: QuoteStyle::Double, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\ndb 'hello', 'ok'\n", &opt).unwrap();
+        assert!(out.contains("\"hello\", \"ok\""), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_quote_style_skips_a_literal_that_would_need_an_escape() {
+        // Converting `"it's a test"` to single quotes would need an escape
+        // this format has no syntax for - the literal must be left as-is.
+        let opt = AsmFormatOptions { quote_style: QuoteStyle::Single, ..AsmFormatOptions::default() };
+        let out = format("org 0x4000\ndb \"it's a test\"\n", &opt).unwrap();
+        assert!(out.contains("\"it's a test\""), "ambiguous literal must not be converted: {out:?}");
+    }
+
+    #[test]
+    fn test_quote_style_untouched_by_default() {
+        let out = fmt("org 0x4000\ndb \"hello\", 'ok'\n");
+        assert!(out.contains("\"hello\""), "got: {out:?}");
+        assert!(out.contains("'ok'"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_comma_and_quote_style_formatting_is_idempotent() {
+        let opt = AsmFormatOptions {
+            space_around_comma: SpaceAroundColumn::Both,
+            quote_style: QuoteStyle::Single,
+            ..AsmFormatOptions::default()
+        };
+        let once = format("org 0x4000\ndb \"a,b\",1,2\ncall list_new(2,-1)\n", &opt).unwrap();
+        let twice = format(&once, &opt).unwrap();
+        assert_eq!(once, twice, "not idempotent: {once:?} -> {twice:?}");
     }
 }
