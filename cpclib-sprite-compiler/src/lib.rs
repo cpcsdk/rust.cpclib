@@ -10,7 +10,7 @@ use cpclib_asm::{
 // encoding - and never its colours, so it works the same whichever machine the
 // palette was built for.
 use cpclib_image::color::AmstradColor;
-use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
+use cpclib_image::transfer::{SpriteEncoding, SpriteOutput};
 use itertools::Itertools;
 use smol_str::SmolStr;
 

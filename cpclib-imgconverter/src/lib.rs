@@ -13,7 +13,7 @@ use cpclib::common::{clap, clap_parse_any_positive_number};
 use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
-use cpclib::image::convert::*;
+use cpclib::image::transfer::*;
 use cpclib::image::image::Mode;
 
 // Most of this tool is Gate Array work: 27 inks, written through the GA ports.

@@ -1813,7 +1813,7 @@ impl<C: AmstradColor> ImageConverter<C> {
 
 #[cfg(test)]
 mod tests {
-    use crate::convert::*;
+    use crate::transfer::*;
 
     #[test]
     fn overscan_test() {

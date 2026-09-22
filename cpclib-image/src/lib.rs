@@ -10,5 +10,5 @@ pub mod asic;
 pub mod color;
 pub mod kit;
 
-/// PC to CPC image conversions. WIP
-pub mod convert;
+/// PC to CPC image transfer: exact resolution, exact/near hardware colors already. WIP
+pub mod transfer;
