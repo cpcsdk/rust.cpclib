@@ -56,18 +56,19 @@ pub fn bayer_matrix(n: usize) -> Vec<Vec<u32>> {
 ///   emitted light actually adds in - blending in Lab or gamma-encoded RGB
 ///   would not correspond to what a display physically produces, even
 ///   though Lab/CIEDE2000 is still what decides which candidate is closest;
-/// - a candidate pair is skipped when its two colors' lightness differs by
-///   more than several times the palette's own typical successive gap
-///   (Yliluoma's "psychovisual" guard) - it avoids jarring high-contrast
-///   speckling, e.g. a stray bright pixel dropped into a dark region purely
-///   because it numerically minimized the distance;
-/// - a candidate pair's own dissimilarity (full Lab distance between its two
-///   colors, not just lightness) is added to its score - without this, two
-///   colors that are nowhere near each other in hue can still average to
+/// - a candidate pair's own *chroma* dissimilarity (Euclidean distance in
+///   the Lab a*/b* plane between its two colors - hue and saturation, with
+///   lightness deliberately excluded) is added to its score - without this,
+///   two colors that are nowhere near each other in hue can still average to
 ///   something numerically close to the target in linear RGB (e.g. red and
 ///   green metamerically averaging toward gray), but a real low-resolution
 ///   display does not optically blend adjacent pixels finely enough for that
-///   to read as anything but colored speckle; and
+///   to read as anything but colored speckle. Lightness is excluded from
+///   this penalty on purpose: black and white are about as far apart as two
+///   colors can be in full Lab distance, but blending them is the ordinary,
+///   desired case for a grayscale ramp, not a metamerism problem - only a
+///   *hue* mismatch between the two candidates is the failure mode this
+///   guards against; and
 /// - the winning pair is always mapped low-threshold -> darker,
 ///   high-threshold -> lighter, regardless of which of the two happened to
 ///   be nearest, so neighboring pixels' dither patterns stay tonally
@@ -77,26 +78,19 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
     palette: &[(C, LabF32, LinRgbF32)],
     bayer_size: usize
 ) -> ColorMatrix<C> {
-    /// Weight of a candidate pair's own dissimilarity in its score, relative
-    /// to how well the pair's blend fits the target pixel (both measured in
-    /// CIEDE2000 delta-E units). Mirrors Yliluoma's `ColorCompare(a,b) x 0.1`
-    /// penalty term; picked empirically for this metric's scale by checking
-    /// that a mid-gray photograph dithers into a neutral gray-black-white
-    /// halftone rather than colored speckle, then never trying to push it
-    /// further than what that check needed.
-    const PAIR_DISSIMILARITY_WEIGHT: f32 = 0.3;
+    /// Weight of a candidate pair's own chroma dissimilarity in its score,
+    /// relative to how well the pair's blend fits the target pixel (the fit
+    /// is a CIEDE2000 delta-E; the chroma term is a plain Euclidean a*/b*
+    /// distance, a different scale - this weight is what reconciles them).
+    /// Picked empirically by checking that a mid-gray photograph dithers
+    /// into a neutral gray-black-white halftone rather than colored
+    /// speckle, without also flattening out legitimate high-lightness-span
+    /// pairs (black+white for a wide tonal range).
+    const PAIR_DISSIMILARITY_WEIGHT: f32 = 0.05;
 
     let bayer = bayer_matrix(bayer_size);
     let levels = (bayer_size * bayer_size) as u32;
     let mut out = ColorMatrix::<C>::new(img.width() as usize, img.height() as usize);
-
-    let typical_gap = typical_successive_lightness_gap(palette);
-    let max_lightness_gap = if typical_gap > f32::EPSILON {
-        typical_gap * 5.0
-    }
-    else {
-        f32::INFINITY
-    };
 
     for y in 0..img.height() {
         for x in 0..img.width() {
@@ -119,10 +113,6 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
             for i in 0..palette.len() {
                 let (ci, labi, lini) = palette[i];
                 for &(cj, labj, linj) in &palette[i + 1..] {
-                    if (labi.l - labj.l).abs() > max_lightness_gap {
-                        continue;
-                    }
-
                     let t = best_linear_ratio(target_lin, lini, linj);
                     let mixed_lin = LinRgbF32::new(
                         lini.red + (linj.red - lini.red) * t,
@@ -132,16 +122,18 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
                     let fit = lab_distance(target, linear_to_lab(mixed_lin));
 
                     // Penalize dissimilar pairs directly (Yliluoma's
-                    // ColorCompare(a,b) term): two colors far apart in full
-                    // Lab - not just lightness - can still average to
-                    // something numerically close to the target in linear
-                    // RGB (e.g. red+green metamerically averaging to a
-                    // target gray), but a real low-resolution display does
-                    // not optically blend adjacent pixels finely enough for
-                    // that to read as anything but colored speckle. Without
-                    // this term the fit score alone would happily pick such
-                    // a pair.
-                    let score = fit + lab_distance(labi, labj) * PAIR_DISSIMILARITY_WEIGHT;
+                    // ColorCompare(a,b) term), but only on chroma - a
+                    // lightness-inclusive penalty would equally punish
+                    // black+white, the ordinary case for a wide tonal
+                    // range, along with the actual failure mode: two colors
+                    // far apart in hue can still average to something
+                    // numerically close to the target in linear RGB (e.g.
+                    // red+green metamerically averaging to a target gray),
+                    // but a real low-resolution display does not optically
+                    // blend adjacent pixels finely enough for that to read
+                    // as anything but colored speckle. Without this term
+                    // the fit score alone would happily pick such a pair.
+                    let score = fit + chroma_distance(labi, labj) * PAIR_DISSIMILARITY_WEIGHT;
 
                     if best.is_none_or(|(.., bs)| score < bs) {
                         best = Some((ci, labi, cj, labj, t, score));
@@ -177,6 +169,17 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
     out
 }
 
+/// Distance between two colors in just the Lab a*/b* (chroma) plane,
+/// deliberately ignoring lightness - see [`ordered_arbitrary_dither`]'s
+/// pair-dissimilarity penalty for why: it must catch a hue mismatch (red vs
+/// green) without also catching an ordinary wide lightness span (black vs
+/// white), and full Lab/CIEDE2000 distance conflates the two.
+fn chroma_distance(a: LabF32, b: LabF32) -> f32 {
+    let da = a.a - b.a;
+    let db = a.b - b.b;
+    (da * da + db * db).sqrt()
+}
+
 /// Closed-form mixing ratio (fraction toward `b`) that best approximates
 /// `target` as a blend of `a` and `b` in linear RGB: a luma-weighted (CCIR
 /// 601 coefficients) per-channel least-squares fit, solved directly instead
@@ -203,21 +206,6 @@ fn best_linear_ratio(target: LinRgbF32, a: LinRgbF32, b: LinRgbF32) -> f32 {
     else {
         (num / den).clamp(0.0, 1.0)
     }
-}
-
-/// Average gap between consecutive Lab lightness values across the palette,
-/// sorted - Yliluoma's "typical successive difference," used to bound how
-/// far apart two candidate colors may be before blending them is considered
-/// psychovisually jarring rather than a genuine dither. `f32::INFINITY` for
-/// a palette too small or too uniform for the notion to mean anything.
-fn typical_successive_lightness_gap<C: AmstradColor>(palette: &[(C, LabF32, LinRgbF32)]) -> f32 {
-    if palette.len() < 2 {
-        return f32::INFINITY;
-    }
-    let mut lightness: Vec<f32> = palette.iter().map(|(_, lab, _)| lab.l).collect();
-    lightness.sort_by(f32::total_cmp);
-    let total_gap: f32 = lightness.windows(2).map(|w| w[1] - w[0]).sum();
-    total_gap / (lightness.len() - 1) as f32
 }
 
 /// A weighted error-diffusion kernel: each `(dx, dy, weight)` tap propagates
