@@ -28,6 +28,11 @@ pub(super) struct Formatter<'src> {
     pub(super) label_definition_postfix_with_column: LabelPostfix,
     pub(super) current_line: usize,
     pub(super) output: String,
+    // How many FUNCTION bodies currently enclose the token being formatted
+    // (>0 while inside one, however deeply nested inside further IF/REPEAT/...
+    // wrapping within it - those don't open their own scope, see
+    // `tokens::Formatter::assign_depth`'s own doc comment).
+    pub(super) function_nesting: usize,
     // Per-source-line segment cache (`:` splitting for one_instruction_per_line)
     pub(super) seg_line: usize, // which source line is currently cached (usize::MAX = none)
     pub(super) seg_idx: usize,  // next segment to consume
@@ -54,6 +59,7 @@ impl<'src> Formatter<'src> {
             label_definition_postfix_with_column: opt.label_definition_postfix_with_column,
             current_line: 0,
             output: String::new(),
+            function_nesting: 0,
             seg_line: usize::MAX,
             seg_idx: 0,
             seg_items: Vec::new(),

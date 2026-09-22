@@ -4,11 +4,31 @@ use super::Formatter;
 use crate::options::LabelPostfix;
 
 impl<'src> Formatter<'src> {
-    /// The indentation depth an assignment/EQU should actually render at -
-    /// see the call sites' own comments for why this differs from a plain
-    /// instruction's depth.
-    fn assign_depth(depth: usize) -> usize {
-        if depth <= 1 { 0 } else { depth }
+    /// The indentation depth an assignment/EQU should actually render at.
+    ///
+    /// `=`/`EQU` define a symbol, and outside a FUNCTION that symbol is
+    /// always globally visible - IF/REPEAT/WHILE/... bodies never scope
+    /// anything, they only decide whether/how many times their body
+    /// assembles at all (confirmed live: a variable set inside a plain `IF`
+    /// or `REPEAT` is still readable straight after it). So a definition
+    /// textually inside one of those is, semantically, exactly as global as
+    /// a top-level one, and keeps that convention's column 0 regardless of
+    /// how deep the surrounding IF/REPEAT nesting happens to be - matching
+    /// real project style found this way (skyline's own source keeps such
+    /// definitions flush left even nested several IFs deep).
+    ///
+    /// A FUNCTION body is different: it has real local scope (confirmed
+    /// live: `Unknown symbol` for a name assigned inside one, if referenced
+    /// after it), so an assignment there is an ordinary local statement, not
+    /// a declaration - it keeps the surrounding block's own depth like its
+    /// sibling statements (`RETURN`, ...), the same way real hand-written
+    /// code in this style already aligns it (confirmed against a real
+    /// project's own source, not just guessed). `function_nesting` stays set
+    /// through any further IF/REPEAT/... wrapping *within* that FUNCTION
+    /// body, since those don't open a scope of their own either - the
+    /// assignment is still local to the enclosing FUNCTION.
+    fn assign_depth(&self, depth: usize) -> usize {
+        if self.function_nesting > 0 { depth } else { 0 }
     }
 
     pub fn format_tokens(&mut self, tokens: &[LocatedToken], depth: usize) {
@@ -114,12 +134,19 @@ impl<'src> Formatter<'src> {
             );
         }
         else if token.is_function_definition() {
+            // A FUNCTION body has real local scope in cpclib-asm/basm (confirmed
+            // live: a variable assigned inside one is `Unknown symbol` outside
+            // it) - unlike IF/REPEAT/WHILE/..., whose bodies never scope a
+            // symbol at all, only conditionally/repeatedly assemble it. That
+            // distinction is what `assign_depth` keys off.
+            self.function_nesting += 1;
             self.format_block(
                 token.function_definition_inner(),
                 depth,
                 line_0,
                 &["ENDFUNCTION", "ENDF"]
             );
+            self.function_nesting -= 1;
         }
         else if token.is_switch() {
             self.format_switch(token, depth, line_0);
@@ -250,28 +277,19 @@ impl<'src> Formatter<'src> {
             self.emit_line(depth, &out, comment.as_deref());
         }
         else if token.is_assign() {
-            // Symbol assignment (label = value, label += value, etc.). `format()`
-            // starts the whole file at depth 1 (an ordinary top-level instruction
-            // sits one level in, with labels/declarations flush left at 0) - so
-            // `depth <= 1` here means "not nested in any real block", and a
-            // top-level constant (`SIZE = 4`) keeps the label-like column-0
-            // convention. Once actually nested (depth >= 2: inside a FUNCTION/
-            // REPEAT/IF/...), this is an ordinary local-variable statement, not a
-            // declaration to keep grep-able at the margin - it now keeps the
-            // surrounding block's own depth instead of being flattened out from
-            // under it, matching how hand-written code in this style already
-            // aligns it with its sibling statements (confirmed against a real
-            // project's own source, not just guessed).
+            // Symbol assignment (label = value, label += value, etc.) - see
+            // `assign_depth`'s own doc comment for the FUNCTION-vs-everything-
+            // else distinction this depends on.
             let out = Self::normalize_assignment_spacing(&content, self.space_around_assignment);
             let out = self.reformat_numeric_literals(&out);
-            self.emit_line(Self::assign_depth(depth), &out, comment.as_deref());
+            self.emit_line(self.assign_depth(depth), &out, comment.as_deref());
         }
         else if token.is_equ() {
             // "symbol EQU value": same reasoning as `is_assign` above; apply
             // directive_case only to the keyword (second word).
             let out = Self::apply_case_to_second_word(&content, self.directive_case);
             let out = self.reformat_numeric_literals(&out);
-            self.emit_line(Self::assign_depth(depth), &out, comment.as_deref());
+            self.emit_line(self.assign_depth(depth), &out, comment.as_deref());
         }
         else {
             // Directives where a user-defined symbol precedes the keyword (like SETN/NEXT)

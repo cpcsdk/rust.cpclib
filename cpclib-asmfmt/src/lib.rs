@@ -356,13 +356,18 @@ mod tests {
         );
     }
 
-    /// Regression: `is_assign`/`is_equ` used to hardcode column 0 unconditionally,
-    /// so a local assignment inside a FUNCTION/REPEAT/IF/... body was flattened
-    /// to the left margin - out from under its own block, and out of step with
-    /// every sibling statement around it (`RETURN`, a nested `IF`'s body, ...).
-    /// Only the true top-level case (not nested in any block) keeps the
-    /// label-like column-0 convention `test_assign_at_column_zero`/
-    /// `test_equ_at_column_zero` pin.
+    /// Regression: `is_assign`/`is_equ` used to hardcode column 0
+    /// unconditionally, so a local assignment inside a FUNCTION body was
+    /// flattened to the left margin - out from under its own block, and out
+    /// of step with every sibling statement around it (`RETURN`, ...).
+    ///
+    /// FUNCTION is the one construct that actually gets this treatment: it
+    /// has real local scope in basm (confirmed live: a name assigned inside
+    /// one is `Unknown symbol` if read after it), so an assignment there is
+    /// an ordinary local statement, not a declaration - see
+    /// `test_assign_inside_a_bare_if_or_repeat_stays_at_column_zero` for the
+    /// (deliberately different) IF/REPEAT/... case, which never scopes
+    /// anything and keeps the column-0 convention regardless of nesting.
     #[test]
     fn test_assign_and_equ_inside_a_function_keep_the_bodys_depth() {
         let out = fmt("function foo x\n    a = 1\n    b equ 2\n    return a\nendfunction\n");
@@ -380,14 +385,34 @@ mod tests {
         assert_eq!(body_indent(b_line), body_indent(return_line), "EQU should match its sibling statements' depth: {b_line:?}");
     }
 
-    /// Same regression, for REPEAT (a second, independently-broken block kind
-    /// before the fix - `is_assign`/`is_equ` ignored `depth` regardless of
-    /// which construct it came from).
+    /// IF/REPEAT/WHILE/... never scope a symbol at all (confirmed live: a
+    /// variable set inside a plain `IF` or `REPEAT` is still readable
+    /// straight after it, unlike FUNCTION) - a definition textually inside
+    /// one is exactly as global as a top-level one, and real project style
+    /// found this way agrees: skyline's own source keeps such definitions
+    /// flush left even several IFs deep. So, deliberately unlike FUNCTION,
+    /// these keep the column-0 convention regardless of nesting.
     #[test]
-    fn test_assign_inside_a_repeat_keeps_the_bodys_depth() {
-        let out = fmt("repeat 3, i, 0\n    c = i\nendrepeat\n");
-        let line = out.lines().find(|l| l.contains("c = i")).unwrap();
-        assert!(line.starts_with(' '), "assignment flattened to column 0 inside REPEAT: {line:?}");
+    fn test_assign_inside_a_bare_if_or_repeat_stays_at_column_zero() {
+        for src in ["if true\n    c = 1\nendif\n", "repeat 3, i, 0\n    c = i\nendrepeat\n"] {
+            let out = fmt(src);
+            let line = out.lines().find(|l| l.trim_start().starts_with('c')).unwrap();
+            assert!(!line.starts_with(' '), "assignment indented outside any FUNCTION: {line:?} (from {src:?})");
+        }
+    }
+
+    /// An IF/REPEAT/... nested *inside* a FUNCTION doesn't open a scope of
+    /// its own either - an assignment inside it is still local to the
+    /// enclosing FUNCTION, and should keep tracking depth like its sibling
+    /// statements, not fall back to column 0 just because the nearest
+    /// wrapper isn't the FUNCTION keyword itself.
+    #[test]
+    fn test_assign_inside_an_if_nested_in_a_function_still_tracks_depth() {
+        let out = fmt("function foo x\n    if x\n        a = 1\n    endif\n    return a\nendfunction\n");
+        let lines: Vec<&str> = out.lines().collect();
+        let body_indent = |line: &str| line.len() - line.trim_start().len();
+        let a_line = lines.iter().find(|l| l.contains("a = 1")).unwrap();
+        assert!(body_indent(*a_line) > 0, "assignment flattened to column 0 inside IF-inside-FUNCTION: {a_line:?}");
     }
 
     #[test]
