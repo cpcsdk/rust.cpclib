@@ -166,9 +166,9 @@ single master flag: giving any one of them is enough to enable it.
   target resolution already comes from `--mode` and
   `--standard`/`--overscan`/`--fullscreen`
 
-Two further flags tune the true-color pipeline for cases the defaults don't
-handle as well. Both are opt-in - each is a genuine trade-off, not a strict
-improvement, so neither changes behavior unless asked for:
+Three further flags tune the true-color pipeline for cases the defaults don't
+handle as well. All are opt-in - each is a genuine trade-off, not a strict
+improvement, so none changes behavior unless asked for:
 
 - `--prefer-neutral-palette` - bias automatic palette selection away from
   fully-saturated inks when a less colorful hardware match would do almost as
@@ -177,6 +177,18 @@ improvement, so neither changes behavior unless asked for:
   spending most of the color budget on saturated substitutes once those three
   are taken. Not recommended for a vividly colorful source, where it can fit
   some hues less precisely than the unbiased nearest match would.
+- `--prefer-salient-palette` - bias automatic palette selection toward colors
+  that stand out from the image's own dominant tone, even if they cover very
+  few pixels. Plain frequency-weighted selection can otherwise spend the
+  whole color budget on a large uniform area (a night sky) and let a small
+  but visually critical accent (its stars) get diluted away entirely. Does
+  nothing useful for a source with no real outlier colors, and at a very
+  small color budget it can trade away accurate representation of the
+  dominant tone to keep the accent - a real trade-off, not a free win. It
+  also can't recover an accent that a low `--out-width`/`--out-height` or the
+  target screen resolution has already blurred away during resizing: a tiny
+  bright detail that the resize step has smoothed into its surroundings
+  isn't in the data anymore for palette selection to find.
 - `--dither-edge-aware` (with `--dither ordered` only) - relax the ordered
   dither's usual rule against mixing very different hues, in proportion to
   local detail in the source image: still suppressed in flat regions (where

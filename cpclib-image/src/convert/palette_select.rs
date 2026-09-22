@@ -35,11 +35,22 @@ use crate::color::AmstradColor;
 /// substitutes once the few genuinely neutral inks are taken), but for a
 /// vividly colorful source it will make some clusters fit their target hue
 /// less precisely than the unbiased nearest-match would have.
+///
+/// `prefer_salient` (`--prefer-salient-palette`) boosts a color's influence
+/// on clustering by how far it is from the image's own dominant tone - see
+/// [`SALIENCE_BOOST`]. Without it, plain frequency weighting can let a
+/// small but strikingly different region (a handful of bright stars against
+/// a huge dark sky) get diluted away entirely once the color budget is
+/// small, even though it's the most visually important part of the source.
+/// Opt-in because it's also a trade-off: for a source with no real outlier
+/// colors, it does nothing useful and can very slightly skew clustering
+/// toward whatever mild outliers do exist.
 pub fn auto_select_palette<C: AmstradColor + SnapToHardware>(
     img: &RgbImage,
     max_colors: usize,
     pinned: &[C],
-    prefer_neutral: bool
+    prefer_neutral: bool,
+    prefer_salient: bool
 ) -> Vec<C> {
     let k = max_colors.saturating_sub(pinned.len());
     if k == 0 {
@@ -72,7 +83,7 @@ pub fn auto_select_palette<C: AmstradColor + SnapToHardware>(
         uniques.iter().map(|&(lab, _)| lab).collect()
     }
     else {
-        weighted_kmeans(&uniques, &pinned_lab, k)
+        weighted_kmeans(&uniques, &pinned_lab, k, prefer_salient)
     };
 
     let mut claimed: HashSet<C> = pinned.iter().copied().collect();
@@ -122,15 +133,69 @@ fn nearest_free(lab: LabF32, pinned_lab: &[LabF32], free: &[LabF32]) -> Option<u
     best_idx
 }
 
-fn weighted_kmeans(uniques: &[(LabF32, u32)], pinned_lab: &[LabF32], k: usize) -> Vec<LabF32> {
+/// How much extra weight a color gets in [`weighted_kmeans`]'s clustering
+/// (not its seeding, which is already frequency-independent) in proportion
+/// to its Lab distance from the image's own weighted-average tone, when
+/// `prefer_salient` is set. A pixel far from the image's dominant color is
+/// disproportionately noticeable to a human regardless of how little area
+/// it covers - a handful of bright stars against a huge dark sky - but
+/// plain frequency weighting treats it as negligible and lets it be diluted
+/// away by everything competing to pull a cluster toward the majority tone.
+/// Picked empirically: strong enough that a real accent color (Starry
+/// Night's stars, invisible in mode 1 without this) survives to the final
+/// palette, without inflating genuinely unremarkable outliers so much that
+/// they crowd out the image's real structure.
+const SALIENCE_BOOST: f32 = 1.0;
+
+fn weighted_kmeans(
+    uniques: &[(LabF32, u32)],
+    pinned_lab: &[LabF32],
+    k: usize,
+    prefer_salient: bool
+) -> Vec<LabF32> {
+    // Frequency weight, optionally log-compressed and boosted by how much
+    // of an outlier a color is relative to the image's own weighted-average
+    // tone. Only used for the Lloyd-iteration mean update below -
+    // farthest-point seeding already looks for outliers directly, and this
+    // weighting would only ever reinforce, never override, the seeding.
+    //
+    // A distance-proportional boost alone is nowhere near enough on its
+    // own: a real photo's frequency counts can span 3-4 orders of
+    // magnitude (a few hundred star pixels against tens of thousands of
+    // sky pixels), and no bounded per-color multiplier can claw back that
+    // much of a raw-count disadvantage. Taking the *log* of the count
+    // first compresses that dynamic range down to something the distance
+    // boost can actually compete against, before the boost itself gives
+    // genuine outliers the rest of the edge they need.
+    let cluster_weight: Vec<f32> = if prefer_salient {
+        let total_weight: f32 = uniques.iter().map(|&(_, w)| w as f32).sum();
+        let (mut ml, mut ma, mut mb) = (0.0f32, 0.0f32, 0.0f32);
+        for &(lab, w) in uniques {
+            let wf = w as f32;
+            ml += lab.l * wf;
+            ma += lab.a * wf;
+            mb += lab.b * wf;
+        }
+        let mean_lab = LabF32::new(ml / total_weight, ma / total_weight, mb / total_weight);
+        uniques
+            .iter()
+            .map(|&(lab, w)| {
+                (1.0 + w as f32).ln() * (1.0 + SALIENCE_BOOST * lab_distance(lab, mean_lab))
+            })
+            .collect()
+    }
+    else {
+        uniques.iter().map(|&(_, w)| w as f32).collect()
+    };
+
     let mut free: Vec<LabF32> = Vec::with_capacity(k);
 
     if pinned_lab.is_empty() {
         // Seed 0: highest-weight color (first occurrence wins ties, and
         // `uniques` is pre-sorted, so this is reproducible).
         let mut best_i = 0;
-        let mut best_w = 0u32;
-        for (i, &(_, w)) in uniques.iter().enumerate() {
+        let mut best_w = -1.0f32;
+        for (i, &w) in cluster_weight.iter().enumerate() {
             if w > best_w {
                 best_w = w;
                 best_i = i;
@@ -156,13 +221,14 @@ fn weighted_kmeans(uniques: &[(LabF32, u32)], pinned_lab: &[LabF32], k: usize) -
 
     for _ in 0..32 {
         let mut sums = vec![(0.0f32, 0.0f32, 0.0f32, 0.0f32); k]; // l, a, b, weight
-        for &(lab, w) in uniques {
+        for (i, &(lab, _)) in uniques.iter().enumerate() {
             if let Some(j) = nearest_free(lab, pinned_lab, &free) {
                 let s = &mut sums[j];
-                s.0 += lab.l * w as f32;
-                s.1 += lab.a * w as f32;
-                s.2 += lab.b * w as f32;
-                s.3 += w as f32;
+                let wf = cluster_weight[i];
+                s.0 += lab.l * wf;
+                s.1 += lab.a * wf;
+                s.2 += lab.b * wf;
+                s.3 += wf;
             }
         }
 
@@ -270,7 +336,7 @@ mod tests {
     #[test]
     fn exact_fit_round_trips_unchanged() {
         let img = image_with_colors(&[(0, 0, 0, 5), (255, 255, 255, 5)]);
-        let palette = auto_select_palette::<Ink>(&img, 4, &[], false);
+        let palette = auto_select_palette::<Ink>(&img, 4, &[], false, false);
         assert_eq!(palette.len(), 2);
         assert!(palette.contains(&Ink::BLACK));
         assert!(palette.contains(&Ink::BRIGHTWHITE));
@@ -296,8 +362,8 @@ mod tests {
             .collect();
         let img = image_with_colors(&grays);
 
-        let unbiased = auto_select_palette::<Ink>(&img, 8, &[], false);
-        let biased = auto_select_palette::<Ink>(&img, 8, &[], true);
+        let unbiased = auto_select_palette::<Ink>(&img, 8, &[], false, false);
+        let biased = auto_select_palette::<Ink>(&img, 8, &[], true, false);
 
         let avg_chroma = |palette: &[Ink]| -> f32 {
             let total: f32 = palette
@@ -316,6 +382,55 @@ mod tests {
         );
     }
 
+    /// The real Starry Night case, at unit-test scale: a vast dark sky, a
+    /// much larger population of transitional pixels that sit closer to the
+    /// accent than to the sky, and a tiny handful of pure bright-yellow
+    /// "star" pixels. With a 2-color budget, plain frequency weighting lets
+    /// the far more numerous transitional pixels drag the second cluster's
+    /// centroid away from the rare but visually critical yellow.
+    ///
+    /// Goes through `weighted_kmeans` directly rather than the full
+    /// `auto_select_palette` pipeline: the final hardware-snapping step
+    /// rounds to one of only 27 fixed inks, which can hide a real but small
+    /// shift in the underlying continuous centroid - this checks the
+    /// centroid itself, where the effect is unambiguous.
+    #[test]
+    fn prefer_salient_pulls_the_centroid_closer_to_a_rare_but_highly_distinct_accent() {
+        // (200, 180, 100) khaki sits much closer (in Lab) to the yellow
+        // accent than to the dominant blue, so it gets assigned to the
+        // yellow-seeded cluster during Lloyd iteration - and, being 60x
+        // more numerous than the true yellow pixels, is exactly what would
+        // drag that cluster's centroid away from yellow without the
+        // saliency correction.
+        let uniques: Vec<(LabF32, u32)> = [
+            (Rgb([0u8, 0, 80]), 1000u32),
+            (Rgb([200, 180, 100]), 300),
+            (Rgb([255, 255, 0]), 5)
+        ]
+        .into_iter()
+        .map(|(rgb, w)| (rgb8_to_lab(rgb), w))
+        .collect();
+
+        let unbiased = weighted_kmeans(&uniques, &[], 2, false);
+        let salient = weighted_kmeans(&uniques, &[], 2, true);
+
+        let yellow_lab = rgb8_to_lab(Rgb([255, 255, 0]));
+        let closest_to_yellow = |centroids: &[LabF32]| -> f32 {
+            centroids
+                .iter()
+                .map(|&c| lab_distance(c, yellow_lab))
+                .fold(f32::MAX, f32::min)
+        };
+
+        assert!(
+            closest_to_yellow(&salient) < closest_to_yellow(&unbiased),
+            "prefer_salient should pull a centroid closer to the rare yellow accent: \
+             unbiased dist={}, salient dist={}",
+            closest_to_yellow(&unbiased),
+            closest_to_yellow(&salient)
+        );
+    }
+
     #[test]
     fn over_budget_yields_exactly_max_colors_distinct() {
         // 8 quite different colors squeezed into a 3-color budget.
@@ -329,7 +444,7 @@ mod tests {
             (0, 0, 255, 10),
             (128, 128, 0, 5)
         ]);
-        let palette = auto_select_palette::<Ink>(&img, 3, &[], false);
+        let palette = auto_select_palette::<Ink>(&img, 3, &[], false, false);
         assert_eq!(palette.len(), 3);
         assert_eq!(palette.iter().collect::<HashSet<_>>().len(), 3);
     }
@@ -345,8 +460,8 @@ mod tests {
             (128, 128, 0, 5),
             (30, 60, 90, 7)
         ]);
-        let a = auto_select_palette::<Ink>(&img, 4, &[], false);
-        let b = auto_select_palette::<Ink>(&img, 4, &[], false);
+        let a = auto_select_palette::<Ink>(&img, 4, &[], false, false);
+        let b = auto_select_palette::<Ink>(&img, 4, &[], false, false);
         assert_eq!(a, b);
     }
 
@@ -362,7 +477,7 @@ mod tests {
             (10, 200, 10, 5)
         ]);
         let pinned = [Ink::RED];
-        let palette = auto_select_palette::<Ink>(&img, 3, &pinned, false);
+        let palette = auto_select_palette::<Ink>(&img, 3, &pinned, false, false);
         assert_eq!(palette.len(), 3);
         assert_eq!(palette[0], Ink::RED);
         // The other 2 pens are free and must not duplicate the pin.
@@ -373,7 +488,7 @@ mod tests {
     fn fully_pinned_budget_runs_no_clustering() {
         let img = image_with_colors(&[(0, 0, 0, 10), (255, 255, 255, 10), (255, 0, 0, 10)]);
         let pinned = [Ink::BLACK, Ink::BRIGHTWHITE];
-        let palette = auto_select_palette::<Ink>(&img, 2, &pinned, false);
+        let palette = auto_select_palette::<Ink>(&img, 2, &pinned, false, false);
         assert_eq!(palette, vec![Ink::BLACK, Ink::BRIGHTWHITE]);
     }
 }

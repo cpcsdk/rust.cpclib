@@ -271,6 +271,7 @@ fn true_color_pipeline_requested(matches: &ArgMatches) -> bool {
         "RESIZE_FILTER",
         "COLORS",
         "PREFER_NEUTRAL_PALETTE",
+        "PREFER_SALIENT_PALETTE",
         "DITHER_EDGE_AWARE"
     ]
     .iter()
@@ -998,6 +999,7 @@ where
 
         let max_colors = matches.get_one::<u8>("COLORS").map(|&n| n as usize);
         let prefer_neutral_palette = matches.get_flag("PREFER_NEUTRAL_PALETTE");
+        let prefer_salient_palette = matches.get_flag("PREFER_SALIENT_PALETTE");
         let edge_aware_dither = matches.get_flag("DITHER_EDGE_AWARE");
 
         let (matrix, built_palette) = cpclib::image::convert::convert_true_color::<C, _>(
@@ -1012,6 +1014,7 @@ where
                 target_height,
                 bayer_size: 8,
                 prefer_neutral_palette,
+                prefer_salient_palette,
                 edge_aware_dither
             }
         )?;
@@ -1519,6 +1522,12 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                         Arg::new("PREFER_NEUTRAL_PALETTE")
                         .long("prefer-neutral-palette")
                         .help("Enable true-color conversion and bias automatic palette selection away from fully-saturated inks when a less colorful hardware match would do almost as well. The Gate Array has only 3 truly neutral inks (black, medium grey, white), so an unbiased selection can otherwise waste most of a grayscale or pastel photo's color budget on saturated substitutes once those three are taken. Not a strict improvement for a vividly colorful source, where it can fit some hues less precisely - hence opt-in.")
+                        .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("PREFER_SALIENT_PALETTE")
+                        .long("prefer-salient-palette")
+                        .help("Enable true-color conversion and bias automatic palette selection toward colors that stand out from the image's own dominant tone, even if they cover very few pixels. Plain frequency-weighted selection can otherwise spend the whole color budget on a large uniform area (a night sky) and let a small but visually critical accent (its stars) get diluted away entirely. Not a strict improvement for a source with no real outlier colors, where it does nothing useful - hence opt-in.")
                         .action(ArgAction::SetTrue)
                     )
                     .arg(
