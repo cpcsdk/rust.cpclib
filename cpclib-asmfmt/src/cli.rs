@@ -11,7 +11,11 @@ use crate::options::AsmFormatOptions;
         walking up to the filesystem root, then in $XDG_CONFIG_HOME/basm-fmt/.\n    \
         When found, the file is loaded first as the base configuration.\n    \
         Flags given on the command line override individual options from the file;\n    \
-        omit a flag to keep the config file value for that option."
+        omit a flag to keep the config file value for that option.\n    \
+        \n    \
+        A top-level `ignore = [\"glob\", ...]` array (paths relative to the config\n    \
+        file's own directory) excludes matching files from a run entirely - no flag\n    \
+        equivalent, config file only, the same convention rustfmt.toml itself uses."
 )]
 pub struct Cli {
     /// Source files to format. Use `-` to read from stdin.
@@ -31,9 +35,9 @@ pub struct Cli {
     pub diff: bool,
 
     /// Format only lines START:END (1-based, inclusive); everything else is left
-    /// untouched, the same mechanism `; fmt: off`/`on` uses internally. Ignored for stdin
-    /// input given without a matching single file (each file in a multi-file run would
-    /// need its own range, so this only applies when exactly one source is given).
+    /// untouched, the same mechanism `; fmt: off`/`on` uses internally. Refused when more
+    /// than one file is given (each would need its own range); fine with a single file or
+    /// with stdin.
     #[arg(long, value_name = "START:END")]
     pub lines: Option<String>,
 
