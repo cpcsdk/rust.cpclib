@@ -356,6 +356,40 @@ mod tests {
         );
     }
 
+    /// Regression: `is_assign`/`is_equ` used to hardcode column 0 unconditionally,
+    /// so a local assignment inside a FUNCTION/REPEAT/IF/... body was flattened
+    /// to the left margin - out from under its own block, and out of step with
+    /// every sibling statement around it (`RETURN`, a nested `IF`'s body, ...).
+    /// Only the true top-level case (not nested in any block) keeps the
+    /// label-like column-0 convention `test_assign_at_column_zero`/
+    /// `test_equ_at_column_zero` pin.
+    #[test]
+    fn test_assign_and_equ_inside_a_function_keep_the_bodys_depth() {
+        let out = fmt("function foo x\n    a = 1\n    b equ 2\n    return a\nendfunction\n");
+        let lines: Vec<&str> = out.lines().collect();
+        let body_indent = |line: &str| line.len() - line.trim_start().len();
+        let a_line = lines.iter().find(|l| l.contains("a = 1")).unwrap();
+        let b_line = lines.iter().find(|l| l.contains("EQU 2")).unwrap();
+        let return_line = lines.iter().find(|l| l.to_uppercase().contains("RETURN")).unwrap();
+        assert!(body_indent(a_line) > 0, "assignment flattened to column 0 inside FUNCTION: {a_line:?}");
+        assert_eq!(
+            body_indent(a_line),
+            body_indent(return_line),
+            "assignment and RETURN should sit at the same depth inside the body: {a_line:?} vs {return_line:?}"
+        );
+        assert_eq!(body_indent(b_line), body_indent(return_line), "EQU should match its sibling statements' depth: {b_line:?}");
+    }
+
+    /// Same regression, for REPEAT (a second, independently-broken block kind
+    /// before the fix - `is_assign`/`is_equ` ignored `depth` regardless of
+    /// which construct it came from).
+    #[test]
+    fn test_assign_inside_a_repeat_keeps_the_bodys_depth() {
+        let out = fmt("repeat 3, i, 0\n    c = i\nendrepeat\n");
+        let line = out.lines().find(|l| l.contains("c = i")).unwrap();
+        assert!(line.starts_with(' '), "assignment flattened to column 0 inside REPEAT: {line:?}");
+    }
+
     #[test]
     fn test_comment_column_custom() {
         // comment_column should be honoured for non-default values.

@@ -4,6 +4,13 @@ use super::Formatter;
 use crate::options::LabelPostfix;
 
 impl<'src> Formatter<'src> {
+    /// The indentation depth an assignment/EQU should actually render at -
+    /// see the call sites' own comments for why this differs from a plain
+    /// instruction's depth.
+    fn assign_depth(depth: usize) -> usize {
+        if depth <= 1 { 0 } else { depth }
+    }
+
     pub fn format_tokens(&mut self, tokens: &[LocatedToken], depth: usize) {
         for token in tokens {
             let (line_1, _) = token.span().relative_line_and_column();
@@ -243,18 +250,28 @@ impl<'src> Formatter<'src> {
             self.emit_line(depth, &out, comment.as_deref());
         }
         else if token.is_assign() {
-            // Symbol assignment (label = value, label += value, etc.):
-            // first word is a user-defined symbol name — always at column 0.
+            // Symbol assignment (label = value, label += value, etc.). `format()`
+            // starts the whole file at depth 1 (an ordinary top-level instruction
+            // sits one level in, with labels/declarations flush left at 0) - so
+            // `depth <= 1` here means "not nested in any real block", and a
+            // top-level constant (`SIZE = 4`) keeps the label-like column-0
+            // convention. Once actually nested (depth >= 2: inside a FUNCTION/
+            // REPEAT/IF/...), this is an ordinary local-variable statement, not a
+            // declaration to keep grep-able at the margin - it now keeps the
+            // surrounding block's own depth instead of being flattened out from
+            // under it, matching how hand-written code in this style already
+            // aligns it with its sibling statements (confirmed against a real
+            // project's own source, not just guessed).
             let out = Self::normalize_assignment_spacing(&content, self.space_around_assignment);
             let out = self.reformat_numeric_literals(&out);
-            self.emit_line(0, &out, comment.as_deref());
+            self.emit_line(Self::assign_depth(depth), &out, comment.as_deref());
         }
         else if token.is_equ() {
-            // "symbol EQU value": label (first word) always at column 0;
-            // apply directive_case only to the keyword (second word).
+            // "symbol EQU value": same reasoning as `is_assign` above; apply
+            // directive_case only to the keyword (second word).
             let out = Self::apply_case_to_second_word(&content, self.directive_case);
             let out = self.reformat_numeric_literals(&out);
-            self.emit_line(0, &out, comment.as_deref());
+            self.emit_line(Self::assign_depth(depth), &out, comment.as_deref());
         }
         else {
             // Directives where a user-defined symbol precedes the keyword (like SETN/NEXT)
