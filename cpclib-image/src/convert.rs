@@ -127,11 +127,15 @@ where
         palette
     };
 
-    let pal_lab = lab::palette_lab(&palette.colors());
-
     let matrix = match params.dither.kernel() {
-        None => dither::ordered_arbitrary_dither(&resized, &pal_lab, params.bayer_size),
-        Some(kernel) => dither::error_diffuse(&resized, &pal_lab, kernel)
+        None => {
+            let pal = lab::palette_lab_and_linear(&palette.colors());
+            dither::ordered_arbitrary_dither(&resized, &pal, params.bayer_size)
+        },
+        Some(kernel) => {
+            let pal_lab = lab::palette_lab(&palette.colors());
+            dither::error_diffuse(&resized, &pal_lab, kernel)
+        }
     };
 
     Ok((matrix, palette))

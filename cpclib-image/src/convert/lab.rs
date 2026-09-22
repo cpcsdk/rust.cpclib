@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 use image as im;
 use palette::color_difference::Ciede2000;
 use palette::white_point::D65;
-use palette::{FromColor, Lab, Srgb, Xyz};
+use palette::{FromColor, Lab, LinSrgb, Srgb, Xyz};
 
 use crate::asic::AsicColor;
 use crate::color::AmstradColor;
@@ -22,6 +22,13 @@ use crate::ink::Ink;
 /// comparison and every clustering/dithering operation in this pipeline
 /// works in.
 pub type LabF32 = Lab<D65, f32>;
+
+/// Linear (gamma-decoded) sRGB, `f32` components - the space physical light
+/// actually adds in. Two adjacent dithered pixels of different colors are
+/// integrated by the eye as light, not as Lab coordinates or gamma-encoded
+/// RGB, so any blend meant to model what an ordered dither will look like
+/// from a distance has to be computed here, not in Lab.
+pub type LinRgbF32 = LinSrgb<f32>;
 
 pub fn rgb8_to_lab(rgb: im::Rgb<u8>) -> LabF32 {
     let srgb_u8 = Srgb::new(rgb[0], rgb[1], rgb[2]);
@@ -35,6 +42,17 @@ pub fn lab_to_rgb8(lab: LabF32) -> im::Rgb<u8> {
     let srgb_f32: Srgb<f32> = Srgb::from_color(xyz);
     let srgb_u8: Srgb<u8> = srgb_f32.into_format();
     im::Rgb([srgb_u8.red, srgb_u8.green, srgb_u8.blue])
+}
+
+pub fn rgb8_to_linear(rgb: im::Rgb<u8>) -> LinRgbF32 {
+    let srgb_u8 = Srgb::new(rgb[0], rgb[1], rgb[2]);
+    let srgb_f32: Srgb<f32> = srgb_u8.into_format();
+    srgb_f32.into_linear()
+}
+
+pub fn linear_to_lab(lin: LinRgbF32) -> LabF32 {
+    let xyz: Xyz<D65, f32> = Xyz::from_color(lin);
+    Lab::from_color(xyz)
 }
 
 /// Perceptual distance between two Lab colors (CIEDE2000 delta-E). Smaller
@@ -165,6 +183,20 @@ pub fn nearest_in_palette<C: AmstradColor>(target: LabF32, palette: &[(C, LabF32
         .iter()
         .min_by(|(_, a), (_, b)| lab_distance(target, *a).total_cmp(&lab_distance(target, *b)))
         .expect("palette must not be empty")
+}
+
+/// `(color, Lab, linear RGB)` triples for a runtime palette - what the
+/// arbitrary-palette ordered dither searches against: Lab for comparing a
+/// candidate blend to the target pixel, linear RGB for actually computing
+/// that blend (see [`LinRgbF32`]).
+pub fn palette_lab_and_linear<C: AmstradColor>(colors: &[C]) -> Vec<(C, LabF32, LinRgbF32)> {
+    colors
+        .iter()
+        .map(|&c| {
+            let rgb = c.color();
+            (c, rgb8_to_lab(rgb), rgb8_to_linear(rgb))
+        })
+        .collect()
 }
 
 #[cfg(test)]

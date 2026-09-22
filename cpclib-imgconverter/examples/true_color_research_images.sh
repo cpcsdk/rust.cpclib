@@ -85,7 +85,14 @@ for entry in "${conversions[@]}"; do
     echo "Converting $name (mode $mode, $dither)..."
     "$img2cpc" --mode "$mode" --dither "$dither" "$src" scr -o "$scr" -p "$pal"
 
-    "$cpc2img" "$scr" "$png" -m "$mode" --ga-pal "$pal" --mode0ratio screen --width 80
+    # Mode 0 packs 2 pixels/byte, so its pixels are twice as wide as mode
+    # 1/2's and need --mode0ratio to display at the right aspect ratio; mode
+    # 1/2 are already square-ish and must NOT be doubled again.
+    ratio_flag=()
+    if [[ "$mode" == "0" ]]; then
+        ratio_flag=(--mode0ratio)
+    fi
+    "$cpc2img" "$scr" "$png" -m "$mode" --ga-pal "$pal" "${ratio_flag[@]}" screen --width 80
 done
 
 echo

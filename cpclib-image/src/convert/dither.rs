@@ -8,7 +8,9 @@
 
 use image::RgbImage;
 
-use super::lab::{lab_distance, nearest_in_palette, rgb8_to_lab, LabF32};
+use super::lab::{
+    lab_distance, linear_to_lab, nearest_in_palette, rgb8_to_lab, rgb8_to_linear, LabF32, LinRgbF32
+};
 use crate::color::AmstradColor;
 use crate::image::ColorMatrix;
 
@@ -39,64 +41,183 @@ pub fn bayer_matrix(n: usize) -> Vec<Vec<u32>> {
     out
 }
 
-/// Ordered dithering generalized for arbitrary/irregular palettes (Yliluoma
-/// ordered dithering algorithm 3-style): for each pixel, find the nearest
-/// palette color, then search blends of it with every other palette entry in
-/// perceptual space to find the best-fitting pair and mixing ratio, then use
-/// a Bayer threshold matrix value at that pixel's position to deterministically
-/// choose between the pair according to the ratio. Restricted to pairs
-/// involving the single nearest color (rather than every pair in the
-/// palette) as an explicit complexity trade-off.
+/// Ordered dithering generalized for arbitrary/irregular palettes, following
+/// Joel Yliluoma's "ordered dithering for arbitrary palettes" algorithm
+/// (<https://bisqwit.iki.fi/story/howto/dither/jy/>). For each pixel:
+///
+/// - every pair of palette colors is a dithering candidate, not just pairs
+///   involving the single nearest one - a target color can sit between two
+///   colors that are each individually far from it;
+/// - the mixing ratio is solved in closed form (a luma-weighted per-channel
+///   least-squares fit, `best_linear_ratio`) rather than sampled at every
+///   Bayer threshold level;
+/// - the blend itself is computed in linear (gamma-decoded) RGB
+///   (`LinRgbF32`), because that is the space two adjacent dithered pixels'
+///   emitted light actually adds in - blending in Lab or gamma-encoded RGB
+///   would not correspond to what a display physically produces, even
+///   though Lab/CIEDE2000 is still what decides which candidate is closest;
+/// - a candidate pair is skipped when its two colors' lightness differs by
+///   more than several times the palette's own typical successive gap
+///   (Yliluoma's "psychovisual" guard) - it avoids jarring high-contrast
+///   speckling, e.g. a stray bright pixel dropped into a dark region purely
+///   because it numerically minimized the distance;
+/// - a candidate pair's own dissimilarity (full Lab distance between its two
+///   colors, not just lightness) is added to its score - without this, two
+///   colors that are nowhere near each other in hue can still average to
+///   something numerically close to the target in linear RGB (e.g. red and
+///   green metamerically averaging toward gray), but a real low-resolution
+///   display does not optically blend adjacent pixels finely enough for that
+///   to read as anything but colored speckle; and
+/// - the winning pair is always mapped low-threshold -> darker,
+///   high-threshold -> lighter, regardless of which of the two happened to
+///   be nearest, so neighboring pixels' dither patterns stay tonally
+///   consistent instead of fighting each other.
 pub fn ordered_arbitrary_dither<C: AmstradColor>(
     img: &RgbImage,
-    palette: &[(C, LabF32)],
+    palette: &[(C, LabF32, LinRgbF32)],
     bayer_size: usize
 ) -> ColorMatrix<C> {
+    /// Weight of a candidate pair's own dissimilarity in its score, relative
+    /// to how well the pair's blend fits the target pixel (both measured in
+    /// CIEDE2000 delta-E units). Mirrors Yliluoma's `ColorCompare(a,b) x 0.1`
+    /// penalty term; picked empirically for this metric's scale by checking
+    /// that a mid-gray photograph dithers into a neutral gray-black-white
+    /// halftone rather than colored speckle, then never trying to push it
+    /// further than what that check needed.
+    const PAIR_DISSIMILARITY_WEIGHT: f32 = 0.3;
+
     let bayer = bayer_matrix(bayer_size);
     let levels = (bayer_size * bayer_size) as u32;
     let mut out = ColorMatrix::<C>::new(img.width() as usize, img.height() as usize);
 
+    let typical_gap = typical_successive_lightness_gap(palette);
+    let max_lightness_gap = if typical_gap > f32::EPSILON {
+        typical_gap * 5.0
+    }
+    else {
+        f32::INFINITY
+    };
+
     for y in 0..img.height() {
         for x in 0..img.width() {
-            let target = rgb8_to_lab(*img.get_pixel(x, y));
-            let (c0, lab0) = nearest_in_palette(target, palette);
+            let target_rgb = *img.get_pixel(x, y);
+            let target = rgb8_to_lab(target_rgb);
+            let target_lin = rgb8_to_linear(target_rgb);
 
-            let mut best_color = c0;
-            let mut best_level = 0u32;
-            let mut best_dist = lab_distance(target, lab0);
+            // (color_a, lab_a, color_b, lab_b, fraction toward b, distance).
+            // a == b is the "no blend improves on the nearest single color"
+            // case, always present as a starting candidate.
+            let mut best: Option<(C, LabF32, C, LabF32, f32, f32)> = None;
 
-            for &(cj, labj) in palette.iter() {
-                if cj == c0 {
-                    continue;
+            for &(ci, labi, _) in palette {
+                let d = lab_distance(target, labi);
+                if best.is_none_or(|(.., bd)| d < bd) {
+                    best = Some((ci, labi, ci, labi, 0.0, d));
                 }
-                for level in 0..=levels {
-                    let t = level as f32 / levels as f32;
-                    let blend = LabF32::new(
-                        lab0.l * (1.0 - t) + labj.l * t,
-                        lab0.a * (1.0 - t) + labj.a * t,
-                        lab0.b * (1.0 - t) + labj.b * t
+            }
+
+            for i in 0..palette.len() {
+                let (ci, labi, lini) = palette[i];
+                for &(cj, labj, linj) in &palette[i + 1..] {
+                    if (labi.l - labj.l).abs() > max_lightness_gap {
+                        continue;
+                    }
+
+                    let t = best_linear_ratio(target_lin, lini, linj);
+                    let mixed_lin = LinRgbF32::new(
+                        lini.red + (linj.red - lini.red) * t,
+                        lini.green + (linj.green - lini.green) * t,
+                        lini.blue + (linj.blue - lini.blue) * t
                     );
-                    let d = lab_distance(target, blend);
-                    if d < best_dist {
-                        best_dist = d;
-                        best_color = cj;
-                        best_level = level;
+                    let fit = lab_distance(target, linear_to_lab(mixed_lin));
+
+                    // Penalize dissimilar pairs directly (Yliluoma's
+                    // ColorCompare(a,b) term): two colors far apart in full
+                    // Lab - not just lightness - can still average to
+                    // something numerically close to the target in linear
+                    // RGB (e.g. red+green metamerically averaging to a
+                    // target gray), but a real low-resolution display does
+                    // not optically blend adjacent pixels finely enough for
+                    // that to read as anything but colored speckle. Without
+                    // this term the fit score alone would happily pick such
+                    // a pair.
+                    let score = fit + lab_distance(labi, labj) * PAIR_DISSIMILARITY_WEIGHT;
+
+                    if best.is_none_or(|(.., bs)| score < bs) {
+                        best = Some((ci, labi, cj, labj, t, score));
                     }
                 }
             }
 
-            let threshold = bayer[(y as usize) % bayer_size][(x as usize) % bayer_size];
-            let chosen = if threshold < best_level {
-                best_color
+            let (a, lab_a, b, lab_b, frac_b, _) = best.expect("palette must not be empty");
+
+            let chosen = if a == b {
+                a
             }
             else {
-                c0
+                let (lo, hi, frac_hi) = if lab_a.l <= lab_b.l {
+                    (a, b, frac_b)
+                }
+                else {
+                    (b, a, 1.0 - frac_b)
+                };
+                let level = (frac_hi * levels as f32).round() as u32;
+                let threshold = bayer[(y as usize) % bayer_size][(x as usize) % bayer_size];
+                if threshold < level {
+                    hi
+                }
+                else {
+                    lo
+                }
             };
             out.set_color(x as usize, y as usize, chosen);
         }
     }
 
     out
+}
+
+/// Closed-form mixing ratio (fraction toward `b`) that best approximates
+/// `target` as a blend of `a` and `b` in linear RGB: a luma-weighted (CCIR
+/// 601 coefficients) per-channel least-squares fit, solved directly instead
+/// of sampled - the same "solve mathematically" optimization Yliluoma's
+/// article uses in place of brute-force ratio scanning. Clamped to `[0, 1]`:
+/// extrapolating past either endpoint is never a valid mix.
+fn best_linear_ratio(target: LinRgbF32, a: LinRgbF32, b: LinRgbF32) -> f32 {
+    const WEIGHTS: [f32; 3] = [0.299, 0.587, 0.114];
+    let a = [a.red, a.green, a.blue];
+    let b = [b.red, b.green, b.blue];
+    let t = [target.red, target.green, target.blue];
+
+    let mut num = 0.0f32;
+    let mut den = 0.0f32;
+    for k in 0..3 {
+        let diff = b[k] - a[k];
+        num += WEIGHTS[k] * diff * (t[k] - a[k]);
+        den += WEIGHTS[k] * diff * diff;
+    }
+
+    if den <= f32::EPSILON {
+        0.0
+    }
+    else {
+        (num / den).clamp(0.0, 1.0)
+    }
+}
+
+/// Average gap between consecutive Lab lightness values across the palette,
+/// sorted - Yliluoma's "typical successive difference," used to bound how
+/// far apart two candidate colors may be before blending them is considered
+/// psychovisually jarring rather than a genuine dither. `f32::INFINITY` for
+/// a palette too small or too uniform for the notion to mean anything.
+fn typical_successive_lightness_gap<C: AmstradColor>(palette: &[(C, LabF32, LinRgbF32)]) -> f32 {
+    if palette.len() < 2 {
+        return f32::INFINITY;
+    }
+    let mut lightness: Vec<f32> = palette.iter().map(|(_, lab, _)| lab.l).collect();
+    lightness.sort_by(f32::total_cmp);
+    let total_gap: f32 = lightness.windows(2).map(|w| w[1] - w[0]).sum();
+    total_gap / (lightness.len() - 1) as f32
 }
 
 /// A weighted error-diffusion kernel: each `(dx, dy, weight)` tap propagates
@@ -288,6 +409,10 @@ mod tests {
         super::super::lab::palette_lab(&[Ink::BLACK, Ink::BRIGHTWHITE])
     }
 
+    fn black_white_palette_linear() -> Vec<(Ink, LabF32, LinRgbF32)> {
+        super::super::lab::palette_lab_and_linear(&[Ink::BLACK, Ink::BRIGHTWHITE])
+    }
+
     fn mid_gray_gradient(w: u32, h: u32) -> RgbImage {
         RgbImage::from_fn(w, h, |_, _| Rgb([128, 128, 128]))
     }
@@ -301,12 +426,42 @@ mod tests {
         }
     }
 
+    /// A real regression: with only a lightness-based guard, a candidate
+    /// pair whose two colors are nowhere near each other in hue (e.g. red
+    /// and green) can still average to something numerically close to a
+    /// gray target in linear RGB, purely by metameric cancellation - and
+    /// get picked over the much more sensible black/white pair. On an
+    /// actual low-resolution display that reads as colored speckle, not
+    /// gray, since adjacent pixels aren't optically blended finely enough.
+    #[test]
+    fn ordered_dither_prefers_black_white_over_a_metameric_red_green_pair_for_gray() {
+        let img = mid_gray_gradient(16, 16);
+        let palette = super::super::lab::palette_lab_and_linear(&[
+            Ink::BLACK,
+            Ink::BRIGHTWHITE,
+            Ink::RED,
+            Ink::BRIGHTGREEN
+        ]);
+        let out = ordered_arbitrary_dither(&img, &palette, 8);
+
+        for y in 0..out.height() as usize {
+            for x in 0..out.width() as usize {
+                let color = *out.get_color(x, y);
+                assert!(
+                    color == Ink::BLACK || color == Ink::BRIGHTWHITE,
+                    "pixel ({x},{y}) used {color:?} instead of black/white for a neutral gray \
+                     target - a red/green metameric pair was picked instead"
+                );
+            }
+        }
+    }
+
     #[test]
     fn ordered_dither_uses_only_palette_colors() {
         let img = mid_gray_gradient(16, 16);
-        let palette = black_white_palette();
+        let palette = black_white_palette_linear();
         let out = ordered_arbitrary_dither(&img, &palette, 8);
-        assert_only_palette_colors(&out, &palette);
+        assert_only_palette_colors(&out, &black_white_palette());
     }
 
     #[test]
