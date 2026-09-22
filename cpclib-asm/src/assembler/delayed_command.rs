@@ -163,13 +163,23 @@ impl PrintCommand {
         self.print_or_error.is_left()
     }
 }
+/// Holds a span that is only formatted well after assembling (a `PAUSE`'s
+/// message is built at post-action time, once the whole program has been
+/// visited) - so it keeps whichever macro/struct-expansion buffer that span
+/// points into alive, the same hazard `PrintCommand`/`FailedAssertCommand`
+/// have and fix the same way.
 #[derive(Debug, Clone)]
-
-pub struct PauseCommand(Option<Z80Span>);
+pub struct PauseCommand(Option<Z80Span>, #[allow(dead_code)] Vec<Arc<LocatedListing>>);
 
 impl From<Option<Z80Span>> for PauseCommand {
     fn from(s: Option<Z80Span>) -> Self {
-        Self(s)
+        Self(s, Vec::new())
+    }
+}
+
+impl PauseCommand {
+    pub fn with_keep_alive(span: Option<Z80Span>, keep_alive: Vec<Arc<LocatedListing>>) -> Self {
+        Self(span, keep_alive)
     }
 }
 
@@ -699,5 +709,73 @@ impl DelayedCommands {
 impl DelayedCommands {
     pub fn collect_breakpoints(&self) -> &[BreakpointCommand] {
         &self.breakpoint_commands
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use cpclib_common::event::DiscardObserver;
+
+    use super::*;
+
+    /// A `PRINT`/`PAUSE` reached while inside a macro expansion must keep
+    /// that expansion's buffer alive - see `PrintCommand`/`PauseCommand`'s own
+    /// doc comments for the dangling-span hazard this avoids. Pins the
+    /// invariant directly (a non-empty `_keep_alive`) rather than relying on
+    /// use-after-free actually being observable, which is exactly the kind of
+    /// thing that doesn't reproduce reliably.
+    #[test]
+    fn print_and_pause_inside_a_macro_keep_their_expansion_buffer_alive() {
+        let src = "\tmacro M\n\tprint \"x\"\n\tpause\n\tendm\n\torg 0x4000\n\tM(void)\n";
+        let listing = crate::parser::parse_z80_str(src).expect("parses");
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let mut assemble = crate::AssemblingOptions::default();
+        assemble.set_dry_run(true);
+        let (_processed, env) = crate::assembler::visit_tokens_all_passes_with_options(
+            &listing,
+            crate::EnvOptions::new(parse, assemble, std::sync::Arc::new(DiscardObserver))
+        )
+        .expect("assembles");
+
+        let commands = env.active_page_info().print_commands();
+        assert_eq!(commands.len(), 2, "{commands:?}");
+        for c in commands {
+            match c {
+                PrintOrPauseCommand::Print(p) => {
+                    assert!(!p._keep_alive.is_empty(), "a PRINT inside a macro must keep it alive")
+                },
+                PrintOrPauseCommand::Pause(p) => {
+                    assert!(!p.1.is_empty(), "a PAUSE inside a macro must keep it alive")
+                }
+            }
+        }
+    }
+
+    /// The top-level program is not an expansion of anything: nothing to
+    /// keep alive, and this must not be treated as a bug (an empty
+    /// `_keep_alive` there is correct, not a missed case).
+    #[test]
+    fn print_and_pause_at_top_level_need_nothing_kept_alive() {
+        let src = "\torg 0x4000\n\tprint \"x\"\n\tpause\n";
+        let listing = crate::parser::parse_z80_str(src).expect("parses");
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let mut assemble = crate::AssemblingOptions::default();
+        assemble.set_dry_run(true);
+        let (_processed, env) = crate::assembler::visit_tokens_all_passes_with_options(
+            &listing,
+            crate::EnvOptions::new(parse, assemble, std::sync::Arc::new(DiscardObserver))
+        )
+        .expect("assembles");
+
+        let commands = env.active_page_info().print_commands();
+        assert_eq!(commands.len(), 2, "{commands:?}");
+        for c in commands {
+            match c {
+                PrintOrPauseCommand::Print(p) => assert!(p._keep_alive.is_empty()),
+                PrintOrPauseCommand::Pause(p) => assert!(p.1.is_empty())
+            }
+        }
     }
 }

@@ -408,6 +408,13 @@ impl ListingOutput {
                 | LocatedTokenInner::Defw(..)
                 | LocatedTokenInner::Incbin { .. }
                 | LocatedTokenInner::Str(..)
+                // The compressed bytes a crunched section (`LZ48`/`LZSHRINKLER`/...)
+                // writes to the output are an opaque blob, never executed as
+                // code - like `Incbin`, which is what they get injected
+                // through (`Env::visit_incbin`), just not literally that
+                // token. Without this a whole crunched section's real
+                // output bytes were counted as code.
+                | LocatedTokenInner::CrunchedSection(..)
         );
     }
 

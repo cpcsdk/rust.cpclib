@@ -1070,3 +1070,49 @@ fn crunched_sections_expose_their_decrunched_bytes() {
     assert_eq!(&sections[0].decrunched[..3], &[1, 2, 3]);
     assert_eq!(sections[0].crunched_len, 21);
 }
+
+/// A `PRINT`/`PAUSE` inside a macro body only gets formatted well after
+/// assembling (in the post actions), by which point the macro-expansion
+/// buffer its span points into may have already been dropped - unless the
+/// command keeps it alive itself (`PrintCommand`/`PauseCommand::_keep_alive`,
+/// the same fix `FailedAssertCommand` already had). Simulates the dangerous
+/// pattern directly: drop the whole processed-token tree (which is what owns
+/// every macro-body listing) before running the post actions that format the
+/// stashed spans.
+#[test]
+fn a_print_and_pause_inside_a_macro_survive_the_token_tree_being_dropped_first() {
+    let src = "\tmacro M\n\tprint \"in the body\"\n\tpause\n\tendm\n\torg 0x4000\n\tM(void)\n\tM(void)\n";
+    let listing = cpclib_asm::parser::parse_z80_str(src).expect("parses");
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let mut assemble = cpclib_asm::AssemblingOptions::default();
+    // `dry_run` skips PAUSE's blocking stdin read but still formats its
+    // message (and so still touches the span) - see `PauseCommand::execute`.
+    assemble.set_dry_run(true);
+    let (processed, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(parse, assemble, Arc::new(DiscardObserver))
+    )
+    .expect("assembles");
+    // The dangerous pattern: everything the macro-body listings were kept
+    // alive by, gone before the spans stashed in PRINT/PAUSE commands are
+    // used.
+    drop(processed);
+    env.handle_post_actions(&listing)
+        .expect("post actions must not panic on a stale-but-kept-alive span");
+}
+
+/// A crunched section's real output bytes are an opaque compressed blob -
+/// never executed as code - the same way `incbin` is data. Without this the
+/// whole section showed up as code in any code/data split (e.g.
+/// `cpclib-mcp`'s `size_map`).
+#[test]
+fn a_crunched_sections_output_bytes_are_marked_as_data() {
+    let (_, rows) = rows(CRUNCHED);
+    // The output rows are the ones on the `LZ49` line itself (line 3 of
+    // `CRUNCHED`) - as opposed to the plain `nop`/`ret` around the section,
+    // which also happen to have `logical == physical` but are ordinary code.
+    let output_rows: Vec<_> = rows.iter().filter(|r| r.line == 3).collect();
+    assert!(!output_rows.is_empty(), "{rows:?}");
+    assert!(output_rows.iter().all(|r| r.is_data), "{output_rows:?}");
+}

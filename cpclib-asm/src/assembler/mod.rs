@@ -3905,8 +3905,9 @@ impl Env {
     }
 
     pub fn visit_pause(&mut self, span: Option<&Z80Span>) {
+        let keep_alive = self.expansion_keep_alive();
         self.active_page_info_mut()
-            .add_pause_command(span.cloned().into());
+            .add_pause_command(PauseCommand::with_keep_alive(span.cloned(), keep_alive));
     }
 
     pub fn visit_fail(
