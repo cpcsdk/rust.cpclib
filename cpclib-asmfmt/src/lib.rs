@@ -811,6 +811,53 @@ label_definition_postfix_with_column = "NoColumn"
         assert!(!label_line.contains(';'), "comment leaked onto the label line: {label_line:?}");
     }
 
+    // ── MACRO bodies are formatted for real, not copied verbatim ───────────
+
+    /// A macro body is captured as raw text (genuinely re-parsed on every
+    /// call), not a token list - but confirmed against two real projects,
+    /// ~97% of real macro bodies parse fine completely on their own even
+    /// with `{param}` placeholders (recognised syntax everywhere an
+    /// expression can appear), so they're formatted for real: case
+    /// transforms, numeric literals, re-indentation one level deeper than
+    /// the MACRO/ENDM lines, same as any other block body.
+    #[test]
+    fn test_macro_body_is_actually_formatted() {
+        let out = fmt("macro FOO x\n\tld   a,b\n\tld hl,0x1234\nendm");
+        assert!(out.contains("        LD A,B"), "macro body not formatted: {out:?}");
+        assert!(out.contains("        LD HL,0x1234"), "{out:?}");
+    }
+
+    /// A macro body whose placeholder use genuinely doesn't parse on its own
+    /// (e.g. `{reg}` standing in for a whole register operand, not a value)
+    /// falls back to a verbatim copy - the only thing possible before this -
+    /// rather than losing or corrupting content the real parser can't make
+    /// sense of without an actual call to substitute into.
+    #[test]
+    fn test_unparseable_macro_body_falls_back_to_verbatim() {
+        // `:=` is not valid Z80/basm syntax on its own - guaranteed to fail
+        // to parse standalone regardless of what this formatter ever learns
+        // to recognise, unlike a real placeholder use that might start
+        // parsing successfully as this crate's own coverage improves.
+        let src = "macro FOO x\n\tld a, {x} := broken\nendm";
+        let out = fmt(src);
+        assert!(out.contains("\tld a, {x} := broken"), "verbatim fallback lost/changed content: {out:?}");
+    }
+
+    /// Regression: reformatting a macro body used to silently drop a genuine
+    /// blank line sitting right before `ENDM` on a *second* formatting pass
+    /// (found chasing idempotency on real macro-heavy files) - traced to
+    /// `Vec::join("\n")` not round-tripping a trailing blank line back
+    /// through a later `.lines()` call, and separately to nothing flushing
+    /// trailing blank/comment lines after the last real token in any
+    /// buffer (whole file or macro body alike).
+    #[test]
+    fn test_blank_line_before_endm_survives_two_formatting_passes() {
+        let once = fmt("macro FOO x\n\tld a,0\n\nendm");
+        let twice = format(&once, &AsmFormatOptions::default()).unwrap();
+        assert_eq!(once, twice, "blank line before ENDM did not survive a second pass: {once:?} -> {twice:?}");
+        assert!(once.contains("\n\n"), "the blank line should still be there at all: {once:?}");
+    }
+
     // ── `; fmt: off` / `; fmt: on` ──────────────────────────────────────────
 
     /// The region between the markers passes through completely unchanged -

@@ -37,7 +37,12 @@ pub(super) struct Formatter<'src> {
     // 0-based, inclusive `(start, end)` source-line ranges where formatting is
     // suppressed - between a `; fmt: off` line and its matching `; fmt: on`
     // (both marker lines included) - see `pragma`'s own doc comment.
-    pub(super) disabled_ranges: Vec<(usize, usize)>
+    pub(super) disabled_ranges: Vec<(usize, usize)>,
+    // Kept so a MACRO body (captured as raw text, not a nested token list,
+    // since it is genuinely re-parsed fresh on every call) can be formatted
+    // by recursing into `format_listing` with these same options, rather
+    // than only ever copied through verbatim - see `tokens::format_macro_def`.
+    pub(super) opt: AsmFormatOptions
 }
 
 impl<'src> Formatter<'src> {
@@ -60,7 +65,8 @@ impl<'src> Formatter<'src> {
             current_line: 0,
             output: String::new(),
             function_nesting: 0,
-            disabled_ranges: pragma::disabled_ranges(source)
+            disabled_ranges: pragma::disabled_ranges(source),
+            opt: opt.clone()
         }
     }
 }
@@ -77,6 +83,17 @@ pub fn format_listing(
         fmt.current_line = line_1.saturating_sub(1);
     }
     fmt.format_tokens(listing, depth);
+    // `format_tokens`/`emit_interstitial` only ever preserve a blank/comment
+    // line by walking *up to* the next real token's own line - nothing calls
+    // that walk again after the very last token, so a blank line or comment
+    // trailing after it (with nothing following, all the way to the end of
+    // `source`) would otherwise be silently dropped. Rare for a whole file
+    // (most real sources don't end on a meaningful trailing blank with
+    // nothing after it) but routine for a MACRO body reformatted through
+    // this same function (`tokens::format_macro_def`) - a blank line right
+    // before `ENDM` is exactly that shape, and no different in principle
+    // from a mid-file one.
+    fmt.emit_interstitial(fmt.source_lines.len());
     fmt.output
 }
 

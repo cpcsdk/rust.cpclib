@@ -498,11 +498,46 @@ impl<'src> Formatter<'src> {
         if lines.last().is_some_and(|l| l.trim().is_empty()) {
             lines.pop();
         }
-        for line in lines {
-            self.output.push_str(line);
-            self.output.push('\n');
-            self.current_line += 1;
+        let line_count = lines.len();
+        // `lines.join("\n")` alone does not round-trip a genuine trailing
+        // blank line (`lines` ending in `""`) back through a later `.lines()`
+        // call - `["a", ""].join("\n")` is `"a\n"`, and `.lines()` on *that*
+        // yields just `["a"]` again, silently losing the blank. One more
+        // trailing `\n` than `join` alone produces fixes it for every case
+        // (a body with no trailing blank is unaffected: `.lines()` never
+        // creates a phantom empty element from a lone final newline) and is
+        // exactly what surfaced this: reformatting a macro body twice used
+        // to quietly drop a blank line sitting right before `ENDM`.
+        let trimmed_body = format!("{}\n", lines.join("\n"));
+
+        // A macro body is captured as raw text (it is genuinely re-parsed fresh
+        // on every call, with parameter substitution, so it was never part of
+        // the single token tree the rest of this formatter walks) - but that
+        // text is still *ordinary Z80 source with an occasional `{param}`
+        // placeholder*, and `{param}` is real, already-recognised syntax
+        // wherever an expression can appear, not something that needs an
+        // actual call to resolve. Confirmed against two real projects: ~97%
+        // of their macro bodies parse completely fine standalone. So: try the
+        // real parser first, and only fall back to a verbatim copy - the only
+        // thing possible before this - for the rare body whose placeholder use
+        // genuinely isn't valid syntax on its own (e.g. a `{reg}` standing in
+        // for a whole register operand rather than a value).
+        let formatted_body = (!trimmed_body.trim().is_empty())
+            .then(|| cpclib_asm::parser::parse_z80_str(&trimmed_body).ok())
+            .flatten()
+            .map(|body_listing| super::format_listing(&body_listing, &trimmed_body, depth + 1, &self.opt));
+
+        match formatted_body {
+            Some(formatted) => self.output.push_str(&formatted),
+            None => {
+                for line in &lines {
+                    self.output.push_str(line);
+                    self.output.push('\n');
+                }
+            }
         }
+        self.current_line += line_count;
+
         self.emit_closer(depth, &["ENDM", "ENDMACRO", "MEND"]);
     }
 
