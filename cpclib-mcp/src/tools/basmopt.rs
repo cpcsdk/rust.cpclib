@@ -4,7 +4,7 @@
 //! (`SuggestionReason`s with their own source positions), and whether it's
 //! safe to bulk-apply.
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_basmopt::{AnalyzeOutcome, OptimizationGoal, Options, Suggestion, SuggestionReason};
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::{tool, tool_router};
@@ -66,7 +66,18 @@ pub struct SuggestInput {
     /// Symbols to define before assembling, `NAME` (= 1) or `NAME=VALUE`,
     /// like `basm -D` - for code conditional on a symbol the real build
     /// passes on its command line (e.g. `LINKED_VERSION=1`).
-    pub defines: Option<Vec<String>>
+    pub defines: Option<Vec<String>>,
+    /// Also analyze every file `path` (transitively) `INCLUDE`s, each
+    /// against `path`'s own real, whole-project address space - not just
+    /// `path`'s own top-level lines. A project that keeps its real code in
+    /// included files (a thin top-level file that mostly `INCLUDE`s
+    /// everything else - the common shape, and how e.g. a project like
+    /// etchy's `main.asm` is built) has almost nothing to find without
+    /// this: `path`'s own `INCLUDE` lines are opaque to a single-file
+    /// analysis. Read-only either way - only `apply_optimizations` writes,
+    /// and only ever to `path` itself, never to an included file this
+    /// finds. Default false.
+    pub include_project: Option<bool>
 }
 
 /// Peephole-optimization suggestions for a source file - each with the
@@ -86,6 +97,18 @@ pub(crate) fn suggest_optimizations(input: SuggestInput) -> ToolResult {
         defines: input.defines.unwrap_or_default(),
         ..Default::default()
     };
+
+    if input.include_project.unwrap_or(false) {
+        let outcomes = cpclib_basmopt::analyze_project(path, &options).map_err(|e| {
+            ToolError::with_details(
+                ToolErrorKind::Assembler,
+                e.to_string(),
+                json!({ "path": input.path })
+            )
+        })?;
+        return Ok(project_outcomes_to_json(&input.path, &outcomes));
+    }
+
     let outcome = cpclib_basmopt::analyze_file(path, &options).map_err(|e| {
         ToolError::with_details(
             ToolErrorKind::Assembler,
@@ -94,6 +117,33 @@ pub(crate) fn suggest_optimizations(input: SuggestInput) -> ToolResult {
         )
     })?;
     Ok(outcome_to_json(&outcome))
+}
+
+/// `analyze_project`'s per-file outcomes into one JSON report: a `files`
+/// breakdown (only files with something to say - a clean file with no
+/// suggestions and no warning is just noise in an already long list),
+/// plus the totals a caller checking "is there anything at all" wants
+/// without walking `files` itself.
+fn project_outcomes_to_json(entry_path: &str, outcomes: &[(Utf8PathBuf, AnalyzeOutcome)]) -> Value {
+    let files: Vec<Value> = outcomes
+        .iter()
+        .filter(|(_, o)| !o.suggestions.is_empty() || o.assemble_warning.is_some())
+        .map(|(path, o)| {
+            json!({
+                "path": path.as_str(),
+                "suggestion_count": o.suggestions.len(),
+                "suggestions": o.suggestions.iter().map(suggestion_to_json).collect::<Vec<_>>(),
+                "assemble_warning": o.assemble_warning
+            })
+        })
+        .collect();
+    json!({
+        "entry": entry_path,
+        "files_analyzed": outcomes.len(),
+        "files_with_findings": files.len(),
+        "suggestion_count": outcomes.iter().map(|(_, o)| o.suggestions.len()).sum::<usize>(),
+        "files": files
+    })
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -160,7 +210,12 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 #[tool_router(router = basmopt_router, vis = "pub(crate)")]
 impl McpServer {
     #[tool(description = "Peephole-optimization suggestions for a basm source file, with the \
-                           matched rule and why each is believed safe. Read-only.")]
+                           matched rule and why each is believed safe. Read-only. By default \
+                           only looks at path's own top-level lines - pass include_project: \
+                           true to also analyze every file it INCLUDEs (transitively), each \
+                           against the real whole-project address space, which most projects \
+                           need: a thin top-level file that mostly INCLUDEs everything else has \
+                           almost nothing to find otherwise.")]
     async fn suggest_optimizations(
         &self,
         Parameters(input): Parameters<SuggestInput>
@@ -175,5 +230,53 @@ impl McpServer {
         Parameters(input): Parameters<ApplyInput>
     ) -> Result<Json<Value>, Json<Value>> {
         ok_or_tool_error(apply_optimizations(input))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base(path: &str) -> SuggestInput {
+        SuggestInput {
+            path: path.to_string(),
+            goal: None,
+            disabled_rules: None,
+            include_dirs: None,
+            defines: None,
+            include_project: None
+        }
+    }
+
+    /// Without `include_project`, a thin entry file that only `INCLUDE`s the
+    /// real code finds nothing - the gap this option exists to close.
+    #[test]
+    fn without_include_project_an_include_only_entry_finds_nothing() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        fs_err::write(dir.path().join("code.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
+        fs_err::write(dir.path().join("entry.asm"), "\torg 0x4000\n\tinclude \"code.asm\"\n").unwrap();
+        let path = dir.path().join("entry.asm").to_string();
+
+        let out = suggest_optimizations(base(&path)).unwrap();
+        assert_eq!(out["suggestion_count"], 0, "{out}");
+    }
+
+    /// With it, the same project finds the suggestion inside the included
+    /// file, reported under its own path in `files`.
+    #[test]
+    fn include_project_finds_suggestions_in_an_included_file() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        fs_err::write(dir.path().join("code.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
+        fs_err::write(dir.path().join("entry.asm"), "\torg 0x4000\n\tinclude \"code.asm\"\n").unwrap();
+        let path = dir.path().join("entry.asm").to_string();
+
+        let out = suggest_optimizations(SuggestInput { include_project: Some(true), ..base(&path) }).unwrap();
+        assert_eq!(out["files_analyzed"], 2, "{out}");
+        assert!(out["suggestion_count"].as_u64().unwrap() > 0, "{out}");
+        let files = out["files"].as_array().unwrap();
+        assert!(
+            files.iter().any(|f| f["path"].as_str().unwrap().ends_with("code.asm")),
+            "the included file must be listed: {out}"
+        );
     }
 }

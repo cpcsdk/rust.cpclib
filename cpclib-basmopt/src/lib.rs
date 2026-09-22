@@ -20,7 +20,8 @@ use cpclib_asm::parser::{LocatedListing, LocatedToken, parse_z80_with_context_bu
 use cpclib_asm::{AssemblerError, AssemblingOptions, EnvOptions};
 use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::find_matches_with_resolver;
-pub use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal};
+use cpclib_tokens::ListingElement;
+pub use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, ProjectAddressResolver};
 
 /// What to check for, and which rules to check with.
 #[derive(Debug, Clone)]
@@ -180,6 +181,151 @@ pub fn analyze_file(path: &Utf8Path, options: &Options) -> Result<AnalyzeOutcome
         }
     })?;
     analyze_source(source, path, options)
+}
+
+/// Parses `entry` and every file it (transitively) `INCLUDE`s, and analyzes
+/// each one on its own - `analyze_file` alone only ever sees `entry`'s own
+/// top-level lines, which on a project shaped the common way (a thin
+/// top-level file that mostly `INCLUDE`s everything else, the real code
+/// living in the included files) means almost nothing gets analyzed at all.
+///
+/// `entry` is assembled once, for real (dry run), and every file's
+/// address-aware rules are answered against that one whole-project address
+/// space - an included file is not a complete program on its own, so
+/// [`analyze_file`] called on it directly cannot give those rules real
+/// addresses at all (see [`ProjectAddressResolver`]).
+///
+/// Each returned `(path, AnalyzeOutcome)` is scoped to exactly that one
+/// file and applies with [`apply_fixes`]/[`apply_fixes_in_place`] exactly
+/// as [`analyze_file`]'s own result would, against that file's own path -
+/// nothing here changes what a suggestion means, only how many files get
+/// looked at.
+///
+/// Best-effort in two ways, both matching [`analyze_file`]'s own philosophy
+/// for an unresolvable `INCLUDE`: a file that fails to resolve, read or
+/// parse is skipped (that one `INCLUDE` line just isn't followed further,
+/// everything else still gets analyzed), and if the whole-project assemble
+/// itself fails, this falls back to analyzing `entry` alone, address-aware
+/// rules sitting out - it has no way to resolve any `INCLUDE` target that
+/// needs symbol interpolation without a real `Env` to evaluate it with.
+pub fn analyze_project(
+    entry: &Utf8Path,
+    options: &Options
+) -> Result<Vec<(Utf8PathBuf, AnalyzeOutcome)>, BasmOptError> {
+    let entry_source = fs_err::read_to_string(entry).map_err(|source| {
+        BasmOptError::Io {
+            path: entry.to_owned(),
+            source
+        }
+    })?;
+
+    let mut parser_options = ParserOptions::default();
+    if let Ok(cwd) = std::env::current_dir()
+        && let Ok(cwd) = Utf8PathBuf::from_path_buf(cwd)
+    {
+        let _ = parser_options.add_search_path(cwd);
+    }
+    let _ = parser_options.add_search_path_from_file(entry.as_str());
+    for dir in &options.include_dirs {
+        let _ = parser_options.add_search_path(dir.as_str());
+    }
+
+    let builder = parser_options.clone().context_builder().set_current_filename(entry.as_str());
+    let entry_listing = parse_z80_with_context_builder(&entry_source, builder).map_err(|cause| {
+        BasmOptError::Parse {
+            path: entry.to_owned(),
+            cause: Box::new(cause)
+        }
+    })?;
+
+    let rules = build_rule_set(options, entry)?;
+    let needs_addresses = cpclib_asmoptim::rules_need_addresses(&rules);
+
+    // One real assemble of the whole project - every file below is matched
+    // against this same `env`, so their addresses agree with the actual
+    // final program rather than each being assembled (wrongly) as if it
+    // were the whole program on its own.
+    let mut env = assemble_dry_run(&entry_listing, parser_options.clone(), &options.defines).ok();
+    let fallback_to_entry_only = needs_addresses && env.is_none();
+
+    let entry_canonical = fs_err::canonicalize(entry)
+        .ok()
+        .and_then(|p| Utf8PathBuf::try_from(p).ok())
+        .unwrap_or_else(|| entry.to_owned());
+    let mut seen = HashSet::new();
+    seen.insert(entry_canonical.clone());
+    let mut queue: Vec<(Utf8PathBuf, String, LocatedListing)> =
+        vec![(entry_canonical, entry_source, entry_listing)];
+
+    let mut outcomes = Vec::new();
+    while let Some((path, source, listing)) = queue.pop() {
+        let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
+
+        let (matches, assemble_warning) = match &env {
+            Some(env) if needs_addresses => {
+                let resolver = ProjectAddressResolver::new(env, path.clone().into_std_path_buf());
+                (find_matches_with_resolver(&tokens, &rules, &resolver, options.goal), None)
+            },
+            None if needs_addresses => {
+                (
+                    cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal),
+                    Some(
+                        "the project could not be fully assembled - address-aware rules were \
+                         skipped for every file"
+                            .to_string()
+                    )
+                )
+            },
+            _ => (cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal), None)
+        };
+        let suggestions = matches.iter().map(|m| to_suggestion(&source, &tokens, m)).collect();
+
+        // Queue this file's own further INCLUDEs before its listing (which
+        // `tokens` borrows from) is dropped at the end of this iteration.
+        // Needs a real `Env` to resolve a target that interpolates a symbol
+        // into its filename - a plain string literal would not, but there
+        // is no cheap way to tell which case an `INCLUDE` is without one.
+        if !fallback_to_entry_only && let Some(env) = env.as_mut() {
+            for token in &tokens {
+                if !token.is_include() {
+                    continue;
+                }
+                let Ok(fname) = env.build_fname(token.include_fname()) else { continue };
+                let Ok(resolved) = cpclib_asm::assembler::file::get_filename_to_read(
+                    &fname,
+                    &parser_options,
+                    Some(&*env)
+                )
+                else {
+                    continue;
+                };
+                let Some(canonical) = fs_err::canonicalize(&resolved)
+                    .ok()
+                    .and_then(|p| Utf8PathBuf::try_from(p).ok())
+                else {
+                    continue;
+                };
+                if !seen.insert(canonical.clone()) {
+                    continue; // already queued or being processed - mutual/repeated INCLUDE
+                }
+                let Ok(text) = fs_err::read_to_string(&canonical) else { continue };
+                let builder = parser_options.clone().context_builder().set_current_filename(canonical.as_str());
+                let Ok(nested) = parse_z80_with_context_builder(&text, builder) else { continue };
+                queue.push((canonical, text, nested));
+            }
+        }
+
+        outcomes.push((
+            path,
+            AnalyzeOutcome {
+                source,
+                suggestions,
+                assemble_warning
+            }
+        ));
+    }
+
+    Ok(outcomes)
 }
 
 /// [`analyze_file`]'s real work, taking the source text directly instead of
@@ -742,6 +888,71 @@ pub fn apply_fixes_in_place_project(root: &Utf8Path, options: &Options) -> Proje
     result
 }
 
+
+#[cfg(test)]
+mod analyze_project_tests {
+    use super::*;
+
+    /// The whole point: a top-level file that only `INCLUDE`s another one
+    /// still gets that included file's own suggestions - which `analyze_file`
+    /// on the entry alone cannot see (its `INCLUDE` is one opaque token).
+    #[test]
+    fn a_project_wide_analysis_finds_suggestions_in_an_included_file() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        fs_err::write(dir.path().join("real_code.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
+        fs_err::write(dir.path().join("entry.asm"), "\torg 0x4000\n\tinclude \"real_code.asm\"\n").unwrap();
+        let entry = camino::Utf8Path::from_path(dir.path().join("entry.asm").as_std_path()).unwrap().to_owned();
+
+        let outcomes = analyze_project(&entry, &Options::default()).unwrap();
+        assert_eq!(outcomes.len(), 2, "{outcomes:?}");
+
+        let entry_alone = analyze_file(&entry, &Options::default()).unwrap();
+        assert!(
+            entry_alone.suggestions.is_empty(),
+            "analyze_file on the entry alone cannot see inside its own INCLUDE: {:?}",
+            entry_alone.suggestions
+        );
+
+        let included = outcomes.iter().find(|(p, _)| p.as_str().ends_with("real_code.asm")).expect("real_code.asm must be queued");
+        assert!(!included.1.suggestions.is_empty(), "the duplicate `ld a,0` must be found inside the included file");
+    }
+
+    /// A chain of INCLUDEs (A includes B includes C) is walked fully, and a
+    /// file INCLUDEd from two places is only queued once.
+    #[test]
+    fn included_files_are_walked_transitively_and_deduplicated() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        fs_err::write(dir.path().join("c.asm"), "\tret\n").unwrap();
+        fs_err::write(dir.path().join("b.asm"), "\tinclude \"c.asm\"\n\tinclude \"c.asm\"\n").unwrap();
+        fs_err::write(dir.path().join("a.asm"), "\torg 0x4000\n\tinclude \"b.asm\"\n").unwrap();
+        let entry = camino::Utf8Path::from_path(dir.path().join("a.asm").as_std_path()).unwrap().to_owned();
+
+        let outcomes = analyze_project(&entry, &Options::default()).unwrap();
+        let names: Vec<String> = outcomes.iter().map(|(p, _)| p.file_name().unwrap().to_string()).collect();
+        assert_eq!(names.len(), 3, "{names:?}");
+        assert!(names.contains(&"a.asm".to_string()));
+        assert!(names.contains(&"b.asm".to_string()));
+        assert!(names.contains(&"c.asm".to_string()), "c.asm queued once despite two INCLUDEs: {names:?}");
+    }
+
+    /// An unresolvable INCLUDE must not abort the whole walk - everything
+    /// else discoverable still gets analyzed, matching `analyze_file`'s own
+    /// "fall back gracefully" behavior for the same situation.
+    #[test]
+    fn an_unresolvable_include_does_not_abort_the_rest_of_the_walk() {
+        let dir = camino_tempfile::tempdir().unwrap();
+        fs_err::write(
+            dir.path().join("entry.asm"),
+            "\torg 0x4000\n\tinclude \"does-not-exist.asm\"\n\tld a,0\n\tld a,0\n\tret\n"
+        )
+        .unwrap();
+        let entry = camino::Utf8Path::from_path(dir.path().join("entry.asm").as_std_path()).unwrap().to_owned();
+
+        let outcomes = analyze_project(&entry, &Options::default()).unwrap();
+        assert_eq!(outcomes.len(), 1, "only the entry itself, the bad INCLUDE just isn't followed: {outcomes:?}");
+        assert!(!outcomes[0].1.suggestions.is_empty(), "the entry's own duplicate ld a,0 must still be found");
+    }
+}
 
 #[cfg(test)]
 mod define_tests {
