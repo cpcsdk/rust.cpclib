@@ -253,6 +253,29 @@ fn pens_are_unlocked(matches: &ArgMatches, id: &str) -> bool {
     matches.try_get_one::<bool>(id).ok().flatten() == Some(&true)
 }
 
+/// Whether `id` was actually typed on the command line, as opposed to being
+/// absent (there is no default value on any of the flags this is used for,
+/// so "present" always means "explicitly passed").
+fn explicitly_passed(matches: &ArgMatches, id: &str) -> bool {
+    matches.value_source(id) == Some(clap::parser::ValueSource::CommandLine)
+}
+
+/// Any true-color-specific flag, on the top-level command or (for
+/// `--out-width`/`--out-height`) the `sprite`/`tile` subcommand, switches
+/// this run from the exact-transfer pipeline to the true-color one - there
+/// is no single master flag.
+fn true_color_pipeline_requested(matches: &ArgMatches) -> bool {
+    ["DITHER", "RESIZE_FILTER", "COLORS"]
+        .iter()
+        .any(|id| explicitly_passed(matches, id))
+        || matches
+            .subcommand_matches("sprite")
+            .is_some_and(|m| explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT"))
+        || matches
+            .subcommand_matches("tile")
+            .is_some_and(|m| explicitly_passed(m, "OUT_WIDTH") || explicitly_passed(m, "OUT_HEIGHT"))
+}
+
 /// The palette the user asked for, on whichever machine they asked for.
 ///
 /// `--kit`/`--colbN` mean the Amstrad Plus and give the `Asic` variant; every
@@ -819,7 +842,9 @@ fn convert_with_palette<C>(
     o: &dyn EventObserver
 ) -> anyhow::Result<()>
 where
-    C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
+    C: AmstradColor
+        + std::convert::TryFrom<AnyColor, Error = String>
+        + cpclib::image::convert::lab::SnapToHardware,
 {
 
     o.emit_stdout(&format!(
@@ -898,18 +923,106 @@ where
 
     let crop_if_too_large = matches.get_flag("CROP_IF_TOO_LARGE");
     let output_format = get_output_format(matches).map_err(anyhow::Error::msg)?;
-    let conversion = ImageConverter::convert(
-        input_file,
-        ConvertParams {
-            palette,
-            mode: output_mode.into(),
-            transformations,
-            crop_if_too_large,
-            missing_pen,
-            o
-        },
-        output_format
-    )?;
+    let mode: Mode = output_mode.into();
+
+    let conversion = if true_color_pipeline_requested(matches) {
+        let (target_width, target_height) = match &output_format {
+            OutputFormat::CPCMemory {
+                output_dimension, ..
+            } => (output_dimension.width(mode) as u32, output_dimension.height() as u32),
+            _ => {
+                let (source_width, source_height) = image::image_dimensions(input_file)?;
+                let sub = sub_sprite.or(sub_tile);
+                let width = sub
+                    .and_then(|m| m.get_one::<u32>("OUT_WIDTH"))
+                    .copied()
+                    .unwrap_or(source_width);
+                let height = sub
+                    .and_then(|m| m.get_one::<u32>("OUT_HEIGHT"))
+                    .copied()
+                    .unwrap_or(source_height);
+                (width, height)
+            }
+        };
+
+        let dither = if explicitly_passed(matches, "DITHER") {
+            match matches.get_one::<String>("DITHER").unwrap().as_str() {
+                "ordered" => cpclib::image::convert::DitherAlgorithm::OrderedArbitrary,
+                "floyd-steinberg" => cpclib::image::convert::DitherAlgorithm::FloydSteinberg,
+                "false-floyd-steinberg" => {
+                    cpclib::image::convert::DitherAlgorithm::FalseFloydSteinberg
+                },
+                "jarvis-judice-ninke" => cpclib::image::convert::DitherAlgorithm::JarvisJudiceNinke,
+                "stucki" => cpclib::image::convert::DitherAlgorithm::Stucki,
+                "atkinson" => cpclib::image::convert::DitherAlgorithm::Atkinson,
+                "burkes" => cpclib::image::convert::DitherAlgorithm::Burkes,
+                "sierra-3" => cpclib::image::convert::DitherAlgorithm::Sierra3,
+                "sierra-2" => cpclib::image::convert::DitherAlgorithm::Sierra2,
+                "sierra-lite" => cpclib::image::convert::DitherAlgorithm::SierraLite,
+                other => unreachable!("clap value_parser should have rejected {other}")
+            }
+        }
+        else {
+            cpclib::image::convert::DitherAlgorithm::OrderedArbitrary
+        };
+
+        let resize_filter = if explicitly_passed(matches, "RESIZE_FILTER") {
+            match matches.get_one::<String>("RESIZE_FILTER").unwrap().as_str() {
+                "nearest" => cpclib::image::convert::ResizeFilter::Nearest,
+                "triangle" => cpclib::image::convert::ResizeFilter::Triangle,
+                "catmullrom" => cpclib::image::convert::ResizeFilter::CatmullRom,
+                "gaussian" => cpclib::image::convert::ResizeFilter::Gaussian,
+                "lanczos3" => cpclib::image::convert::ResizeFilter::Lanczos3,
+                other => unreachable!("clap value_parser should have rejected {other}")
+            }
+        }
+        else {
+            cpclib::image::convert::ResizeFilter::Lanczos3
+        };
+
+        let max_colors = matches.get_one::<u8>("COLORS").map(|&n| n as usize);
+
+        let (matrix, built_palette) = cpclib::image::convert::convert_true_color::<C, _>(
+            input_file,
+            mode,
+            cpclib::image::convert::TrueColorParams {
+                resize_filter,
+                dither,
+                max_colors,
+                hint: palette,
+                target_width,
+                target_height,
+                bayer_size: 8
+            }
+        )?;
+
+        ImageConverter::convert_from_matrix(
+            matrix,
+            ConvertParams {
+                palette: cpclib::image::ga::LockablePalette::locked(built_palette),
+                mode,
+                transformations,
+                crop_if_too_large,
+                missing_pen,
+                o
+            },
+            output_format
+        )?
+    }
+    else {
+        ImageConverter::convert(
+            input_file,
+            ConvertParams {
+                palette,
+                mode,
+                transformations,
+                crop_if_too_large,
+                missing_pen,
+                o
+            },
+            output_format
+        )?
+    };
 
     if let Some(sub_sprite) = sub_sprite {
         // TODO share code with the tile branch
@@ -1362,6 +1475,28 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                     .required(false)
                     .help("Number of pixel lines to keep.")
                 )
+                .arg(
+                    Arg::new("DITHER")
+                    .long("dither")
+                    .help("Enable true-color conversion (resize + automatic palette selection if none is given) and dither into the target palette with this algorithm, instead of the default exact-transfer behaviour.")
+                    .value_parser([
+                        "ordered", "floyd-steinberg", "false-floyd-steinberg",
+                        "jarvis-judice-ninke", "stucki", "atkinson", "burkes",
+                        "sierra-3", "sierra-2", "sierra-lite"
+                    ])
+                )
+                .arg(
+                    Arg::new("RESIZE_FILTER")
+                    .long("resize-filter")
+                    .help("Enable true-color conversion and use this resampling filter when resizing to the target resolution. Defaults to lanczos3 once true-color conversion is enabled.")
+                    .value_parser(["nearest", "triangle", "catmullrom", "gaussian", "lanczos3"])
+                )
+                .arg(
+                    Arg::new("COLORS")
+                    .long("colors")
+                    .help("Enable true-color conversion and cap automatic palette selection to this many colors (still bounded by the mode's own budget). Has no effect on pens already pinned by --penN without --unlock-pens.")
+                    .value_parser(value_parser!(u8).range(1..=16))
+                )
                     .subcommand(
                         Command::new("sna")
                             .about("Generate a snapshot with the converted image.")
@@ -1544,6 +1679,18 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                             .help("Color that replaces the mask color in the sprite data (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
                             .value_parser(clap_parse_ink_or_color)
                         )
+                        .arg(
+                            Arg::new("OUT_WIDTH")
+                            .long("out-width")
+                            .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel width first. Defaults to the source image's own width.")
+                            .value_parser(value_parser!(u32))
+                        )
+                        .arg(
+                            Arg::new("OUT_HEIGHT")
+                            .long("out-height")
+                            .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel height first. Defaults to the source image's own height.")
+                            .value_parser(value_parser!(u32))
+                        )
                     ))
 
                     .subcommand(
@@ -1595,6 +1742,18 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                                 .long("output")
                                 .help("Filename to generate. Will be postfixed by the number")
                                 .required(true)
+                            )
+                            .arg(
+                                Arg::new("OUT_WIDTH")
+                                .long("out-width")
+                                .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel width first. Defaults to the source image's own width.")
+                                .value_parser(value_parser!(u32))
+                            )
+                            .arg(
+                                Arg::new("OUT_HEIGHT")
+                                .long("out-height")
+                                .help("Enable true-color conversion (see --dither/--resize-filter/--colors) and resize the source image to this pixel height first. Defaults to the source image's own height.")
+                                .value_parser(value_parser!(u32))
                             )
 
                     ))

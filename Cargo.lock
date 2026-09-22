@@ -2693,6 +2693,7 @@ dependencies = [
  "crossbeam-channel",
  "exitcode",
  "fs-err",
+ "image",
  "notify",
  "owo-colors",
 ]

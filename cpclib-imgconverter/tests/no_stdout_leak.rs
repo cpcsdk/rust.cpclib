@@ -51,3 +51,38 @@ fn converting_an_image_writes_nothing_to_stdout() {
 
     let _ = std::fs::remove_file(&out);
 }
+
+/// Same guarantee, but through the true-color pipeline (`--dither`) rather
+/// than the default exact-transfer one - new code, so it earns its own
+/// check rather than relying on the assumption above having covered it.
+#[test]
+fn true_color_conversion_writes_nothing_to_stdout() {
+    let out = std::env::temp_dir().join("cpclib_no_stdout_leak_true_color_test.sna");
+    let _ = std::fs::remove_file(&out);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_img2cpc"))
+        .args([
+            "--mode",
+            "0",
+            "--dither",
+            "floyd-steinberg",
+            "tests/gradient_truecolor.png",
+            "sna",
+            out.to_str().unwrap()
+        ])
+        .output()
+        .expect("failed to spawn img2cpc");
+
+    assert!(
+        output.status.success(),
+        "the conversion itself must succeed, or this test proves nothing: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "the true-color pipeline wrote to its own real stdout. Captured stdout: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let _ = std::fs::remove_file(&out);
+}
