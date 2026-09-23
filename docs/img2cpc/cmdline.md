@@ -206,9 +206,12 @@ improvement, so none changes behavior unless asked for:
     own, without needing `--prefer-salient-palette` at all - a large chunk
     of remaining error sitting on a handful of pixels no chosen color is
     close to is exactly the kind of win this looks for at each step. The
-    cost is trying every candidate at every step: cheap for the Gate
-    Array's 27 inks, much more expensive for `--plus`'s 4096-entry native
-    ASIC grid.
+    cost is trying every candidate at every step - cheap for the Gate
+    Array's 27 inks (a fraction of a second to a few seconds even for a
+    16-color mode 0 photo), much more expensive for `--plus`'s 4096-entry
+    native ASIC grid (real photos measured at 20s-45s per image on a
+    20-core machine, down from several minutes before this search was
+    parallelized - still the slower choice, but no longer impractical).
 - `--dither-edge-aware` (with `--dither ordered` only) - relax the ordered
   dither's usual rule against mixing very different hues, in proportion to
   local detail in the source image: still suppressed in flat regions (where
