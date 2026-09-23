@@ -76,6 +76,21 @@ fn every_named_dither_algorithm_runs_successfully() {
 }
 
 #[test]
+fn palette_algorithm_greedy_runs_successfully_and_fits_the_budget() {
+    let inks = sprite_inks(
+        &[
+            "--dither",
+            "floyd-steinberg",
+            "--palette-algorithm",
+            "greedy"
+        ],
+        "palette_algorithm_greedy"
+    );
+    assert!(!inks.is_empty(), "greedy produced no inks");
+    assert!(inks.len() <= 16, "greedy produced {} inks", inks.len());
+}
+
+#[test]
 fn every_named_resize_filter_runs_successfully() {
     for filter in ["nearest", "triangle", "catmullrom", "gaussian", "lanczos3"] {
         let inks = sprite_inks(

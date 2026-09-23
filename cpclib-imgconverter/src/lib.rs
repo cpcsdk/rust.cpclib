@@ -272,6 +272,7 @@ fn true_color_pipeline_requested(matches: &ArgMatches) -> bool {
         "COLORS",
         "PREFER_NEUTRAL_PALETTE",
         "PREFER_SALIENT_PALETTE",
+        "PALETTE_ALGORITHM",
         "DITHER_EDGE_AWARE"
     ]
     .iter()
@@ -1000,6 +1001,16 @@ where
         let max_colors = matches.get_one::<u8>("COLORS").map(|&n| n as usize);
         let prefer_neutral_palette = matches.get_flag("PREFER_NEUTRAL_PALETTE");
         let prefer_salient_palette = matches.get_flag("PREFER_SALIENT_PALETTE");
+        let palette_algorithm = match matches
+            .get_one::<String>("PALETTE_ALGORITHM")
+            .map(String::as_str)
+        {
+            Some("greedy") => cpclib::image::convert::palette_select::PaletteAlgorithm::Greedy,
+            Some("kmeans") | None => {
+                cpclib::image::convert::palette_select::PaletteAlgorithm::KMeans
+            },
+            Some(other) => unreachable!("clap value_parser should have rejected {other}")
+        };
         let edge_aware_dither = matches.get_flag("DITHER_EDGE_AWARE");
 
         let (matrix, built_palette) = cpclib::image::convert::convert_true_color::<C, _>(
@@ -1015,6 +1026,7 @@ where
                 bayer_size: 8,
                 prefer_neutral_palette,
                 prefer_salient_palette,
+                palette_algorithm,
                 edge_aware_dither
             }
         )?;
@@ -1529,6 +1541,12 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                         .long("prefer-salient-palette")
                         .help("Enable true-color conversion and bias automatic palette selection toward colors that stand out from the image's own dominant tone, even if they cover very few pixels. Plain frequency-weighted selection can otherwise spend the whole color budget on a large uniform area (a night sky) and let a small but visually critical accent (its stars) get diluted away entirely. Not a strict improvement for a source with no real outlier colors, where it does nothing useful - hence opt-in.")
                         .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("PALETTE_ALGORITHM")
+                        .long("palette-algorithm")
+                        .help("Enable true-color conversion and choose the strategy automatic palette selection uses to fill whatever pens aren't already pinned. 'kmeans' (default): weighted k-means clustering, fast regardless of how big the hardware's native color space is. 'greedy': exhaustive forward selection - at each remaining slot, tries every representable hardware color and keeps whichever single one most reduces total error, so it directly optimizes the real objective at each step (and, as a side effect, tends to keep a rare-but-important accent color without needing --prefer-salient-palette at all) rather than approximating it through clustering. Much more expensive for --plus (4096 native colors to try at every step) than for the Gate Array (27).")
+                        .value_parser(["kmeans", "greedy"])
                     )
                     .arg(
                         Arg::new("DITHER_EDGE_AWARE")

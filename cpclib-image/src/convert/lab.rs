@@ -91,6 +91,15 @@ pub fn chroma(lab: LabF32) -> f32 {
 /// actually display - the last step of automatic palette selection, and the
 /// only place the Gate Array and the Plus genuinely differ in this pipeline.
 pub trait SnapToHardware: AmstradColor {
+    /// Every representable hardware color - used by algorithms (like
+    /// [`crate::convert::palette_select`]'s exhaustive greedy forward
+    /// selection) that search the whole native space directly instead of
+    /// snapping a continuous position after the fact. [`Ink`] returns its
+    /// 27 real inks; [`crate::asic::AsicColor`] returns its full 4096-entry
+    /// grid, which is why an algorithm that calls this at every step of a
+    /// search is much more expensive for the Plus than for the Gate Array.
+    fn all_candidates() -> Vec<Self>;
+
     /// Nearest representable hardware color to `lab`.
     fn snap_from_lab(lab: LabF32) -> Self;
 
@@ -125,6 +134,10 @@ pub trait SnapToHardware: AmstradColor {
 }
 
 impl SnapToHardware for Ink {
+    fn all_candidates() -> Vec<Self> {
+        Ink::INKS[0..27].to_vec()
+    }
+
     /// Exhaustive nearest-of-27 search - the Gate Array's inks are not a
     /// regular grid, so there is no shortcut.
     fn snap_from_lab(lab: LabF32) -> Self {
@@ -182,13 +195,25 @@ impl SnapToHardware for Ink {
 /// primaries (the Gate Array has only 3 truly neutral inks: black, medium
 /// grey, white) just because they happen to be the nearest *unclaimed*
 /// option once the few genuinely neutral ones are taken.
-fn neutral_biased_score(target: LabF32, candidate: LabF32) -> f32 {
+pub(crate) fn neutral_biased_score(target: LabF32, candidate: LabF32) -> f32 {
     const EXCESS_CHROMA_WEIGHT: f32 = 1.5;
     let excess_chroma = (chroma(candidate) - chroma(target)).max(0.0);
     lab_distance(target, candidate) + excess_chroma * EXCESS_CHROMA_WEIGHT
 }
 
 impl SnapToHardware for AsicColor {
+    fn all_candidates() -> Vec<Self> {
+        let mut all = Vec::with_capacity(16 * 16 * 16);
+        for r in 0..16u8 {
+            for g in 0..16u8 {
+                for b in 0..16u8 {
+                    all.push(AsicColor::new(r, g, b));
+                }
+            }
+        }
+        all
+    }
+
     /// The ASIC's 4-bit-per-channel space is a regular grid, so the nearest
     /// representable color is exact arithmetic, not a search - reusing
     /// `AsicColor::from(Rgb<u8>)`, which already rounds each 8-bit channel to

@@ -86,6 +86,9 @@ pub struct TrueColorParams<C: AmstradColor> {
     /// [`palette_select::auto_select_palette`]'s own doc comment. Has no
     /// effect when `hint` is locked (no auto-selection runs at all).
     pub prefer_salient_palette: bool,
+    /// `--palette-algorithm`: see [`palette_select::PaletteAlgorithm`]. Has
+    /// no effect when `hint` is locked (no auto-selection runs at all).
+    pub palette_algorithm: palette_select::PaletteAlgorithm,
     /// `--dither-edge-aware`, [`DitherAlgorithm::OrderedArbitrary`] only:
     /// see [`dither::ordered_arbitrary_dither`]'s own doc comment. Ignored
     /// by every other algorithm.
@@ -132,7 +135,8 @@ where
             max_colors,
             &pinned,
             params.prefer_neutral_palette,
-            params.prefer_salient_palette
+            params.prefer_salient_palette,
+            params.palette_algorithm
         );
 
         let mut palette = hint_palette;
@@ -198,6 +202,7 @@ mod tests {
                 bayer_size: 8,
                 prefer_neutral_palette: false,
                 prefer_salient_palette: false,
+                palette_algorithm: palette_select::PaletteAlgorithm::KMeans,
                 edge_aware_dither: false
             }
         )

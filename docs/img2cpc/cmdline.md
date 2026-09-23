@@ -177,18 +177,38 @@ improvement, so none changes behavior unless asked for:
   spending most of the color budget on saturated substitutes once those three
   are taken. Not recommended for a vividly colorful source, where it can fit
   some hues less precisely than the unbiased nearest match would.
-- `--prefer-salient-palette` - bias automatic palette selection toward colors
-  that stand out from the image's own dominant tone, even if they cover very
-  few pixels. Plain frequency-weighted selection can otherwise spend the
-  whole color budget on a large uniform area (a night sky) and let a small
-  but visually critical accent (its stars) get diluted away entirely. Does
-  nothing useful for a source with no real outlier colors, and at a very
-  small color budget it can trade away accurate representation of the
-  dominant tone to keep the accent - a real trade-off, not a free win. It
-  also can't recover an accent that a low `--out-width`/`--out-height` or the
-  target screen resolution has already blurred away during resizing: a tiny
-  bright detail that the resize step has smoothed into its surroundings
-  isn't in the data anymore for palette selection to find.
+- `--prefer-salient-palette` - reserve one color (when at least two are still
+  free) for whichever color stands out most from the image's own dominant
+  tone, even if it covers very few pixels, instead of letting automatic
+  selection spend the whole budget on a large uniform area (a night sky) and
+  dilute away a small but visually critical accent (its stars) entirely. A
+  reserved color is exact - unlike a mere frequency-weight boost, nothing
+  during clustering can average it back toward the background - so a genuine
+  accent survives even at a very small color budget. Does nothing useful for
+  a source with no real outlier colors, and can spend a whole color on a
+  spurious one-pixel outlier (a compression artifact) exactly as readily as
+  on a real accent - a real trade-off, not a free win. It also can't recover
+  an accent that a low `--out-width`/`--out-height` or the target screen
+  resolution has already blurred away during resizing: a tiny bright detail
+  that the resize step has smoothed into its surroundings isn't in the data
+  anymore for palette selection to find.
+- `--palette-algorithm <ALGO>` - strategy used to fill whatever pens aren't
+  already pinned. One of:
+  - `kmeans` (the default) - weighted k-means clustering. Fast regardless of
+    how big the hardware's native color space is, since cost scales with the
+    number of *distinct* colors in the source, not with the palette it's
+    choosing from.
+  - `greedy` - exhaustive forward selection: for each remaining free slot,
+    tries every representable hardware color and keeps whichever single one
+    most reduces total error, so every choice directly optimizes the real
+    objective rather than approximating it through clustering. As a side
+    effect it tends to preserve a rare-but-important accent color on its
+    own, without needing `--prefer-salient-palette` at all - a large chunk
+    of remaining error sitting on a handful of pixels no chosen color is
+    close to is exactly the kind of win this looks for at each step. The
+    cost is trying every candidate at every step: cheap for the Gate
+    Array's 27 inks, much more expensive for `--plus`'s 4096-entry native
+    ASIC grid.
 - `--dither-edge-aware` (with `--dither ordered` only) - relax the ordered
   dither's usual rule against mixing very different hues, in proportion to
   local detail in the source image: still suppressed in flat regions (where
@@ -212,6 +232,10 @@ img2cpc --mode 0 --pen0 0 --unlock-pens --dither ordered photo.png scr -o photo.
 
 # Resize an arbitrary-size photo down to a 32x32 sprite with at most 4 colors
 img2cpc --mode 1 --colors 4 photo.png sprite -o photo.spr --out-width 32 --out-height 32
+
+# Mode 1's tight 4-color budget benefits most from the slower, exhaustive
+# palette search
+img2cpc --mode 1 --dither floyd-steinberg --palette-algorithm greedy photo.png scr -o photo.scr
 ```
 
 ### Other Options
