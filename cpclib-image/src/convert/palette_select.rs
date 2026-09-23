@@ -9,6 +9,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use image::RgbImage;
 
 use super::lab::{lab_distance, neutral_biased_score, rgb8_to_lab, LabF32, SnapToHardware};
@@ -519,23 +521,31 @@ fn greedy_exhaustive<C: AmstradColor + SnapToHardware>(
     };
 
     for _ in 0..remaining_k {
-        let mut best_candidate = None;
-        let mut best_total = f32::MAX;
-        for candidate in C::all_candidates() {
-            if claimed.contains(&candidate) {
-                continue;
-            }
-            let candidate_lab = rgb8_to_lab(candidate.color());
-            let mut total = 0.0f32;
-            for (i, &(lab, _)) in uniques.iter().enumerate() {
-                total += score(lab, candidate_lab).min(best_err[i]) * weight[i];
-            }
-            if total < best_total {
-                best_total = total;
-                best_candidate = Some(candidate);
-            }
-        }
-        let chosen = best_candidate
+        let candidates = C::all_candidates();
+
+        // Every candidate's total error is independent of every other
+        // candidate's, so this scores them in parallel when the `rayon`
+        // feature is on - this loop (candidates x distinct source colors,
+        // run once per free slot) is exactly where nearly all of this
+        // engine's cost lives, especially for the Plus's 4096-entry native
+        // gamut, and it embarrasses trivially.
+        #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+        let iter = candidates.par_iter();
+        #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
+        let iter = candidates.iter();
+
+        let (chosen, _) = iter
+            .filter(|candidate| !claimed.contains(*candidate))
+            .map(|&candidate| {
+                let candidate_lab = rgb8_to_lab(candidate.color());
+                let total: f32 = uniques
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(lab, _))| score(lab, candidate_lab).min(best_err[i]) * weight[i])
+                    .sum();
+                (candidate, total)
+            })
+            .min_by(|(_, a), (_, b)| a.total_cmp(b))
             .expect("all_candidates() has far more entries than any mode's color budget");
         claimed.insert(chosen);
         resolved.push(chosen);
