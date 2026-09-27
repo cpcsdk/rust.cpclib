@@ -3221,8 +3221,21 @@ pub fn parse_macro_or_struct_call_inner(
             (my_space0_with_newlines, ')', my_space0).parse_next(input)?;
         }
 
+        // A call whose only argument is empty is not a call the parser can make
+        // sense of. Reachable from plain text that merely starts like one (a
+        // name, then junk), so it has to be an error, never a panic: the LSP
+        // parses whatever file it is pointed at.
         if args.len() == 1 && args.first().unwrap().0.is_empty() {
-            panic!();
+            return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
+                input,
+                &input_start,
+                if for_struct {
+                    "STRUCT: empty argument"
+                }
+                else {
+                    "MACRO or STRUCT: empty argument"
+                }
+            )));
         }
 
         if args.len() == 1 {
