@@ -1277,12 +1277,16 @@ pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::
     cpclib_project::root::resolve_include_path(filename, &path)
 }
 
-/// Every filename referenced by an `INCLUDE`/`INCBIN`/`BINCLUDE` directive in
-/// `text`, in document order. Best-effort text scan (recognizes the same
-/// directives as `resolve_include_at`, but line-anchored rather than
-/// cursor-anchored so the whole file can be scanned in one pass).
+/// Every assembly file referenced by an `INCLUDE` directive in `text`, in
+/// document order. Best-effort text scan, line-anchored rather than
+/// cursor-anchored so the whole file can be scanned in one pass.
+///
+/// `INCBIN`/`BINCLUDE` targets are deliberately absent: every caller here reads
+/// the file to parse, index or search it as assembly, and binary data is not
+/// that. Parsing a real project's `incbin "loading.pal"` as source panicked the
+/// parser, which silently took the whole "Run in emulator" CodeLens with it.
 pub fn extract_include_filenames(text: &str) -> Vec<String> {
-    cpclib_project::root::extract_include_filenames(text)
+    cpclib_project::root::extract_source_include_filenames(text)
 }
 
 /// The nearest ancestor directory of `doc_uri` containing a project-root

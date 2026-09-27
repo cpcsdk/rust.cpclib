@@ -596,6 +596,30 @@ mod run_lens_tests {
         );
     }
 
+    /// A real user-reported bug: `loading.asm` (`org` / `run $` / `incbin
+    /// "loading.pal"`) got no Run/Debug lens at all. The reference-count lens
+    /// indexes every file the document includes, and it read the `incbin`'d
+    /// palette as assembly; the parser panicked on those bytes, and the panic
+    /// took the whole lens list down with it.
+    #[test]
+    fn an_incbin_of_binary_data_does_not_cost_the_file_its_run_lens() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        // The actual bytes of birthtro's `loading.pal`.
+        std::fs::write(tmp.path().join("loading.pal"), "TDU\\]LMFW^NOSJKT\nT").unwrap();
+        let asm_path = tmp.path().join("loading.asm");
+        let text = "\torg 0x4000\n\trun $\n\tjp $\npalette\n\tincbin \"loading.pal\"\n";
+        std::fs::write(&asm_path, text).unwrap();
+        let d = Document::new(Url::from_file_path(&asm_path).unwrap(), text.to_string(), 1);
+
+        let lenses = AssemblyAnalyzer::new().code_lens(&d);
+        assert!(
+            lenses
+                .iter()
+                .any(|l| l.command.as_ref().unwrap().command == "cpclib.runAsm"),
+            "{lenses:?}"
+        );
+    }
+
     /// ...and to debug itself, beside it: the choice between running and
     /// debugging is made when you press one, not when you set the project up.
     #[test]

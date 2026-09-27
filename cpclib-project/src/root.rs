@@ -24,6 +24,10 @@ pub const PROJECT_ROOT_MARKERS: &[&str] = &[
 
 pub const INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE", "INCBIN", "BINCLUDE"];
 
+/// The subset of [`INCLUDE_DIRECTIVES`] whose target is itself assembly source,
+/// as opposed to binary data pulled in verbatim.
+pub const SOURCE_INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE"];
+
 /// Whether `dir` looks like the top of a project.
 pub fn is_project_root(dir: &Path) -> bool {
     PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists())
@@ -98,12 +102,25 @@ pub fn resolve_include_path(filename: &str, from_file: &Path) -> Option<PathBuf>
 /// It is used to build the include graph, where missing an edge costs a worse
 /// answer rather than a wrong one.
 pub fn extract_include_filenames(text: &str) -> Vec<String> {
+    extract_filenames_of(text, INCLUDE_DIRECTIVES)
+}
+
+/// Like [`extract_include_filenames`], but only the `INCLUDE` targets - the
+/// files that are assembly source. `INCBIN`/`BINCLUDE` targets are binary data:
+/// anything that reads an included file to parse, index or search it as
+/// assembly must not be handed those (a `.pal` or `.scr` is arbitrary bytes,
+/// and the parser has no obligation to make sense of them).
+pub fn extract_source_include_filenames(text: &str) -> Vec<String> {
+    extract_filenames_of(text, SOURCE_INCLUDE_DIRECTIVES)
+}
+
+fn extract_filenames_of(text: &str, directives: &[&str]) -> Vec<String> {
     let mut out = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim_start();
         let upper = trimmed.to_uppercase();
 
-        let Some(directive) = INCLUDE_DIRECTIVES.iter().find(|d| {
+        let Some(directive) = directives.iter().find(|d| {
             upper == **d
                 || upper.starts_with(&format!("{d} "))
                 || upper.starts_with(&format!("{d}\t"))
@@ -193,5 +210,11 @@ mod tests {
     fn include_filenames_are_scanned_in_order() {
         let text = "\tinclude \"a.asm\"\n\tld a,0\n\tINCBIN \"b.bin\"\n\t; include \"c.asm\"\n";
         assert_eq!(extract_include_filenames(text), vec!["a.asm", "b.bin"]);
+    }
+
+    #[test]
+    fn source_include_filenames_leave_out_binary_data() {
+        let text = "\tinclude \"a.asm\"\n\tINCBIN \"b.bin\"\n\tbinclude \"c.pal\"\n\tINCLUDE ONCE \"d.asm\"\n";
+        assert_eq!(extract_source_include_filenames(text), vec!["a.asm", "d.asm"]);
     }
 }

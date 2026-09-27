@@ -2831,7 +2831,13 @@ impl LanguageServer for CpcLspBackend {
         .await
         {
             Ok(lenses) => Some(lenses).filter(|v| !v.is_empty()),
-            Err(_join_error) => None
+            Err(join_error) => {
+                // A panic in an analyzer lands here. Without this line the
+                // only symptom is "no CodeLens at all", with nothing in the log
+                // to say why.
+                tracing::warn!("CodeLens request for {} failed: {}", uri, join_error);
+                None
+            }
         };
         tracing::debug!("CodeLens request for {} took {:?}", uri, start.elapsed());
         Ok(result)
