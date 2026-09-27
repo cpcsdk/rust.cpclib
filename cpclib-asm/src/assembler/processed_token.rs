@@ -1759,25 +1759,37 @@ where
                         // doc comment. `msg` renders through the same
                         // `RelocatedWarning`/`Display` path as before, so the
                         // human-readable text is unchanged.
-                        let span = self
-                            .token
-                            .possible_span()
-                            .expect("BUG: warning token should have a span");
-                        let (line, column) = span.relative_line_and_column();
-                        let len = span.as_str().len();
-                        let rendered = AssemblerError::RelocatedWarning {
-                            warning: Box::new(AssemblerError::AssemblingError {
-                                msg: self.token.warning_message().to_owned()
-                            }),
-                            span: span.clone()
-                        }
-                        .to_string();
-                        let warning = AssemblerError::AlreadyRenderedWarningWithLocation {
-                            msg: rendered,
-                            line: line as u32,
-                            column: column as u32,
-                            len: len as u32,
-                            filename: span.filename().to_string()
+                        //
+                        // Tokens built without span tracking at all (e.g. a
+                        // `Listing` produced by `Listing::from_str`, as the
+                        // `assemble!`/`parse_z80!` proc-macros do from a bare
+                        // string literal) have no span to attach a location
+                        // to; fall back to the plain, location-less message
+                        // rather than panicking.
+                        let warning = match self.token.possible_span() {
+                            Some(span) => {
+                                let (line, column) = span.relative_line_and_column();
+                                let len = span.as_str().len();
+                                let rendered = AssemblerError::RelocatedWarning {
+                                    warning: Box::new(AssemblerError::AssemblingError {
+                                        msg: self.token.warning_message().to_owned()
+                                    }),
+                                    span: span.clone()
+                                }
+                                .to_string();
+                                AssemblerError::AlreadyRenderedWarningWithLocation {
+                                    msg: rendered,
+                                    line: line as u32,
+                                    column: column as u32,
+                                    len: len as u32,
+                                    filename: span.filename().to_string()
+                                }
+                            },
+                            None => {
+                                AssemblerError::AlreadyRenderedError(
+                                    self.token.warning_message().to_owned()
+                                )
+                            }
                         };
                         env.add_warning(warning);
                         token.visited(env)

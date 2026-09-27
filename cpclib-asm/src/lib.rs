@@ -1734,6 +1734,23 @@ Truc
         assert_eq!(listing.estimated_duration().unwrap(), 100);
     }
 
+    /// A regression test for a real panic: a warning-carrying token built
+    /// through `Listing::from_str` (the same path `assemble!`/`parse_z80!`
+    /// use to build a `Listing` from a bare string literal) has no span at
+    /// all - `Token`'s own `MayHaveSpan::possible_span()` always returns
+    /// `None`, unlike a parsed `LocatedToken`'s. Hitting a real warning from
+    /// such a token used to panic with "BUG: warning token should have a
+    /// span" in `processed_token.rs`'s `ProcessedTokenState::Warning`
+    /// handling. `cp a,c` always triggers the redundant-accumulator-prefix
+    /// warning (`wrap_optional_accumulator_warning`), so it exercises this
+    /// without needing to reach for internals.
+    #[test]
+    fn a_span_less_listing_s_warning_does_not_panic() {
+        let listing = Listing::from_str("cp a,c").expect("unable to parse");
+        assemble_tokens_with_options(listing.listing(), EnvOptions::default())
+            .expect("a span-less warning must not panic the assembler");
+    }
+
     fn code_test(code: &'static str) {
         let asm_options = AssemblingOptions::new_case_insensitive();
         let env_options = EnvOptions::new(ParserOptions::default(), asm_options, Arc::new(()));
