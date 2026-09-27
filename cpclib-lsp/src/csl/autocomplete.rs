@@ -102,7 +102,8 @@ fn describe_shape(shape: ArgShape) -> &'static str {
         ArgShape::Duration => "<microseconds>",
         ArgShape::OptionalCount => "[count]",
         ArgShape::OptionalVsyncFlag => "[vsync]",
-        ArgShape::SnapshotVersion => "<1|2|3>"
+        ArgShape::SnapshotVersion => "<1|2|3>",
+        ArgShape::SsmCode => "<0xHHHH>"
     }
 }
 
