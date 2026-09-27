@@ -171,8 +171,16 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
         .collect::<Vec<u8>>()
 }
 
-// Convert inks to pens
-fn colors_to_pens<C: AmstradColor>(colors: &[Vec<C>], p: &Palette<C>) -> Vec<Vec<Pen>> {
+// Convert inks to pens. A locked palette that turns out not to actually
+// cover every color the image uses (e.g. `--pen15 8` alone pins pen 15 and
+// leaves the other 15 pens unset, but the image needs more than one color)
+// used to panic here with the whole palette dumped into the message - this
+// is reachable from a real image + a real CLI invocation, so it has to be a
+// normal error, not a panic.
+fn colors_to_pens<C: AmstradColor>(
+    colors: &[Vec<C>],
+    p: &Palette<C>
+) -> anyhow::Result<Vec<Vec<Pen>>> {
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
     let iter = colors.par_iter();
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
@@ -181,18 +189,20 @@ fn colors_to_pens<C: AmstradColor>(colors: &[Vec<C>], p: &Palette<C>) -> Vec<Vec
     iter.map(|line| {
         line.iter()
             .map(|color| {
-                p.get_pen_for_color(*color).unwrap_or_else(|| {
-                    panic!("Unable to find a correspondance for color {color:?} in given palette {p:?}")
+                p.get_pen_for_color(*color).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Unable to find a correspondance for color {color:?} in given palette {p:?}"
+                    )
                 })
             })
-            .collect::<Vec<Pen>>()
+            .collect::<anyhow::Result<Vec<Pen>>>()
     })
-    .collect::<Vec<_>>()
+    .collect::<anyhow::Result<Vec<_>>>()
 }
 
 #[deprecated(note = "Use colors_to_pens instead")]
 #[allow(unused)]
-fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette<Ink>) -> Vec<Vec<Pen>> {
+fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette<Ink>) -> anyhow::Result<Vec<Vec<Pen>>> {
     colors_to_pens(inks, p)
 }
 
@@ -838,31 +848,36 @@ impl<C: AmstradColor> ColorMatrix<C> {
         Ok(bytes)
     }
 
-    /// Convert the matrix as a sprite, given the right mode and an optional palette
+    /// Convert the matrix as a sprite, given the right mode and an optional palette.
+    ///
+    /// A locked palette used to be trusted blindly here (skip straight to
+    /// `colors_to_pens`, which panicked - dumping the whole palette in the
+    /// message - the moment the image needed a color the lock didn't cover,
+    /// e.g. `--pen15 8` alone with no `--unlock-pens`, which pins pen 15 and
+    /// implicitly locks the other 15 pens empty). Routing it through
+    /// `extract_palette_with_hint` too costs nothing when the lock really is
+    /// complete (every color is already present, so nothing gets added) and
+    /// turns the incomplete case into the same plain, actionable error the
+    /// unlocked path already had.
     pub fn as_sprite(
         &self,
         mode: Mode,
         palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> Sprite<C> {
-
-        // Extract the palette is not provided as an argument
-        let palette = if palette.is_locked() {
-            palette.into_palette()
-        }
-        else {
-            self.extract_palette_with_hint(mode, palette).unwrap()
-        };
+    ) -> anyhow::Result<Sprite<C>> {
+        let palette = self
+            .extract_palette_with_hint(mode, palette)
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         // Really make the conversion
-        let pens = colors_to_pens(&self.data, &palette);
+        let pens = colors_to_pens(&self.data, &palette)?;
 
         // Build the sprite
-        Sprite {
+        Ok(Sprite {
             mode: Some(mode),
             palette: Some(palette),
             data: encode(&pens, mode, missing_pen)
-        }
+        })
     }
 
 }
@@ -1136,12 +1151,13 @@ impl<C: AmstradColor> ColorMatrixList<C> {
         mode: Mode,
         palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> SpriteList<C> {
-        self.to_vec()
+    ) -> anyhow::Result<SpriteList<C>> {
+        Ok(self
+            .to_vec()
             .iter()
             .map(|matrix| matrix.as_sprite(mode, palette.clone(), missing_pen))
-            .collect::<Vec<Sprite<C>>>()
-            .into()
+            .collect::<anyhow::Result<Vec<Sprite<C>>>>()?
+            .into())
     }
 
     /// Crop each matrix in order to only keep the maximal window where at least one pixel change over the animation
@@ -1427,7 +1443,7 @@ impl<C: AmstradColor> Sprite<C> {
         conversion: ConversionRule,
         palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         // Get the list of Inks that represent the image
         let matrix = ColorMatrix::convert(img, conversion);
         matrix.as_sprite(mode, palette, missing_pen)
@@ -1439,15 +1455,15 @@ impl<C: AmstradColor> Sprite<C> {
         conversion: ConversionRule,
         palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> Result<Self, im::ImageError> {
+    ) -> anyhow::Result<Self> {
         let img = im::open(fname.as_ref())?;
-        Ok(Self::convert(
+        Self::convert(
             &img.to_rgb8(),
             mode,
             conversion,
             palette,
             missing_pen
-        ))
+        )
     }
 
     /// Apply a transformation function on each line
