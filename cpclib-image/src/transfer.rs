@@ -1319,7 +1319,7 @@ impl<C: AmstradColor> ImageConverter<C> {
                     crop_if_too_large
                 };
 
-                let sprite = converter.load_sprite(&source, missing_pen);
+                let sprite = converter.load_sprite(&source, missing_pen)?;
                 converter
                     .apply_sprite_conversion(&sprite, o)
                     .map(|output| output.sprite().unwrap())
@@ -1445,7 +1445,7 @@ impl<C: AmstradColor> ImageConverter<C> {
         if let OutputFormat::LinearEncodedChuncky = &output {
             let mut matrix = converter.load_color_matrix(&source);
             matrix.double_horizontally();
-            let sprite = matrix.as_sprite(mode, LockablePalette::<C>::empty(), None);
+            let sprite = matrix.as_sprite(mode, LockablePalette::<C>::empty(), None)?;
             Ok(Output::<C>::LinearEncodedChuncky {
                 data: sprite.to_linear_vec(),
                 palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
@@ -1519,7 +1519,7 @@ impl<C: AmstradColor> ImageConverter<C> {
             Ok(Output::<C>::SpriteAndMask { sprite, mask })
         }
         else {
-            let sprite = converter.load_sprite(&source, missing_pen);
+            let sprite = converter.load_sprite(&source, missing_pen)?;
             converter.apply_sprite_conversion(&sprite, o)
         }
     }
@@ -1543,13 +1543,16 @@ impl<C: AmstradColor> ImageConverter<C> {
 
     /// Load the initial image
     /// TODO make compatibility tests are alike
-    /// TODO propagate errors when needed
-    fn load_sprite(&mut self, source: &ImageSource<C>, missing_pen: Option<Pen>) -> Sprite<C> {
+    fn load_sprite(
+        &mut self,
+        source: &ImageSource<C>,
+        missing_pen: Option<Pen>
+    ) -> anyhow::Result<Sprite<C>> {
         let matrix = self.load_color_matrix(source);
-        let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
+        let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen)?;
         self.palette = LockablePalette::<C>::locked(sprite.palette().unwrap());
 
-        sprite
+        Ok(sprite)
     }
 
     fn load_color_matrix(&self, source: &ImageSource<C>) -> ColorMatrix<C> {
@@ -1960,17 +1963,20 @@ mod tests {
         assert_eq!(from_matrix.palette().colors(), from_file.palette().colors());
     }
 
-    /// A matrix containing a color absent from a locked palette must panic,
-    /// exactly as it already does today for any other locked-palette
-    /// mismatch (`colors_to_pens`) - `convert_from_matrix` introduces no new
-    /// failure mode.
+    /// A matrix containing a color absent from a locked palette must be a
+    /// clean error, exactly as any other locked-palette mismatch
+    /// (`colors_to_pens`, via `as_sprite`) already is - `convert_from_matrix`
+    /// introduces no new failure mode. This used to be a panic dumping the
+    /// whole palette into the message; `as_sprite` now routes even a locked
+    /// palette through `extract_palette_with_hint`'s own validation, which
+    /// still refuses to add colors to a locked palette but reports it as a
+    /// normal `Err` instead.
     #[test]
-    #[should_panic]
-    fn convert_from_matrix_panics_on_color_outside_locked_palette() {
+    fn convert_from_matrix_errors_on_color_outside_locked_palette() {
         let matrix = ColorMatrix::from(vec![vec![Ink::BLACK, Ink::GREEN]]);
         let locked = LockablePalette::<Ink>::locked(vec![Ink::BLACK, Ink::RED].into());
 
-        let _ = ImageConverter::convert_from_matrix(
+        let result = ImageConverter::convert_from_matrix(
             matrix,
             ConvertParams {
                 palette: locked,
@@ -1981,6 +1987,12 @@ mod tests {
                 o: &()
             },
             OutputFormat::Sprite(SpriteEncoding::Linear)
+        );
+
+        assert!(result.is_err(), "{result:?}");
+        assert!(
+            result.unwrap_err().to_string().contains("locked"),
+            "expected a message about the locked palette"
         );
     }
 }
