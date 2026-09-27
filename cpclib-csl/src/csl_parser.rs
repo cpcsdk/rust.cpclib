@@ -6,7 +6,7 @@ use std::ops::Range;
 
 #[cfg(test)]
 use cpclib_common::winnow::ModalParser;
-use cpclib_common::winnow::ascii::{dec_uint, line_ending};
+use cpclib_common::winnow::ascii::{dec_uint, hex_uint, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, opt, preceded, repeat, terminated
 };
@@ -567,6 +567,22 @@ fn parse_wait_ssm0000<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a,
         .parse_next(input)
 }
 
+/// Parse a `wait_ssm <ssm code>` instruction (since CSL v1.5): the code is
+/// hexadecimal, prefixed by `0x` per the standard (`&` and `#`, the other
+/// hex prefixes the CPC toolchain commonly uses, are also accepted).
+fn parse_wait_ssm<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("wait_ssm", ws1)
+        .context(StrContext::Label("wait_ssm"))
+        .parse_next(input)?;
+
+    cut_err(
+        preceded(alt(("0x", "0X", "&", "#")), hex_uint::<_, u16, _>)
+            .context(StrContext::Label("SSM code (hexadecimal, e.g. 0xABCD)"))
+    )
+    .map(CslInstruction::WaitSsm)
+    .parse_next(input)
+}
+
 /// Parse screenshot_name instruction
 fn parse_screenshot_name<'a>(
     input: &mut LocatingSlice<&'a str>
@@ -710,15 +726,20 @@ pub fn parse_instruction<'a>(
             )),
             alt((
                 alt((
-                    parse_key_from_file,
-                    parse_keyboard_write,
-                    parse_wait_driveonoff,
-                    parse_wait_vsyncoffon,
-                    parse_wait_ssm0000,
-                    parse_wait,
-                    parse_screenshot_name,
-                    parse_screenshot_dir,
-                    parse_screenshot
+                    alt((
+                        parse_key_from_file,
+                        parse_keyboard_write,
+                        parse_wait_driveonoff,
+                        parse_wait_vsyncoffon,
+                        parse_wait_ssm0000,
+                        parse_wait_ssm
+                    )),
+                    alt((
+                        parse_wait,
+                        parse_screenshot_name,
+                        parse_screenshot_dir,
+                        parse_screenshot
+                    ))
                 )),
                 alt((
                     parse_snapshot_name,
@@ -1004,6 +1025,54 @@ mod tests {
         let result = parse_test(parse_line, "wait 1300455\n");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), CslInstruction::Wait(1300455));
+    }
+
+    #[test]
+    fn test_parse_wait_ssm0000() {
+        let result = parse_test(parse_line, "wait_ssm0000\n");
+        assert_eq!(result.unwrap(), CslInstruction::WaitSsm0000);
+    }
+
+    #[test]
+    fn test_parse_wait_ssm() {
+        // the standard's own example (SSM-STANDARD-EN.pdf / CSL-STANDARD-EN.pdf)
+        let result = parse_test(parse_line, "wait_ssm 0xABCD\n");
+        assert_eq!(result.unwrap(), CslInstruction::WaitSsm(0xABCD));
+    }
+
+    #[test]
+    fn test_parse_wait_ssm_accepts_other_hex_prefixes_too() {
+        for input in ["wait_ssm &1234\n", "wait_ssm #1234\n", "wait_ssm 0X1234\n"] {
+            let result = parse_test(parse_line, input);
+            assert_eq!(result.unwrap(), CslInstruction::WaitSsm(0x1234), "input {input:?}");
+        }
+    }
+
+    #[test]
+    fn test_parse_wait_ssm_does_not_swallow_wait_ssm0000() {
+        // "wait_ssm0000" must still parse as the zero-argument instruction,
+        // not as "wait_ssm" followed by a missing/malformed argument.
+        let result = parse_test(parse_line, "wait_ssm0000\n");
+        assert_eq!(result.unwrap(), CslInstruction::WaitSsm0000);
+    }
+
+    #[test]
+    fn test_wait_ssm_requires_csl_1_5() {
+        let script = "csl_version 1.0\nwait_ssm 0xABCD\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_err(), "wait_ssm should be rejected under csl_version 1.0");
+
+        let script = "csl_version 1.5\nwait_ssm 0xABCD\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_ok(), "wait_ssm should be accepted under csl_version 1.5: {result:?}");
+    }
+
+    #[test]
+    fn test_wait_ssm_display_roundtrips() {
+        let instruction = CslInstruction::WaitSsm(0xABCD);
+        assert_eq!(instruction.to_string(), "wait_ssm 0xABCD");
+        let reparsed = parse_test(parse_line, &format!("{instruction}\n"));
+        assert_eq!(reparsed.unwrap(), instruction);
     }
 
     #[test]

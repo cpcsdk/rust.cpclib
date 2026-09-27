@@ -51,7 +51,9 @@ pub enum ArgShape {
     /// An optional bare word `vsync` (`screenshot`/`snapshot`).
     OptionalVsyncFlag,
     /// One of `1`, `2`, `3` (`snapshot_version`).
-    SnapshotVersion
+    SnapshotVersion,
+    /// A hexadecimal SSM code, `0x`-prefixed (`wait_ssm`, v1.5).
+    SsmCode
 }
 
 /// One CSL instruction keyword, as an editor would want to offer it: its
@@ -66,6 +68,7 @@ pub struct InstructionSpec {
 const V1_0: CslVersion = CslVersion::new(1, 0);
 const V1_1: CslVersion = CslVersion::new(1, 1);
 const V1_2: CslVersion = CslVersion::new(1, 2);
+const V1_5: CslVersion = CslVersion::new(1, 5);
 
 /// Every CSL instruction keyword `csl_parser::parse_instruction` accepts,
 /// in the same order that function tries them.
@@ -200,6 +203,11 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
         name: "wait_ssm0000",
         min_version: V1_0,
         args: ArgShape::None
+    },
+    InstructionSpec {
+        name: "wait_ssm",
+        min_version: V1_5,
+        args: ArgShape::SsmCode
     },
     InstructionSpec {
         name: "screenshot_name",

@@ -498,6 +498,9 @@ pub enum CslInstruction {
     /// Wait for SSM Code 0000 (ED 00 ED 00)
     WaitSsm0000,
 
+    /// Wait for a specific SSM code to be received (since CSL v1.5)
+    WaitSsm(u16),
+
     // Exports
     /// Specify name for next screenshot (without extension)
     ScreenshotName(Utf8PathBuf),
@@ -654,6 +657,7 @@ impl fmt::Display for CslInstruction {
             Self::WaitDriveOnOff(n) => write!(f, "wait_driveonoff {}", n),
             Self::WaitVsyncOffOn => write!(f, "wait_vsyncoffon"),
             Self::WaitSsm0000 => write!(f, "wait_ssm0000"),
+            Self::WaitSsm(code) => write!(f, "wait_ssm 0x{code:04X}"),
             Self::ScreenshotName(name) => write!(f, "screenshot_name '{}'", name),
             Self::ScreenshotDir(dir) => {
                 write!(f, "screenshot_dir '{}'", normalize_path_for_csl(dir, true))
@@ -707,6 +711,11 @@ impl CslInstruction {
         matches!(self, Self::KeyboardWrite(_))
     }
 
+    /// Check if this instruction is a v1.5 feature
+    pub fn is_v1_5_feature(&self) -> bool {
+        matches!(self, Self::WaitSsm(_))
+    }
+
     /// Get the instruction name as it appears in CSL files
     pub fn instruction_name(&self) -> &'static str {
         match self {
@@ -736,6 +745,7 @@ impl CslInstruction {
             Self::WaitDriveOnOff(_) => "wait_driveonoff",
             Self::WaitVsyncOffOn => "wait_vsyncoffon",
             Self::WaitSsm0000 => "wait_ssm0000",
+            Self::WaitSsm(_) => "wait_ssm",
             Self::ScreenshotName(_) => "screenshot_name",
             Self::ScreenshotDir(_) => "screenshot_dir",
             Self::Screenshot { .. } => "screenshot",
@@ -1165,6 +1175,18 @@ impl CslScriptBuilder {
         }
 
         let version = self.current_version();
+
+        // Check v1.5 features
+        if instruction.is_v1_5_feature()
+            && (version.major < 1 || (version.major == 1 && version.minor < 5))
+        {
+            return Err(format!(
+                "Instruction '{}' requires CSL version 1.5 or higher, but script uses version {}.{}",
+                instruction.instruction_name(),
+                version.major,
+                version.minor
+            ));
+        }
 
         // Check v1.2 features
         if instruction.is_v1_2_feature()

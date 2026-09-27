@@ -155,6 +155,7 @@ pub fn suggest_instruction(input: &str) -> Option<String> {
         "wait_driveonoff",
         "wait_vsyncoffon",
         "wait_ssm0000",
+        "wait_ssm",
         "screenshot_name",
         "screenshot_dir",
         "screenshot",
