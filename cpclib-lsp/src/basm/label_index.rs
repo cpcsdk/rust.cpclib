@@ -173,9 +173,30 @@ impl AssemblyAnalyzer {
         .collect();
 
         let mut occurrences: FxHashMap<String, Vec<Range>> = FxHashMap::default();
-        for (line_idx, line) in document.text().lines().enumerate() {
+        // `document.rope.lines()` (ropey's own line iterator, true O(n)
+        // total) instead of `document.text().lines()`, which used to
+        // flatten the *entire* rope into one owned `String` just to
+        // immediately re-split it into lines - on the debounced-edit path
+        // for every open assembly file. `RopeSlice::as_str()` is zero-copy
+        // whenever the line happens to sit in a single rope chunk (the
+        // common case for an ordinary source line); only a line that
+        // actually spans a chunk boundary pays for `.to_string()`.
+        // `tokenize_line`'s tokens never include `\n`/`\r` (not an
+        // identifier byte), so a trailing line terminator - which
+        // `rope.lines()` includes and `str::lines()` would have stripped -
+        // is harmless here: it's just skipped like any other non-identifier
+        // byte, never folded into a token's start/end range.
+        for (line_idx, line_slice) in document.rope.lines().enumerate() {
             let line_idx = line_idx as u32;
-            for (word, start, end) in tokenize_line(&line) {
+            let owned_line;
+            let line: &str = match line_slice.as_str() {
+                Some(s) => s,
+                None => {
+                    owned_line = line_slice.to_string();
+                    &owned_line
+                }
+            };
+            for (word, start, end) in tokenize_line(line) {
                 // A bare local is only ever meaningful relative to whatever
                 // global's scope contains *this occurrence* - not
                 // necessarily the same global that owns the file's very
