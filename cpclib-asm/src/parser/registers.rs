@@ -289,7 +289,6 @@ macro_rules! parse_any_indexregister8 {
             #[cfg_attr(not(target_arch = "wasm32"), inline)]
             #[cfg_attr(target_arch = "wasm32", inline(never))]
             pub fn [<parse_register_ $reg:lower>] (input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
-                let _start = input.clone();
                 let span = (
                     alt((
                         parse_word( stringify!($reg).as_bytes()),

@@ -1377,18 +1377,20 @@ impl SymbolsTable {
             return Ok(true);
         }
 
-        let raw_symbol = symbol.as_ref().to_owned();
-        let raw_symbol_for_lookup: Symbol = raw_symbol.as_str().into();
-        let symbol = self.extend_local_and_patterns_for_symbol::<Symbol>(raw_symbol_for_lookup)?;
+        // `Symbol` wraps a `SmolStr` (inline for short strings), so this and
+        // the `.clone()` below are cheap - see `any_value`'s own comment for
+        // the `String` round-trip this mirrors it in avoiding.
+        let raw_symbol: Symbol = symbol.into();
+        let symbol = self.extend_local_and_patterns_for_symbol::<Symbol>(raw_symbol.clone())?;
 
         let symbols = self.get_potential_candidates(symbol);
         if symbols.iter().any(|symbol| self.map.contains_key(symbol)) {
             return Ok(true);
         }
 
-        if raw_symbol.starts_with('@') {
+        if raw_symbol.value().starts_with('@') {
             for seed in self.seed_stack.iter().rev() {
-                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.as_str(), *seed);
+                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.value(), *seed);
                 if let Some(frame) = self.functions_stack.current_frame()
                     && frame.contains_key(&seeded_symbol)
                 {
