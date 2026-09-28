@@ -952,6 +952,7 @@ where
     let child = command
         .spawn()
         .map_err(|e| format!("cannot start {executable}: {e}"))?;
+    let _ = fs_err::remove_file(&path);
 
     let endpoint = format!("http://127.0.0.1:{port}");
     wait_until_listening(&endpoint, std::time::Duration::from_secs(30))?;
