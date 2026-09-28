@@ -6598,14 +6598,19 @@ fn same_file(left: &Path, right: &Path) -> bool {
     }
 }
 
+/// `0x`/`&`/`#`/`$`-prefixed hex, `0o`/`@`-prefixed octal, `%`/`0b`-prefixed
+/// binary, or plain decimal. Reuses `cpclib_common`'s own number parser (the
+/// same one the assembler's own source-level number literals go through)
+/// instead of this session's own narrower one, which used to only know
+/// about hex/decimal - see `basic_session::parse_address`, which already
+/// made this switch and is a strict superset of what this used to accept.
 fn parse_number(text: &str) -> Option<u32> {
-    let text = text.trim();
-    for prefix in ["0x", "0X", "&", "#", "$"] {
-        if let Some(digits) = text.strip_prefix(prefix) {
-            return u32::from_str_radix(digits, 16).ok();
-        }
-    }
-    text.parse::<u32>().ok()
+    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::error::ContextError;
+    use cpclib_common::winnow::stream::AsBStr;
+    cpclib_common::parse_value::<_, ContextError>
+        .parse(text.trim().as_bstr())
+        .ok()
 }
 
 /// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument -
@@ -6721,6 +6726,24 @@ fn trailing_comment(line: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::is_a_defs_directive;
+
+    /// Regression test: `parse_number` used to be a narrower, hand-rolled
+    /// parser (hex via `0x`/`&`/`#`/`$`, or plain decimal) - it now shares
+    /// `cpclib_common::parse_value` with `basic_session::parse_address` and
+    /// `ace.rs`/`sugarbox.rs::parse_flexible_int`, which additionally
+    /// accepts octal/binary prefixes and rejects trailing garbage the same
+    /// way a full parse (not a prefix match) always has.
+    #[test]
+    fn parse_number_accepts_every_prefix_the_old_narrower_parser_did() {
+        use super::parse_number;
+
+        assert_eq!(parse_number("0x1F"), Some(0x1F));
+        assert_eq!(parse_number("&1F"), Some(0x1F));
+        assert_eq!(parse_number("#1F"), Some(0x1F));
+        assert_eq!(parse_number("$1F"), Some(0x1F));
+        assert_eq!(parse_number("31"), Some(31));
+        assert_eq!(parse_number("not a number"), None);
+    }
 
     /// A `;` inside a string/char literal must not be mistaken for a
     /// comment start - `db 'a;b'` is not a comment on `'a`.

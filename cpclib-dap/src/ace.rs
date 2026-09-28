@@ -282,14 +282,18 @@ fn ace_round_trip(port: u16, cmd: Value, timeout: Duration) -> std::io::Result<V
     }
 }
 
+/// `0x`/`&`/`#`/`$`-prefixed hex, `0o`/`@`-prefixed octal, `%`/`0b`-prefixed
+/// binary, or plain decimal. Reuses `cpclib_common`'s own number parser (the
+/// same one the assembler's own source-level number literals go through)
+/// instead of a narrower one that used to only know about `0x`/decimal - see
+/// `basic_session::parse_address`, which already made this switch.
 fn parse_flexible_int(value: &str) -> Option<u32> {
-    let value = value.trim();
-    if let Some(hex) = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")) {
-        u32::from_str_radix(hex, 16).ok()
-    }
-    else {
-        value.parse::<u32>().ok()
-    }
+    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::error::ContextError;
+    use cpclib_common::winnow::stream::AsBStr;
+    cpclib_common::parse_value::<_, ContextError>
+        .parse(value.trim().as_bstr())
+        .ok()
 }
 
 /// `cpclib/*` hardware-state panes this backend answers - all read from one
@@ -978,6 +982,15 @@ mod tests {
         assert_eq!(parse_flexible_int("0x1F"), Some(0x1F));
         assert_eq!(parse_flexible_int("31"), Some(31));
         assert_eq!(parse_flexible_int("not a number"), None);
+    }
+
+    /// Regression test: this used to be a narrower, hand-rolled parser that
+    /// only knew `0x`/decimal - `&1F` (a real, commonly-typed hex form on
+    /// this platform) silently failed here even though it already worked in
+    /// `basic_session::parse_address`. Now shares that same parser.
+    #[test]
+    fn flexible_int_parsing_accepts_the_ampersand_hex_prefix() {
+        assert_eq!(parse_flexible_int("&1F"), Some(0x1F));
     }
 
     /// A fake server whose replies are split across several physical lines
