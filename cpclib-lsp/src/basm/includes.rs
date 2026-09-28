@@ -42,11 +42,23 @@ pub(super) fn read_inner_file_bytes(filename: &str) -> Option<Vec<u8>> {
 /// `inner://...` resource or a real file on disk — resolved the same way
 /// `super::definition::resolve_include_path` resolves it for goto-definition.
 pub(super) fn read_included_file(filename: &str, doc_uri: &Url) -> Option<String> {
+    #[cfg(test)]
+    READ_INCLUDED_FILE_CALLS.with(|c| c.set(c.get() + 1));
     if is_inner_uri(filename) {
         return read_inner_file(filename);
     }
     let path = super::definition::resolve_include_path(filename, doc_uri)?;
     fs_err::read_to_string(path).ok()
+}
+
+/// Test-only call counter, thread-local for the same reason
+/// `basm::parse::PARSE_SOURCE_CALLS` is: a plain global atomic would be
+/// flaky under `cargo test`'s parallel execution, with other tests' own
+/// disk reads polluting a shared count. See
+/// `autocomplete::tests::collect_symbols_from_includes_does_not_reread_an_unchanged_file`.
+#[cfg(test)]
+thread_local! {
+    pub(super) static READ_INCLUDED_FILE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// As [`read_included_file`], but the raw bytes — for `INCBIN` targets.

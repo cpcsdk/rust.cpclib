@@ -1277,10 +1277,6 @@ impl AssemblyAnalyzer {
         let text = document.text();
         let mut out = Vec::new();
         for filename in super::definition::extract_include_filenames(&text) {
-            let Some(content) = super::includes::read_included_file(&filename, &document.uri)
-            else {
-                continue;
-            };
             let source_name = filename.rsplit('/').next().unwrap_or(&filename).to_string();
             let synthetic_uri = synthetic_include_uri(&filename, &document.uri);
             // `synthetic_uri` is stable per include path, so the version we
@@ -1300,6 +1296,28 @@ impl AssemblyAnalyzer {
                 super::definition::resolve_include_path(&filename, &document.uri)
                     .map(|path| crate::server::backend::disk_file_version(&path))
                     .unwrap_or(0)
+            };
+            // Cheap freshness check (a `stat()`-backed version, already
+            // computed above, against `symbols_cache`'s own in-memory entry)
+            // before the expensive part: this used to unconditionally
+            // `read_included_file` (a full disk read) and build a fresh
+            // `Document` (a new `Rope`) on *every single call* - i.e. every
+            // completion request, for every include - before
+            // `collect_symbols_cached` ever got a chance to say the cached
+            // result was already exact-version-fresh. Most basm sources
+            // include a shared routines/constants header, so this fires on
+            // essentially every completion in a real project.
+            if let Some(entry) = self.symbols_cache.get(&synthetic_uri)
+                && entry.0 == version
+            {
+                for (sym, detail) in entry.1.iter().cloned() {
+                    out.push((source_name.clone(), sym, detail));
+                }
+                continue;
+            }
+            let Some(content) = super::includes::read_included_file(&filename, &document.uri)
+            else {
+                continue;
             };
             let included_doc = Document::new(synthetic_uri, content, version);
             // `ExactVersionOnly`, not `ToleratesStale`: unlike the main
@@ -2037,6 +2055,35 @@ mod include_tests {
                 .any(|(src, sym, _)| sym == "HELPER_LABEL" && src == "helper.asm"),
             "{syms:?}"
         );
+    }
+
+    /// Regression test: `collect_symbols_from_includes` used to
+    /// unconditionally `read_included_file` (a full disk read) before ever
+    /// checking whether `symbols_cache` already had this exact version -
+    /// i.e. every completion request re-read every included file from disk,
+    /// even when nothing about it had changed since the last request.
+    #[test]
+    fn collect_symbols_from_includes_does_not_reread_an_unchanged_file() {
+        use crate::basm::includes::READ_INCLUDED_FILE_CALLS;
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let doc = Document::new(uri, "    include \"helper.asm\"\n".to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        READ_INCLUDED_FILE_CALLS.with(|c| c.set(0));
+        let first = analyzer.collect_symbols_from_includes(&doc);
+        assert_eq!(READ_INCLUDED_FILE_CALLS.with(|c| c.get()), 1);
+
+        let second = analyzer.collect_symbols_from_includes(&doc);
+        assert_eq!(
+            READ_INCLUDED_FILE_CALLS.with(|c| c.get()),
+            1,
+            "a second call with the include file unchanged on disk must hit \
+             symbols_cache, not read it again"
+        );
+        assert_eq!(first, second);
     }
 
     /// Regression test for the hardcoded-version-0 stale-cache bug: since
