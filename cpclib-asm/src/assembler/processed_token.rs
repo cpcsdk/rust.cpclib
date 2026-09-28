@@ -964,11 +964,25 @@ where
     if options.show_progress() {
         // setup the amount of tokens that will be processed
         Progress::instance().add_expected_to_pass(tokens.len() as _);
-        for chunk in &tokens.iter_mut().chunks(64) {
+        'chunks: for chunk in &tokens.iter_mut().chunks(64) {
             let mut visited = 0;
             for token in chunk {
                 token.visited(env)?;
                 visited += 1;
+                // A RETURN reachable from here isn't necessarily this call's
+                // own - `visit_processed_tokens` recurses into itself for
+                // every nested construct (IF/REPEAT/SWITCH/...), and RETURN
+                // is legal inside any of them (they're parsed under whatever
+                // ParsingState is ambient, so a FUNCTION's FunctionLimited
+                // carries into its own nested blocks). Stopping only checked
+                // this at the top of the call, never between iterations of
+                // this very loop, so a RETURN firing inside e.g. an IF's body
+                // left every following token in that *same* IF branch still
+                // executing - see return_stops_nested_block.rs.
+                if env.return_value.is_some() {
+                    Progress::instance().add_visited_to_pass(visited);
+                    break 'chunks;
+                }
             }
 
             Progress::instance().add_visited_to_pass(visited);
@@ -978,6 +992,10 @@ where
         // normal iteration
         for token in tokens.iter_mut() {
             token.visited(env)?;
+            // See the identical check in the `show_progress` branch above.
+            if env.return_value.is_some() {
+                break;
+            }
         }
     }
 
