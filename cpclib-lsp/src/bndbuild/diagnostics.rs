@@ -5,7 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
-use crate::common::document::Document;
+use crate::common::document::{Document, byte_offset_to_utf16_col};
 
 /// Expand a raw `targets:`/`dependencies:` token the same way the real
 /// executor does (brace `{a,b}` + glob `*`/`?`/`[` expansion, reusing
@@ -221,7 +221,8 @@ impl BuildFileAnalyzer {
 
             for &key in super::token::DEP_KEY_NAMES.iter() {
                 if let Some(rest) = content.strip_prefix(key).and_then(|r| r.strip_prefix(':')) {
-                    let value = rest.split('#').next().unwrap_or("").trim();
+                    let rest_before_comment = rest.split('#').next().unwrap_or("");
+                    let value = rest_before_comment.trim();
                     if value.starts_with('>') || value.starts_with('|') {
                         break;
                     }
@@ -240,15 +241,17 @@ impl BuildFileAnalyzer {
                     let was_templated =
                         orig_line_text.contains("{{") || orig_line_text.contains("{%");
 
-                    // `key.len() + 1` accounts for the stripped `key:` prefix.
+                    // `key.len() + 1` accounts for the stripped `key:` prefix;
+                    // the rest is however much whitespace actually separated
+                    // it from the value - computed from `rest_before_comment`
+                    // (not yet trimmed). This used to instead scan `value`
+                    // (already `.trim()`-med at this point, so never had a
+                    // leading space to find) for one, a no-op that silently
+                    // left col_offset - and so every token's reported
+                    // column, not just the first - one byte short of the
+                    // real position in the ordinary single-space case.
                     let mut col_offset = line.len() - content.len() + key.len() + 1;
-                    // skip spaces after colon
-                    let value_bytes = value.as_bytes();
-                    let mut vi = 0;
-                    while vi < value_bytes.len() && value_bytes[vi] == b' ' {
-                        vi += 1;
-                        col_offset += 1;
-                    }
+                    col_offset += rest_before_comment.len() - rest_before_comment.trim_start().len();
 
                     for tok in value.split_whitespace() {
                         // Still-unresolved Jinja expression (expansion fell
@@ -307,7 +310,10 @@ impl BuildFileAnalyzer {
                                             },
                                             end: Position {
                                                 line: orig_line_num,
-                                                character: orig_line_text.chars().count() as u32
+                                                character: byte_offset_to_utf16_col(
+                                                    orig_line_text,
+                                                    orig_line_text.len()
+                                                ) as u32
                                             }
                                         }
                                     }
@@ -315,11 +321,17 @@ impl BuildFileAnalyzer {
                                         Range {
                                             start: Position {
                                                 line: orig_line_num,
-                                                character: tok_start as u32
+                                                character: byte_offset_to_utf16_col(
+                                                    orig_line_text,
+                                                    tok_start
+                                                ) as u32
                                             },
                                             end: Position {
                                                 line: orig_line_num,
-                                                character: tok_end as u32
+                                                character: byte_offset_to_utf16_col(
+                                                    orig_line_text,
+                                                    tok_end
+                                                ) as u32
                                             }
                                         }
                                     };
@@ -597,6 +609,35 @@ mod tests {
             d.message
         );
         assert_eq!(d.range.start.line, 1);
+    }
+
+    #[test]
+    fn missing_dependency_diagnostic_uses_utf16_columns_not_byte_offsets() {
+        // A build-file dependency diagnostic's column used to be computed
+        // directly from `&str` byte lengths (tok_start/tok_end), not UTF-16
+        // code units as the LSP spec requires - a non-ASCII character
+        // earlier on the flagged line misplaced the highlighted range.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let text = "- targets: café.o\n  cmd: basm café.asm\n- targets: out.bin\n  \
+                     dep: café.o missing.o\n  cmd: link\n";
+        let diags = diagnostics_for(&tmp, text);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+
+        let line_text = "  dep: café.o missing.o";
+        assert_ne!(line_text.len(), line_text.encode_utf16().count());
+        // "missing.o" is the last (ASCII) token on the line, so its own
+        // UTF-16 length equals its byte length either way - only its
+        // *start* column depends on correctly converting everything before
+        // it ("  dep: café.o ").
+        let expected_start = line_text.encode_utf16().count() - "missing.o".len();
+
+        assert_eq!(diags[0].range.start.line, 3);
+        assert_eq!(
+            diags[0].range.start.character as usize,
+            expected_start,
+            "{:?}",
+            diags[0]
+        );
     }
 
     #[test]

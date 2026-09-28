@@ -14,7 +14,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
-use crate::common::document::Document;
+use crate::common::document::{Document, byte_offset_to_utf16_col};
 
 /// Result of running a rule on behalf of the editor.
 pub struct RuleRunOutcome {
@@ -713,11 +713,11 @@ fn failure_outcome(
         range: Range {
             start: Position {
                 line: line_idx as u32,
-                character: start_char as u32
+                character: byte_offset_to_utf16_col(line_text, start_char) as u32
             },
             end: Position {
                 line: line_idx as u32,
-                character: line_text.len() as u32
+                character: byte_offset_to_utf16_col(line_text, line_text.len()) as u32
             }
         },
         severity: Some(DiagnosticSeverity::ERROR),
@@ -1204,11 +1204,11 @@ fn ignored_error_diagnostics(
                 range: Range {
                     start: Position {
                         line: line_idx as u32,
-                        character: start_char as u32
+                        character: byte_offset_to_utf16_col(line_text, start_char) as u32
                     },
                     end: Position {
                         line: line_idx as u32,
-                        character: line_text.len() as u32
+                        character: byte_offset_to_utf16_col(line_text, line_text.len()) as u32
                     }
                 },
                 severity: Some(DiagnosticSeverity::WARNING),
@@ -1962,6 +1962,63 @@ mod tests {
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(diag.range.start.line, 0);
         assert!(diag.message.contains("Unknown symbol"), "{}", diag.message);
+    }
+
+    #[test]
+    fn failure_outcome_uses_utf16_columns_not_byte_offsets() {
+        // Regression test: a build-failure diagnostic's column used to be
+        // computed directly from `&str` byte lengths (`line_text.len()`),
+        // not UTF-16 code units as the LSP spec requires (`Position` docs:
+        // "character offsets are based on a UTF-16 string representation")
+        // - any non-ASCII character on the flagged line misplaced the
+        // highlighted range in the editor.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let line_text = "  - tgt: café";
+        let bnd_content = format!("{line_text}\n    cmd: false\n");
+        let document = doc(tmp.path().as_std_path(), &bnd_content);
+
+        let outcome = failure_outcome(&document, "café", "café", "boom".to_string(), None, "");
+
+        // "é" is 2 UTF-8 bytes but 1 UTF-16 code unit, so this line's byte
+        // length and UTF-16 length actually differ - a real exercise of the
+        // conversion, not a no-op on ASCII-only text.
+        assert_ne!(line_text.len(), line_text.encode_utf16().count());
+
+        let diag = outcome.diagnostics.first().expect("expected a diagnostic");
+        assert_eq!(diag.range.start.line, 0);
+        assert_eq!(
+            diag.range.end.character as usize,
+            line_text.encode_utf16().count(),
+            "end column must be counted in UTF-16 units, not bytes: {diag:?}"
+        );
+    }
+
+    #[test]
+    fn ignored_error_diagnostics_uses_utf16_columns_not_byte_offsets() {
+        // Same bug, same fix, as `failure_outcome_uses_utf16_columns_not_byte_offsets`
+        // above - `ignored_error_diagnostics` builds its Range from the same
+        // kind of byte-length arithmetic.
+        let bnd_content = "- tgt: café\n  cmd:\n    - café échoué\n";
+        let document = doc(camino_tempfile::tempdir().unwrap().path().as_std_path(), bnd_content);
+
+        let diags = ignored_error_diagnostics(
+            &document,
+            vec![IgnoredTaskError {
+                rule: "café".to_string(),
+                task_index: 0,
+                message: "boom".to_string()
+            }]
+        );
+
+        let line_text = "    - café échoué";
+        assert_ne!(line_text.len(), line_text.encode_utf16().count());
+
+        let diag = diags.first().expect("expected a diagnostic");
+        assert_eq!(
+            diag.range.end.character as usize,
+            line_text.encode_utf16().count(),
+            "end column must be counted in UTF-16 units, not bytes: {diag:?}"
+        );
     }
 
     #[test]
