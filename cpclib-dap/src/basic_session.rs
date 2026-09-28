@@ -134,10 +134,10 @@ pub(crate) fn format_amspirit_basic_listing(body: &Value) -> String {
 /// An address or count typed at `-mv`/`-dv` - `0x`/`&`/`#`/`$`-prefixed hex,
 /// `0o`/`@`-prefixed octal, `%`/`0b`-prefixed binary, or plain decimal.
 /// Reuses `cpclib_common`'s own number parser (the same one the assembler's
-/// own source-level number literals go through) rather than a second,
-/// narrower implementation - the Z80 session's own console commands
-/// (`session.rs`) predate this being available and still have their own,
-/// which this deliberately does not copy.
+/// own source-level number literals go through) - `session.rs::parse_number`
+/// and `ace.rs`/`sugarbox.rs::parse_flexible_int` now do the same, closing
+/// what used to be a real gap: those three each had their own narrower
+/// hex/decimal-only parser, so e.g. `&BB5A` worked here but not there.
 fn parse_address(text: &str) -> Option<u32> {
     use cpclib_common::winnow::Parser;
     use cpclib_common::winnow::error::ContextError;
