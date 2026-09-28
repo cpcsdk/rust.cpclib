@@ -133,7 +133,6 @@ impl CprAssembler {
         if let Some(first) = self.pages.selected_active_page_info().unwrap().startadr {
             let max = (first as u32 + 0x4000).min(0xFFFF) as u16;
             if max > self.pages.selected_active_page_info().unwrap().output_limit {
-                dbg!(max, self.pages.selected_active_page_info());
                 return Err(Box::new(AssemblerError::AssemblingError {
                     msg: "Page output limit exceeded".to_owned()
                 }));

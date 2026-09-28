@@ -198,34 +198,28 @@ pub enum AssemblerError {
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
 
-    //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
         errors: Vec<Box<AssemblerError>>
     },
 
-    //#[fail(display = "{} cannot be empty.", 0)]
     EmptyBinaryFile(String),
 
-    //#[fail(display = "Amsdos error: {}", error)]
     AmsdosError {
         error: AmsdosError
     },
 
-    //#[fail(display = "Assembling bug: {}", msg)]
     BugInAssembler {
         file: &'static str,
         line: u32,
         msg: String
     },
 
-    //#[fail(display = "Parser bug: {}. Context: {:?}", error, context)]
     BugInParser {
         error: String,
         context: Box<ParserContext>
     },
 
     // TODO add more information
-    //#[fail(display = "Syntax error:\n{}", error)]
     SyntaxError {
         error: Z80ParserError
     },
@@ -244,7 +238,6 @@ pub enum AssemblerError {
         notes: Vec<String>
     },
 
-    //#[fail(display = "Basic error: {}", error)]
     BasicError {
         error: BasicError
     },
@@ -254,7 +247,6 @@ pub enum AssemblerError {
     },
 
     // TODO add more information
-    // #[fail(display = "Assembling error: {}", msg)]
     AssemblingError {
         msg: String
     },
@@ -264,7 +256,6 @@ pub enum AssemblerError {
     /// too, via `RelocatedWarning`/`locate_warning`.
     ExpressionWarning(cpclib_tokens::ExprWarning),
 
-    // #[fail(display = "Invalid argument: {}", msg)]
     InvalidArgument {
         msg: String
     },
@@ -273,14 +264,12 @@ pub enum AssemblerError {
         msg: String
     },
 
-    //  #[fail(display = "Assertion failed -- {} [{}]: {}", test, guidance, msg)]
     AssertionFailed {
         test: String,
         msg: String,
         guidance: String
     },
 
-    //  #[fail(display = "Symbol `{}` already present on the symbol table", symbol)]
     SymbolAlreadyExists {
         symbol: String
     },
@@ -293,33 +282,23 @@ pub enum AssemblerError {
         msg: String
     },
 
-    //    #[fail(
-    //        display = "There is no macro named `{}`. Closest one is: {:?}",
-    //        symbol, closest
-    //    )]
     UnknownMacro {
         symbol: SmolStr,
         closest: Option<SmolStr>
     },
 
-    //    #[fail(display = "Error when applying macro {}. {}", name, root)]
     MacroError {
         name: SmolStr,
         location: Option<SourceLocation>,
         root: Box<AssemblerError>
     },
 
-    //   #[fail(
-    //       display = "Macro `{}` expect {} arguments; {} are provided.",
-    //       symbol, nb_arguments, nb_paramers
-    //   )]
     WrongNumberOfParameters {
         symbol: String,
         nb_paramers: usize,
         nb_arguments: usize
     },
 
-    //  #[fail(display = "Unknown symbol: {}. Closest one is: {:?}", symbol, closest)]
     UnknownSymbol {
         symbol: SmolStr,
         closest: Option<SmolStr>
@@ -327,7 +306,6 @@ pub enum AssemblerError {
 
     InvalidSymbol(SmolStr),
 
-    //   #[fail(display = "Symbol {} is not a {}", symbol, isnot)]
     WrongSymbolType {
         symbol: SmolStr,
         isnot: SmolStr
@@ -352,12 +330,10 @@ pub enum AssemblerError {
         here: Option<SourceLocation>
     },
 
-    //   #[fail(display = "IO error: {}", msg)]
     IOError {
         msg: String
     },
 
-    //  #[fail(display = "Current assembling address is unknown.")]
     UnknownAssemblingAddress,
     ReadOnlySymbol(Symbol),
     RunAlreadySpecified,
@@ -373,7 +349,6 @@ pub enum AssemblerError {
     },
     OverrideMemory(PhysicalAddress, usize),
 
-    //  #[fail(display = "Unable to resolve expression {}.", expression)]
     ExpressionUnresolvable {
         expression: tokens::Expr
     },
@@ -646,18 +621,10 @@ impl AssemblerError {
     }
 }
 
-#[allow(unused)]
-pub(crate) const LD_WRONG_SOURCE: &str = "LD: error in the source";
 pub(crate) const LD_WRONG_DESTINATION: &str = "LD: error in the destination";
 
 pub(crate) const JP_WRONG_PARAM: &str = "JP: error in the destination";
-#[allow(unused)]
-pub(crate) const JR_WRONG_PARAM: &str = "JR: error in the destination";
-#[allow(unused)]
-pub(crate) const CALL_WRONG_PARAM: &str = "CALL: error in the destination";
 
-#[allow(unused)]
-pub(crate) const SNASET_WRONG_LABEL: &str = "SNASET: error in the option naming";
 pub(crate) const SNASET_MISSING_COMMA: &str = "SNASET: missing comma";
 
 impl Display for AssemblerError {
