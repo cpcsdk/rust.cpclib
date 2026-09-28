@@ -1353,9 +1353,7 @@ fn start_build_progress_with_token(
             // `tower_lsp::Client::send_request` awaits the client's response
             // with no timeout of its own - if the client never answers this
             // particular request (for whatever reason), this would otherwise
-            // hang forever rather than falling back, silently taking the
-            // rest of this function (including the diagnostic log below)
-            // with it.
+            // hang forever rather than falling back.
             let create_result = tokio::time::timeout(
                 Duration::from_secs(5),
                 client.send_request::<request::WorkDoneProgressCreate>(
@@ -1365,19 +1363,6 @@ fn start_build_progress_with_token(
                 )
             )
             .await;
-            // Temporary diagnostic: the LSP output channel is the one place
-            // guaranteed visible to whoever is testing this, unlike a log
-            // file whose path/rotation can be a mystery from the outside.
-            // Remove once progress reporting is confirmed working end to
-            // end.
-            client
-                .log_message(
-                    MessageType::INFO,
-                    format!(
-                        "[progress] workDoneProgress/create for token {token:?}: {create_result:?}"
-                    )
-                )
-                .await;
             matches!(create_result, Ok(Ok(())))
         };
 
