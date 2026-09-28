@@ -92,13 +92,35 @@ impl AssemblyAnalyzer {
                 break;
             }
 
-            let listing_with_errors = match Self::parse_source(
-                remaining,
-                Some(&document.uri),
-                disabled_parser_categories
-            ) {
-                Ok(_) => break, // the rest of the file parses cleanly
-                Err(e) => e
+            // The very first attempt (the common case: the whole file, and
+            // usually the only iteration this loop ever needs) is the exact
+            // same parse `self.parse_document` already caches per document
+            // version - go through it instead of a raw, uncached
+            // `parse_source` call, so a clean-parsing file isn't fully
+            // parsed twice per edit (once here, once more a few lines below
+            // to build `listing`/`env` for the assembler-warnings pass).
+            // Every retry after this first one parses a genuinely different
+            // substring (the tail after the previous error), which
+            // `parse_document` has no cached form of, so only start_line==0
+            // can benefit - `Arc::from` below is just a pointer rewrap
+            // (cheap, no `LocatedListing` clone), unifying both branches'
+            // error type since `parse_document`'s own cache already stores
+            // an `Arc`.
+            let listing_with_errors: Arc<LocatedListing> = if start_line == 0 {
+                match self.parse_document(document) {
+                    Ok(_) => break, // the rest of the file parses cleanly
+                    Err(e) => e
+                }
+            }
+            else {
+                match Self::parse_source(
+                    remaining,
+                    Some(&document.uri),
+                    disabled_parser_categories
+                ) {
+                    Ok(_) => break,
+                    Err(e) => Arc::from(e)
+                }
             };
             let error = listing_with_errors.cpclib_error_unchecked();
 
@@ -1048,6 +1070,45 @@ mod tests {
     fn valid_file_yields_no_diagnostics() {
         let text = "org 0x4000\n ld a, 1\n ret\n";
         assert!(diagnostics_for(text).is_empty());
+    }
+
+    /// Regression test: a clean-parsing file used to be fully parsed twice
+    /// per `analyze_for_activity` call - once via a raw, uncached
+    /// `parse_source` call in the recovery loop's first iteration, then
+    /// again via `self.parse_document` a few lines below to build the
+    /// `listing`/`env` the assembler-warnings pass needs, which missed the
+    /// cache because the first call never populated it (a different
+    /// underlying function). Fires on essentially every keystroke, for
+    /// every open file - the hottest single finding of the whole review
+    /// this test came out of. Uses a real, non-trivial file so the parse
+    /// isn't trivially free either way.
+    #[test]
+    fn analyze_for_activity_parses_a_clean_file_exactly_once() {
+        use crate::basm::parse::PARSE_SOURCE_CALLS;
+
+        let text = "org 0x8000\n\
+                     start\n\
+                     \tld hl, message\n\
+                     \tld b, 13\n\
+                     .loop\n\
+                     \tld a, (hl)\n\
+                     \tinc hl\n\
+                     \tdjnz .loop\n\
+                     \tret\n\
+                     message\n\
+                     \tdefm \"Hello, world!\"\n";
+        let uri = Url::parse("file:///exactly_once.asm").unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        PARSE_SOURCE_CALLS.with(|c| c.set(0));
+        let diags = analyzer.analyze_for_activity(&document, true);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(
+            PARSE_SOURCE_CALLS.with(|c| c.get()),
+            1,
+            "a clean-parsing file must only be parsed once per analyze_for_activity call"
+        );
     }
 
     /// Regression test: a document that parses cleanly but fails a *real*

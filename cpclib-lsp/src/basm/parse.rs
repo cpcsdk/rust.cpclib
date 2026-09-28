@@ -24,6 +24,18 @@ pub(super) fn disabled_parser_warning_categories(
     warnings.disabled_parser_categories()
 }
 
+/// Test-only call counter on `parse_source`, so a regression test can prove
+/// a real parse happened exactly once (or however many times it should),
+/// rather than trusting cache-hit reasoning alone. Thread-local, not a
+/// plain global atomic: `cargo test` runs tests in parallel on separate
+/// threads sharing one process, and other, unrelated tests calling
+/// `parse_source` concurrently would otherwise pollute the count. See
+/// `analyze_for_activity_parses_a_clean_file_exactly_once`.
+#[cfg(test)]
+thread_local! {
+    pub(super) static PARSE_SOURCE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Same idea as `disabled_parser_warning_categories`, for real assembling
 /// (`AssemblingOptions`, via `expand::dry_run_env`) - covers all four
 /// assembler-known categories, since `fake_instructions`/
@@ -151,6 +163,8 @@ impl AssemblyAnalyzer {
         doc_uri: Option<&Url>,
         disabled_categories: BitFlags<WarningCategory>
     ) -> Result<LocatedListing, Box<LocatedListing>> {
+        #[cfg(test)]
+        PARSE_SOURCE_CALLS.with(|c| c.set(c.get() + 1));
         // `quiet`: a `PRINT_PARSE` directive prints at *parse* time, before
         // any `Env`/`dry_run` exists to gate it — must be suppressed here
         // instead, since the LSP's real stdout carries JSON-RPC traffic.
