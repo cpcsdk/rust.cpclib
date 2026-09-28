@@ -2053,7 +2053,7 @@ impl LanguageServer for CpcLspBackend {
             // lookups below actually find it instead of missing under its
             // own now-non-canonical bare text.
             let word = asm_analyzer.canonicalize_label_query(&document, position, &word);
-            let document_text = document.text().to_string();
+            let document_text = document.text();
             let refs = asm_analyzer.label_locations_in(&document, &word);
             Some((word, document_text, refs))
         })

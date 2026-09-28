@@ -3056,9 +3056,10 @@ impl Env {
 
         // A label cannot be defined multiple times
         let res = if self.symbols().contains_symbol(label)?
-            && (self.pass.is_first_pass()
-                || !(self.symbols().kind(label)? == "address"
-                    || self.symbols().kind(label)? == "any"))
+            && (self.pass.is_first_pass() || {
+                let kind = self.symbols().kind(label)?;
+                !(kind == "address" || kind == "any")
+            })
         {
             Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: self
