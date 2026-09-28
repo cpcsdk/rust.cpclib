@@ -2423,7 +2423,11 @@ impl<P: DapPeer> Session<P> {
     fn chips_command(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
         if self.machine_state.is_none() {
             self.pending_chip_prints.push(request.clone());
-            if self.pending_chip_scopes.is_empty() && self.pending_chip_prints.len() == 1 {
+            if self.pending_chip_scopes.is_empty()
+                && self.pending_chip_prints.len() == 1
+                && self.pending_crtc_views.is_empty()
+                && self.pending_simple_chip_views.is_empty()
+            {
                 self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
             }
             return Ok(Vec::new());
@@ -3153,8 +3157,16 @@ impl<P: DapPeer> Session<P> {
 
         self.pending_chip_scopes.push(request.clone());
         // One request in flight, however many scopes are expanded: the others
-        // are answered from the same snapshot when it arrives.
-        if self.pending_chip_scopes.len() == 1 {
+        // are answered from the same snapshot when it arrives. Same
+        // whole-family check `crtc_view_command`/`simple_chip_view_command`
+        // already make - this used to check only `pending_chip_scopes`
+        // itself, which could send a second `cpclib/machineState` request
+        // while one from a different pending kind was already in flight.
+        if self.pending_chip_scopes.len() == 1
+            && self.pending_chip_prints.is_empty()
+            && self.pending_crtc_views.is_empty()
+            && self.pending_simple_chip_views.is_empty()
+        {
             self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
         }
         Ok(Vec::new())
