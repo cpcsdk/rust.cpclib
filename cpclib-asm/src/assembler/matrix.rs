@@ -5,6 +5,18 @@ use crate::assembler::list::list_new;
 use crate::error::{AssemblerError, ExpressionError};
 use crate::list::list_get;
 
+/// `AssemblerError::ExpressionError(ExpressionError::OwnError(...))`,
+/// wrapping "`{value}` is not a `{kind}`" - repeated, byte-for-byte
+/// identical, in every function below whenever the caller's `ExprResult`
+/// isn't the shape (`matrix`, `list`) that function needs.
+fn not_a(value: &ExprResult, kind: &str) -> Box<crate::AssemblerError> {
+    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(
+        Box::new(AssemblerError::AssemblingError {
+            msg: format!("{value} is not a {kind}")
+        })
+    )))
+}
+
 /// Create a new matrix
 pub fn matrix_new(height: usize, width: usize, value: ExprResult) -> ExprResult {
     ExprResult::Matrix {
@@ -52,13 +64,7 @@ pub fn matrix_from_list(expr: &ExprResult) -> Result<ExprResult, Box<crate::Asse
             })
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{expr} is not a a list")
-                }))
-            )))
-        },
+        _ => Err(not_a(expr, "list"))
     }
 }
 
@@ -74,13 +80,7 @@ pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, Box<crate
             Ok(matrix.matrix_col(x))
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(matrix, "matrix"))
     }
 }
 
@@ -108,23 +108,11 @@ pub fn matrix_set_col(
                     matrix.matrix_set_col(x, col.list_content());
                     Ok(matrix)
                 },
-                _ => {
-                    Err(Box::new(AssemblerError::ExpressionError(
-                        ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                            msg: format!("{matrix} is not a list")
-                        }))
-                    )))
-                },
+                _ => Err(not_a(&matrix, "list")),
             }
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(&matrix, "matrix"))
     }
 }
 
@@ -140,13 +128,7 @@ pub fn matrix_row(matrix: &ExprResult, y: usize) -> Result<ExprResult, Box<crate
             Ok(matrix.matrix_row(y).clone())
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(matrix, "matrix"))
     }
 }
 
@@ -178,23 +160,11 @@ pub fn matrix_set_row(
                     std::sync::Arc::make_mut(content)[y] = row.clone();
                     Ok(matrix)
                 },
-                _ => {
-                    Err(Box::new(AssemblerError::ExpressionError(
-                        ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                            msg: format!("{matrix} is not a list")
-                        }))
-                    )))
-                },
+                _ => Err(not_a(&matrix, "list")),
             }
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(&matrix, "matrix"))
     }
 }
 
@@ -220,13 +190,7 @@ pub fn matrix_set(
             Ok(matrix)
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(&matrix, "matrix"))
     }
 }
 
@@ -263,39 +227,21 @@ pub fn matrix_get(
             list_get(row, x)
         },
 
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(matrix, "matrix"))
     }
 }
 
 pub fn matrix_width(matrix: &ExprResult) -> Result<ExprResult, Box<crate::AssemblerError>> {
     match matrix {
         ExprResult::Matrix { width, .. } => Ok((*width as i32).into()),
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(matrix, "matrix"))
     }
 }
 
 pub fn matrix_height(matrix: &ExprResult) -> Result<ExprResult, Box<crate::AssemblerError>> {
     match matrix {
         ExprResult::Matrix { height, .. } => Ok((*height as i32).into()),
-        _ => {
-            Err(Box::new(AssemblerError::ExpressionError(
-                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{matrix} is not a matrix")
-                }))
-            )))
-        },
+        _ => Err(not_a(matrix, "matrix"))
     }
 }
 
