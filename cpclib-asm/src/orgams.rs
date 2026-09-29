@@ -11,19 +11,9 @@ use cpclib_tokens::{
 };
 
 use crate::{
-    LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan, ParserContext,
-    ParserContextBuilder, SourceString, TokenExt, Z80Span, parse_z80
+    LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan, SourceString,
+    TokenExt, ctx_and_span, parse_z80
 };
-
-fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
-    let ctx = Box::new(
-        ParserContextBuilder::default()
-            .set_context_name("TEST")
-            .build(code)
-    );
-    let span = Z80Span::new_extra(code, ctx.deref());
-    (ctx, span)
-}
 
 #[derive(Debug)]
 pub struct ToOrgamsError(String);
