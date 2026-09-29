@@ -743,12 +743,11 @@ pub(super) fn module_body_end_line(text: &str, start_line: u32) -> u32 {
 /// found (e.g. a stray closing keyword with no opener, or a document with a
 /// syntax error).
 fn block_start_line(
-    text: &str,
+    lines: &[&str],
     end_line: u32,
     open_words: &[&str],
     close_words: &[&str]
 ) -> Option<u32> {
-    let lines: Vec<&str> = text.lines().collect();
     let mut depth = 1i32;
     let mut i = end_line as i64 - 1;
     while i >= 0 {
@@ -842,15 +841,22 @@ const IF_ELSE_WORDS: &[&str] = &[
 /// instead, mirroring `block_end_line`'s own already-established
 /// text-based approach (used for MACRO/REPEAT/FUNCTION parameter renaming)
 /// rather than inventing a second mechanism.
-pub(super) fn matching_opening_line(text: &str, line: u32) -> Option<u32> {
-    let lines: Vec<&str> = text.lines().collect();
+///
+/// `lines` is the caller's own `text.lines().collect::<Vec<_>>()` - taken
+/// as a parameter rather than splitting `text` internally so a caller
+/// asking about several lines (`inlay_hints`, once per line in the
+/// requested range) can build it once and reuse it, instead of this
+/// function re-splitting the *whole* document on every single call - an
+/// `O(range × file_lines)` cost with no caching that a real-project-sized
+/// file (or a whole-document inlay-hint request) made genuinely expensive.
+pub(super) fn matching_opening_line(lines: &[&str], line: u32) -> Option<u32> {
     let line_text = lines.get(line as usize)?;
     let upper = line_text.trim().to_uppercase();
     let first_word = upper.split_whitespace().next().unwrap_or("");
 
     if IF_ELSE_WORDS.contains(&first_word) {
         let (if_open_words, if_close_words) = BLOCK_KEYWORD_PAIRS[0];
-        return block_start_line(text, line, if_open_words, if_close_words);
+        return block_start_line(lines, line, if_open_words, if_close_words);
     }
 
     // `NEXTU` is a repeatable mid-block marker for `UNION`, the same
@@ -865,12 +871,12 @@ pub(super) fn matching_opening_line(text: &str, line: u32) -> Option<u32> {
             .find(|(open, _)| open.contains(&"UNION"))
             .copied()
     {
-        return block_start_line(text, line, union_open_words, union_close_words);
+        return block_start_line(lines, line, union_open_words, union_close_words);
     }
 
     for (open_words, close_words) in BLOCK_KEYWORD_PAIRS {
         if close_words.contains(&first_word) {
-            return block_start_line(text, line, open_words, close_words);
+            return block_start_line(lines, line, open_words, close_words);
         }
     }
     None

@@ -59,8 +59,10 @@ impl AssemblyAnalyzer {
         // `MACRO`/etc. are each one nested node for the whole block), so
         // this is resolved from raw text - same established approach
         // `block_end_line` already uses for the forward direction.
+        let document_text = document.text();
+        let document_lines: Vec<&str> = document_text.lines().collect();
         if let Some(opening_line) =
-            super::token::matching_opening_line(&document.text(), position.line)
+            super::token::matching_opening_line(&document_lines, position.line)
         {
             return Some(Location {
                 uri: document.uri.clone(),

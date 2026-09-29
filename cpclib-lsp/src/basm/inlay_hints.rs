@@ -13,6 +13,12 @@ impl AssemblyAnalyzer {
     /// falls within `range`.
     pub fn inlay_hints(&self, document: &Document, range: Range) -> Vec<InlayHint> {
         let text = document.text();
+        // Built once, outside the loop: `matching_opening_line` used to
+        // re-split the *whole* document on every call, and this loop calls
+        // it once per line in the requested range - an `O(range ×
+        // file_lines)` cost with no caching that a real-project-sized file
+        // (or a whole-document request) made genuinely expensive.
+        let lines: Vec<&str> = text.lines().collect();
         let mut hints = Vec::new();
 
         for line in range.start.line..=range.end.line {
@@ -21,7 +27,7 @@ impl AssemblyAnalyzer {
                 continue;
             };
             let line_text = line_text.trim_end_matches(['\n', '\r']);
-            let Some(opening_line) = super::token::matching_opening_line(&text, line)
+            let Some(opening_line) = super::token::matching_opening_line(&lines, line)
             else {
                 continue;
             };
