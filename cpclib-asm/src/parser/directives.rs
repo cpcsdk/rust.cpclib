@@ -2544,55 +2544,6 @@ pub fn parse_z80_directive_with_block(
     }
 }
 
-pub fn parse_assign_operator(
-    input: &mut InnerZ80Span
-) -> ModalResult<Option<BinaryOperation>, Z80ParserError> {
-    let start = input.checkpoint();
-    let word = take_while(1..=3, |c| {
-        c == b'='
-            || c == b'<'
-            || c == b'>'
-            || c == b'+'
-            || c == b'-'
-            || c == b'*'
-            || c == b'/'
-            || c == b'%'
-            || c == b'^'
-            || c == b'|'
-            || c == b'&'
-    })
-    .parse_next(input)?;
-    let oper = match word {
-        b"=" => None,
-
-        b">>=" => Some(BinaryOperation::RightShift),
-        b"<<=" => Some(BinaryOperation::LeftShift),
-
-        b"+=" => Some(BinaryOperation::Add),
-        b"-=" => Some(BinaryOperation::Sub),
-        b"*=" => Some(BinaryOperation::Mul),
-        b"/=" => Some(BinaryOperation::Div),
-        b"%=" => Some(BinaryOperation::Mod),
-
-        b"&=" => Some(BinaryOperation::BinaryAnd),
-        b"|=" => Some(BinaryOperation::BinaryOr),
-        b"^=" => Some(BinaryOperation::BinaryXor),
-
-        b"&&=" => Some(BinaryOperation::BooleanAnd),
-        b"||=" => Some(BinaryOperation::BooleanOr),
-
-        _ => {
-            return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
-                input,
-                &start,
-                "Wrong symbol"
-            )));
-        }
-    };
-
-    Ok(oper)
-}
-
 pub fn parse_charset(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let charset =
         opt(alt((parse_charset_string, parse_charset_start_stop_end))).parse_next(input)?;

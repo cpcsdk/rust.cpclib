@@ -1037,57 +1037,6 @@ pub fn parse_z80_line_complete(
     parse_line(r#in)
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_assign_operator(
-    input: &mut InnerZ80Span
-) -> ModalResult<Option<BinaryOperation>, Z80ParserError> {
-    let start = input.checkpoint();
-    let word = take_while(1..=3, |c| {
-        c == b'='
-            || c == b'<'
-            || c == b'>'
-            || c == b'+'
-            || c == b'-'
-            || c == b'*'
-            || c == b'/'
-            || c == b'%'
-            || c == b'^'
-            || c == b'|'
-            || c == b'&'
-    })
-    .parse_next(input)?;
-    let oper = match word {
-        b"=" => None,
-
-        b">>=" => Some(BinaryOperation::RightShift),
-        b"<<=" => Some(BinaryOperation::LeftShift),
-
-        b"+=" => Some(BinaryOperation::Add),
-        b"-=" => Some(BinaryOperation::Sub),
-        b"*=" => Some(BinaryOperation::Mul),
-        b"/=" => Some(BinaryOperation::Div),
-        b"%=" => Some(BinaryOperation::Mod),
-
-        b"&=" => Some(BinaryOperation::BinaryAnd),
-        b"|=" => Some(BinaryOperation::BinaryOr),
-        b"^=" => Some(BinaryOperation::BinaryXor),
-
-        b"&&=" => Some(BinaryOperation::BooleanAnd),
-        b"||=" => Some(BinaryOperation::BooleanOr),
-
-        _ => {
-            return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
-                input,
-                &start,
-                "Wrong symbol"
-            )));
-        }
-    };
-
-    Ok(oper)
-}
-
 /// Repeatable *mid*-block marker keywords - `NEXTU`(`UNION`), `CASE`/
 /// `DEFAULT`/`BREAK` (`SWITCH`), `ELSE`/`ELSEIF*` (`IF`) - checked
 /// alongside `END_DIRECTIVE` by [`parse_forbidden_keyword`] below for

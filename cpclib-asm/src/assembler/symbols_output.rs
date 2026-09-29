@@ -244,15 +244,18 @@ impl SymbolOutputGenerator {
     }
 
     fn is_included(list: &[Symbol], sym: &Symbol) -> bool {
-        list.iter()
-            .find(|s2| {
-                if **s2 == *sym {
-                    return true;
-                }
-                // if !s2.value().contains(".") {return false;}
-                sym.value().starts_with(&format!("{}.", s2.value()))
-            })
-            .is_some()
+        list.iter().any(|s2| {
+            if *s2 == *sym {
+                return true;
+            }
+            // `sym` is a member of `s2`'s own namespace when it starts with
+            // "{s2}." - checked without `format!`'s per-comparison
+            // allocation via `strip_prefix` + a plain `starts_with('.')` on
+            // what's left.
+            sym.value()
+                .strip_prefix(s2.value())
+                .is_some_and(|rest| rest.starts_with('.'))
+        })
     }
 
     pub fn forbid_all_symbols(&mut self) {
