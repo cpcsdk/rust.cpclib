@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 // `pub`, not `mod`: an external consumer driving code intelligence
 // directly (e.g. an MCP server) needs `AssemblyAnalyzer` and its per-feature
 // return types (`basm::cycles::SelectionCycleCount`, etc.), same as
