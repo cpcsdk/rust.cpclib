@@ -26,7 +26,7 @@ use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
 use super::command::{single_file_edit, single_file_multi_edit};
-use crate::common::document::Document;
+use crate::common::document::{Document, byte_offset_to_position};
 
 /// Diagnostic `source` tag for every peephole warning, distinct from plain
 /// `"basm"` (used for real parser/assembler diagnostics) so a user can tell
@@ -707,18 +707,6 @@ fn byte_range_to_lsp(text: &str, range: &std::ops::Range<usize>) -> Range {
     Range {
         start: byte_offset_to_position(text, range.start),
         end: byte_offset_to_position(text, range.end)
-    }
-}
-
-fn byte_offset_to_position(text: &str, offset: usize) -> Position {
-    let offset = offset.min(text.len());
-    let line = text[..offset].matches('\n').count();
-    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
-    let line_text = &text[line_start..cpclib_asmoptim::edit::line_end(text, line_start)];
-    Position {
-        line: line as u32,
-        character: crate::common::document::byte_offset_to_utf16_col(line_text, offset - line_start)
-            as u32
     }
 }
 
