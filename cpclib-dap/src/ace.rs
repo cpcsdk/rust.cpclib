@@ -416,18 +416,7 @@ fn ace_registers_of(state: &Value) -> Vec<Value> {
     const NAMES: &[&str] = &[
         "AF", "BC", "DE", "HL", "AF'", "BC'", "DE'", "HL'", "IX", "IY", "SP", "PC", "I", "R", "WZ"
     ];
-    NAMES
-        .iter()
-        .filter_map(|name| {
-            state.get(*name).and_then(Value::as_u64).map(|value| {
-                json!({
-                    "name": name,
-                    "value": format!("0x{value:04X}"),
-                    "variablesReference": 0
-                })
-            })
-        })
-        .collect()
+    crate::protocol::registers_of(state, NAMES)
 }
 
 /// Shape ACE's own reply (`state`) into the DAP response `request` is
