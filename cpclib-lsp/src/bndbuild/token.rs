@@ -78,34 +78,10 @@ pub(super) enum Collecting {
 
 impl BuildFileAnalyzer {
     pub(super) fn extract_word_at_position(&self, line: &str, column: usize) -> Option<String> {
-        let chars: Vec<char> = line.chars().collect();
-        if column >= chars.len() {
-            return None;
-        }
-
-        let mut start = column;
-        let mut end = column;
-
-        while start > 0
-            && (chars[start - 1].is_alphanumeric()
-                || chars[start - 1] == '_'
-                || chars[start - 1] == '-')
-        {
-            start -= 1;
-        }
-
-        while end < chars.len()
-            && (chars[end].is_alphanumeric() || chars[end] == '_' || chars[end] == '-')
-        {
-            end += 1;
-        }
-
-        if start < end {
-            Some(chars[start..end].iter().collect())
-        }
-        else {
-            None
-        }
+        crate::basm::token::word_range_at_position_matching(line, column, |c| {
+            c.is_alphanumeric() || c == '_' || c == '-'
+        })
+        .map(|(word, ..)| word)
     }
 
     /// A bare `- value` list item never repeats its governing key on its own

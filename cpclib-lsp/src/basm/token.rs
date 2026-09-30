@@ -111,18 +111,22 @@ pub(crate) fn semantic_tokens_legend() -> SemanticTokensLegend {
     }
 }
 
-/// The Z80/basm identifier word (and its `[start, end)` `char`-count column
-/// range) at `column` in `line`, or `None` if `column` doesn't sit on one.
-/// Z80/basm identifier characters: alphanumeric, `_`, `.`, `@` — the dot
-/// allows `.local` labels and qualified names like `module.symbol`. The
-/// single source of truth for this scan; `AssemblyAnalyzer::extract_word_at_position`
-/// is a thin wrapper discarding the range for callers that don't need it.
-pub(super) fn word_range_at_position(line: &str, column: usize) -> Option<(String, u32, u32)> {
+/// The word (and its `[start, end)` `char`-count column range) at `column`
+/// in `line`, expanding outward from it while `is_word` holds - or `None`
+/// if `column` doesn't sit on one. Generic over what counts as a "word"
+/// character so every language module needing this same boundary scan
+/// (`bndbuild::token::BuildFileAnalyzer::extract_word_at_position` used to
+/// carry its own copy, identical but for its own identifier charset) can
+/// share the scan itself and only supply the predicate.
+pub(crate) fn word_range_at_position_matching(
+    line: &str,
+    column: usize,
+    is_word: impl Fn(char) -> bool
+) -> Option<(String, u32, u32)> {
     let chars: Vec<char> = line.chars().collect();
     if column >= chars.len() {
         return None;
     }
-    let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '.' || c == '@';
     let mut start = column;
     let mut end = column;
     while start > 0 && is_word(chars[start - 1]) {
@@ -137,6 +141,18 @@ pub(super) fn word_range_at_position(line: &str, column: usize) -> Option<(Strin
     else {
         None
     }
+}
+
+/// The Z80/basm identifier word (and its `[start, end)` `char`-count column
+/// range) at `column` in `line`, or `None` if `column` doesn't sit on one.
+/// Z80/basm identifier characters: alphanumeric, `_`, `.`, `@` — the dot
+/// allows `.local` labels and qualified names like `module.symbol`. The
+/// single source of truth for this scan; `AssemblyAnalyzer::extract_word_at_position`
+/// is a thin wrapper discarding the range for callers that don't need it.
+pub(super) fn word_range_at_position(line: &str, column: usize) -> Option<(String, u32, u32)> {
+    word_range_at_position_matching(line, column, |c| {
+        c.is_alphanumeric() || c == '_' || c == '.' || c == '@'
+    })
 }
 
 impl AssemblyAnalyzer {
