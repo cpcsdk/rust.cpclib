@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use cpclib_common::clap;
 use cpclib_common::clap::{Parser, Subcommand};
 use cpclib_lsp::CpcLspBackend;

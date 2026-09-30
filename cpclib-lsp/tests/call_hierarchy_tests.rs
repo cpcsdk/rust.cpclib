@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! Integration tests for LSP call hierarchy: cross-document basm CALL/RET
 //! and BASIC embedded in a `LOCOMOTIVE` block, both of which need the real
 //! `backend.rs` request/response round-trip (the `data` tag surviving a

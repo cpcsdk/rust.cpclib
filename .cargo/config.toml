@@ -1,4 +1,4 @@
-[build.x86_64-unknown-linux-gnu]
+[build]
 #rustc-wrapper = '/home/rgiot/.cargo/bin/sccache'
 jobs=2
 
