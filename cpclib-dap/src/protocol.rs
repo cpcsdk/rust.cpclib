@@ -57,6 +57,31 @@ pub fn address_reference(address: u32) -> String {
     format!("0x{address:04x}")
 }
 
+/// DAP `variables` entries for whichever of `names` are present in `state`
+/// (a flat register-name-keyed object, as SugarboxV2's and ACE's own
+/// `getStatus`/`readRegisters` replies both already are), each formatted as
+/// 4-digit hex. Shared by `sugarbox`/`ace` (previously identical,
+/// byte-for-byte, differing only in their own `names` list); AMSpiriT
+/// Lite's own `registers_of` is deliberately not folded in here - its state
+/// shape needs a real per-register value lookup (`register(state, name)`,
+/// not a plain `state.get(name)`) and variable-width formatting (2 hex
+/// digits for 8-bit registers, 4 for 16-bit), not just a different name
+/// list.
+pub fn registers_of(state: &Value, names: &[&str]) -> Vec<Value> {
+    names
+        .iter()
+        .filter_map(|name| {
+            state.get(*name).and_then(Value::as_u64).map(|value| {
+                json!({
+                    "name": name,
+                    "value": format!("0x{value:04X}"),
+                    "variablesReference": 0
+                })
+            })
+        })
+        .collect()
+}
+
 pub fn parse_address_reference(reference: &str) -> Option<u32> {
     let trimmed = reference.trim();
     let hex = trimmed
