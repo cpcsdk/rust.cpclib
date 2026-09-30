@@ -41,6 +41,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install ALSA development library
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes libasound2-dev
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
