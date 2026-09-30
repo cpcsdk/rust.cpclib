@@ -10,7 +10,7 @@ use tower_lsp::lsp_types::*;
 
 use super::BasicAnalyzer;
 use super::token::*;
-use crate::common::document::Document;
+use crate::common::document::{Document, span_range};
 
 impl BasicAnalyzer {
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
@@ -175,19 +175,6 @@ fn variable_occurrence_spans(prog: &LocatedBasicProgram, var_key: &str) -> Vec<(
         }
     }
     spans
-}
-
-fn span_range(line: u32, col: u32, len: u32) -> Range {
-    Range {
-        start: Position {
-            line,
-            character: col
-        },
-        end: Position {
-            line,
-            character: col + len
-        }
-    }
 }
 
 /// Build a single-file `WorkspaceEdit` renaming every occurrence of

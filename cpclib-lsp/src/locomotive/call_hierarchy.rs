@@ -12,7 +12,7 @@ use tower_lsp::lsp_types::*;
 
 use super::BasicAnalyzer;
 use crate::common::call_hierarchy::CallHierarchyData;
-use crate::common::document::Document;
+use crate::common::document::{Document, span_range};
 
 /// `(line, column, length)` of one call-site token span.
 type CallSiteSpan = (u32, u32, u32);
@@ -69,19 +69,6 @@ fn basic_line_to_call_hierarchy_item(
             }
             .to_json()
         )
-    }
-}
-
-fn span_range(line: u32, col: u32, len: u32) -> Range {
-    Range {
-        start: Position {
-            line,
-            character: col
-        },
-        end: Position {
-            line,
-            character: col + len
-        }
     }
 }
 

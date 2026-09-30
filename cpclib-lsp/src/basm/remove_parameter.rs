@@ -24,11 +24,11 @@ use cpclib_asm::parser::obtained::{
     LocatedDataAccess, LocatedExpr, LocatedListing, LocatedMacroParam, LocatedToken, MayHaveSpan
 };
 use cpclib_tokens::{ListingElement, TestKindElement};
-use tower_lsp::lsp_types::{Position, TextEdit};
+use tower_lsp::lsp_types::TextEdit;
 
 use super::AssemblyAnalyzer;
 use super::format::strip_asm_comment;
-use crate::common::document::{Document, byte_offset_to_utf16_col};
+use crate::common::document::{Document, byte_offset_to_position};
 
 /// MACRO or FUNCTION - the only two kinds this refactor supports.
 /// REPEAT/ITERATE/FOR counters already got their own, much simpler,
@@ -727,15 +727,6 @@ fn definition_header_removable_span(
     let arg_span = spans.get(param_index)?.clone();
     let arity = spans.len();
     expand_to_removable_argument_span(header_line, arg_span, param_index, arity)
-}
-
-fn byte_offset_to_position(text: &str, offset: usize) -> Position {
-    let up_to = &text[..offset.min(text.len())];
-    let line = up_to.matches('\n').count() as u32;
-    let line_start = up_to.rfind('\n').map(|i| i + 1).unwrap_or(0);
-    let line_text = text[line_start..].split('\n').next().unwrap_or("");
-    let character = byte_offset_to_utf16_col(line_text, offset - line_start) as u32;
-    Position { line, character }
 }
 
 fn byte_range_to_text_edit(text: &str, range: Range<usize>) -> TextEdit {

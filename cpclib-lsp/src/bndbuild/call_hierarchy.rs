@@ -33,7 +33,7 @@ use tower_lsp::lsp_types::*;
 use super::BuildFileAnalyzer;
 use super::sourcemap::SourceMap;
 use crate::common::call_hierarchy::CallHierarchyData;
-use crate::common::document::Document;
+use crate::common::document::{Document, span_range};
 
 fn indent_of(line: &str) -> usize {
     line.len() - line.trim_start().len()
@@ -123,19 +123,6 @@ fn translate_line_range(
 /// coordinates (no source-map translation needed) — used by the macro side,
 /// which scans the raw document directly (see
 /// `BuildFileAnalyzer::call_hierarchy_item_for_macro`'s doc comment).
-fn span_range(line: u32, col: u32, len: u32) -> Range {
-    Range {
-        start: Position {
-            line,
-            character: col
-        },
-        end: Position {
-            line,
-            character: col + len
-        }
-    }
-}
-
 /// A `Range` spanning raw-document lines `[start, end]` (inclusive) in full
 /// — the macro-side, already-raw-coordinates counterpart of
 /// `translate_line_range`.

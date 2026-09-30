@@ -117,6 +117,43 @@ pub fn byte_offset_to_utf16_col(line: &str, byte_offset: usize) -> usize {
         .sum()
 }
 
+/// A byte offset into `text` (a whole document/section, not just one line)
+/// as an LSP `Position` - line count plus a UTF-16 column via
+/// `byte_offset_to_utf16_col`. For a caller that only has a raw `&str` (no
+/// `Document`/rope at hand), e.g. text extracted for a quickfix/refactor
+/// pass, computing positions in it via manual byte-offset scanning. Was
+/// duplicated identically (module-private, differing only in which
+/// equivalent line-boundary idiom each used) in `basm::remove_parameter`
+/// and `basm::peephole`.
+/// A `Range` spanning `len` UTF-16 columns starting at `(line, col)`, both
+/// already given in LSP's own units - for a caller that already has a
+/// symbol's line/column/length (e.g. from a label index or call-hierarchy
+/// scan) rather than a raw byte offset to convert. Was duplicated
+/// identically, character-for-character, in `locomotive::call_hierarchy`,
+/// `locomotive::definition`, and `bndbuild::call_hierarchy`.
+pub fn span_range(line: u32, col: u32, len: u32) -> Range {
+    Range {
+        start: Position {
+            line,
+            character: col
+        },
+        end: Position {
+            line,
+            character: col + len
+        }
+    }
+}
+
+pub fn byte_offset_to_position(text: &str, offset: usize) -> Position {
+    let offset = offset.min(text.len());
+    let up_to = &text[..offset];
+    let line = up_to.matches('\n').count() as u32;
+    let line_start = up_to.rfind('\n').map_or(0, |i| i + 1);
+    let line_text = text[line_start..].split('\n').next().unwrap_or("");
+    let character = byte_offset_to_utf16_col(line_text, offset - line_start) as u32;
+    Position { line, character }
+}
+
 /// Shared core of `Document::char_column`: walk `chars` accumulating UTF-16
 /// code units until `utf16_col` is reached, returning the `char` count at
 /// that point. Generic over the char source so it works against both a rope
