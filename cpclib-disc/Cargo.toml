@@ -36,9 +36,7 @@ enumn = {workspace = true, optional = true}
 camino-tempfile = {workspace = true, optional = true}
 
 
-# Only allow it on linux, because it fails on other platforms right now
 hxcfe = {workspace = true, optional = true}
-hxcfe-sys = {workspace = true, optional = true}
 
 [dev-dependencies]
 camino-tempfile.workspace = true
@@ -46,7 +44,6 @@ camino-tempfile.workspace = true
 
 [build-dependencies]
 built.workspace = true
-cc.workspace = true
 
 
 [features]
@@ -54,7 +51,7 @@ default = ["dskmanager", "catalog", "hideur"]
 dskmanager = ["cmdline"]
 catalog = ["cmdline", "log", "simple_logger", "clap"]
 hideur = ["cmdline"]
-hfe = ["hxcfe", "hxcfe-sys", "enumn", "camino-tempfile"]
+hfe = ["hxcfe", "enumn", "camino-tempfile"]
 cmdline = ["cpclib-common/cmdline"]
 
 [[bin]]
