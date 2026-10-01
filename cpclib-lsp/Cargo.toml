@@ -21,7 +21,7 @@ cpclib-asmoptim.workspace = true
 cpclib-z80flow.workspace = true
 cpclib-basmdoc = { workspace = true, default-features = false }
 cpclib-csl = { workspace = true, default-features = false }
-cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon", "basmdoc-generator", "tape", "fap", "archive-7z", "apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0", "self-update"] }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon", "basmdoc-generator", "tape", "fap", "archive-7z", "hfe", "apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0", "self-update"] }
 cpclib-runner = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
 cpclib-catart.workspace = true
