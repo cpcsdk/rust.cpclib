@@ -34,11 +34,10 @@ built = { workspace = true, features = ["chrono"] }
 static_vcruntime.workspace = true
 
 [features]
-default = ["rayon"]
+default = ["rayon", "hfe"]
 rayon = ["cpclib-bndbuild/rayon"]
 hfe = ["cpclib-bndbuild/hfe"]
 
 [[bin]]
 name = "bndbuild-gui"
 path = "src/main.rs"
-

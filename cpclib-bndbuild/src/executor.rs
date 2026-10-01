@@ -40,6 +40,7 @@ use crate::runners::fs::mkdir::MkdirRunner;
 use crate::runners::fs::mv::MvRunner;
 use crate::runners::fs::rm::RmRunner;
 use crate::runners::hideur::HideurRunner;
+#[cfg(feature = "hfe")]
 use crate::runners::hxcfe::HxcfeRunner;
 use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::snapshot::SnapshotRunner;
@@ -232,7 +233,10 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
         InnerTask::Extern(_) => ExternRunner::default().run_redirected(task.args(), observer, stdin, stdout),
         InnerTask::Fade(_) => FadeRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout),
         InnerTask::Hideur(_) => HideurRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        #[cfg(feature = "hfe")]
         InnerTask::Hxcfe(_) => HxcfeRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        #[cfg(not(feature = "hfe"))]
+        InnerTask::Hxcfe(_) => Err("HFE support is not enabled. Rebuild with --features hfe".into()),
         InnerTask::Snapshot(_) => SnapshotRunner::default().run_redirected(task.args(), observer, stdin, stdout),
         InnerTask::ImgToCpc(_) => ImgToCpcRunner::default().run_redirected(task.args(), observer, stdin, stdout),
         InnerTask::CpcToImg(_) => CpcToImgRunner::default().run_redirected(task.args(), observer, stdin, stdout),
