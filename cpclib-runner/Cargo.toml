@@ -50,7 +50,7 @@ zip.workspace = true
 fs_extra.workspace = true
 
 [features]
-default = ["fap", "screenshot", "archive-7z"]
+default = ["fap", "screenshot", "archive-7z", "hfe"]
 transparent-x11 = ["dep:transparent"]
 screenshot = ["dep:xcap", "dep:base64"]
 fap = []

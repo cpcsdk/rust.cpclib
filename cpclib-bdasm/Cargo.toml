@@ -26,6 +26,7 @@ thiserror.workspace = true
 time.workspace = true
 
 [features]
+default = ["hfe"]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 
 [build-dependencies]
@@ -43,4 +44,3 @@ rexpect.workspace = true
 [[bin]]
 name = "bdasm"
 path = "src/main.rs"
-

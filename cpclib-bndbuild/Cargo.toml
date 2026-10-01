@@ -94,7 +94,7 @@ path = "src/main.rs"
 
 [features]
 
-default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "screenshot", "archive-7z",
+default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "screenshot", "archive-7z", "hfe",
 "apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0", "tape",
 "basmdoc-generator"]
 # Kept as its own feature (not folded into cpclib-basmdoc's dependency line
