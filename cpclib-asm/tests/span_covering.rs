@@ -1,5 +1,3 @@
-#![feature(box_patterns)]
-
 use cpclib_asm::parser::expression::located_expr;
 use cpclib_asm::parser::dispatch::ctx_and_span;
 use cpclib_asm::{InnerZ80Span, MayHaveSpan};
@@ -30,8 +28,8 @@ fn test_span_covering_basic() {
     // The top-level should be a BinaryOperation(Add, A, B*C)
     if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
         cpclib_tokens::BinaryOperation::Add,
-        box left,
-        box right,
+        left,
+        right,
         _
     ) = &expr
     {
@@ -46,10 +44,10 @@ fn test_span_covering_basic() {
         // Right should be BinaryOperation(Mul, B, C) covering "B*C"
         if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
             cpclib_tokens::BinaryOperation::Mul,
-            box b,
-            box c,
+            b,
+            c,
             mul_span
-        ) = right
+        ) = right.as_ref()
         {
             println!(
                 "[span_covering] mul_span.as_bstr() = {:?}",
@@ -121,21 +119,21 @@ fn test_span_covering_complex_expression() {
     // The top-level should be a BinaryOperation(Sub, left, right)
     if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
         cpclib_tokens::BinaryOperation::Sub,
-        box left,
-        box right,
+        left,
+        right,
         sub_span
     ) = &expr
     {
         // left: should be BinaryOperation(Add, A, B*C)
         if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
             cpclib_tokens::BinaryOperation::Add,
-            box a,
-            box b_mul_c,
+            a,
+            b_mul_c,
             add_span
-        ) = left
+        ) = left.as_ref()
         {
             // a: should be variable A
-            if let cpclib_asm::parser::obtained::LocatedExpr::Label(a_span) = a {
+            if let cpclib_asm::parser::obtained::LocatedExpr::Label(a_span) = a.as_ref() {
                 assert_eq!(a_span.as_bstr(), b"A");
             }
             else {
@@ -144,18 +142,18 @@ fn test_span_covering_complex_expression() {
             // b_mul_c: should be BinaryOperation(Mul, B, C)
             if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
                 cpclib_tokens::BinaryOperation::Mul,
-                box b,
-                box c,
+                b,
+                c,
                 mul_span
-            ) = b_mul_c
+            ) = b_mul_c.as_ref()
             {
-                if let cpclib_asm::parser::obtained::LocatedExpr::Label(b_span) = b {
+                if let cpclib_asm::parser::obtained::LocatedExpr::Label(b_span) = b.as_ref() {
                     assert_eq!(b_span.as_bstr(), b"B");
                 }
                 else {
                     panic!("Expected B in B*C");
                 }
-                if let cpclib_asm::parser::obtained::LocatedExpr::Label(c_span) = c {
+                if let cpclib_asm::parser::obtained::LocatedExpr::Label(c_span) = c.as_ref() {
                     assert_eq!(c_span.as_bstr(), b"C");
                 }
                 else {
@@ -174,18 +172,18 @@ fn test_span_covering_complex_expression() {
         // right: should be BinaryOperation(Div, D, E)
         if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
             cpclib_tokens::BinaryOperation::Div,
-            box d,
-            box e,
+            d,
+            e,
             div_span
-        ) = right
+        ) = right.as_ref()
         {
-            if let cpclib_asm::parser::obtained::LocatedExpr::Label(d_span) = d {
+            if let cpclib_asm::parser::obtained::LocatedExpr::Label(d_span) = d.as_ref() {
                 assert_eq!(d_span.as_bstr(), b"D");
             }
             else {
                 panic!("Expected D in D/E");
             }
-            if let cpclib_asm::parser::obtained::LocatedExpr::Label(e_span) = e {
+            if let cpclib_asm::parser::obtained::LocatedExpr::Label(e_span) = e.as_ref() {
                 assert_eq!(e_span.as_bstr(), b"E");
             }
             else {
@@ -212,8 +210,8 @@ fn test_span_covering_overlap() {
     // The top-level should be a BinaryOperation(Add, AB, BC)
     if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
         cpclib_tokens::BinaryOperation::Add,
-        box left,
-        box right,
+        left,
+        right,
         _
     ) = &expr
     {
