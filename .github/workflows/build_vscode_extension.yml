@@ -155,6 +155,35 @@ jobs:
           path: cpclib-vscode.vsix
           if-no-files-found: error
 
+  # Add the multi-platform extension package (embedding the Linux, Windows and
+  # macOS cpclib-lsp binaries) to the "latest" development build release, the
+  # same way the Linux and Windows build workflows do for their own artifacts.
+  publish-dev-release:
+    name: Publish Dev Release
+    needs: package-extension
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download extension artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-vscode-extension
+
+      - uses: ncipollo/release-action@v1
+        with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
+          allowUpdates: true
+          removeArtifacts: false
+          prerelease: true
+          draft: false
+          tag: latest
+          name: "Development Build"
+          generateReleaseNotes: false
+          artifacts: "cpclib-vscode.vsix"
+
   # Publish to VSCode Marketplace and Open VSX (only on tag push)
   publish-extension:
     name: Publish Extension
