@@ -1,4 +1,4 @@
-use cpclib_asm::{ListingElement, LocatedToken, MayHaveSpan};
+use cpclib_asm::{ListingElement, LocatedToken, MayHaveSpan, SmcOffset, Token};
 
 use super::Formatter;
 use crate::options::LabelPostfix;
@@ -194,12 +194,23 @@ impl<'src> Formatter<'src> {
 
     fn format_label(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
         let name = token.label_symbol();
+        let token = token.to_token();
+        let smc_offset = match token.as_ref() {
+            Token::Label(_, offset) => *offset,
+            _ => None
+        };
+        let suffix = match smc_offset {
+            Some(SmcOffset::Literal(offset)) => format!("+{offset}"),
+            Some(SmcOffset::Smart) => "+*".to_string(),
+            None => String::new()
+        };
+        let label_name = format!("{name}{suffix}");
 
         // Determine whether to emit the trailing ':' based on the postfix option.
         let src_line = self.source_lines.get(line_0).copied().unwrap_or("");
         let original_had_colon = src_line
             .trim_start()
-            .strip_prefix(name)
+            .strip_prefix(&label_name)
             .is_some_and(|rest| rest.trim_start().starts_with(':'));
         let emit_colon = match self.label_definition_postfix_with_column {
             LabelPostfix::WithColumn => true,
@@ -207,10 +218,10 @@ impl<'src> Formatter<'src> {
             LabelPostfix::Untouched => original_had_colon
         };
         let label_str = if emit_colon {
-            format!("{name}:")
+            format!("{label_name}:")
         }
         else {
-            name.to_string()
+            label_name.clone()
         };
 
         if self.one_instruction_per_line {
@@ -221,7 +232,7 @@ impl<'src> Formatter<'src> {
             // - it will be visited on its own right after this call returns, and
             // rendered by `format_simple` from its own span, landing on a new
             // output line automatically. Nothing to extract or re-inject here.
-            let comment = self.trailing_comment_for_span(name, line_0);
+            let comment = self.trailing_comment_for_span(&label_name, line_0);
             self.emit_line(0, &label_str, comment.as_deref());
         }
         else {
@@ -230,7 +241,7 @@ impl<'src> Formatter<'src> {
             // Extract any instruction content that follows the label name on the same source line.
             let after_label = content_no_comment
                 .trim_start()
-                .strip_prefix(name)
+                .strip_prefix(&label_name)
                 .map(|rest| rest.trim_start_matches(':').trim())
                 .unwrap_or("");
             if after_label.is_empty() {
