@@ -33,15 +33,13 @@ impl<'src> Formatter<'src> {
 
     pub fn format_tokens(&mut self, tokens: &[LocatedToken], depth: usize) {
         for (index, token) in tokens.iter().enumerate() {
-            let (line_1, column) = token.span().relative_line_and_column();
+            let (line_1, _) = token.span().relative_line_and_column();
             let line_0 = line_1.saturating_sub(1);
-            if self.source_lines.get(line_0).is_some_and(|line| line.contains("my_triangle1")) {
-                let span: &str = token.span().as_ref();
-                eprintln!("span {line_1}:{column} {:?} label={} macro={}", span, token.is_label(), token.is_call_macro_or_build_struct());
-            }
             self.emit_interstitial(line_0);
             let next_is_label_on_same_line = tokens.get(index + 1).is_some_and(|next| {
-                next.is_label() && next.span().relative_line_and_column().0 == line_1
+                next.is_label()
+                    && next.span().relative_line_and_column().0 == line_1
+                    && self.source_label_position(next).is_some()
             });
             self.format_token(token, depth, line_0, next_is_label_on_same_line);
         }
@@ -217,27 +215,13 @@ impl<'src> Formatter<'src> {
         line_0: usize,
         next_is_label_on_same_line: bool
     ) {
-        let name = token.label_symbol();
-        let token = token.to_token();
-        let smc_offset = match token.as_ref() {
-            Token::Label(_, offset) => *offset,
-            _ => None
+        let Some((label_start, label_name)) = self.source_label_position(token) else {
+            return;
         };
-        let suffix = match smc_offset {
-            Some(SmcOffset::Literal(offset)) => format!("+{offset}"),
-            Some(SmcOffset::Smart) => "+*".to_string(),
-            None => String::new()
-        };
-        let label_name = format!("{name}{suffix}");
 
         // Determine whether to emit the trailing ':' based on the postfix option.
         let src_line = self.source_lines.get(line_0).copied().unwrap_or("");
-        let (content_no_comment, comment) = Self::split_comment(src_line.trim());
-        let content = content_no_comment.trim_start();
-        let Some(label_start) = Self::source_label_start(content, &label_name)
-        else {
-            return;
-        };
+        let (content, comment) = Self::split_comment(src_line);
         let original_had_colon = content[label_start + label_name.len()..]
             .trim_start()
             .starts_with(':');
@@ -294,23 +278,40 @@ impl<'src> Formatter<'src> {
         self.current_line = line_0 + 1;
     }
 
-    fn source_label_start(content: &str, label_name: &str) -> Option<usize> {
-        content.match_indices(label_name).find_map(|(start, _)| {
-            let prefix = &content[..start];
-            let suffix = &content[start + label_name.len()..];
-            let before_is_word = prefix
-                .chars()
-                .next_back()
-                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
-            let after_is_word = suffix
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
-            (!before_is_word
-                && !after_is_word
-                && (prefix.trim().is_empty() || suffix.trim_start().starts_with(':')))
-            .then_some(start)
-        })
+    fn source_label_position(&self, token: &LocatedToken) -> Option<(usize, String)> {
+        let (line_1, column_1) = token.span().relative_line_and_column();
+        let line = self.source_lines.get(line_1.checked_sub(1)?)?;
+        let (content, _) = Self::split_comment(line);
+        let start = column_1.checked_sub(1)?;
+        let prefix = content.get(..start)?;
+        let label_name = Self::label_name(token);
+        let after = content.get(start..)?.strip_prefix(&label_name)?;
+
+        let starts_after_other_content = !prefix.trim().is_empty();
+        let followed_by_identifier = after
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+        if followed_by_identifier
+            || (starts_after_other_content && !after.trim_start().starts_with(':'))
+        {
+            return None;
+        }
+
+        Some((start, label_name))
+    }
+
+    fn label_name(token: &LocatedToken) -> String {
+        let smc_offset = match token.to_token().as_ref() {
+            Token::Label(_, offset) => *offset,
+            _ => None
+        };
+        let suffix = match smc_offset {
+            Some(SmcOffset::Literal(offset)) => format!("+{offset}"),
+            Some(SmcOffset::Smart) => "+*".to_string(),
+            None => String::new()
+        };
+        format!("{}{suffix}", token.label_symbol())
     }
 
     // Format a non-block, non-label token.
