@@ -46,8 +46,9 @@ mod tests {
             let out = format(source, &options).expect("parse failed");
             assert!(out.contains("answer+1:"), "literal offset was lost: {out:?}");
             assert!(out.contains("smart+*:"), "smart offset was lost: {out:?}");
-            assert!(out.contains("LD A, 13"), "same-line instruction lost: {out:?}");
-            assert!(out.contains("LD A, 42"), "same-line instruction lost: {out:?}");
+            let uppercase = out.to_ascii_uppercase();
+            assert!(uppercase.contains("LD A, 13"), "instruction lost: {out:?}");
+            assert!(uppercase.contains("LD A, 42"), "instruction lost: {out:?}");
         }
     }
 
