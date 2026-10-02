@@ -36,6 +36,33 @@ mod tests {
     }
 
     #[test]
+    fn test_label_name_suffix_is_not_a_second_label() {
+        let src = "STRUCT triangle\np1 db 1\nENDSTRUCT\nIF 0\nmy_triangle1: triangle\nENDIF";
+        for one_instruction_per_line in [false, true] {
+            let options = AsmFormatOptions {
+                one_instruction_per_line,
+                ..AsmFormatOptions::default()
+            };
+            let out = format(src, &options).unwrap();
+
+            let lines: Vec<_> = out.lines().collect();
+            let label_line = lines
+                .iter()
+                .position(|line| line.trim() == "my_triangle1:")
+                .expect("label was lost");
+            assert_eq!(
+                lines.get(label_line + 1).map(|line| line.trim()),
+                Some("triangle"),
+                "struct invocation was changed: {out:?}"
+            );
+            assert!(
+                !out.contains("triangle:\n") && !out.contains("1: triangle"),
+                "struct name was mistaken for a label: {out:?}"
+            );
+        }
+    }
+
+    #[test]
     fn test_smc_offset_labels_are_preserved() {
         for one_instruction_per_line in [true, false] {
             let options = AsmFormatOptions {
