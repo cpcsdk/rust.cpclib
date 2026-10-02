@@ -39,7 +39,6 @@ impl<'src> Formatter<'src> {
             let next_is_label_on_same_line = tokens.get(index + 1).is_some_and(|next| {
                 next.is_label()
                     && next.span().relative_line_and_column().0 == line_1
-                    && self.source_label_position(next).is_some()
             });
             self.format_token(token, depth, line_0, next_is_label_on_same_line);
         }
