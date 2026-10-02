@@ -36,6 +36,23 @@ mod tests {
     }
 
     #[test]
+    fn test_smc_offset_labels_are_preserved() {
+        for one_instruction_per_line in [true, false] {
+            let options = AsmFormatOptions {
+                one_instruction_per_line,
+                ..AsmFormatOptions::default()
+            };
+            let source = "answer+1: ld a, 13\nsmart+*: ld a, 42\n";
+            let out = format(source, &options).expect("parse failed");
+            assert!(out.contains("answer+1:"), "literal offset was lost: {out:?}");
+            assert!(out.contains("smart+*:"), "smart offset was lost: {out:?}");
+            let uppercase = out.to_ascii_uppercase();
+            assert!(uppercase.contains("LD A, 13"), "instruction lost: {out:?}");
+            assert!(uppercase.contains("LD A, 42"), "instruction lost: {out:?}");
+        }
+    }
+
+    #[test]
     fn test_repeat_block() {
         let out = fmt("repeat 10\n push af\n endrepeat");
         assert!(out.contains("        PUSH AF\n"), "got: {out:?}");
