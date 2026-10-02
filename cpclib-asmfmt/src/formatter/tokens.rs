@@ -33,8 +33,12 @@ impl<'src> Formatter<'src> {
 
     pub fn format_tokens(&mut self, tokens: &[LocatedToken], depth: usize) {
         for (index, token) in tokens.iter().enumerate() {
-            let (line_1, _) = token.span().relative_line_and_column();
+            let (line_1, column) = token.span().relative_line_and_column();
             let line_0 = line_1.saturating_sub(1);
+            if self.source_lines.get(line_0).is_some_and(|line| line.contains("my_triangle1")) {
+                let span: &str = token.span().as_ref();
+                eprintln!("span {line_1}:{column} {:?} label={} macro={}", span, token.is_label(), token.is_call_macro_or_build_struct());
+            }
             self.emit_interstitial(line_0);
             let next_is_label_on_same_line = tokens.get(index + 1).is_some_and(|next| {
                 next.is_label() && next.span().relative_line_and_column().0 == line_1
