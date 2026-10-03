@@ -990,7 +990,7 @@ fn a_long_defs_run_is_never_marked_as_data() {
 /// covering real byte/string tables.
 #[test]
 fn other_data_directives_are_still_marked_as_data() {
-    let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/asm/basm1.o");
+    let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/asm/basm1.o").replace('\\', "\\\\");
 
     for (name, source) in [
         ("db text", "\torg 0x4000\n\tdb \"Hello\"\n".to_string()),
