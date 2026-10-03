@@ -70,7 +70,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install --yes clang libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-          libspeechd-dev libxkbcommon-dev libssl-dev libxdo-dev libpipewire-0.3-dev libgbm-dev libasound2-dev
+          libspeechd-dev libxkbcommon-dev libwayland-dev libssl-dev libxdo-dev libpipewire-0.3-dev libgbm-dev libasound2-dev
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
