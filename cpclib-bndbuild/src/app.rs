@@ -1027,13 +1027,14 @@ impl BndBuilderApp {
                 }
             }
             else if matches.get_flag("direct") {
-                let cmd: String = matches
+                let cmd = serialize_direct_args(
+                    matches
                     .get_many::<String>("target")
                     .ok_or_else(|| {
                         BndBuilderError::AnyError("--direct needs a command".to_owned())
                     })?
-                    .map(|s| s.as_str())
-                    .join(" ");
+                    .map(String::as_str)
+                )?;
                 return Ok(BndBuilderCommandInner::Direct(
                     cmd,
                     matches.get_flag("with_expansion")
@@ -1080,6 +1081,7 @@ impl BndBuilderApp {
                     fname.to_owned()
                 }
             }
+
             else {
                 let mut selected = &EXPECTED_FILENAMES[1];
                 for fname in EXPECTED_FILENAMES {
@@ -1274,5 +1276,43 @@ impl BndBuilderApp {
                 observers: Arc::clone(&self.observers)
             }
         })
+    }
+}
+
+fn serialize_direct_args<'a>(
+    args: impl IntoIterator<Item = &'a str>
+) -> Result<String, BndBuilderError> {
+    shlex::try_join(args).map_err(|e| {
+        BndBuilderError::AnyError(format!("Could not serialize direct command arguments: {e}"))
+    })
+}
+
+#[cfg(test)]
+mod direct_args_tests {
+    use super::serialize_direct_args;
+
+    #[test]
+    fn direct_args_preserve_windows_paths_when_split_again() {
+        let args = [
+            "archive",
+            "create",
+            "-o",
+            r"C:\Users\runner\AppData\Local\Temp\test archive.zip",
+            r"C:\Users\runner\AppData\Local\Temp\src\main.asm"
+        ];
+
+        let serialized = serialize_direct_args(args).unwrap();
+        let parsed = shlex::split(&serialized).unwrap();
+
+        assert_eq!(
+            parsed,
+            [
+                "archive",
+                "create",
+                "-o",
+                r"C:\Users\runner\AppData\Local\Temp\test archive.zip",
+                r"C:\Users\runner\AppData\Local\Temp\src\main.asm"
+            ]
+        );
     }
 }
