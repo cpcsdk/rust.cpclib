@@ -1029,11 +1029,11 @@ impl BndBuilderApp {
             else if matches.get_flag("direct") {
                 let cmd = serialize_direct_args(
                     matches
-                    .get_many::<String>("target")
-                    .ok_or_else(|| {
-                        BndBuilderError::AnyError("--direct needs a command".to_owned())
-                    })?
-                    .map(String::as_str)
+                        .get_many::<String>("target")
+                        .ok_or_else(|| {
+                            BndBuilderError::AnyError("--direct needs a command".to_owned())
+                        })?
+                        .map(String::as_str)
                 )?;
                 return Ok(BndBuilderCommandInner::Direct(
                     cmd,
@@ -1081,7 +1081,6 @@ impl BndBuilderApp {
                     fname.to_owned()
                 }
             }
-
             else {
                 let mut selected = &EXPECTED_FILENAMES[1];
                 for fname in EXPECTED_FILENAMES {
