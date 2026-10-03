@@ -1590,7 +1590,8 @@ mod test_super {
             std::process::id()
         ));
         let _ = fs_err::remove_file(&target); // in case a previous failed run left it behind
-        let code = format!("org 0\ndb 1,2,3,4\nsave \"{}\", 0, 4\n", target.display());
+        let escaped_target = target.display().to_string().replace('\\', "\\\\");
+        let code = format!("org 0\ndb 1,2,3,4\nsave \"{}\", 0, 4\n", escaped_target);
 
         let mut options = AssemblingOptions::default();
         options.set_dry_run(true);
