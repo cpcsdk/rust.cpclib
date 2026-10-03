@@ -131,7 +131,8 @@ exec "$MARTINE_EXEC" "$@"
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-darwin-amd64.zip")
                             .folder("martine_0_39")
                             .archive_format(ArchiveFormat::Zip)
-                            .exec_fname("martine-darwin-amd64/martine.app/Contents/MacOS/cli")
+                            // The archive root folder is unwrapped on extraction
+                            .exec_fname("martine.app/Contents/MacOS/cli")
                             .build()
                     },
                 }

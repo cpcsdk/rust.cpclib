@@ -199,7 +199,7 @@ fn parse_os_constraint(input: &mut &str) -> ModalResult<Constraint> {
 fn parse_hostname_constraint(input: &mut &str) -> ModalResult<Constraint> {
     delimited(
         (Caseless("hostname("), space0),
-        repeat(1.., alt((alphanumeric1, "_", "-"))),
+        repeat(1.., alt((alphanumeric1, "_", "-", "."))),
         (space0, ")", space0)
     )
     .map(|txt: String| Constraint::Hostname(Hostname(txt.to_string())))
@@ -233,6 +233,11 @@ mod test {
         let s = "not(hostname(FAKE))".to_string();
         let c = parse_logical_constraint.parse(&s).unwrap();
         assert!(c.corresponds());
+
+        // Fully qualified names (e.g. macOS `name.local`) must parse too
+        let s = "hostname(host-1.example.local)".to_string();
+        let c = parse_hostname_constraint.parse(&s).unwrap();
+        assert!(!c.corresponds());
 
         let s = format!("hostname({})", hostname::get().unwrap().display());
         let c = parse_hostname_constraint.parse(&s).unwrap();
