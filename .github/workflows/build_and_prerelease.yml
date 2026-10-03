@@ -83,7 +83,7 @@ jobs:
         key: ${{ matrix.name }}
 
     - name: Test
-      run: cargo test --features hfe --no-fail-fast
+      run: cargo test --features hfe --no-fail-fast -- --quiet
 
     - name: Build release binaries
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
