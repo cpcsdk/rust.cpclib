@@ -1,0 +1,119 @@
+name: Build and test
+
+# Builds and tests the default workspace members on Linux, Windows and macOS.
+# On pushes to master, release binaries are also published to the "latest"
+# development build release.
+#
+# cpclib-bndbuild-tauri is deliberately not built nor tested here (it is not a
+# default workspace member and its tauri build steps were removed).
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Must match rust-toolchain.toml
+  RUST_TOOLCHAIN: nightly-2026-07-31
+
+jobs:
+  build:
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            release_suffix: ""
+          - name: windows
+            os: windows-latest
+            release_suffix: ""
+          - name: macos
+            os: macos-latest
+            release_suffix: "-macos"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Remove unnecessary directories to free up space
+      if: runner.os == 'Linux'
+      run: |
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/lib/jvm
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/share/swift
+        sudo rm -rf /usr/local/julia*
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /opt/microsoft /opt/google
+        sudo rm -rf /opt/az
+        docker system prune -af || true
+        docker builder prune -af || true
+
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes clang libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+          libspeechd-dev libxkbcommon-dev libssl-dev libxdo-dev libpipewire-0.3-dev libgbm-dev libasound2-dev
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_TOOLCHAIN }}
+        components: rustfmt, clippy
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ matrix.name }}
+
+    - name: Test
+      run: cargo test --features hfe --no-fail-fast
+
+    - name: Build release binaries
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      run: cargo build --bins --release --features hfe
+
+    - name: Collect release binaries
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      shell: bash
+      run: |
+        mkdir -p dist
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          cp target/release/*.exe dist/
+        else
+          find target/release -maxdepth 1 -type f -perm -u+x | while read -r bin; do
+            cp "$bin" "dist/$(basename "$bin")${{ matrix.release_suffix }}"
+          done
+        fi
+        ls -l dist
+
+    - uses: ncipollo/release-action@v1
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      with:
+        token: "${{ secrets.GITHUB_TOKEN }}"
+        allowUpdates: true
+        removeArtifacts: false
+        replacesArtifacts: true
+        prerelease: true
+        draft: false
+        tag: latest
+        name: "Development Build"
+        generateReleaseNotes: false
+        omitBodyDuringUpdate: true
+        artifacts: "dist/*"

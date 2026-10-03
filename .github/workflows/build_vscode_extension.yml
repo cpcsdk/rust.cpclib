@@ -17,33 +17,69 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Build the LSP server binary for all platforms
-  build-lsp-binaries:
-    name: Build cpclib-lsp (${{ matrix.os }})
+  # Make sure the TypeScript part of the extension builds on every OS
+  check-extension:
+    name: Compile extension (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cpclib-vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: cpclib-vscode
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: cpclib-vscode
+        run: npm run compile
+
+  # Build the LSP server binary for all platforms, each on its native runner
+  build-lsp-binaries:
+    name: Build cpclib-lsp (${{ matrix.vsce_target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            vsce_target: linux-x64
             binary_name: cpclib-lsp
-            artifact_name: cpclib-lsp-linux
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            vsce_target: linux-arm64
+            binary_name: cpclib-lsp
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            vsce_target: win32-x64
             binary_name: cpclib-lsp.exe
-            artifact_name: cpclib-lsp-windows
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            vsce_target: darwin-arm64
+            binary_name: cpclib-lsp
           - os: macos-latest
             target: x86_64-apple-darwin
+            vsce_target: darwin-x64
             binary_name: cpclib-lsp
-            artifact_name: cpclib-lsp-macos
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install ALSA development library
+      - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes libasound2-dev
+        run: sudo apt-get update && sudo apt-get install --yes clang libasound2-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -51,52 +87,47 @@ jobs:
           toolchain: nightly-2026-07-31
           targets: ${{ matrix.target }}
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          key: lsp-${{ matrix.target }}
 
       - name: Build cpclib-lsp
         run: cargo build --release -p cpclib-lsp --target ${{ matrix.target }}
 
-      - name: Create artifacts directory
-        run: mkdir -p artifacts
-
-      - name: Copy binary to artifacts (Unix)
-        if: runner.os != 'Windows'
+      - name: Copy binary to artifacts
+        shell: bash
         run: |
+          mkdir -p artifacts
           cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/
           chmod +x artifacts/${{ matrix.binary_name }}
-
-      - name: Copy binary to artifacts (Windows)
-        if: runner.os == 'Windows'
-        run: copy target\${{ matrix.target }}\release\${{ matrix.binary_name }} artifacts\
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
+          name: cpclib-lsp-${{ matrix.vsce_target }}
           path: artifacts/${{ matrix.binary_name }}
           if-no-files-found: error
 
-  # Package the VSCode extension with all platform binaries
-  package-extension:
-    name: Package VSCode Extension
-    needs: build-lsp-binaries
+  # One VSIX per platform (what the marketplaces serve to each user),
+  # each embedding only its own cpclib-lsp binary.
+  package-platform-extensions:
+    name: Package extension (${{ matrix.vsce_target }})
+    needs: [check-extension, build-lsp-binaries]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vsce_target: linux-x64
+            bin_dir: linux
+          - vsce_target: linux-arm64
+            bin_dir: linux
+          - vsce_target: win32-x64
+            bin_dir: windows
+          - vsce_target: darwin-arm64
+            bin_dir: macos
+          - vsce_target: darwin-x64
+            bin_dir: macos
 
     steps:
       - name: Checkout repository
@@ -116,23 +147,94 @@ jobs:
       - name: Install vsce (VSCode Extension Manager)
         run: npm install -g @vscode/vsce
 
+      - name: Remove bundled binaries from the checkout
+        working-directory: cpclib-vscode
+        run: rm -rf bin
+
+      - name: Download LSP binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-lsp-${{ matrix.vsce_target }}
+          path: cpclib-vscode/bin/${{ matrix.bin_dir }}
+
+      - name: Make binary executable
+        working-directory: cpclib-vscode
+        run: chmod +x bin/${{ matrix.bin_dir }}/*
+
+      - name: Compile TypeScript
+        working-directory: cpclib-vscode
+        run: npm run compile
+
+      - name: Package extension
+        working-directory: cpclib-vscode
+        run: vsce package --target ${{ matrix.vsce_target }} --out ../cpclib-vscode-${{ matrix.vsce_target }}.vsix
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpclib-vscode-extension-${{ matrix.vsce_target }}
+          path: cpclib-vscode-${{ matrix.vsce_target }}.vsix
+          if-no-files-found: error
+
+  # A single VSIX that works everywhere (Linux x64, Windows x64, macOS
+  # universal binary), handy for manual installation.
+  # Runs on macOS to merge both macOS binaries with lipo.
+  package-extension:
+    name: Package universal extension
+    needs: [check-extension, build-lsp-binaries]
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cpclib-vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: cpclib-vscode
+        run: npm ci
+
+      - name: Install vsce (VSCode Extension Manager)
+        run: npm install -g @vscode/vsce
+
+      - name: Remove bundled binaries from the checkout
+        working-directory: cpclib-vscode
+        run: rm -rf bin
+
       - name: Download Linux binary
         uses: actions/download-artifact@v4
         with:
-          name: cpclib-lsp-linux
+          name: cpclib-lsp-linux-x64
           path: cpclib-vscode/bin/linux
 
       - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
-          name: cpclib-lsp-windows
+          name: cpclib-lsp-win32-x64
           path: cpclib-vscode/bin/windows
 
-      - name: Download macOS binary
+      - name: Download macOS arm64 binary
         uses: actions/download-artifact@v4
         with:
-          name: cpclib-lsp-macos
-          path: cpclib-vscode/bin/macos
+          name: cpclib-lsp-darwin-arm64
+          path: macos-arm64
+
+      - name: Download macOS x64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-lsp-darwin-x64
+          path: macos-x64
+
+      - name: Build macOS universal binary
+        run: |
+          mkdir -p cpclib-vscode/bin/macos
+          lipo -create macos-arm64/cpclib-lsp macos-x64/cpclib-lsp -output cpclib-vscode/bin/macos/cpclib-lsp
+          lipo -info cpclib-vscode/bin/macos/cpclib-lsp
 
       - name: Make binaries executable
         working-directory: cpclib-vscode
@@ -155,22 +257,22 @@ jobs:
           path: cpclib-vscode.vsix
           if-no-files-found: error
 
-  # Add the multi-platform extension package (embedding the Linux, Windows and
-  # macOS cpclib-lsp binaries) to the "latest" development build release, the
-  # same way the Linux and Windows build workflows do for their own artifacts.
+  # Add the universal and per-platform extension packages to the "latest"
+  # development build release, next to the binaries of the main build workflow.
   publish-dev-release:
     name: Publish Dev Release
-    needs: package-extension
+    needs: [package-extension, package-platform-extensions]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: write
 
     steps:
-      - name: Download extension artifact
+      - name: Download extension artifacts
         uses: actions/download-artifact@v4
         with:
-          name: cpclib-vscode-extension
+          pattern: cpclib-vscode-extension*
+          merge-multiple: true
 
       - uses: ncipollo/release-action@v1
         with:
@@ -182,20 +284,23 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: false
-          artifacts: "cpclib-vscode.vsix"
+          replacesArtifacts: true
+          omitBodyDuringUpdate: true
+          artifacts: "*.vsix"
 
   # Publish to VSCode Marketplace and Open VSX (only on tag push)
   publish-extension:
     name: Publish Extension
-    needs: package-extension
+    needs: [package-extension, package-platform-extensions]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download extension artifact
+      - name: Download extension artifacts
         uses: actions/download-artifact@v4
         with:
-          name: cpclib-vscode-extension
+          pattern: cpclib-vscode-extension*
+          merge-multiple: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -213,7 +318,7 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: |
           # Modern Azure AD service principal authentication
-          vsce publish --packagePath cpclib-vscode.vsix \
+          vsce publish --packagePath cpclib-vscode-*.vsix \
             --azure-credential \
             --azureTenantId $AZURE_TENANT_ID
 
@@ -221,7 +326,7 @@ jobs:
         if: env.VSCE_PAT != '' && (env.AZURE_CLIENT_ID == '' || env.AZURE_TENANT_ID == '' || env.AZURE_CLIENT_SECRET == '')
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: vsce publish --packagePath cpclib-vscode.vsix -p $VSCE_PAT
+        run: vsce publish --packagePath cpclib-vscode-*.vsix -p $VSCE_PAT
 
       - name: Publish to Open VSX Registry
         if: env.OVSX_PAT != ''
@@ -229,12 +334,14 @@ jobs:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
           npm install -g ovsx
-          ovsx publish cpclib-vscode.vsix -p $OVSX_PAT
+          for vsix in cpclib-vscode-*.vsix; do
+            ovsx publish "$vsix" -p $OVSX_PAT
+          done
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: cpclib-vscode.vsix
+          files: "*.vsix"
           draft: false
           prerelease: false
         env:

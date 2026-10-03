@@ -289,8 +289,23 @@ fn add_dir_to_zip<W: Write + std::io::Seek, E: EventObserver>(
     Ok(())
 }
 
-/// Compute the archive entry name from a file path, applying transformations
+/// Compute the archive entry name from a file path, applying transformations.
+/// Archive formats (zip, tar) always use `/` as separator, whatever the host OS.
 fn compute_archive_name(
+    path: &Utf8Path,
+    strip_prefix: Option<&str>,
+    basename_only: bool
+) -> String {
+    let name = compute_native_archive_name(path, strip_prefix, basename_only);
+    if cfg!(windows) {
+        name.replace('\\', "/")
+    }
+    else {
+        name
+    }
+}
+
+fn compute_native_archive_name(
     path: &Utf8Path,
     strip_prefix: Option<&str>,
     basename_only: bool
