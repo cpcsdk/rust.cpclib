@@ -10,6 +10,15 @@ use cpclib_lsp::CpcLspBackend;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{LanguageServer, LspService};
 
+/// Url expected for a file in a tempdir. On macOS the tempdir lives behind
+/// the `/var` -> `/private/var` symlink, which the LSP resolves.
+fn expected_file_url(path: impl AsRef<std::path::Path>) -> Url {
+    let path = path.as_ref();
+    #[cfg(target_os = "macos")]
+    let path = &std::fs::canonicalize(path).unwrap();
+    Url::from_file_path(path).unwrap()
+}
+
 fn init_params() -> InitializeParams {
     InitializeParams {
         process_id: None,
@@ -233,7 +242,7 @@ async fn test_bndbuild_target_dependency_resolves_across_an_include() {
         .unwrap();
 
     let scene_uri = Url::from_file_path(tmp.path().join("scene/build.bnd")).unwrap();
-    let common_uri = Url::from_file_path(tmp.path().join("common.build")).unwrap();
+    let common_uri = expected_file_url(tmp.path().join("common.build"));
     backend
         .did_open(open_params(
             scene_uri.clone(),
@@ -363,7 +372,7 @@ async fn test_bndbuild_macro_call_resolves_across_an_include() {
         .unwrap();
 
     let scene_uri = Url::from_file_path(tmp.path().join("polar_dots/build.bnd")).unwrap();
-    let common_uri = Url::from_file_path(tmp.path().join("common.build")).unwrap();
+    let common_uri = expected_file_url(tmp.path().join("common.build"));
     backend
         .did_open(open_params(scene_uri.clone(), "bndbuild", scene_text))
         .await;

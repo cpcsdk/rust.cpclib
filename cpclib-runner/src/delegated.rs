@@ -689,7 +689,7 @@ mod delegated_stdin_tests {
     /// `>`/`>>` target or the next pipe stage instead of reaching the
     /// observer's stderr separately, exactly like `extern`/`echo`/`rm`
     /// already do. Rigs a `DelegateApplicationDescription` pointing at a
-    /// real, already-in-place binary (a copy of `/usr/bin/cat`) so
+    /// real, already-in-place binary (a copy of `/bin/cat`, present on Linux and macOS) so
     /// `is_cached()` is true and no network download ever runs, then drives
     /// the real `DelegatedRunner` -> `ExternRunner` dispatch path directly.
     #[test]
@@ -698,7 +698,7 @@ mod delegated_stdin_tests {
         let dest_dir = base_cache_folder().join(folder);
         fs_err::create_dir_all(&dest_dir).unwrap();
         let dest_bin = dest_dir.join("cat");
-        fs_err::copy("/usr/bin/cat", &dest_bin).unwrap();
+        fs_err::copy("/bin/cat", &dest_bin).unwrap();
         {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = fs_err::metadata(&dest_bin).unwrap().permissions();

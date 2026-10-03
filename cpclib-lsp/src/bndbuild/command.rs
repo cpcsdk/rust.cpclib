@@ -1269,6 +1269,15 @@ mod tests {
 
     use super::*;
 
+    /// Url expected for a file in a tempdir. On macOS the tempdir lives
+    /// behind the `/var` -> `/private/var` symlink, which the LSP resolves.
+    fn expected_file_url(path: impl AsRef<std::path::Path>) -> Url {
+        let path = path.as_ref();
+        #[cfg(target_os = "macos")]
+        let path = &std::fs::canonicalize(path).unwrap();
+        Url::from_file_path(path).unwrap()
+    }
+
     fn doc(dir: &std::path::Path, content: &str) -> Document {
         let path = dir.join("bndbuild.yml");
         std::fs::write(&path, content).unwrap();
@@ -1902,7 +1911,7 @@ mod tests {
             .into_iter()
             .next()
             .expect("expected a cross-file diagnostic");
-        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(target_uri, expected_file_url(&asm_path));
         assert_eq!(
             diag.range.start,
             Position {
@@ -1959,7 +1968,7 @@ mod tests {
             .into_iter()
             .next()
             .expect("expected a cross-file diagnostic even though full_output is empty");
-        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(target_uri, expected_file_url(&asm_path));
         assert_eq!(diag.range.start.line, 0);
         assert!(diag.message.contains("Unknown symbol"), "{}", diag.message);
     }
@@ -2092,7 +2101,7 @@ mod tests {
             .into_iter()
             .next()
             .expect("expected a cross-file diagnostic for the relative sna.asm reference");
-        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(target_uri, expected_file_url(&asm_path));
         assert_eq!(diag.range.start.line, 3);
     }
 
@@ -2257,7 +2266,7 @@ mod tests {
                 outcome.message
             )
         });
-        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(target_uri, expected_file_url(&asm_path));
         assert_eq!(diag.range.start.line, 0);
         assert!(
             diag.message.contains("build rule 'broken'"),

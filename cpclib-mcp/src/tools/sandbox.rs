@@ -173,6 +173,10 @@ pub(crate) fn clone_project(input: CloneProjectInput) -> ToolResult {
     }
     // Copying a directory into itself would recurse forever.
     let dest_abs = if destination.is_absolute() { destination.clone() } else { std::env::current_dir().map_err(|e| ToolError::io(e.to_string()))?.join(&destination) };
+    // `source` is canonical, so resolve the destination the same way (through
+    // its deepest existing ancestor, as it may not exist yet): otherwise a
+    // symlinked path such as macOS's `/var` -> `/private/var` slips through.
+    let dest_abs = resolve_existing_prefix(&dest_abs);
     if dest_abs.starts_with(&source) {
         return Err(ToolError::invalid_input("the destination must not be inside the source"));
     }
@@ -189,6 +193,24 @@ pub(crate) fn clone_project(input: CloneProjectInput) -> ToolResult {
         "skipped_directories": stats.skipped_dirs,
         "note": "modification times preserved; the source was only read"
     }))
+}
+
+/// Canonicalizes the longest existing prefix of `path` and appends the rest.
+fn resolve_existing_prefix(path: &Path) -> PathBuf {
+    let mut existing = path;
+    let mut rest = Vec::new();
+    loop {
+        if let Ok(resolved) = fs_err::canonicalize(existing) {
+            return rest.iter().rev().fold(resolved, |acc, part| acc.join(part));
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_owned());
+                existing = parent;
+            },
+            _ => return path.to_path_buf()
+        }
+    }
 }
 
 fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
