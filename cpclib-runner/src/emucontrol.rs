@@ -92,6 +92,10 @@ fn ensure_embedded_rom_written(dst: &Utf8Path, embedded_name: &str) -> Result<()
     }
     let src = format!("roms://{embedded_name}");
     let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
+    // The emulator folder may not exist yet (e.g. emulator not downloaded)
+    if let Some(parent) = dst.parent() {
+        fs_err::create_dir_all(parent).map_err(|e| format!("cannot create {parent}: {e}"))?;
+    }
     fs_err::write(dst, data.data).map_err(|e| format!("cannot write {dst}: {e}"))
 }
 

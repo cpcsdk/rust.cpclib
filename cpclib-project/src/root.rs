@@ -175,9 +175,11 @@ mod tests {
         std::fs::write(&file, "").unwrap();
 
         assert!(is_project_root(root.as_std_path()));
+        // Compare resolved paths: macOS temp dirs sit behind the
+        // `/var` -> `/private/var` symlink.
         assert_eq!(
-            project_root(file.as_std_path()).unwrap(),
-            std::fs::canonicalize(root.as_std_path()).unwrap_or(root.as_std_path().to_path_buf())
+            std::fs::canonicalize(project_root(file.as_std_path()).unwrap()).unwrap(),
+            std::fs::canonicalize(root.as_std_path()).unwrap()
         );
 
         let dirs = ancestor_directories(file.as_std_path());

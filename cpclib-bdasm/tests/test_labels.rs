@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use escargot::CargoBuild;
 use fs_err as fs;
 use tempfile::TempDir;
 
@@ -22,15 +21,11 @@ fn test_label_generation() {
     // Output path
     let disasm_output = temp_dir.path().join("hello_disasm.asm");
 
-    // Build and get the binary path using escargot
-    let bdasm_bin = CargoBuild::new()
-        .bin("bdasm")
-        .current_release()
-        .run()
-        .unwrap();
+    // Binary built by cargo for integration tests
+    let bdasm_bin = PathBuf::from(env!("CARGO_BIN_EXE_bdasm"));
 
     // Disassemble binary
-    let output = Command::new(bdasm_bin.path())
+    let output = Command::new(&bdasm_bin)
         .arg(&binary_with_header)
         .arg("--origin")
         .arg("0x1200")

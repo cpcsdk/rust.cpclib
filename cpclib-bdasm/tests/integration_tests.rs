@@ -1,21 +1,15 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use escargot::CargoBuild;
 use fs_err as fs;
 #[cfg(unix)]
 use rexpect::session::spawn_command;
 use tempfile::TempDir;
 
 // Helper function to get the bdasm binary path
+// (provided by cargo for integration tests, so no nested cargo build is needed)
 fn get_bdasm_bin() -> PathBuf {
-    CargoBuild::new()
-        .bin("bdasm")
-        .current_release()
-        .run()
-        .unwrap()
-        .path()
-        .to_path_buf()
+    PathBuf::from(env!("CARGO_BIN_EXE_bdasm"))
 }
 
 #[test]
