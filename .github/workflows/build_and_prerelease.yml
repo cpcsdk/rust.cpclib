@@ -83,7 +83,18 @@ jobs:
         key: ${{ matrix.name }}
 
     - name: Test
-      run: cargo test --features hfe --no-fail-fast -- --quiet
+      shell: bash
+      run: |
+        set -o pipefail
+        cargo test --features hfe --no-fail-fast -- --quiet 2>&1 | tee test.log
+
+    - name: Summarize test failures
+      if: failure()
+      shell: bash
+      run: |
+        # Repeat only the failure reports at the end of the log, so they are
+        # easy to find in a very long build log.
+        awk '/^failures:$/ {on=1} on {print} /^test result:/ {on=0}' test.log | tail -n 3000
 
     - name: Build release binaries
       if: github.event_name == 'push' && github.ref == 'refs/heads/master'
