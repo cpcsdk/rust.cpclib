@@ -332,7 +332,10 @@ async fn test_bndbuild_target_dependency_resolves_across_an_include() {
         .expect("expected one incoming call from scene.bin");
     assert_eq!(incoming.len(), 1, "{incoming:?}");
     assert_eq!(incoming[0].from.name, "scene.bin");
-    assert_eq!(incoming[0].from.uri, scene_uri);
+    assert_eq!(
+        incoming[0].from.uri,
+        expected_file_url(scene_uri.to_file_path().unwrap())
+    );
 }
 
 #[tokio::test]
@@ -413,5 +416,8 @@ async fn test_bndbuild_macro_call_resolves_across_an_include() {
         .unwrap()
         .expect("expected one incoming call from polar_dots/build.bnd");
     assert_eq!(incoming.len(), 1, "{incoming:?}");
-    assert_eq!(incoming[0].from.uri, scene_uri);
+    assert_eq!(
+        incoming[0].from.uri,
+        expected_file_url(scene_uri.to_file_path().unwrap())
+    );
 }
