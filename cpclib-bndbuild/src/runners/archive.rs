@@ -312,10 +312,12 @@ fn compute_archive_name(
                 result.push(comp);
             }
             result.as_str().to_string()
-        } else {
+        }
+        else {
             path.as_str().to_string()
         }
-    } else {
+    }
+    else {
         path.as_str().to_string()
     };
 
