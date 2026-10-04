@@ -237,7 +237,10 @@ fn install_macos_source_release(cache_folder: &Utf8Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn install_macos_dmg_release(cache_folder: &Utf8Path, dmg_path: &Utf8Path) -> Result<(), String> {
+pub(super) fn install_macos_dmg_release(
+    cache_folder: &Utf8Path,
+    dmg_path: &Utf8Path
+) -> Result<(), String> {
     use std::process::Command;
 
     let target_app = cache_folder.join("cadence.app");

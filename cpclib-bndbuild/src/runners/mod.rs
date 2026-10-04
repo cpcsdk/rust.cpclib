@@ -25,6 +25,7 @@ pub mod emulator;
 pub mod fade;
 pub mod fs;
 pub mod hideur;
+#[cfg(feature = "hfe")]
 pub mod hxcfe;
 pub mod img2cpc;
 pub mod locomotive;

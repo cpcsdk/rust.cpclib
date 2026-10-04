@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! Integration tests that actually launch the LSP server and query it
 
 use cpclib_lsp::CpcLspBackend;

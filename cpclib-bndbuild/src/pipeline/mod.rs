@@ -33,9 +33,10 @@ pub fn format_disc<E: BndBuilderObserver + 'static>(
     dsk_path: &Utf8Path,
     observer: &Arc<E>
 ) -> Result<(), String> {
-    let task: Task = InnerTask::Disc(StandardTaskArguments::new(format!(
-        "{dsk_path} format -f data"
-    )))
+    let task: Task = InnerTask::Disc(StandardTaskArguments::new(
+        shlex::try_join([dsk_path.as_str(), "format", "-f", "data"])
+            .map_err(|e| format!("Could not build disc arguments: {e}"))?
+    ))
     .into();
     task.execute(observer)
 }
@@ -48,9 +49,10 @@ pub fn add_file_to_disc<E: BndBuilderObserver + 'static>(
     file_path: &Utf8Path,
     observer: &Arc<E>
 ) -> Result<(), String> {
-    let task: Task = InnerTask::Disc(StandardTaskArguments::new(format!(
-        "{dsk_path} add {file_path}"
-    )))
+    let task: Task = InnerTask::Disc(StandardTaskArguments::new(
+        shlex::try_join([dsk_path.as_str(), "add", file_path.as_str()])
+            .map_err(|e| format!("Could not build disc arguments: {e}"))?
+    ))
     .into();
     task.execute(observer)
 }
@@ -75,9 +77,19 @@ pub fn launch_emulator_with_auto_run<E: BndBuilderObserver + 'static>(
     // session; fire-and-forget is the correct default here.
     let task: Task = InnerTask::Emulator(
         Emulator::EmulatorFacade,
-        StandardTaskArguments::new(format!(
-            "--drivea {drive_a} --emulator {emulator} --auto-run-file {auto_run_file} --background run"
-        ))
+        StandardTaskArguments::new(
+            shlex::try_join([
+                "--drivea",
+                drive_a.as_str(),
+                "--emulator",
+                emulator,
+                "--auto-run-file",
+                auto_run_file,
+                "--background",
+                "run"
+            ])
+            .map_err(|e| format!("Could not build emulator arguments: {e}"))?
+        )
     )
     .into();
     task.execute(observer)
@@ -98,9 +110,17 @@ pub fn launch_emulator_with_snapshot<E: BndBuilderObserver + 'static>(
 ) -> Result<(), String> {
     let task: Task = InnerTask::Emulator(
         Emulator::EmulatorFacade,
-        StandardTaskArguments::new(format!(
-            "--emulator {emulator} --snapshot {snapshot} --background run"
-        ))
+        StandardTaskArguments::new(
+            shlex::try_join([
+                "--emulator",
+                emulator,
+                "--snapshot",
+                snapshot.as_str(),
+                "--background",
+                "run"
+            ])
+            .map_err(|e| format!("Could not build emulator arguments: {e}"))?
+        )
     )
     .into();
     task.execute(observer)

@@ -1,4 +1,4 @@
-use cpclib_asm::{ListingElement, LocatedToken, MayHaveSpan};
+use cpclib_asm::{ListingElement, LocatedToken, MayHaveSpan, SmcOffset, Token};
 
 use super::Formatter;
 use crate::options::LabelPostfix;
@@ -32,11 +32,15 @@ impl<'src> Formatter<'src> {
     }
 
     pub fn format_tokens(&mut self, tokens: &[LocatedToken], depth: usize) {
-        for token in tokens {
+        for (index, token) in tokens.iter().enumerate() {
             let (line_1, _) = token.span().relative_line_and_column();
             let line_0 = line_1.saturating_sub(1);
             self.emit_interstitial(line_0);
-            self.format_token(token, depth, line_0);
+            let next_is_label_on_same_line = tokens.get(index + 1).is_some_and(|next| {
+                next.is_label()
+                    && next.span().relative_line_and_column().0 == line_1
+            });
+            self.format_token(token, depth, line_0, next_is_label_on_same_line);
         }
     }
 
@@ -66,7 +70,13 @@ impl<'src> Formatter<'src> {
         if rest.trim().is_empty() { comment.map(str::to_string) } else { None }
     }
 
-    fn format_token(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
+    fn format_token(
+        &mut self,
+        token: &LocatedToken,
+        depth: usize,
+        line_0: usize,
+        next_is_label_on_same_line: bool
+    ) {
         // `; fmt: off` .. `; fmt: on` - pass the whole range through verbatim
         // and skip every token whose line falls in it entirely (comments,
         // labels, instructions, blocks alike - see `pragma`'s own doc
@@ -80,7 +90,12 @@ impl<'src> Formatter<'src> {
         }
 
         if token.is_warning() {
-            self.format_token(token.warning_token(), depth, line_0);
+            self.format_token(
+                token.warning_token(),
+                depth,
+                line_0,
+                next_is_label_on_same_line
+            );
             return;
         }
 
@@ -98,7 +113,7 @@ impl<'src> Formatter<'src> {
         }
 
         if token.is_label() {
-            self.format_label(token, depth, line_0);
+            self.format_label(token, depth, line_0, next_is_label_on_same_line);
         }
         else if token.is_if() {
             self.format_if(token, depth, line_0);
@@ -192,48 +207,61 @@ impl<'src> Formatter<'src> {
         }
     }
 
-    fn format_label(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
-        let name = token.label_symbol();
+    fn format_label(
+        &mut self,
+        token: &LocatedToken,
+        depth: usize,
+        line_0: usize,
+        next_is_label_on_same_line: bool
+    ) {
+        let Some((label_start, label_name)) = self.source_label_position(token) else {
+            return;
+        };
 
         // Determine whether to emit the trailing ':' based on the postfix option.
         let src_line = self.source_lines.get(line_0).copied().unwrap_or("");
-        let original_had_colon = src_line
+        let (content, comment) = Self::split_comment(src_line);
+        let original_had_colon = content[label_start + label_name.len()..]
             .trim_start()
-            .strip_prefix(name)
-            .is_some_and(|rest| rest.trim_start().starts_with(':'));
+            .starts_with(':');
         let emit_colon = match self.label_definition_postfix_with_column {
             LabelPostfix::WithColumn => true,
             LabelPostfix::NoColumn => false,
             LabelPostfix::Untouched => original_had_colon
         };
         let label_str = if emit_colon {
-            format!("{name}:")
+            format!("{label_name}:")
         }
         else {
-            name.to_string()
+            label_name.clone()
         };
+        let after_label = content[label_start + label_name.len()..]
+            .trim_start_matches(':')
+            .trim();
+        let next_is_label_definition = next_is_label_on_same_line
+            && after_label
+                .split_ascii_whitespace()
+                .next()
+                .is_some_and(|word| word.ends_with(':'));
 
         if self.one_instruction_per_line {
-            // A trailing instruction sharing this source line (`myloop: ld a,0`,
-            // or even `myloop ld a,0` with no `:` at all - the real parser can
-            // tell those apart from a label's own name whether or not a colon is
-            // there) is simply the *next* token the real parser already produced
-            // - it will be visited on its own right after this call returns, and
-            // rendered by `format_simple` from its own span, landing on a new
-            // output line automatically. Nothing to extract or re-inject here.
-            let comment = self.trailing_comment_for_span(name, line_0);
-            self.emit_line(0, &label_str, comment.as_deref());
+            // Normally a trailing instruction sharing this source line is the
+            // next token, rendered on its own line by `format_simple`. If the
+            // parser reports a label that is not a source label, preserve the
+            // source tail here instead.
+            if next_is_label_on_same_line && !next_is_label_definition && !after_label.is_empty() {
+                self.emit_line(0, &label_str, None);
+                let after = Self::normalize_colon_spacing(after_label, self.space_around_column);
+                let after = self.apply_comma_and_quote_style(&after);
+                self.emit_line(depth, &after, comment);
+            }
+            else {
+                let comment = self.trailing_comment_for_span(&label_name, line_0);
+                self.emit_line(0, &label_str, comment.as_deref());
+            }
         }
         else {
-            let src = self.source_lines.get(line_0).copied().unwrap_or("");
-            let (content_no_comment, comment) = Self::split_comment(src.trim());
-            // Extract any instruction content that follows the label name on the same source line.
-            let after_label = content_no_comment
-                .trim_start()
-                .strip_prefix(name)
-                .map(|rest| rest.trim_start_matches(':').trim())
-                .unwrap_or("");
-            if after_label.is_empty() {
+            if next_is_label_definition || after_label.is_empty() {
                 self.emit_line(0, &label_str, comment);
             }
             else {
@@ -247,6 +275,42 @@ impl<'src> Formatter<'src> {
             }
         }
         self.current_line = line_0 + 1;
+    }
+
+    fn source_label_position(&self, token: &LocatedToken) -> Option<(usize, String)> {
+        let (line_1, column_1) = token.span().relative_line_and_column();
+        let line = self.source_lines.get(line_1.checked_sub(1)?)?;
+        let (content, _) = Self::split_comment(line);
+        let start = column_1.checked_sub(1)?;
+        let prefix = content.get(..start)?;
+        let label_name = Self::label_name(token);
+        let after = content.get(start..)?.strip_prefix(&label_name)?;
+
+        let starts_after_other_content = !prefix.trim().is_empty();
+        let followed_by_identifier = after
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+        if followed_by_identifier
+            || (starts_after_other_content && !after.trim_start().starts_with(':'))
+        {
+            return None;
+        }
+
+        Some((start, label_name))
+    }
+
+    fn label_name(token: &LocatedToken) -> String {
+        let smc_offset = match token.to_token().as_ref() {
+            Token::Label(_, offset) => *offset,
+            _ => None
+        };
+        let suffix = match smc_offset {
+            Some(SmcOffset::Literal(offset)) => format!("+{offset}"),
+            Some(SmcOffset::Smart) => "+*".to_string(),
+            None => String::new()
+        };
+        format!("{}{suffix}", token.label_symbol())
     }
 
     // Format a non-block, non-label token.

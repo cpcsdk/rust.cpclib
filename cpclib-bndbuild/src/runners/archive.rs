@@ -295,11 +295,9 @@ fn compute_archive_name(
     strip_prefix: Option<&str>,
     basename_only: bool
 ) -> String {
-    if basename_only {
-        return path.file_name().unwrap_or("file").to_string();
-    }
-
-    if let Some(prefix) = strip_prefix {
+    let archive_name = if basename_only {
+        path.file_name().unwrap_or("file").to_string()
+    } else if let Some(prefix) = strip_prefix {
         // Remove all occurrences of the prefix component from the path
         let components: Vec<_> = path
             .components()
@@ -311,11 +309,15 @@ fn compute_archive_name(
             for comp in components {
                 result.push(comp);
             }
-            return result.as_str().to_string();
+            result.as_str().to_string()
+        } else {
+            path.as_str().to_string()
         }
-    }
+    } else {
+        path.as_str().to_string()
+    };
 
-    path.as_str().to_string()
+    archive_name.replace('\\', "/")
 }
 
 fn create_tar_gz<E: EventObserver>(

@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! `cpclib-mcp`: an MCP (Model Context Protocol) server exposing this
 //! workspace's Amstrad CPC democoding capabilities to AI agents - static
 //! analysis (assemble/diagnostics, NOP-count timing, peephole-optimization
