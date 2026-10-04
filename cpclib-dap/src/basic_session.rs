@@ -1942,25 +1942,11 @@ impl<P: DapPeer> BasicSession<P> {
                     );
                 },
                 Purpose::NativeStateAfterStep => {
-                    // Stale-read guard - see `Purpose::NativeStateAfterStepRetry`'s
-                    // own doc comment. Capped at exactly one retry for the
-                    // same reason the `Continue` loop's own version is: a
-                    // real self-loop (`10 GOTO 10`) legitimately revisits
-                    // the same address every step.
-                    let address_before_step = self.current_statement_address;
-                    let line = self.apply_native_basic_state(message);
-                    if line.is_some()
-                        && address_before_step.is_some()
-                        && self.current_statement_address == address_before_step
-                    {
-                        let _ = self.send_own(
-                            "cpclib/basicState",
-                            json!({}),
-                            Purpose::NativeStateAfterStepRetry
-                        );
-                        return Vec::new();
-                    }
-                    return self.decide_step_stop(line);
+                    return self.handle_native_state_read(
+                        message,
+                        Purpose::NativeStateAfterStepRetry,
+                        Self::decide_step_stop
+                    );
                 },
                 Purpose::NativeStateAfterStepRetry => {
                     let line = self.apply_native_basic_state(message);
@@ -1984,26 +1970,13 @@ impl<P: DapPeer> BasicSession<P> {
                     // landed on it, was reported, `continue` was clicked,
                     // one step ran, and the stale read said the machine was
                     // still sitting on the exact same statement it had just
-                    // left. One extra read, only when nothing moved, is
-                    // cheap; capped at exactly one retry
-                    // (`NativeContinueStateRetry` does not check again) so a
-                    // real self-loop (`10 GOTO 10`, which legitimately
-                    // revisits the same address every step) cannot turn this
-                    // into an infinite poll.
-                    let address_before_step = self.current_statement_address;
-                    let line = self.apply_native_basic_state(message);
-                    if line.is_some()
-                        && address_before_step.is_some()
-                        && self.current_statement_address == address_before_step
-                    {
-                        let _ = self.send_own(
-                            "cpclib/basicState",
-                            json!({}),
-                            Purpose::NativeContinueStateRetry
-                        );
-                        return Vec::new();
-                    }
-                    return self.decide_continue_stop(line);
+                    // left. See `handle_native_state_read`'s own doc comment
+                    // for the retry cap this shares with the plain-step case.
+                    return self.handle_native_state_read(
+                        message,
+                        Purpose::NativeContinueStateRetry,
+                        Self::decide_continue_stop
+                    );
                 },
                 Purpose::NativeContinueStateRetry => {
                     let line = self.apply_native_basic_state(message);
@@ -2682,6 +2655,37 @@ impl<P: DapPeer> BasicSession<P> {
     /// rejected instead: `current_statement_column` is left as it was
     /// (whole-line highlight, via `report_stopped`'s own fallback) rather
     /// than actively pointing at the wrong token.
+    /// Shared shape of answering a `basicState` read taken right after a
+    /// step or a continue: apply it, and if the statement address didn't
+    /// move, treat the read as stale and poll once more via
+    /// `retry_purpose` instead of trusting it - capped at exactly one
+    /// retry (the purpose this sends never loops back through this same
+    /// check again) so a real self-loop (`10 GOTO 10`, which legitimately
+    /// revisits the same address every step) cannot turn this into an
+    /// infinite poll. Otherwise hands the result to `decide`
+    /// (`decide_step_stop`/`decide_continue_stop`, whichever the caller's
+    /// own situation needs). Was duplicated, identically but for which
+    /// retry purpose and decide function each one needed, between
+    /// `Purpose::NativeStateAfterStep` and `Purpose::NativeContinueState`'s
+    /// own handling.
+    fn handle_native_state_read(
+        &mut self,
+        message: &Value,
+        retry_purpose: Purpose,
+        decide: fn(&mut Self, Option<u16>) -> Vec<Value>
+    ) -> Vec<Value> {
+        let address_before_step = self.current_statement_address;
+        let line = self.apply_native_basic_state(message);
+        if line.is_some()
+            && address_before_step.is_some()
+            && self.current_statement_address == address_before_step
+        {
+            let _ = self.send_own("cpclib/basicState", json!({}), retry_purpose);
+            return Vec::new();
+        }
+        decide(self, line)
+    }
+
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
         // See `known_txttop`'s own doc comment - cached from every body
