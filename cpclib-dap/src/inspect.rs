@@ -757,6 +757,49 @@ pub fn parse_palette_override(text: &str) -> Vec<Option<Ink>> {
         .collect()
 }
 
+/// The 7 positional overrides `-sv [address] [width] [height] [mode]
+/// [row_height] [palette] [encoding]` can carry - every field `None`/empty
+/// means "use the live default", the same convention each individual
+/// argument already has on its own. Parsed once by
+/// [`parse_screen_view_overrides`], shared by both session types' own
+/// `screen_view_command` (previously identical parsing code, each with its
+/// own 7-line copy) - what each then *does* with the result (which request
+/// to send, what to remember for auto-refresh) still differs enough
+/// between them that only the parsing itself was worth sharing.
+pub struct ScreenViewOverrides {
+    pub address: Option<usize>,
+    pub width: Option<usize>,
+    pub height: Option<usize>,
+    pub mode: Option<u8>,
+    pub row_height: Option<usize>,
+    pub palette: Vec<Option<Ink>>,
+    pub encoding: Option<u8>
+}
+
+/// Parse `-sv`'s own 7 positional arguments - see [`ScreenViewOverrides`].
+pub fn parse_screen_view_overrides(arguments: &[&str]) -> ScreenViewOverrides {
+    fn number(arguments: &[&str], index: usize) -> Option<u32> {
+        arguments.get(index).and_then(|a| {
+            use cpclib_common::winnow::Parser;
+            use cpclib_common::winnow::error::ContextError;
+            use cpclib_common::winnow::stream::AsBStr;
+            cpclib_common::parse_value::<_, ContextError>
+                .parse(a.trim().as_bstr())
+                .ok()
+        })
+    }
+
+    ScreenViewOverrides {
+        address: number(arguments, 0).map(|a| a as usize),
+        width: number(arguments, 1).map(|a| a as usize),
+        height: number(arguments, 2).map(|a| a as usize),
+        mode: number(arguments, 3).map(|a| a as u8),
+        row_height: number(arguments, 4).map(|a| a as usize),
+        palette: arguments.get(5).map(|a| parse_palette_override(a)).unwrap_or_default(),
+        encoding: number(arguments, 6).map(|a| a as u8)
+    }
+}
+
 /// The char-row-height argument, resolved: real WinAPE's own memory-
 /// browsing tool this view is modelled on treats it as `R9 + 1` for the
 /// address interleaving itself, not only as a display value - the CRTC's

@@ -2627,20 +2627,15 @@ impl<P: DapPeer> Session<P> {
         request: &Value,
         arguments: &[&str]
     ) -> std::io::Result<Vec<Value>> {
-        let address_override = arguments
-            .first()
-            .and_then(|a| parse_number(a))
-            .map(|a| a as usize);
-        let width_override = arguments.get(1).and_then(|a| parse_number(a)).map(|a| a as usize);
-        let height_override = arguments.get(2).and_then(|a| parse_number(a)).map(|a| a as usize);
-        let mode_override = arguments.get(3).and_then(|a| parse_number(a)).map(|a| a as u8);
-        let row_height_override =
-            arguments.get(4).and_then(|a| parse_number(a)).map(|a| a as usize);
-        let palette_override = arguments
-            .get(5)
-            .map(|a| crate::inspect::parse_palette_override(a))
-            .unwrap_or_default();
-        let encoding_override = arguments.get(6).and_then(|a| parse_number(a)).map(|a| a as u8);
+        let crate::inspect::ScreenViewOverrides {
+            address: address_override,
+            width: width_override,
+            height: height_override,
+            mode: mode_override,
+            row_height: row_height_override,
+            palette: palette_override,
+            encoding: encoding_override
+        } = crate::inspect::parse_screen_view_overrides(arguments);
         let config_override = parse_config_override(arguments.get(7));
         // Remembered so `refresh_screen_view` can keep re-issuing this exact
         // request on every stop - every `-sv`, typed or from the panel's own
