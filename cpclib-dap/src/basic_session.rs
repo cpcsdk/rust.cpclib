@@ -854,11 +854,7 @@ impl<P: DapPeer> BasicSession<P> {
             let _ = self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
         }
         else if let Err(problem) = self.resume_after_injection_landed() {
-            return vec![protocol::event(
-                "output",
-                json!({ "category": "stderr", "output": format!("{problem}\n") }),
-                1
-            )];
+            return vec![protocol::stderr_output_event(format!("{problem}\n"), 1)];
         }
         Vec::new()
     }
@@ -1879,29 +1875,17 @@ impl<P: DapPeer> BasicSession<P> {
                 Purpose::Plain => {},
                 Purpose::Attach => {
                     if let Err(problem) = self.on_attached() {
-                        return vec![protocol::event(
-                            "output",
-                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
-                            1
-                        )];
+                        return vec![protocol::stderr_output_event(format!("{problem}\n"), 1)];
                     }
                 },
                 Purpose::BreakpointArmed => {
                     if let Some(warning) = Self::breakpoint_arm_warning(message) {
-                        return vec![protocol::event(
-                            "output",
-                            json!({ "category": "stderr", "output": format!("{warning}\n") }),
-                            1
-                        )];
+                        return vec![protocol::stderr_output_event(format!("{warning}\n"), 1)];
                     }
                 },
                 Purpose::LaunchResumed => {
                     if let Err(problem) = self.autotype_run() {
-                        return vec![protocol::event(
-                            "output",
-                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
-                            1
-                        )];
+                        return vec![protocol::stderr_output_event(format!("{problem}\n"), 1)];
                     }
                 },
                 Purpose::CurrentLinePointer => return self.on_line_pointer_read(message),
@@ -1912,11 +1896,7 @@ impl<P: DapPeer> BasicSession<P> {
                         self.known_txttop = Some(u16::from_le_bytes([chunk[0], chunk[1]]));
                     }
                     if let Err(problem) = self.start_variable_reads() {
-                        return vec![protocol::event(
-                            "output",
-                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
-                            1
-                        )];
+                        return vec![protocol::stderr_output_event(format!("{problem}\n"), 1)];
                     }
                 },
                 Purpose::VariableChainHeads => {
@@ -2083,11 +2063,7 @@ impl<P: DapPeer> BasicSession<P> {
                                 json!({ "source": self.source_text }),
                                 Purpose::NativeInjected
                             );
-                            return vec![protocol::event(
-                                "output",
-                                json!({ "category": "stderr", "output": note }),
-                                1
-                            )];
+                            return vec![protocol::stderr_output_event(note, 1)];
                         }
                         else if self.native_reinjection_attempts == MAX_NATIVE_REINJECTION_ATTEMPTS {
                             // One-shot: move past the cap so this does not
@@ -2096,18 +2072,14 @@ impl<P: DapPeer> BasicSession<P> {
                             // behaviour (poll forever, stuck in direct mode)
                             // from here on.
                             self.native_reinjection_attempts += 1;
-                            return vec![protocol::event(
-                                "output",
-                                json!({
-                                    "category": "stderr",
-                                    "output": format!(
-                                        "AMSpiriT Lite's own program state kept \
-                                         reverting to empty after {MAX_NATIVE_REINJECTION_ATTEMPTS} \
-                                         re-injection attempts - giving up; the \
-                                         session will likely stay stuck in direct \
-                                         mode\n"
-                                    )
-                                }),
+                            return vec![protocol::stderr_output_event(
+                                format!(
+                                    "AMSpiriT Lite's own program state kept \
+                                     reverting to empty after {MAX_NATIVE_REINJECTION_ATTEMPTS} \
+                                     re-injection attempts - giving up; the \
+                                     session will likely stay stuck in direct \
+                                     mode\n"
+                                ),
                                 1
                             )];
                         }
@@ -2589,11 +2561,7 @@ impl<P: DapPeer> BasicSession<P> {
                 Purpose::NativeListingFetched => {
                     self.apply_native_listing(message);
                     if let Err(problem) = self.resume_after_injection_landed() {
-                        return vec![protocol::event(
-                            "output",
-                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
-                            1
-                        )];
+                        return vec![protocol::stderr_output_event(format!("{problem}\n"), 1)];
                     }
                 }
             }

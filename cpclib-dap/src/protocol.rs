@@ -48,6 +48,22 @@ pub fn event(name: &str, body: Value, seq: i64) -> Value {
     json!({ "seq": seq, "type": "event", "event": name, "body": body })
 }
 
+/// A DAP `output` event with `category: "stderr"` - "something went wrong,
+/// tell the user via the Debug Console" is built this exact way, by hand,
+/// at every one of its ~11 call sites across `session.rs`/`basic_session.rs`.
+/// `seq` is still the caller's own to supply - some sites use `self.next_seq()`,
+/// others a fixed `1` (an existing, unexplained difference between the two
+/// session types, left exactly as each already had it: fixing *that* is a
+/// correctness question, not something a reuse consolidation should change
+/// on its own).
+pub fn stderr_output_event(message: impl Into<String>, seq: i64) -> Value {
+    event(
+        "output",
+        json!({ "category": "stderr", "output": message.into() }),
+        seq
+    )
+}
+
 pub fn request(command: &str, arguments: Value, seq: i64) -> Value {
     json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments })
 }
