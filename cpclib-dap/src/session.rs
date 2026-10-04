@@ -1368,12 +1368,8 @@ impl<P: DapPeer> Session<P> {
                     .and_then(|()| self.push_watches())
                     .and_then(|()| self.start_program_if_ready())
                 {
-                    return vec![protocol::event(
-                        "output",
-                        json!({
-                            "category": "stderr",
-                            "output": format!("could not set breakpoints: {problem}\n")
-                        }),
+                    return vec![protocol::stderr_output_event(
+                        format!("could not set breakpoints: {problem}\n"),
                         self.next_seq()
                     )];
                 }
@@ -1779,12 +1775,8 @@ impl<P: DapPeer> Session<P> {
             && let Err(problem) = self.push_breakpoints()
         {
             let seq = self.next_seq();
-            out.push(protocol::event(
-                "output",
-                json!({
-                    "category": "stderr",
-                    "output": format!("could not clear the entry breakpoint: {problem}\n")
-                }),
+            out.push(protocol::stderr_output_event(
+                format!("could not clear the entry breakpoint: {problem}\n"),
                 seq
             ));
         }
@@ -1793,12 +1785,8 @@ impl<P: DapPeer> Session<P> {
         // breakpoint lifted to let it go can be armed again.
         if let Err(problem) = self.restore_lifted_breakpoint() {
             let seq = self.next_seq();
-            out.push(protocol::event(
-                "output",
-                json!({
-                    "category": "stderr",
-                    "output": format!("could not re-arm a breakpoint: {problem}\n")
-                }),
+            out.push(protocol::stderr_output_event(
+                format!("could not re-arm a breakpoint: {problem}\n"),
                 seq
             ));
         }
