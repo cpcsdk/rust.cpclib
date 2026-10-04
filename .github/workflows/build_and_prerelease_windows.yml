@@ -19,8 +19,8 @@ jobs:
           profile: minimal
           target: x86_64-pc-windows-msvc
     - uses: Swatinem/rust-cache@v2
-    - name: install tauri cli
-      run: cargo install tauri-cli --version "^2.0.0" --locked
+#    - name: install tauri cli
+#      run: cargo install tauri-cli --version "^2.0.0" --locked
     - uses: actions-rs/cargo@v1
       with:
         command: build
@@ -30,8 +30,8 @@ jobs:
       with:
         command: test
         toolchain: nightly
-    - name: build tauri
-      run: cd cpclib-bndbuild-tauri && cargo tauri build
+#    - name: build tauri
+#      run: cd cpclib-bndbuild-tauri && cargo tauri build
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
@@ -42,5 +42,5 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: true
-          artifacts: "target/release/*.exe,target/release/bundle/nsis/*.exe"
+          artifacts: "target/release/*.exe"
   
