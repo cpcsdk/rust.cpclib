@@ -5873,6 +5873,18 @@ impl Env {
     }
 }
 
+/// Whether two consecutive `OverrideMemory` warnings describe immediately-
+/// adjacent memory ranges - `prev`'s own range ends exactly where `curr`'s
+/// begins, so the two are worth fusing into one wider warning rather than
+/// reporting a run of tiny overlaps. Shared by `merge_overriding_warnings`'s
+/// two cases below (plain `OverrideMemory`, and the same pair wrapped in
+/// `RelocatedWarning` - which additionally requires the two spans to come
+/// from the same source buffer before trusting this adjacency check at
+/// all, since only then is splicing a combined span between them safe).
+fn overrides_are_contiguous(prev_addr: &PhysicalAddress, prev_size: usize, curr_addr: &PhysicalAddress) -> bool {
+    prev_addr.offset_in_cpc() + prev_size as u32 == curr_addr.offset_in_cpc()
+}
+
 /// Warnings related code
 impl Env {
     fn merge_overriding_warnings(&mut self) {
@@ -5891,8 +5903,7 @@ impl Env {
                     AssemblerWarning::OverrideMemory(prev_addr, prev_size),
                     AssemblerWarning::OverrideMemory(curr_addr, curr_size)
                 ) => {
-                    if (prev_addr.offset_in_cpc() + *prev_size as u32) == curr_addr.offset_in_cpc()
-                    {
+                    if overrides_are_contiguous(prev_addr, *prev_size, curr_addr) {
                         (Some(*prev_size + *curr_size), None)
                     }
                     else {
@@ -5914,8 +5925,7 @@ impl Env {
                         AssemblerWarning::OverrideMemory(prev_addr, prev_size),
                         AssemblerWarning::OverrideMemory(curr_addr, curr_size)
                     ) = (prev_warning.as_ref(), curr_warning.as_ref())
-                        && (prev_addr.offset_in_cpc() + *prev_size as u32
-                            == curr_addr.offset_in_cpc())
+                        && overrides_are_contiguous(prev_addr, *prev_size, curr_addr)
                         && std::ptr::eq(
                             prev_span.complete_source().as_ptr(),
                             curr_span.complete_source().as_ptr()
