@@ -55,6 +55,10 @@ const AKG_HARNESS_SOURCE: &str = include_str!("music_akg_harness.asm");
 /// `music_sid_harness.asm` next to this file for the full commented source.
 const SID_HARNESS_SOURCE: &str = include_str!("music_sid_harness.asm");
 
+/// The song-info printer pasted into both harnesses - see
+/// `music_info_print.asm`.
+const INFO_PRINT_SOURCE: &str = include_str!("music_info_print.asm");
+
 pub struct MusicRunOutcome {
     pub message: String,
     pub success: bool
@@ -82,6 +86,111 @@ fn basm_escaped_path(path: &Utf8Path) -> String {
     // filter exists for `.bnd` templates - this is the same fix for a path
     // built directly in Rust instead of through a template.
     path.as_str().replace('\\', "\\\\")
+}
+
+/// Mode 2 text width, in characters - the harnesses print one `db` line per
+/// text row, with no wrapping of their own.
+const INFO_TEXT_COLUMNS: usize = 78;
+/// Rows kept for the comment, so the text always fits the 25-row screen.
+const INFO_TEXT_MAX_ROWS: usize = 20;
+
+/// Printable-ASCII-only, safe inside a basm/rasm `db "..."` literal (no quote,
+/// backslash or `{}` formatting braces; the ROM font only has 32..=127).
+fn info_ascii(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            match c {
+                '"' => '\'',
+                '\\' => '/',
+                '{' => '(',
+                '}' => ')',
+                '\t' => ' ',
+                c if (' '..='~').contains(&c) => c,
+                'à' | 'â' | 'ä' => 'a',
+                'é' | 'è' | 'ê' | 'ë' => 'e',
+                'î' | 'ï' => 'i',
+                'ô' | 'ö' => 'o',
+                'ù' | 'û' | 'ü' => 'u',
+                'ç' => 'c',
+                _ => '?'
+            }
+        })
+        .collect()
+}
+
+/// Greedy word wrap of one paragraph to `INFO_TEXT_COLUMNS` (long words are cut).
+fn info_wrap(paragraph: &str, out: &mut Vec<String>) {
+    let mut line = String::new();
+    for word in paragraph.split_whitespace() {
+        let mut word = word;
+        while word.len() > INFO_TEXT_COLUMNS {
+            if !line.is_empty() {
+                out.push(std::mem::take(&mut line));
+            }
+            out.push(word[..INFO_TEXT_COLUMNS].to_string());
+            word = &word[INFO_TEXT_COLUMNS..];
+        }
+        if !line.is_empty() && line.len() + 1 + word.len() > INFO_TEXT_COLUMNS {
+            out.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    out.push(line);
+}
+
+/// The text rows a player harness prints: title, author/composer, then the
+/// comment. `fallback_title` (the song's file name) stands in for an empty title.
+fn info_lines(meta: &super::SongMetadata, fallback_title: &str) -> Vec<String> {
+    let meta_field = |s: &str| info_ascii(s).trim().to_string();
+    // AT3's default for a freshly created song - not worth printing.
+    let useful = |s: String| (!s.is_empty() && !s.eq_ignore_ascii_case("unknown")).then_some(s);
+
+    let title = useful(meta_field(&meta.title)).unwrap_or_else(|| info_ascii(fallback_title));
+    let author = useful(meta_field(&meta.author));
+    let composer = useful(meta_field(&meta.composer));
+
+    let mut lines = vec![title];
+    match (author, composer) {
+        (Some(a), Some(c)) if a != c => {
+            lines.push(format!("by {a}"));
+            lines.push(format!("composer: {c}"));
+        },
+        (Some(a), _) | (None, Some(a)) => lines.push(format!("by {a}")),
+        (None, None) => {}
+    }
+
+    let mut comment_rows = Vec::new();
+    for paragraph in meta.comment.lines() {
+        info_wrap(&info_ascii(paragraph), &mut comment_rows);
+    }
+    while comment_rows.last().is_some_and(|l| l.is_empty()) {
+        comment_rows.pop();
+    }
+    if !comment_rows.is_empty() {
+        lines.push(String::new());
+        lines.extend(comment_rows.into_iter().take(INFO_TEXT_MAX_ROWS));
+    }
+    lines
+}
+
+/// The `{{INFO_TEXT}}` replacement: one zero-terminated `db` string per row,
+/// ended by a `255` marker (so an empty row, a lone `0`, stays distinguishable).
+fn info_text_db(song_path: &Utf8Path, name_hint: &str) -> String {
+    let lines = info_lines(&super::song_metadata(song_path), name_hint);
+    let mut out = String::new();
+    for line in lines {
+        if line.is_empty() {
+            out.push_str("    db 0\n");
+        }
+        else {
+            out.push_str(&format!("    db \"{line}\",0\n"));
+        }
+    }
+    out.push_str("    db 255\n");
+    out
 }
 
 /// One assembled run's working files, all inside a fresh temp directory so
@@ -156,10 +265,7 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
     let player_source_path = At3Version::default().akg_path::<()>();
 
     let harness_source = AKG_HARNESS_SOURCE
-        .replace(
-            "{{MUSIC_DATA_FNAME}}",
-            &basm_escaped_path(&akg_path)
-        )
+        .replace("{{MUSIC_DATA_FNAME}}", &basm_escaped_path(&akg_path))
         .replace(
             "{{PLAYER_CONFIG_FNAME}}",
             &basm_escaped_path(&player_config_path)
@@ -168,7 +274,9 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
             "{{PLAYER_SOURCE_FNAME}}",
             &basm_escaped_path(&player_source_path)
         )
-        .replace("{{MUSIC_EXEC_FNAME}}", &basm_escaped_path(&bin_path));
+        .replace("{{MUSIC_EXEC_FNAME}}", &basm_escaped_path(&bin_path))
+        .replace("{{INFO_PRINT_CODE}}", INFO_PRINT_SOURCE)
+        .replace("{{INFO_TEXT}}", &info_text_db(song_path, name_hint));
     let harness_path = dir.path().join("harness.asm");
     fs_err::write(&harness_path, harness_source)
         .map_err(|e| format!("Could not write the player harness: {e}"))?;
@@ -202,6 +310,7 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
 /// say up front which output it's asking `extra_asm_args` for.
 fn convert_and_assemble_sid<E: BndBuilderObserver + 'static>(
     song_path: &Utf8Path,
+    name_hint: &str,
     sid_wait_line_count: u16,
     wants_snapshot: bool,
     extra_asm_args: &[String],
@@ -233,7 +342,9 @@ fn convert_and_assemble_sid<E: BndBuilderObserver + 'static>(
             "{{PLAYER_MACROS_FNAME}}",
             &basm_escaped_path(&At3Version::default().aky_sid_macros_path::<()>())
         )
-        .replace("{{WAIT_LINE_COUNT}}", &sid_wait_line_count.to_string());
+        .replace("{{WAIT_LINE_COUNT}}", &sid_wait_line_count.to_string())
+        .replace("{{INFO_PRINT_CODE}}", INFO_PRINT_SOURCE)
+        .replace("{{INFO_TEXT}}", &info_text_db(song_path, name_hint));
     let harness_path = dir.path().join("harness.asm");
     fs_err::write(&harness_path, harness_source)
         .map_err(|e| format!("Could not write the SID player harness: {e}"))?;
@@ -280,7 +391,11 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
             convert_and_assemble_akg(
                 song_path,
                 name_hint,
-                &["--snapshot".to_string(), "-o".to_string(), sna_path.to_string()],
+                &[
+                    "--snapshot".to_string(),
+                    "-o".to_string(),
+                    sna_path.to_string()
+                ],
                 observer
             )
             .map(|_| ())
@@ -288,12 +403,13 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
         PlayerKind::Sid => {
             convert_and_assemble_sid(
                 song_path,
+                name_hint,
                 sid_wait_line_count,
                 true,
                 &["-oi".to_string(), sna_path.to_string()],
                 observer
             )
-        }
+        },
     };
     if let Err(e) = result {
         return failure(e);
@@ -321,8 +437,8 @@ fn wrap_and_build_dsk<E: BndBuilderObserver + 'static>(
     load_address: u16,
     observer: &Arc<E>
 ) -> Result<Utf8PathBuf, String> {
-    let bytes = fs_err::read(bin_path)
-        .map_err(|e| format!("Could not read the assembled binary: {e}"))?;
+    let bytes =
+        fs_err::read(bin_path).map_err(|e| format!("Could not read the assembled binary: {e}"))?;
     let fname = AmsdosFileName::try_from(bin_name)
         .map_err(|e| format!("Could not build an AMSDOS filename: {e:?}"))?;
     let file = AmsdosFile::binary_file_from_buffer(&fname, load_address, load_address, &bytes)
@@ -361,6 +477,7 @@ pub fn build_music_dsk<E: BndBuilderObserver + 'static>(
 
             convert_and_assemble_sid(
                 song_path,
+                name_hint,
                 sid_wait_line_count,
                 false,
                 &["-ob".to_string(), bin_path.to_string()],
@@ -387,6 +504,28 @@ mod tests {
     }
 
     #[test]
+    fn info_lines_lists_title_author_and_wrapped_comment() {
+        let meta = super::super::SongMetadata {
+            title: "My \"song\" {x}".into(),
+            author: "Zoë\u{2603}".into(),
+            composer: "Unknown".into(),
+            comment: format!("{}\n\nsecond", "word ".repeat(30))
+        };
+        let lines = info_lines(&meta, "FALLBACK");
+        assert_eq!(lines[0], "My 'song' (x)");
+        assert_eq!(lines[1], "by Zoe?");
+        assert_eq!(lines[2], "");
+        assert!(lines[3].len() <= INFO_TEXT_COLUMNS && lines[4].len() <= INFO_TEXT_COLUMNS);
+        assert_eq!(lines.last().unwrap(), "second");
+    }
+
+    #[test]
+    fn info_lines_falls_back_to_the_name_when_there_is_no_metadata() {
+        let lines = info_lines(&super::super::SongMetadata::default(), "tune");
+        assert_eq!(lines, vec!["tune".to_string()]);
+    }
+
+    #[test]
     fn missing_song_file_is_rejected_before_touching_disc() {
         let observer = Arc::new(TestObserver);
         let outcome = run_music_in_emulator(
@@ -403,8 +542,8 @@ mod tests {
     #[test]
     fn missing_song_file_is_rejected_before_touching_disc_dsk_path() {
         let observer = Arc::new(TestObserver);
-        let err = build_music_dsk(Utf8Path::new("/no/such/song.aks"), "PROG", 72, &observer)
-            .unwrap_err();
+        let err =
+            build_music_dsk(Utf8Path::new("/no/such/song.aks"), "PROG", 72, &observer).unwrap_err();
         assert!(err.contains("does not exist"));
     }
 
@@ -453,7 +592,10 @@ mod tests {
             .join("ArkosTracker3")
             .join("sid")
             .join("SidExamples.aks");
-        assert!(super::super::song_uses_sid(&song).unwrap(), "fixture should be SID-tagged");
+        assert!(
+            super::super::song_uses_sid(&song).unwrap(),
+            "fixture should be SID-tagged"
+        );
 
         let dsk_path = build_music_dsk(&song, "SIDTEST", 72, &observer)
             .expect("the real SID conversion+assemble+DSK pipeline should succeed");
@@ -488,6 +630,7 @@ mod tests {
         let sna_path = dir.path().join("song.sna");
         convert_and_assemble_sid(
             &song,
+            "TEST",
             72,
             true,
             &["-oi".to_string(), sna_path.to_string()],
@@ -496,6 +639,9 @@ mod tests {
         .expect("the real SID conversion+assemble+snapshot pipeline should succeed");
         assert!(sna_path.is_file(), "the snapshot should have been written");
         let size = std::fs::metadata(&sna_path).unwrap().len();
-        assert!(size > 20_000, "a real 64K .sna should be well over 20KB, got {size}");
+        assert!(
+            size > 20_000,
+            "a real 64K .sna should be well over 20KB, got {size}"
+        );
     }
 }

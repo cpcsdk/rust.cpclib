@@ -18,7 +18,6 @@ use std::sync::Arc;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::Builder as TempBuilder;
 use cpclib_disc::amsdos::AmsdosFile;
-
 use cpclib_runner::runner::assembler::{ExternAssembler, RasmVersion};
 
 use crate::event::BndBuilderObserver;
@@ -155,8 +154,8 @@ pub fn launch_emulator_with_csl<E: BndBuilderObserver + 'static>(
     observer: &Arc<E>
 ) -> Result<(), String> {
     let args = csl_launch_args(csl_file, base_dir, emulator)?;
-    let task: Task = InnerTask::Emulator(Emulator::EmulatorFacade, StandardTaskArguments::new(args))
-        .into();
+    let task: Task =
+        InnerTask::Emulator(Emulator::EmulatorFacade, StandardTaskArguments::new(args)).into();
     task.execute(observer)
 }
 
@@ -202,16 +201,14 @@ pub fn convert_song_to_akg<E: BndBuilderObserver + 'static>(
     output_path: &Utf8Path,
     observer: &Arc<E>
 ) -> Result<(), String> {
-    let args = shlex::try_join(
-        [
-            "-bin",
-            "-adr",
-            "0x506",
-            "--exportPlayerConfig",
-            song_path.as_str(),
-            output_path.as_str()
-        ]
-    )
+    let args = shlex::try_join([
+        "-bin",
+        "-adr",
+        "0x506",
+        "--exportPlayerConfig",
+        song_path.as_str(),
+        output_path.as_str()
+    ])
     .map_err(|e| format!("Could not build SongToAkg arguments: {e}"))?;
 
     let task: Task = InnerTask::with_songconverter(
@@ -264,8 +261,8 @@ pub fn convert_song_to_aky_source<E: BndBuilderObserver + 'static>(
 pub fn song_uses_sid(song_path: &Utf8Path) -> Result<bool, String> {
     use std::io::Read;
 
-    let file = fs_err::File::open(song_path)
-        .map_err(|e| format!("Could not open {song_path}: {e}"))?;
+    let file =
+        fs_err::File::open(song_path).map_err(|e| format!("Could not open {song_path}: {e}"))?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| format!("{song_path} is not a valid Arkos Tracker project: {e}"))?;
     if archive.is_empty() {
@@ -305,6 +302,94 @@ pub fn song_uses_sid(song_path: &Utf8Path) -> Result<bool, String> {
         }
     }
     Ok(false)
+}
+
+/// The descriptive fields of an Arkos Tracker song, as shown in AT3's
+/// "song properties" - all empty when the song has none (or can't be read,
+/// see [`song_metadata`]).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct SongMetadata {
+    pub title: String,
+    pub author: String,
+    pub composer: String,
+    pub comment: String
+}
+
+/// Best-effort read of `song_path`'s title/author/composer/comment (only the
+/// song's own direct children: instruments carry `title`/`name` tags too, which
+/// must not be mistaken for the song's). Any failure (not an AKS zip - e.g. a
+/// `.vt2`, which AT3 converts itself -, bad XML...) yields empty metadata, as
+/// this only decorates a player and must never stop one from being built.
+/// Handles both the AT3 format (`<title>`) and the older AT1/2 one
+/// (`<aks:title>`).
+pub fn song_metadata(song_path: &Utf8Path) -> SongMetadata {
+    use std::io::Read;
+
+    let mut meta = SongMetadata::default();
+    let Ok(file) = fs_err::File::open(song_path)
+    else {
+        return meta;
+    };
+    let Ok(mut archive) = zip::ZipArchive::new(file)
+    else {
+        return meta;
+    };
+    if archive.is_empty() {
+        return meta;
+    }
+    let mut xml = String::new();
+    match archive.by_index(0) {
+        Ok(mut entry) => {
+            if entry.read_to_string(&mut xml).is_err() {
+                return meta;
+            }
+        },
+        Err(_) => return meta
+    }
+
+    let mut reader = quick_xml::Reader::from_str(&xml);
+    let mut depth = 0usize;
+    let mut current: Option<&'static str> = None;
+    while let Ok(event) = reader.read_event() {
+        match event {
+            quick_xml::events::Event::Start(tag) => {
+                depth += 1;
+                if depth == 2 {
+                    let name = tag.name();
+                    let name = name.as_ref().to_string();
+                    current = match name.rsplit(':').next().unwrap_or("") {
+                        "title" => Some("title"),
+                        "author" => Some("author"),
+                        "composer" => Some("composer"),
+                        "comment" => Some("comment"),
+                        _ => None
+                    };
+                }
+            },
+            quick_xml::events::Event::Text(text) if depth == 2 => {
+                if let Some(field) = current {
+                    let raw: &str = &text;
+                    let text = quick_xml::escape::unescape(raw)
+                        .map_or_else(|_| raw.to_string(), |t| t.into_owned());
+                    match field {
+                        "title" => meta.title.push_str(&text),
+                        "author" => meta.author.push_str(&text),
+                        "composer" => meta.composer.push_str(&text),
+                        _ => meta.comment.push_str(&text)
+                    }
+                }
+            },
+            quick_xml::events::Event::End(_) => {
+                depth = depth.saturating_sub(1);
+                if depth < 2 {
+                    current = None;
+                }
+            },
+            quick_xml::events::Event::Eof => break,
+            _ => {}
+        }
+    }
+    meta
 }
 
 /// Assembles `source_path`, with `extra_args` (`-D` definitions, `--snapshot
@@ -505,8 +590,7 @@ mod tests {
 
     #[test]
     fn csl_launch_args_omits_base_dir_when_not_given() {
-        let args =
-            csl_launch_args(Utf8Path::new("/tmp/script.csl"), None, "amspirit").unwrap();
+        let args = csl_launch_args(Utf8Path::new("/tmp/script.csl"), None, "amspirit").unwrap();
         assert!(!args.contains("--csl-base-dir"), "{args}");
     }
 

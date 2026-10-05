@@ -8,6 +8,8 @@
         ;ASSERT, and local-label macro substitution used throughout the
         ;player/macros are rasm-only - basm implements none of them).
         ;
+        ;   INFO_PRINT_CODE   - music_info_print.asm, prints InfoText in mode 2
+        ;   INFO_TEXT         - the song's title/author/comment as `db` rows
         ;{{PLACEHOLDER}}s substituted by music_run.rs before assembling:
         ;   MUSIC_DATA_FNAME    - SongToAky *source*-mode .asm export
         ;   PLAYER_SOURCE_FNAME - PlayerAkySid_CPC.asm, from the installed AT3
@@ -54,10 +56,9 @@ Start   equ $
         ld (#38),hl
         ld sp,$
 
-        ld bc,#bc01
-        out (c),c
-        ld bc,#bd00
-        out (c),c
+        ;Prints the song's title/author/comment (before any timing-critical
+        ;code starts), and makes the screen visible.
+        call InfoShow
 
         ;Initializes the music.
         ld hl,Music_Start
@@ -242,6 +243,12 @@ Music_End
 Main_Player_Start:
         include "{{PLAYER_SOURCE_FNAME}}"
 Main_Player_End
+
+{{INFO_PRINT_CODE}}
+
+InfoText
+{{INFO_TEXT}}
+FontBuf equ $
 
 
 

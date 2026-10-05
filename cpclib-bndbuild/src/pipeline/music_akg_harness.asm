@@ -12,6 +12,9 @@
 ;   PLAYER_SOURCE_FNAME - PlayerAkg.asm, from the installed Arkos Tracker 3
 ;   MUSIC_EXEC_FNAME    - where the assembled AMSDOS binary is saved
 ;
+;   INFO_PRINT_CODE   - music_info_print.asm, prints InfoText in mode 2
+;   INFO_TEXT          - the song's title/author/comment as `db` rows
+;
 ; Adapted from the AKM/AKG harnesses in cpcsdk/amstrad_cpc_players_comparison
 ; (players/akg/akg.asm) - the player source is pulled from the real AT3
 ; install (PLAYER_SOURCE_FNAME) rather than from a locally vendored copy.
@@ -40,13 +43,12 @@ AKG_File
 
     run $
 Start
+    di
     ld sp, 0x500
     ld hl, #c9fb : ld (#38), hl        ; reduced interrupt handler (ei/ret)
 
-    ld bc, 0xbc00+1 : out (c), c
-    ld bc, 0xbd00+0 : out (c), c
+    call InfoShow                       ; title/author/comment, see below
 
-    di
     ld hl, AKG_File
     xor a
     call PLY_AKG_Init
@@ -69,7 +71,14 @@ WaitVsync
 
     jr MainLoop
 
+{{INFO_PRINT_CODE}}
+
     include "{{PLAYER_SOURCE_FNAME}}"
+
+    ; Song info text, then the (unsaved) glyph buffer right after the binary.
+InfoText
+{{INFO_TEXT}}
+FontBuf equ $
 
     ; Headerless (no AMSDOS header, see the note above the `jp Start` gap) -
     ; `music_run.rs` wraps this in a proper AMSDOS header itself.
