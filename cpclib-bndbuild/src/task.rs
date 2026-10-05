@@ -426,9 +426,8 @@ impl<'de> Deserialize<'de> for InnerTask {
 
                 let mut parsed_segments = Vec::with_capacity(n);
                 for seg in &segments {
-                    parsed_segments.push(
-                        crate::shell_pipe::strip_redirections(seg).map_err(E::custom)?
-                    );
+                    parsed_segments
+                        .push(crate::shell_pipe::strip_redirections(seg).map_err(E::custom)?);
                 }
                 let has_redirection = parsed_segments
                     .iter()
@@ -490,8 +489,8 @@ impl<'de> Deserialize<'de> for InnerTask {
                         args: args.to_owned(),
                         ignore_error: false
                     };
-                    let stage = InnerTask::from_command_and_arguments(code, std)
-                        .map_err(E::custom)?;
+                    let stage =
+                        InnerTask::from_command_and_arguments(code, std).map_err(E::custom)?;
                     stages.push(stage);
                 }
 
@@ -1064,7 +1063,9 @@ impl InnerTask {
             InnerTask::Cdt(_, t) => t,
 
             InnerTask::Pipe(_) => {
-                unreachable!("Pipe has no single StandardTaskArguments - callers must check for it first")
+                unreachable!(
+                    "Pipe has no single StandardTaskArguments - callers must check for it first"
+                )
             }
         }
     }
@@ -1112,7 +1113,9 @@ impl InnerTask {
             InnerTask::Cdt(_, t) => t,
 
             InnerTask::Pipe(_) => {
-                unreachable!("Pipe has no single StandardTaskArguments - callers must check for it first")
+                unreachable!(
+                    "Pipe has no single StandardTaskArguments - callers must check for it first"
+                )
             }
         }
     }

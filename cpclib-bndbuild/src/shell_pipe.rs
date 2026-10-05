@@ -77,7 +77,7 @@ fn top_level_operators(line: &str) -> Vec<(usize, char)> {
                     '|' | '<' | '>' => found.push((i, ch)),
                     _ => {}
                 }
-            }
+            },
         }
     }
     found
@@ -144,7 +144,7 @@ fn word_len(s: &str) -> Result<usize, String> {
                     },
                     _ => {}
                 }
-            }
+            },
         }
     }
     if quote != Quote::None {
@@ -396,7 +396,12 @@ pub fn execute_pipe(
         // through to runners (like `Echo`/`Rm`) that only special-case
         // genuine input.
         let stdin = if i == 0 {
-            Some(p.stdin.clone().map(TaskStdin::File).unwrap_or(TaskStdin::Empty))
+            Some(
+                p.stdin
+                    .clone()
+                    .map(TaskStdin::File)
+                    .unwrap_or(TaskStdin::Empty)
+            )
         }
         else {
             Some(TaskStdin::Reader(readers[i].take().unwrap()))
@@ -428,7 +433,10 @@ pub fn execute_pipe(
                 Some(TaskStdout::Writer(writers[i].take().unwrap()))
             };
             stage_stdouts.push(stdout);
-            stage_observers.push(Some(Arc::new(RedirectedObserver::new(None, observer.clone()))));
+            stage_observers.push(Some(Arc::new(RedirectedObserver::new(
+                None,
+                observer.clone()
+            ))));
         }
         else {
             stage_stdouts.push(None);
@@ -437,7 +445,10 @@ pub fn execute_pipe(
                     None => None,
                     Some((path, append)) => {
                         let file = if *append {
-                            fs_err::OpenOptions::new().create(true).append(true).open(path)
+                            fs_err::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(path)
                         }
                         else {
                             fs_err::File::create(path)
@@ -450,7 +461,10 @@ pub fn execute_pipe(
             else {
                 Some(StdoutSink::Pipe(Mutex::new(writers[i].take().unwrap())))
             };
-            stage_observers.push(Some(Arc::new(RedirectedObserver::new(sink, observer.clone()))));
+            stage_observers.push(Some(Arc::new(RedirectedObserver::new(
+                sink,
+                observer.clone()
+            ))));
         }
     }
 
@@ -466,18 +480,12 @@ pub fn execute_pipe(
                 let stdin = stage_stdins[i].take();
                 let stdout = stage_stdouts[i].take();
                 scope.spawn(move || {
-                    let result = crate::executor::execute_redirected(
-                        stage,
-                        &stage_observer,
-                        stdin,
-                        stdout
-                    );
+                    let result =
+                        crate::executor::execute_redirected(stage, &stage_observer, stdin, stdout);
                     let write_error = stage_observer.take_write_error();
                     match (result, write_error) {
                         (Ok(()), None) => Ok(()),
-                        (Ok(()), Some(e)) => {
-                            Err(format!("write error in pipeline stage {i}: {e}"))
-                        },
+                        (Ok(()), Some(e)) => Err(format!("write error in pipeline stage {i}: {e}")),
                         (Err(e), _) => Err(e)
                     }
                 })

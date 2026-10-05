@@ -85,8 +85,10 @@ mod tests {
 
     #[test]
     fn the_constructed_emulator_args_string_parses_against_the_real_cli() {
-        let args_str =
-            format!("--emulator {} --csl {} --background run", "winape", "/tmp/test.csl");
+        let args_str = format!(
+            "--emulator {} --csl {} --background run",
+            "winape", "/tmp/test.csl"
+        );
         let mut args: Vec<&str> = vec!["cpc"];
         args.extend(args_str.split_whitespace());
         let parsed = cpclib_runner::emucontrol::EmuCli::try_parse_from(args);

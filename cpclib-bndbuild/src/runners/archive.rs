@@ -217,14 +217,7 @@ fn create_zip<E: EventObserver>(
             add_file_to_zip(&mut zip, path, strip_prefix, basename_only, options, o)?;
         }
         else if path.is_dir() {
-            add_dir_to_zip(
-                &mut zip,
-                path,
-                strip_prefix,
-                basename_only,
-                options,
-                o
-            )?;
+            add_dir_to_zip(&mut zip, path, strip_prefix, basename_only, options, o)?;
         }
         else {
             return Err(format!("Path not found: {}", file_path));
@@ -297,7 +290,8 @@ fn compute_archive_name(
 ) -> String {
     let archive_name = if basename_only {
         path.file_name().unwrap_or("file").to_string()
-    } else if let Some(prefix) = strip_prefix {
+    }
+    else if let Some(prefix) = strip_prefix {
         // Remove all occurrences of the prefix component from the path
         let components: Vec<_> = path
             .components()
@@ -310,10 +304,12 @@ fn compute_archive_name(
                 result.push(comp);
             }
             result.as_str().to_string()
-        } else {
+        }
+        else {
             path.as_str().to_string()
         }
-    } else {
+    }
+    else {
         path.as_str().to_string()
     };
 

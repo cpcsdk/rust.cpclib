@@ -3,9 +3,9 @@ use std::io::Read;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, FromArgMatches, Parser};
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::TaskStdin;
 #[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
-use cpclib_runner::runner::TaskStdin;
 
 use crate::expand_glob;
 

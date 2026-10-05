@@ -140,7 +140,7 @@ impl ProgressState {
                     },
                     cpclib_asm::progress::AsmProgressEvent::SaveFinished => {
                         ("save complete".to_string(), Some(1.0))
-                    }
+                    },
                 };
 
                 let percentage = within_slot
@@ -261,7 +261,9 @@ mod tests {
             out_of: 1
         });
         let (message, percentage) =
-            state.apply(ProgressUpdate::Asm(AsmProgressEvent::PassStarted { pass: 3 }));
+            state.apply(ProgressUpdate::Asm(AsmProgressEvent::PassStarted {
+                pass: 3
+            }));
         let (line1, line2, line3) = lines(&message);
         assert_eq!(line1, format!("[1/1] main.bin {}", bar(0.0, BAR_WIDTH)));
         assert_eq!(line2, "pass 3");
@@ -300,8 +302,14 @@ mod tests {
                 visited: 40,
                 expected: 80
             }));
-        assert!(!message.contains("40"), "should not leak raw counts: {message}");
-        assert!(!message.contains("80"), "should not leak raw counts: {message}");
+        assert!(
+            !message.contains("40"),
+            "should not leak raw counts: {message}"
+        );
+        assert!(
+            !message.contains("80"),
+            "should not leak raw counts: {message}"
+        );
         let (_, line2, line3) = lines(&message);
         assert_eq!(line2, "pass 2");
         assert_eq!(line3, bar(0.5, BAR_WIDTH));
@@ -319,7 +327,7 @@ mod tests {
         let (message, _) = state.apply(ProgressUpdate::Task {
             command: "basm main.asm -o main.bin".to_string()
         });
-        let (line1, _, _) = lines(&message);
+        let (line1, ..) = lines(&message);
         assert_eq!(
             line1,
             format!("[1/1] basm main.asm -o main.bin {}", bar(0.0, BAR_WIDTH))
@@ -357,7 +365,7 @@ mod tests {
             nb: 2,
             out_of: 2
         });
-        let (line1, _, _) = lines(&message);
+        let (line1, ..) = lines(&message);
         assert_eq!(line1, format!("[2/2] second {}", bar(0.5, BAR_WIDTH)));
     }
 

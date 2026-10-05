@@ -2,8 +2,7 @@
 //! see `cpclib-bndbuild/src/shell_pipe.rs` and `crate::task::InnerTask::Pipe`.
 
 use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use cpclib_bndbuild::executor::execute;
@@ -77,10 +76,7 @@ fn a_delegated_tasks_stdout_redirects_while_its_stderr_still_reaches_the_observe
     let observer = Arc::new(CapturingObserver::new());
     // `cat` writes `input`'s content to stdout (redirected to `out`) and an
     // error about the missing file to stderr (never redirected/piped).
-    let result = run(
-        &format!("extern cat {input} {missing} > {out}"),
-        &observer
-    );
+    let result = run(&format!("extern cat {input} {missing} > {out}"), &observer);
 
     assert!(result.is_err(), "cat should fail on the missing file");
     let content = fs_err::read_to_string(&out).unwrap();
@@ -118,7 +114,10 @@ fn a_three_stage_pipeline_mixes_embedded_and_delegated_stages_delegated_first() 
 
     let observer = Arc::new(CapturingObserver::new());
     // delegated (extern cat file) -> embedded (echo, reads stdin) -> delegated (extern cat, reads stdin)
-    let result = run(&format!("extern cat {input} | echo | extern cat"), &observer);
+    let result = run(
+        &format!("extern cat {input} | echo | extern cat"),
+        &observer
+    );
 
     assert!(result.is_ok(), "{result:?}");
     assert!(observer.stdout_joined().contains("hello-other-order"));

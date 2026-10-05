@@ -64,7 +64,7 @@ impl InnerTask {
             InnerTask::Assembler(Assembler::Extern(extern_assembler), _) => {
                 Some(extern_assembler.configuration::<E>())
             },
-            InnerTask::Assembler(_, _) => None,
+            InnerTask::Assembler(..) => None,
 
             InnerTask::YmCruncher(c, _) => {
                 match c {
@@ -76,7 +76,7 @@ impl InnerTask {
             },
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
             InnerTask::Disassembler(Disassembler::Extern(e), _) => Some(e.configuration()),
-            InnerTask::Disassembler(_, _) => None,
+            InnerTask::Disassembler(..) => None,
 
             InnerTask::Grafx2(_) => Some(Grafx2Version::default().configuration()),
 
@@ -130,21 +130,41 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
                     .run_redirected(task.args(), observer, stdin, stdout)
                 },
                 crate::runners::emulator::Emulator::EmulatorFacade => {
-                    EmulatorFacadeRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+                    EmulatorFacadeRunner::default().run_redirected(
+                        task.args(),
+                        observer,
+                        stdin,
+                        stdout
+                    )
                 },
             }
         },
         InnerTask::Catalog(_args) => {
-            crate::runners::disc::CatalogRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout)
+            crate::runners::disc::CatalogRunner::<E>::default().run_redirected(
+                task.args(),
+                observer,
+                stdin,
+                stdout
+            )
         },
         InnerTask::Locomotive(_args) => {
-            crate::runners::locomotive::LocomotiveRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout)
+            crate::runners::locomotive::LocomotiveRunner::<E>::default().run_redirected(
+                task.args(),
+                observer,
+                stdin,
+                stdout
+            )
         },
         #[cfg(feature = "tape")]
         InnerTask::Cdt(cdt, _args) => {
             match cdt {
                 crate::runners::cdt::CdtManager::Rtzx => {
-                    crate::runners::cdt::RtzxRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout)
+                    crate::runners::cdt::RtzxRunner::<E>::default().run_redirected(
+                        task.args(),
+                        observer,
+                        stdin,
+                        stdout
+                    )
                 },
                 crate::runners::cdt::CdtManager::TwoCdt => {
                     DelegatedRunner::<E>::new(
@@ -157,8 +177,12 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
         },
         InnerTask::Assembler(a, _) => {
             match a {
-                Assembler::Basm => BasmRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-                Assembler::Orgams => OrgamsRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+                Assembler::Basm => {
+                    BasmRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+                },
+                Assembler::Orgams => {
+                    OrgamsRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+                },
                 Assembler::Extern(e) => {
                     DelegatedRunner::<E>::new(e.configuration(), a.get_command().to_owned())
                         .run_redirected(task.args(), observer, stdin, stdout)
@@ -192,7 +216,9 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
             }
         },
 
-        InnerTask::Crunch(_) => CrunchRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::Crunch(_) => {
+            CrunchRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         InnerTask::Disassembler(d, _) => {
             match d {
                 crate::runners::disassembler::Disassembler::Bdasm => {
@@ -205,17 +231,29 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
             }
         },
         InnerTask::SongConverter(d, _) => {
-            DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned())
-                .run_redirected(task.args(), observer, stdin, stdout)
+            DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned()).run_redirected(
+                task.args(),
+                observer,
+                stdin,
+                stdout
+            )
         },
 
         InnerTask::Tracker(d, _) => {
-            DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned())
-                .run_redirected(task.args(), observer, stdin, stdout)
+            DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned()).run_redirected(
+                task.args(),
+                observer,
+                stdin,
+                stdout
+            )
         },
-        InnerTask::BndBuild(_) => BndBuildRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::BndBuild(_) => {
+            BndBuildRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         #[cfg(feature = "basmdoc-generator")]
-        InnerTask::BasmDoc(_) => BasmDocRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::BasmDoc(_) => {
+            BasmDocRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         #[cfg(not(feature = "basmdoc-generator"))]
         InnerTask::BasmDoc(_) => {
             Err(
@@ -224,22 +262,50 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
                     .to_string()
             )
         },
-        InnerTask::Cp(_) => CpRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Mv(_) => MvRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Disc(_) => DiscManagerRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::AsmFmt(_) => AsmFmtRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::BasmOpt(_) => BasmOptRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Echo(_) => EchoRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Extern(_) => ExternRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Fade(_) => FadeRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Hideur(_) => HideurRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::Cp(_) => {
+            CpRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Mv(_) => {
+            MvRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Disc(_) => {
+            DiscManagerRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::AsmFmt(_) => {
+            AsmFmtRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::BasmOpt(_) => {
+            BasmOptRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Echo(_) => {
+            EchoRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Extern(_) => {
+            ExternRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Fade(_) => {
+            FadeRunner::<E>::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Hideur(_) => {
+            HideurRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         #[cfg(feature = "hfe")]
-        InnerTask::Hxcfe(_) => HxcfeRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::Hxcfe(_) => {
+            HxcfeRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         #[cfg(not(feature = "hfe"))]
-        InnerTask::Hxcfe(_) => Err("HFE support is not enabled. Rebuild with --features hfe".into()),
-        InnerTask::Snapshot(_) => SnapshotRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::ImgToCpc(_) => ImgToCpcRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::CpcToImg(_) => CpcToImgRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::Hxcfe(_) => {
+            Err("HFE support is not enabled. Rebuild with --features hfe".into())
+        },
+        InnerTask::Snapshot(_) => {
+            SnapshotRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::ImgToCpc(_) => {
+            ImgToCpcRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::CpcToImg(_) => {
+            CpcToImgRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         InnerTask::ImpDsk(_) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
@@ -271,12 +337,24 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
             )
             .run_redirected(safe_args, observer, stdin, stdout)
         },
-        InnerTask::Mkdir(_) => MkdirRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Rm(_) => RmRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Archive(_) => ArchiveRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Xfer(_) => XferRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Cpr(_) => CprCliRunner::default().run_redirected(task.args(), observer, stdin, stdout),
-        InnerTask::Csl(_) => CslRunner::default().run_redirected(task.args(), observer, stdin, stdout),
+        InnerTask::Mkdir(_) => {
+            MkdirRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Rm(_) => {
+            RmRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Archive(_) => {
+            ArchiveRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Xfer(_) => {
+            XferRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Cpr(_) => {
+            CprCliRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Csl(_) => {
+            CslRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
         InnerTask::Vlink(_) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
