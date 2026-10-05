@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use escargot::CargoBuild;
 use fs_err as fs;
@@ -7,15 +8,19 @@ use fs_err as fs;
 use rexpect::session::spawn_command;
 use tempfile::TempDir;
 
-// Helper function to get the bdasm binary path
+// Build the binary only once: concurrent cargo builds in parallel tests contend on the cargo lock
 fn get_bdasm_bin() -> PathBuf {
-    CargoBuild::new()
-        .bin("bdasm")
-        .current_release()
-        .run()
-        .unwrap()
-        .path()
-        .to_path_buf()
+    static BIN: OnceLock<PathBuf> = OnceLock::new();
+    BIN.get_or_init(|| {
+        CargoBuild::new()
+            .bin("bdasm")
+            .current_release()
+            .run()
+            .unwrap()
+            .path()
+            .to_path_buf()
+    })
+    .clone()
 }
 
 #[test]
