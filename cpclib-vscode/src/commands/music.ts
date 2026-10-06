@@ -71,7 +71,7 @@ async function musicCommandArgs(fileName: string): Promise<unknown[] | undefined
 }
 
 /**
- * Prompts for a music source file: every one found in the open workspace,
+ * Prompts for a music source file (Arkos Tracker, or CHIPNSFX's `.chp`): every one found in the open workspace,
  * plus a "Browse..." entry - via the shared `pickWorkspaceFile` helper.
  * Needed for the Command Palette form of {@link playMusic}/
  * {@link buildMusicDsk}: unlike most other Palette commands, there is no
@@ -80,15 +80,18 @@ async function musicCommandArgs(fileName: string): Promise<unknown[] | undefined
  * is no "currently edited file" for these commands to mean.
  *
  * The extension glob is a static mirror of `MusicConfig::song_extensions`'s
- * default (`aks`/`sks`/`128`/`vt2`/`wyz`) - kept manually in sync, same
+ * default (`aks`/`sks`/`128`/`vt2`/`wyz`/`chp`) - kept manually in sync, same
  * constraint as the `explorer/context` menu's `when` regex in package.json.
  */
 function pickMusicFile(): Promise<string | undefined> {
     return pickWorkspaceFile({
-        glob: '**/*.{aks,sks,128,vt2,wyz,AKS,SKS,VT2,WYZ}',
+        glob: '**/*.{aks,sks,128,vt2,wyz,chp,AKS,SKS,VT2,WYZ,CHP}',
         browseLabel: '$(folder-opened) Browse for a music file...',
         placeHolder: 'Which music file?',
-        dialogFilters: { 'Arkos Tracker song': ['aks', 'sks', '128', 'vt2', 'wyz'] },
+        dialogFilters: {
+            'Arkos Tracker song': ['aks', 'sks', '128', 'vt2', 'wyz'],
+            'CHIPNSFX song': ['chp'],
+        },
         dialogOpenLabel: 'Select',
     });
 }

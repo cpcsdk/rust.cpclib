@@ -894,12 +894,12 @@
         },
         {
           "command": "cpclib.playMusic",
-          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz)$/i",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp)$/i",
           "group": "cpclib"
         },
         {
           "command": "cpclib.buildMusicDsk",
-          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz)$/i",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp)$/i",
           "group": "cpclib"
         },
         {

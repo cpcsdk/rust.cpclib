@@ -34,6 +34,7 @@ use std::sync::Arc;
 use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_runner::runner::tracker::at3::At3Version;
+use cpclib_runner::runner::tracker::chipnsfx::ChipnsfxVersion;
 
 use crate::event::BndBuilderObserver;
 
@@ -43,13 +44,19 @@ use crate::event::BndBuilderObserver;
 /// there is exactly one place that defines it. Verified against the real
 /// formats Arkos Tracker 3 can import (its own "Import from..." feature
 /// list): AKS (Arkos Tracker 1/2/3), SKS (STarKos), 128 (BSC's Soundtrakker),
-/// VT2 (Vortex Tracker 2), WYZ (Wyz Tracker).
-pub const DEFAULT_SONG_EXTENSIONS: &[&str] = &["aks", "sks", "128", "vt2", "wyz"];
+/// VT2 (Vortex Tracker 2), WYZ (Wyz Tracker) - plus CHP (CHIPNSFX), which is
+/// not an Arkos Tracker format at all and gets its own player (see
+/// [`PlayerKind::Chp`]).
+pub const DEFAULT_SONG_EXTENSIONS: &[&str] = &["aks", "sks", "128", "vt2", "wyz", "chp"];
 
 /// The AKG player-harness source, embedded at compile time - see
 /// `music_akg_harness.asm` next to this file for the full commented source
 /// and the `{{PLACEHOLDER}}`s it expects substituted before assembling.
 const AKG_HARNESS_SOURCE: &str = include_str!("music_akg_harness.asm");
+
+/// The CHIPNSFX player-harness source, embedded at compile time - see
+/// `music_chp_harness.asm` next to this file.
+const CHP_HARNESS_SOURCE: &str = include_str!("music_chp_harness.asm");
 
 /// The SID player-harness source, embedded at compile time - see
 /// `music_sid_harness.asm` next to this file for the full commented source.
@@ -178,8 +185,12 @@ fn info_lines(meta: &super::SongMetadata, fallback_title: &str) -> Vec<String> {
 
 /// The `{{INFO_TEXT}}` replacement: one zero-terminated `db` string per row,
 /// ended by a `255` marker (so an empty row, a lone `0`, stays distinguishable).
-fn info_text_db(song_path: &Utf8Path, name_hint: &str) -> String {
-    let lines = info_lines(&super::song_metadata(song_path), name_hint);
+///
+/// `player` names the player the harness embeds, printed as the last row.
+fn info_text_db(song_path: &Utf8Path, name_hint: &str, player: &str) -> String {
+    let mut lines = info_lines(&super::song_metadata(song_path), name_hint);
+    lines.push(String::new());
+    lines.push(format!("Player: {player}"));
     let mut out = String::new();
     for line in lines {
         if line.is_empty() {
@@ -213,9 +224,9 @@ struct Build {
     bin_name: String
 }
 
-/// The AKG harness's AMSDOS binary load/execution address - see `Build`'s
-/// doc comment.
-const AKG_LOAD_ADDRESS: u16 = 0x500;
+/// The AKG and CHP harnesses' AMSDOS binary load/execution address (both start
+/// with `jp Start` at `org 0x500`) - see `Build`'s doc comment.
+const BASM_PLAYER_LOAD_ADDRESS: u16 = 0x500;
 
 /// The SID harness's AMSDOS binary load/execution address. Unlike AKG, this
 /// needs no `jp Start`-at-byte-0 trick: `Start` already lands exactly at
@@ -226,16 +237,105 @@ const SID_LOAD_ADDRESS: u16 = 0x100;
 /// Which player a song needs - see [`super::song_uses_sid`].
 enum PlayerKind {
     Akg,
-    Sid
+    Sid,
+    /// CHIPNSFX's own player, for `.chp` songs.
+    Chp
 }
 
 fn player_kind(song_path: &Utf8Path) -> Result<PlayerKind, String> {
-    if super::song_uses_sid(song_path)? {
+    if super::song_is_chp(song_path) {
+        Ok(PlayerKind::Chp)
+    }
+    else if super::song_uses_sid(song_path)? {
         Ok(PlayerKind::Sid)
     }
     else {
         Ok(PlayerKind::Akg)
     }
+}
+
+/// Everything that differs between the basm-assembled players (AKG, CHP) -
+/// see [`assemble_basm_player`].
+struct BasmPlayer<'a> {
+    /// The harness source, `{{PLACEHOLDER}}`s still in.
+    template: &'a str,
+    /// Printed on the `Player:` row of the song-info screen.
+    player_name: &'a str,
+    /// The converted song, `{{MUSIC_DATA_FNAME}}`.
+    music_path: &'a Utf8Path,
+    /// The player routine's source, `{{PLAYER_SOURCE_FNAME}}`.
+    player_source_path: &'a Utf8Path,
+    /// Harness-specific placeholders, already escaped.
+    extra_substitutions: &'a [(&'a str, String)]
+}
+
+/// Substitutes `{{PLACEHOLDER}}`s into a player harness: the song-info ones
+/// every harness shares (`INFO_PRINT_CODE`, `INFO_TEXT`) plus the caller's
+/// own `substitutions`, whose values must already be escaped for the target
+/// assembler.
+fn fill_harness(
+    template: &str,
+    song_path: &Utf8Path,
+    name_hint: &str,
+    player_name: &str,
+    substitutions: &[(&str, String)]
+) -> String {
+    let mut source = template
+        .replace("{{INFO_PRINT_CODE}}", INFO_PRINT_SOURCE)
+        .replace(
+            "{{INFO_TEXT}}",
+            &info_text_db(song_path, name_hint, player_name)
+        );
+    for (placeholder, value) in substitutions {
+        source = source.replace(placeholder, value);
+    }
+    source
+}
+
+/// Assembles an already-converted song into a standalone player with basm,
+/// inside `dir` (kept alive by the returned [`Build`]): the harness is written
+/// there, and assembled into a headerless `<name_hint>.BIN` (the harness's
+/// own `save`). `extra_asm_args` is where the callers ask for a snapshot too.
+fn assemble_basm_player<E: BndBuilderObserver + 'static>(
+    dir: camino_tempfile::Utf8TempDir,
+    player: &BasmPlayer,
+    song_path: &Utf8Path,
+    name_hint: &str,
+    extra_asm_args: &[String],
+    observer: &Arc<E>
+) -> Result<Build, String> {
+    let bin_name = format!("{}.BIN", super::sanitize_amsdos_stem(name_hint));
+    let bin_path = dir.path().join(&bin_name);
+
+    let mut substitutions = vec![
+        ("{{MUSIC_DATA_FNAME}}", basm_escaped_path(player.music_path)),
+        (
+            "{{PLAYER_SOURCE_FNAME}}",
+            basm_escaped_path(player.player_source_path)
+        ),
+        ("{{MUSIC_EXEC_FNAME}}", basm_escaped_path(&bin_path)),
+    ];
+    substitutions.extend(player.extra_substitutions.iter().cloned());
+
+    let harness_source = fill_harness(
+        player.template,
+        song_path,
+        name_hint,
+        player.player_name,
+        &substitutions
+    );
+    let harness_path = dir.path().join("harness.asm");
+    fs_err::write(&harness_path, harness_source)
+        .map_err(|e| format!("Could not write the player harness: {e}"))?;
+
+    super::assemble_source(&harness_path, extra_asm_args, observer)
+        .map_err(|e| format!("Could not assemble the player harness: {e}"))?;
+
+    Ok(Build {
+        _dir: dir,
+        bin_path,
+        bin_name
+    })
 }
 
 /// Converts `song_path` and assembles the AKG harness around it, naming the
@@ -255,43 +355,84 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
         .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
 
     let akg_path = dir.path().join("song.akg");
+    super::convert_song_to_akg(song_path, &akg_path, observer)
+        .map_err(|e| format!("Could not convert {song_path} to AKG: {e}"))?;
+
     // AT3's own naming convention for `--exportPlayerConfig`'s companion
     // file: `output_path` with its extension stripped, `_playerconfig.asm`
     // appended - see `super::convert_song_to_akg`'s doc comment.
     let player_config_path =
         Utf8PathBuf::from(format!("{}_playerconfig.asm", akg_path.with_extension("")));
-    let bin_name = format!("{}.BIN", super::sanitize_amsdos_stem(name_hint));
-    let bin_path = dir.path().join(&bin_name);
-    let player_source_path = At3Version::default().akg_path::<()>();
 
-    let harness_source = AKG_HARNESS_SOURCE
-        .replace("{{MUSIC_DATA_FNAME}}", &basm_escaped_path(&akg_path))
-        .replace(
-            "{{PLAYER_CONFIG_FNAME}}",
-            &basm_escaped_path(&player_config_path)
-        )
-        .replace(
-            "{{PLAYER_SOURCE_FNAME}}",
-            &basm_escaped_path(&player_source_path)
-        )
-        .replace("{{MUSIC_EXEC_FNAME}}", &basm_escaped_path(&bin_path))
-        .replace("{{INFO_PRINT_CODE}}", INFO_PRINT_SOURCE)
-        .replace("{{INFO_TEXT}}", &info_text_db(song_path, name_hint));
-    let harness_path = dir.path().join("harness.asm");
-    fs_err::write(&harness_path, harness_source)
-        .map_err(|e| format!("Could not write the player harness: {e}"))?;
+    assemble_basm_player(
+        dir,
+        &BasmPlayer {
+            template: AKG_HARNESS_SOURCE,
+            player_name: "Arkos Tracker 3 AKG",
+            music_path: &akg_path,
+            player_source_path: &At3Version::default().akg_path::<()>(),
+            extra_substitutions: &[(
+                "{{PLAYER_CONFIG_FNAME}}",
+                basm_escaped_path(&player_config_path)
+            )]
+        },
+        song_path,
+        name_hint,
+        extra_asm_args,
+        observer
+    )
+}
 
-    super::convert_song_to_akg(song_path, &akg_path, observer)
-        .map_err(|e| format!("Could not convert {song_path} to AKG: {e}"))?;
+/// Converts the CHIPNSFX song `song_path` (`.chp`) and assembles the CHP
+/// harness around it - same shape as [`convert_and_assemble_akg`], whose
+/// `Build` it returns (headerless binary, wrapped in an AMSDOS header by the
+/// caller).
+fn convert_and_assemble_chp<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    name_hint: &str,
+    extra_asm_args: &[String],
+    observer: &Arc<E>
+) -> Result<Build, String> {
+    let dir = camino_tempfile::tempdir()
+        .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
 
-    super::assemble_source(&harness_path, extra_asm_args, observer)
-        .map_err(|e| format!("Could not assemble the player harness: {e}"))?;
+    let music_path = dir.path().join("song.chpz80");
+    // Converting first: it is what downloads CHIPNSFX, whose `CHIPNSFX.I80`
+    // player the harness includes.
+    super::convert_chp_to_z80(song_path, &music_path, observer)
+        .map_err(|e| format!("Could not convert {song_path} with chipnsfx: {e}"))?;
 
-    Ok(Build {
-        _dir: dir,
-        bin_path,
-        bin_name
-    })
+    assemble_basm_player(
+        dir,
+        &BasmPlayer {
+            template: CHP_HARNESS_SOURCE,
+            player_name: "CHIPNSFX",
+            music_path: &music_path,
+            player_source_path: &ChipnsfxVersion::default().player_path::<()>(),
+            extra_substitutions: &[]
+        },
+        song_path,
+        name_hint,
+        extra_asm_args,
+        observer
+    )
+}
+
+/// [`convert_and_assemble_akg`] or [`convert_and_assemble_chp`], as `kind` says
+/// - the two basm-assembled players, which differ only in their conversion.
+fn convert_and_assemble_basm_kind<E: BndBuilderObserver + 'static>(
+    kind: &PlayerKind,
+    song_path: &Utf8Path,
+    name_hint: &str,
+    extra_asm_args: &[String],
+    observer: &Arc<E>
+) -> Result<Build, String> {
+    match kind {
+        PlayerKind::Chp => convert_and_assemble_chp(song_path, name_hint, extra_asm_args, observer),
+        PlayerKind::Akg | PlayerKind::Sid => {
+            convert_and_assemble_akg(song_path, name_hint, extra_asm_args, observer)
+        },
+    }
 }
 
 /// Converts `song_path` (source-mode, [`super::convert_song_to_aky_source`])
@@ -323,28 +464,34 @@ fn convert_and_assemble_sid<E: BndBuilderObserver + 'static>(
     super::convert_song_to_aky_source(song_path, &music_path, observer)
         .map_err(|e| format!("Could not convert {song_path} to AKY: {e}"))?;
 
-    let harness_source = SID_HARNESS_SOURCE
-        .replace(
-            "{{BUILDSNA_DIRECTIVES}}",
-            if wants_snapshot {
-                "        buildsna\n        bankset 0"
-            }
-            else {
-                ""
-            }
-        )
-        .replace("{{MUSIC_DATA_FNAME}}", &basm_escaped_path(&music_path))
-        .replace(
-            "{{PLAYER_SOURCE_FNAME}}",
-            &basm_escaped_path(&At3Version::default().aky_sid_path::<()>())
-        )
-        .replace(
-            "{{PLAYER_MACROS_FNAME}}",
-            &basm_escaped_path(&At3Version::default().aky_sid_macros_path::<()>())
-        )
-        .replace("{{WAIT_LINE_COUNT}}", &sid_wait_line_count.to_string())
-        .replace("{{INFO_PRINT_CODE}}", INFO_PRINT_SOURCE)
-        .replace("{{INFO_TEXT}}", &info_text_db(song_path, name_hint));
+    let aky_sid_macros_path = At3Version::default().aky_sid_macros_path::<()>();
+    let harness_source = fill_harness(
+        SID_HARNESS_SOURCE,
+        song_path,
+        name_hint,
+        "Arkos Tracker 3 AKY (SID)",
+        &[
+            ("{{MUSIC_DATA_FNAME}}", basm_escaped_path(&music_path)),
+            (
+                "{{PLAYER_SOURCE_FNAME}}",
+                basm_escaped_path(&At3Version::default().aky_sid_path::<()>())
+            ),
+            (
+                "{{PLAYER_MACROS_FNAME}}",
+                basm_escaped_path(&aky_sid_macros_path)
+            ),
+            ("{{WAIT_LINE_COUNT}}", sid_wait_line_count.to_string()),
+            (
+                "{{BUILDSNA_DIRECTIVES}}",
+                if wants_snapshot {
+                    "        buildsna\n        bankset 0".to_string()
+                }
+                else {
+                    String::new()
+                }
+            )
+        ]
+    );
     let harness_path = dir.path().join("harness.asm");
     fs_err::write(&harness_path, harness_source)
         .map_err(|e| format!("Could not write the SID player harness: {e}"))?;
@@ -387,8 +534,9 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
     let sna_path = dir.path().join("song.sna");
 
     let result = match kind {
-        PlayerKind::Akg => {
-            convert_and_assemble_akg(
+        PlayerKind::Akg | PlayerKind::Chp => {
+            convert_and_assemble_basm_kind(
+                &kind,
                 song_path,
                 name_hint,
                 &[
@@ -465,9 +613,15 @@ pub fn build_music_dsk<E: BndBuilderObserver + 'static>(
     }
 
     match player_kind(song_path)? {
-        PlayerKind::Akg => {
-            let built = convert_and_assemble_akg(song_path, name_hint, &[], observer)?;
-            wrap_and_build_dsk(&built.bin_path, &built.bin_name, AKG_LOAD_ADDRESS, observer)
+        kind @ (PlayerKind::Akg | PlayerKind::Chp) => {
+            // Both players load, and are entered, at the same address.
+            let built = convert_and_assemble_basm_kind(&kind, song_path, name_hint, &[], observer)?;
+            wrap_and_build_dsk(
+                &built.bin_path,
+                &built.bin_name,
+                BASM_PLAYER_LOAD_ADDRESS,
+                observer
+            )
         },
         PlayerKind::Sid => {
             let dir = camino_tempfile::tempdir()
@@ -523,6 +677,47 @@ mod tests {
     fn info_lines_falls_back_to_the_name_when_there_is_no_metadata() {
         let lines = info_lines(&super::super::SongMetadata::default(), "tune");
         assert_eq!(lines, vec!["tune".to_string()]);
+    }
+
+    #[test]
+    fn chp_songs_are_detected_by_extension_and_get_their_own_player() {
+        assert!(matches!(
+            player_kind(Utf8Path::new("/nowhere/Song.CHP")),
+            Ok(PlayerKind::Chp)
+        ));
+        assert!(DEFAULT_SONG_EXTENSIONS.contains(&"chp"));
+    }
+
+    #[test]
+    fn info_text_names_the_player() {
+        let db = info_text_db(Utf8Path::new("/nowhere/x.chp"), "tune", "CHIPNSFX");
+        assert!(db.contains("db \"Player: CHIPNSFX\",0"), "{db}");
+        assert!(db.trim_end().ends_with("db 255"));
+    }
+
+    #[test]
+    fn chp_metadata_is_the_header_before_the_separator() {
+        let meta = crate::pipeline::song_metadata(Utf8Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/chipnsfx/WINGSOD5.CHP"
+        )));
+        assert_eq!(meta.title, "Wings of Death #5 1990 Thalion");
+        assert_eq!(meta.comment, "by CNGSOFT after Jochen Hippel (Madmax)");
+    }
+
+    /// Real CHIPNSFX song through the real `chipnsfx` tool (needs it downloaded,
+    /// and wine on Linux) - hence `#[ignore]`d.
+    #[test]
+    #[ignore]
+    fn real_chp_fixture_builds_a_real_dsk() {
+        let observer = Arc::new(TestObserver);
+        let song = Utf8PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/chipnsfx/WINGSOD5.CHP"
+        ));
+        let dsk = build_music_dsk(&song, "WINGS", 72, &observer)
+            .expect("the real CHP conversion+assemble+DSK pipeline should succeed");
+        assert!(dsk.is_file());
     }
 
     #[test]

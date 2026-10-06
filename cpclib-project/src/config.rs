@@ -444,7 +444,7 @@ impl Default for BndbuildWarningClasses {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct MusicConfig {
-    /// Arkos-Tracker-compatible source-file extensions (case-insensitive,
+    /// Arkos-Tracker-compatible (plus CHIPNSFX `chp`) source-file extensions (case-insensitive,
     /// no leading dot) recognized by the file browser context menu / command
     /// palette. User-editable - add/remove entries to taste.
     ///
@@ -768,13 +768,13 @@ code_lens = true
 run_emulator = "amspirit"
 
 [music]
-# Arkos-Tracker-compatible source-file extensions recognized by the "Play in
+# Arkos-Tracker-compatible (and CHIPNSFX `chp`) source-file extensions recognized by the "Play in
 # emulator" / "Build DSK" file browser context menu and command palette
 # entries. Add/remove entries to taste - the VS Code extension's own menu
 # entries are a static regex kept manually in sync with this default, so
 # changing this alone won't add a new extension to the context menu without
 # also updating the extension.
-song_extensions = ["aks", "sks", "128", "vt2", "wyz"]
+song_extensions = ["aks", "sks", "128", "vt2", "wyz", "chp"]
 # Emulator launched by "▶ Play in emulator". Any emulator
 # cpclib_runner::emucontrol accepts is valid (the player boots from a
 # snapshot, unlike basic.run_emulator's auto-RUN disc).

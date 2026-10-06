@@ -196,6 +196,38 @@ Support for Locomotive BASIC (`.bas`) and CatArt (`.CAT`, `.ASC`) files:
 - **Hover documentation** for CPC firmware routines
 - **Execution in emulator**
 
+### 🎵 Music Playback
+
+Right-click a song in the Explorer (or use the Command Palette) to hear it on a
+real CPC program, without writing any Z80:
+
+- **Play music in emulator** (`CPClib: Play music in emulator`) converts the song
+  into a standalone player, builds a snapshot and launches it in the emulator
+  named by `[music] run_emulator` in `cpclib-lsp.toml` (`ace` by default).
+- **Build DSK with music** builds the same player into a `.dsk` saved next to
+  the song, without launching anything.
+
+Supported songs:
+
+| Extension | Tracker | Player used |
+|-----------|---------|-------------|
+| `.aks`, `.sks`, `.128`, `.vt2`, `.wyz` | [Arkos Tracker](https://www.julien-nevo.com/arkostracker/) (the other formats are imported by Arkos Tracker 3) | AKG, or a dedicated cycle-exact player for songs using Arkos Tracker's SID feature (detected automatically) |
+| `.chp` | [CHIPNSFX](http://cngsoft.no-ip.org/chipnsfx.htm) (CNGSOFT) | CHIPNSFX's own player |
+
+Whatever the format, the generated program looks the same: a mode 2 screen with
+the song's title, author/composer and comment (the fields of Arkos Tracker's
+song properties, or the text header of a `.chp` file), then a `Player:` line
+telling which player is playing it. The text is drawn without any firmware call
+(the players kill the system), with the font read from the CPC's ROM.
+
+The conversion tools (Arkos Tracker 3, CHIPNSFX) are downloaded on first use. On
+Linux/macOS CHIPNSFX, a Windows program, needs `wine`.
+
+For a SID song the extension asks for a *wait line count*: raise it if playback
+freezes. The default comes from `[music] sid_wait_line_count`. The
+`[music] song_extensions` list governs what the language server accepts; the
+Explorer menu entries themselves are fixed to the extensions above.
+
 ## Installation
 
 Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/) by searching for "CPClib" or "Amstrad CPC".
@@ -294,6 +326,7 @@ cpclib-lsp --update-config
 | `bndbuild.yml` | bndbuild | Build configuration (YAML) |
 | `.bas`, `.BAS` | Locomotive BASIC | Amstrad CPC BASIC programs |
 | `.CAT`, `.cat`, `.ASC`, `.asc` | CatArt | CatArt catalog BASIC files |
+| `.aks`, `.sks`, `.128`, `.vt2`, `.wyz`, `.chp` | (songs) | Explorer menu: play in emulator / build DSK |
 
 ## Troubleshooting
 

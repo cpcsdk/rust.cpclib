@@ -2,6 +2,12 @@
 
 All notable changes to the CPClib VS Code extension are documented here.
 
+## [Unreleased]
+
+- Music: Explorer context menu / commands accept CHIPNSFX `.chp` songs, played by CHIPNSFX's
+  own player
+- Generated music players print the song's title, author and comment, and which player is used
+
 ## [0.0.1] - Initial release
 
 - Language support for Z80 assembly (basm syntax), bndbuild, Locomotive BASIC, and CatArt

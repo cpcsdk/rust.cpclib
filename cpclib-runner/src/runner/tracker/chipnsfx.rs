@@ -1,6 +1,9 @@
 use std::fmt::Display;
 use std::sync::OnceLock;
 
+use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::event::EventObserver;
+
 use crate::delegated::{
     DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication,
     MutiplatformUrls, StaticInformation
@@ -55,3 +58,14 @@ impl ExecutableInformation for ChipnsfxVersion {
 }
 
 impl InternetStaticCompiledApplication for ChipnsfxVersion {}
+
+impl ChipnsfxVersion {
+    /// The Z80 player source (`CHIPNSFX.I80`) shipped in the CHIPNSFX archive,
+    /// next to the converter - only present once the tool has been downloaded
+    /// (i.e. after a first `chipnsfx` run).
+    pub fn player_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("CHIPNSFX.I80")
+    }
+}

@@ -245,6 +245,33 @@ pub fn convert_song_to_aky_source<E: BndBuilderObserver + 'static>(
     task.execute(observer)
 }
 
+/// Whether `song_path` is a CHIPNSFX song (`.chp`) - played by a completely
+/// different player than Arkos Tracker's (see [`music_run`](self::music_run)).
+pub fn song_is_chp(song_path: &Utf8Path) -> bool {
+    song_path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("chp"))
+}
+
+/// Converts the CHIPNSFX song `song_path` (`.chp`) to the Z80 source
+/// (`song_a`/`song_b`/`song_c` data, to be `include`d next to `CHIPNSFX.I80`)
+/// at `output_path`. Runs the real `chipnsfx` tool, downloaded on demand.
+pub fn convert_chp_to_z80<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    output_path: &Utf8Path,
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let args = shlex::try_join([song_path.as_str(), output_path.as_str()])
+        .map_err(|e| format!("Could not build chipnsfx arguments: {e}"))?;
+
+    let task: Task = InnerTask::with_tracker(
+        crate::runners::tracker::Tracker::new_chipnsfx_default(),
+        StandardTaskArguments::new(args)
+    )
+    .into();
+    task.execute(observer)
+}
+
 /// Detects whether `song_path` (an Arkos Tracker `.aks` project - a ZIP
 /// archive with a single inner XML entry) uses AT3's experimental
 /// single-channel CPC "SID" feature, which the AKG/AKM players cannot play at
@@ -260,6 +287,11 @@ pub fn convert_song_to_aky_source<E: BndBuilderObserver + 'static>(
 /// is used, and never emitted as `false` - it's simply absent otherwise.
 pub fn song_uses_sid(song_path: &Utf8Path) -> Result<bool, String> {
     use std::io::Read;
+
+    // CHIPNSFX songs are plain text, and have no such feature.
+    if song_is_chp(song_path) {
+        return Ok(false);
+    }
 
     let file =
         fs_err::File::open(song_path).map_err(|e| format!("Could not open {song_path}: {e}"))?;
@@ -315,7 +347,36 @@ pub struct SongMetadata {
     pub comment: String
 }
 
-/// Best-effort read of `song_path`'s title/author/composer/comment (only the
+/// The free text a CHIPNSFX song starts with: after the `CHIPNSFX format`
+/// line, a title (usually quoted) then any number of description lines (author,
+/// year, ...), up to a `===` line. Yields no metadata for anything else.
+fn chp_metadata(bytes: &[u8]) -> SongMetadata {
+    // Plain 8-bit text: Latin-1 is as good a guess as any, and never fails.
+    let text: String = bytes.iter().map(|&b| char::from(b)).collect();
+    let mut lines = text.lines();
+    if !lines
+        .next()
+        .is_some_and(|l| l.trim().to_ascii_uppercase().starts_with("CHIPNSFX"))
+    {
+        return SongMetadata::default();
+    }
+    let mut header = lines
+        .map(str::trim)
+        .take_while(|l| !l.starts_with("==="))
+        // a malformed song with no `===` must not swallow its whole body
+        .take(8);
+    SongMetadata {
+        title: header
+            .next()
+            .map(|t| t.replace('"', "").trim().to_string())
+            .unwrap_or_default(),
+        comment: header.collect::<Vec<_>>().join("\n"),
+        ..SongMetadata::default()
+    }
+}
+
+/// Best-effort read of `song_path`'s title/author/composer/comment - for a
+/// CHIPNSFX `.chp`, its text header (see `chp_metadata`); for an `.aks` (only the
 /// song's own direct children: instruments carry `title`/`name` tags too, which
 /// must not be mistaken for the song's). Any failure (not an AKS zip - e.g. a
 /// `.vt2`, which AT3 converts itself -, bad XML...) yields empty metadata, as
@@ -326,6 +387,11 @@ pub fn song_metadata(song_path: &Utf8Path) -> SongMetadata {
     use std::io::Read;
 
     let mut meta = SongMetadata::default();
+    if song_is_chp(song_path) {
+        return fs_err::read(song_path)
+            .map(|bytes| chp_metadata(&bytes))
+            .unwrap_or(meta);
+    }
     let Ok(file) = fs_err::File::open(song_path)
     else {
         return meta;
