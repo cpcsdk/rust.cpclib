@@ -174,7 +174,11 @@ pub fn serve(root: &Utf8Path, snapshot: Option<Vec<u8>>) -> std::io::Result<Serv
 /// having kept the [`ServerHandle`] around to ask - the same reason
 /// AMSpiriT Lite/SugarBoxV2's own Robot automation binds each to one fixed,
 /// known port rather than a discovered one.
-pub fn serve_on(root: &Utf8Path, snapshot: Option<Vec<u8>>, port: u16) -> std::io::Result<ServerHandle> {
+pub fn serve_on(
+    root: &Utf8Path,
+    snapshot: Option<Vec<u8>>,
+    port: u16
+) -> std::io::Result<ServerHandle> {
     let listener = TcpListener::bind(("127.0.0.1", port))?;
     let address = listener.local_addr()?;
     let token = random_token();
@@ -559,7 +563,9 @@ mod disconnect_tests {
         // open (not just TCP-accepted) before it is closed again.
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut status_line = String::new();
-        reader.read_line(&mut status_line).expect("read status line");
+        reader
+            .read_line(&mut status_line)
+            .expect("read status line");
         assert!(status_line.starts_with("HTTP/1.1 200"), "{status_line}");
 
         drop(stream);
@@ -655,7 +661,10 @@ mod content_length_framing_tests {
         let mut buffer = Vec::new();
         for byte in &encoded[..encoded.len() - 1] {
             buffer.push(*byte);
-            assert!(decode_content_length_messages(&mut buffer).is_empty(), "not yet complete");
+            assert!(
+                decode_content_length_messages(&mut buffer).is_empty(),
+                "not yet complete"
+            );
         }
         buffer.push(*encoded.last().unwrap());
         assert_eq!(decode_content_length_messages(&mut buffer), vec![message]);
@@ -665,7 +674,12 @@ mod content_length_framing_tests {
     fn several_messages_in_one_read_all_come_out() {
         let a = json!({"seq": 1, "type": "request", "command": "a"});
         let b = json!({"seq": 2, "type": "request", "command": "b"});
-        let mut buffer = format!("{}{}", encode_content_length_message(&a), encode_content_length_message(&b)).into_bytes();
+        let mut buffer = format!(
+            "{}{}",
+            encode_content_length_message(&a),
+            encode_content_length_message(&b)
+        )
+        .into_bytes();
         assert_eq!(decode_content_length_messages(&mut buffer), vec![a, b]);
     }
 

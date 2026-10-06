@@ -215,6 +215,9 @@ mod tests {
     #[test]
     fn source_include_filenames_leave_out_binary_data() {
         let text = "\tinclude \"a.asm\"\n\tINCBIN \"b.bin\"\n\tbinclude \"c.pal\"\n\tINCLUDE ONCE \"d.asm\"\n";
-        assert_eq!(extract_source_include_filenames(text), vec!["a.asm", "d.asm"]);
+        assert_eq!(
+            extract_source_include_filenames(text),
+            vec!["a.asm", "d.asm"]
+        );
     }
 }

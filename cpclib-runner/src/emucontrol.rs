@@ -26,9 +26,9 @@ use crate::event::EventObserver;
 use crate::runner::Runner;
 use crate::runner::emulator::Emulator;
 #[cfg(feature = "screenshot")]
-use crate::runner::emulator::amspiritlite_api;
-#[cfg(feature = "screenshot")]
 use crate::runner::emulator::ace_api;
+#[cfg(feature = "screenshot")]
+use crate::runner::emulator::amspiritlite_api;
 #[cfg(feature = "screenshot")]
 use crate::runner::emulator::js1984_robot_api;
 #[cfg(all(feature = "screenshot", unix))]
@@ -72,12 +72,14 @@ pub enum AmstradRom {
 /// files.
 fn amstrad_rom_slot_files(rom: AmstradRom) -> &'static [(&'static str, u8)] {
     match rom {
-        AmstradRom::Orgams => &[
-            ("BRICBRAC.ROM", 12),
-            ("MONOGAMS.ROM", 13),
-            ("ORGEXT.ROM", 14),
-            ("ORGAMS.ROM", 15)
-        ],
+        AmstradRom::Orgams => {
+            &[
+                ("BRICBRAC.ROM", 12),
+                ("MONOGAMS.ROM", 13),
+                ("ORGEXT.ROM", 14),
+                ("ORGAMS.ROM", 15)
+            ]
+        },
         AmstradRom::Unidos => &[("unidos.rom", 6)]
     }
 }
@@ -861,11 +863,16 @@ impl EmulatorConf {
                     let mut ini = Ini::load_from_file(&ini_path).unwrap_or_else(|_| Ini::new());
                     for rom in &self.roms_configuration {
                         for (embedded_name, slot) in amstrad_rom_slot_files(*rom) {
-                            let basename =
-                                embedded_name.trim_end_matches(".ROM").trim_end_matches(".rom");
+                            let basename = embedded_name
+                                .trim_end_matches(".ROM")
+                                .trim_end_matches(".rom");
                             let dst = roms_folder.join(format!("{basename}.ROM"));
                             ensure_embedded_rom_written(&dst, embedded_name)?;
-                            ini.set_to(Some("ROMS".to_owned()), format!("Upper({slot})"), basename.to_owned());
+                            ini.set_to(
+                                Some("ROMS".to_owned()),
+                                format!("Upper({slot})"),
+                                basename.to_owned()
+                            );
                         }
                     }
                     ini.write_to_file(&ini_path)
@@ -982,7 +989,7 @@ impl EmulatorConf {
                         "Auto type file is currently ignored for this emulator {:?}\n",
                         emu
                     ))
-                }
+                },
             }
         }
 
@@ -1394,15 +1401,27 @@ pub(crate) trait UsedEmulator: Sized {
     /// way at all to peek at memory from outside a real debug session.
     /// Tailored where an emulator has its own API for it.
     #[cfg(feature = "screenshot")]
-    fn read_memory(_robot: &mut RobotImpl<Self>, _address: u16, _count: u16) -> Result<Vec<u8>, String>
-    where Self: Sized {
+    fn read_memory(
+        _robot: &mut RobotImpl<Self>,
+        _address: u16,
+        _count: u16
+    ) -> Result<Vec<u8>, String>
+    where
+        Self: Sized
+    {
         Err("This emulator has no memory-read facility reachable from Robot automation".to_owned())
     }
 
     /// See `read_memory`'s own doc comment - same reasoning, opposite direction.
     #[cfg(feature = "screenshot")]
-    fn write_memory(_robot: &mut RobotImpl<Self>, _address: u16, _data: &[u8]) -> Result<(), String>
-    where Self: Sized {
+    fn write_memory(
+        _robot: &mut RobotImpl<Self>,
+        _address: u16,
+        _data: &[u8]
+    ) -> Result<(), String>
+    where
+        Self: Sized
+    {
         Err("This emulator has no memory-write facility reachable from Robot automation".to_owned())
     }
 
@@ -1413,7 +1432,10 @@ pub(crate) trait UsedEmulator: Sized {
     #[cfg(feature = "screenshot")]
     fn load_snapshot(_robot: &mut RobotImpl<Self>, _path: &Utf8Path) -> Result<(), String>
     where Self: Sized {
-        Err("This emulator has no snapshot-load facility reachable from Robot automation".to_owned())
+        Err(
+            "This emulator has no snapshot-load facility reachable from Robot automation"
+                .to_owned()
+        )
     }
 
     /// See `load_snapshot`'s own doc comment - same reasoning, for discs.
@@ -1535,7 +1557,11 @@ impl UsedEmulator for AceUsedEmulator {
     }
 
     #[cfg(feature = "screenshot")]
-    fn read_memory(_robot: &mut RobotImpl<Self>, address: u16, count: u16) -> Result<Vec<u8>, String> {
+    fn read_memory(
+        _robot: &mut RobotImpl<Self>,
+        address: u16,
+        count: u16
+    ) -> Result<Vec<u8>, String> {
         Ok(retry_native_api_call(
             "ACE readMemory via its own web API",
             || ace_api::read_memory(ACE_ROBOT_WEB_API_PORT, address, count)
@@ -1630,15 +1656,21 @@ impl UsedEmulator for AmspiritUsedEmulator {
     }
 
     #[cfg(feature = "screenshot")]
-    fn read_memory(robot: &mut RobotImpl<Self>, address: u16, count: u16) -> Result<Vec<u8>, String> {
+    fn read_memory(
+        robot: &mut RobotImpl<Self>,
+        address: u16,
+        count: u16
+    ) -> Result<Vec<u8>, String> {
         if matches!(robot.emu, Emulator::AmspiritLite(_)) {
             return Ok(retry_native_api_call(
                 "AMSpiriT Lite readMemory via its own HTTP API",
                 || amspiritlite_api::read_memory(amspiritlite_endpoint(), address, count)
             ));
         }
-        Err("Full AMSpiriT (non-Lite) has no memory-read API reachable from Robot automation"
-            .to_owned())
+        Err(
+            "Full AMSpiriT (non-Lite) has no memory-read API reachable from Robot automation"
+                .to_owned()
+        )
     }
 
     #[cfg(feature = "screenshot")]
@@ -1649,8 +1681,10 @@ impl UsedEmulator for AmspiritUsedEmulator {
             });
             return Ok(());
         }
-        Err("Full AMSpiriT (non-Lite) has no memory-write API reachable from Robot automation"
-            .to_owned())
+        Err(
+            "Full AMSpiriT (non-Lite) has no memory-write API reachable from Robot automation"
+                .to_owned()
+        )
     }
 
     // Deliberately no retry loop, same reasoning as SugarBoxV2UsedEmulator's
@@ -1663,8 +1697,10 @@ impl UsedEmulator for AmspiritUsedEmulator {
         if matches!(robot.emu, Emulator::AmspiritLite(_)) {
             return amspiritlite_api::load_snapshot(amspiritlite_endpoint(), path);
         }
-        Err("Full AMSpiriT (non-Lite) has no snapshot-load API reachable from Robot automation"
-            .to_owned())
+        Err(
+            "Full AMSpiriT (non-Lite) has no snapshot-load API reachable from Robot automation"
+                .to_owned()
+        )
     }
 
     #[cfg(feature = "screenshot")]
@@ -1672,8 +1708,10 @@ impl UsedEmulator for AmspiritUsedEmulator {
         if matches!(robot.emu, Emulator::AmspiritLite(_)) {
             return amspiritlite_api::load_disc(amspiritlite_endpoint(), drive, path);
         }
-        Err("Full AMSpiriT (non-Lite) has no disc-load API reachable from Robot automation"
-            .to_owned())
+        Err(
+            "Full AMSpiriT (non-Lite) has no disc-load API reachable from Robot automation"
+                .to_owned()
+        )
     }
 
     // Deliberately no retry loop, unlike this impl's other native-API
@@ -1690,8 +1728,10 @@ impl UsedEmulator for AmspiritUsedEmulator {
         if matches!(robot.emu, Emulator::AmspiritLite(_)) {
             return amspiritlite_api::save_disc(amspiritlite_endpoint(), drive);
         }
-        Err("Full AMSpiriT (non-Lite) has no disc-save API reachable from Robot automation"
-            .to_owned())
+        Err(
+            "Full AMSpiriT (non-Lite) has no disc-save API reachable from Robot automation"
+                .to_owned()
+        )
     }
 }
 
@@ -1727,7 +1767,11 @@ impl UsedEmulator for SugarBoxV2UsedEmulator {
     }
 
     #[cfg(feature = "screenshot")]
-    fn read_memory(_robot: &mut RobotImpl<Self>, address: u16, count: u16) -> Result<Vec<u8>, String> {
+    fn read_memory(
+        _robot: &mut RobotImpl<Self>,
+        address: u16,
+        count: u16
+    ) -> Result<Vec<u8>, String> {
         Ok(retry_native_api_call(
             "SugarBoxV2 readMemory via its own debug-server API",
             || sugarbox_api::read_memory(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, address, count)
@@ -1736,9 +1780,10 @@ impl UsedEmulator for SugarBoxV2UsedEmulator {
 
     #[cfg(feature = "screenshot")]
     fn write_memory(_robot: &mut RobotImpl<Self>, address: u16, data: &[u8]) -> Result<(), String> {
-        retry_native_api_call("SugarBoxV2 writeMemory via its own debug-server API", || {
-            sugarbox_api::write_memory(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, address, data)
-        });
+        retry_native_api_call(
+            "SugarBoxV2 writeMemory via its own debug-server API",
+            || sugarbox_api::write_memory(SUGARBOX_ROBOT_DEBUG_SERVER_PORT, address, data)
+        );
         Ok(())
     }
 
@@ -1957,17 +2002,22 @@ impl Js1984Robot {
         // X11 window manager this was verified against, and `--app=` mode
         // removes every other candidate (tabs, address bar, bookmarks) that
         // could otherwise add width.
-        let EmuWindow::Xcap(window) = self
-            .window
-            .as_ref()
-            .ok_or_else(|| "1984js's own window was never found; cannot click into it".to_owned())?
+        let EmuWindow::Xcap(window) = self.window.as_ref().ok_or_else(|| {
+            "1984js's own window was never found; cannot click into it".to_owned()
+        })?
         else {
             return Err("1984js's window is not the kind this can click into".to_owned());
         };
-        let win_x = window.x().map_err(|e| format!("cannot read the window's position: {e}"))?;
-        let win_y = window.y().map_err(|e| format!("cannot read the window's position: {e}"))?;
-        let win_height =
-            window.height().map_err(|e| format!("cannot read the window's size: {e}"))? as i32;
+        let win_x = window
+            .x()
+            .map_err(|e| format!("cannot read the window's position: {e}"))?;
+        let win_y = window
+            .y()
+            .map_err(|e| format!("cannot read the window's position: {e}"))?;
+        let win_height = window
+            .height()
+            .map_err(|e| format!("cannot read the window's size: {e}"))?
+            as i32;
         let chrome_top = win_height - point.inner_height;
         let x = win_x + point.x;
         let y = win_y + chrome_top + point.y;
@@ -2020,11 +2070,19 @@ impl Js1984Robot {
             // history happened to match. Select from the cursor to the end
             // of the field and delete it, clearing anything typing alone
             // left behind, before confirming.
-            enigo.key(enigo::Key::Shift, enigo::Direction::Press).map_err(|e| e.to_string())?;
-            enigo.key(enigo::Key::End, enigo::Direction::Click).map_err(|e| e.to_string())?;
-            enigo.key(enigo::Key::Shift, enigo::Direction::Release).map_err(|e| e.to_string())?;
+            enigo
+                .key(enigo::Key::Shift, enigo::Direction::Press)
+                .map_err(|e| e.to_string())?;
+            enigo
+                .key(enigo::Key::End, enigo::Direction::Click)
+                .map_err(|e| e.to_string())?;
+            enigo
+                .key(enigo::Key::Shift, enigo::Direction::Release)
+                .map_err(|e| e.to_string())?;
             WindowEventsManager::wait_a_bit();
-            enigo.key(enigo::Key::Delete, enigo::Direction::Click).map_err(|e| e.to_string())?;
+            enigo
+                .key(enigo::Key::Delete, enigo::Direction::Click)
+                .map_err(|e| e.to_string())?;
         }
         WindowEventsManager::wait_a_bit();
         // Two, not one: confirmed live that a single Return here only
@@ -2163,7 +2221,9 @@ impl Native1984Robot {
         }))
     }
 
-    fn spawn(args: &[String]) -> Result<(std::process::Child, native1984_monitor::Monitor), String> {
+    fn spawn(
+        args: &[String]
+    ) -> Result<(std::process::Child, native1984_monitor::Monitor), String> {
         let app = Emulator::Emulator1984(Default::default())
             .configuration::<cpclib_common::event::DiscardObserver>();
         if !app.is_cached() {
@@ -2258,7 +2318,11 @@ impl Native1984Robot {
         let flag = match drive {
             0 => format!("--disk-a={path}"),
             1 => format!("--disk-b={path}"),
-            _ => return Err(format!("native 1984 only has drives A and B, not drive {drive}"))
+            _ => {
+                return Err(format!(
+                    "native 1984 only has drives A and B, not drive {drive}"
+                ));
+            },
         };
         self.respawn_with(&[flag])
     }
@@ -2849,9 +2913,9 @@ impl RobotHandle {
             // app's output, with no window enumeration involved at all.
             let monitors = xcap::Monitor::all()
                 .map_err(|e| format!("cannot enumerate the private display's monitor: {e}"))?;
-            let monitor = monitors
-                .first()
-                .ok_or_else(|| "the private headless display has no monitor to capture".to_string())?;
+            let monitor = monitors.first().ok_or_else(|| {
+                "the private headless display has no monitor to capture".to_string()
+            })?;
             monitor
                 .capture_image()
                 .map_err(|e| format!("failed to capture the private display: {e}"))?
@@ -3751,8 +3815,8 @@ fn run_csl_file<E: EventObserver + Clone + 'static>(
     csl_path: &Utf8Path,
     o: &E
 ) -> Result<(), String> {
-    let source = fs_err::read_to_string(csl_path)
-        .map_err(|e| format!("Could not read {csl_path}: {e}"))?;
+    let source =
+        fs_err::read_to_string(csl_path).map_err(|e| format!("Could not read {csl_path}: {e}"))?;
     let script = cpclib_csl::parse_csl_with_rich_errors(&source, Some(csl_path.to_string()))
         .map_err(|e| e.to_string())?;
 
@@ -3855,7 +3919,9 @@ fn run_csl_file<E: EventObserver + Clone + 'static>(
 
             for step in crate::csl_interpreter::plan_live_steps(&live) {
                 match step {
-                    crate::csl_interpreter::CslLiveStep::TypeText(text) => robot.handle_raw_text(text),
+                    crate::csl_interpreter::CslLiveStep::TypeText(text) => {
+                        robot.handle_raw_text(text)
+                    },
                     crate::csl_interpreter::CslLiveStep::Sleep(d) => std::thread::sleep(d),
                     crate::csl_interpreter::CslLiveStep::Unsupported(msg) => {
                         o.emit_stdout(&format!("CSL: skipped unsupported live step - {msg}\n"));
@@ -3914,8 +3980,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     // `roms_configuration` handling, so it has to be threaded through here
     // instead - scoped to just those three, so every other emulator's
     // `--enable-rom` handling (or lack of it) is completely unchanged.
-    let slotted_rom_emu =
-        matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec | Emu::Winape);
+    let slotted_rom_emu = matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec | Emu::Winape);
     // CPCEC shares `EmulatorConf.memory` with the same 576KB-for-Orgams
     // reasoning as native 1984 (both turn it into a real launch arg below);
     // WinAPE's own RAM setting lives in its persistent INI instead, out of
@@ -3931,11 +3996,16 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
         .maybe_auto_type(cli.auto_type_file.clone())
-        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()).or_else(|| {
-            // Same 576KB bump Ace's own provisioning applies below, for the
-            // same reason - Orgams needs more than the default 64K.
-            (memory_bump_emu && orgams_requested).then_some(576)
-        }))
+        .maybe_memory(
+            cli.memory
+                .clone()
+                .map(|v| v.parse::<u32>().unwrap())
+                .or_else(|| {
+                    // Same 576KB bump Ace's own provisioning applies below, for the
+                    // same reason - Orgams needs more than the default 64K.
+                    (memory_bump_emu && orgams_requested).then_some(576)
+                })
+        )
         .break_on_bad_hbl(cli.break_on_bad_hbl)
         .break_on_bad_vbl(cli.break_on_bad_vbl)
         .roms_configuration(if slotted_rom_emu {
@@ -4367,16 +4437,26 @@ mod tests {
             .build();
 
         let roms_folder = emu.roms_folder();
-        let rom_fnames =
-            ["BRICBRAC.ROM", "MONOGAMS.ROM", "ORGEXT.ROM", "ORGAMS.ROM", "unidos.rom"];
+        let rom_fnames = [
+            "BRICBRAC.ROM",
+            "MONOGAMS.ROM",
+            "ORGEXT.ROM",
+            "ORGAMS.ROM",
+            "unidos.rom"
+        ];
         let _cleanup = CleanUpEmulatorCacheOnDrop::new(
             rom_fnames.iter().map(|f| roms_folder.join(f)).collect()
         );
 
-        let args = conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
+        let args = conf
+            .args_for_emu(&emu, &cpclib_common::event::DiscardObserver)
+            .expect("args");
 
         let unidos_path = roms_folder.join("unidos.rom");
-        assert!(unidos_path.exists(), "unidos.rom must have been written to {roms_folder}");
+        assert!(
+            unidos_path.exists(),
+            "unidos.rom must have been written to {roms_folder}"
+        );
         assert!(
             args.contains(&format!("--rom-slot=6:{unidos_path}")),
             "expected a slot-6 rom-slot arg for Unidos, got {args:?}"
@@ -4389,13 +4469,19 @@ mod tests {
             ("ORGAMS.ROM", 15)
         ] {
             let path = roms_folder.join(fname);
-            assert!(path.exists(), "{fname} must have been written to {roms_folder}");
+            assert!(
+                path.exists(),
+                "{fname} must have been written to {roms_folder}"
+            );
             assert!(
                 args.contains(&format!("--rom-slot={slot}:{path}")),
                 "expected a slot-{slot} rom-slot arg for {fname}, got {args:?}"
             );
         }
-        assert!(args.contains(&"--memory=576".to_owned()), "expected --memory=576, got {args:?}");
+        assert!(
+            args.contains(&"--memory=576".to_owned()),
+            "expected --memory=576, got {args:?}"
+        );
     }
 
     /// `args_for_emu`'s ROM provisioning writes into each emulator's own
@@ -4413,7 +4499,10 @@ mod tests {
 
     impl CleanUpEmulatorCacheOnDrop {
         fn new(paths: Vec<Utf8PathBuf>) -> Self {
-            Self { paths, restore: None }
+            Self {
+                paths,
+                restore: None
+            }
         }
 
         fn snapshotting(mut self, path: Utf8PathBuf) -> Self {
@@ -4458,15 +4547,22 @@ mod tests {
 
         let roms_folder = emu.roms_folder();
         let profile_path = roms_folder.join("cpclib_orgams_profile.ini");
-        let rom_fnames =
-            ["BRICBRAC.ROM", "MONOGAMS.ROM", "ORGEXT.ROM", "ORGAMS.ROM", "unidos.rom"];
+        let rom_fnames = [
+            "BRICBRAC.ROM",
+            "MONOGAMS.ROM",
+            "ORGEXT.ROM",
+            "ORGAMS.ROM",
+            "unidos.rom"
+        ];
         let _cleanup = CleanUpEmulatorCacheOnDrop::new(
             std::iter::once(profile_path.clone())
                 .chain(rom_fnames.iter().map(|f| roms_folder.join(f)))
                 .collect()
         );
 
-        let args = conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
+        let args = conf
+            .args_for_emu(&emu, &cpclib_common::event::DiscardObserver)
+            .expect("args");
 
         assert!(
             args.contains(&profile_path.to_string()),
@@ -4487,7 +4583,10 @@ mod tests {
                 "{fname} must have been written to {roms_folder}"
             );
             let line = format!("high{slot}={fname}\n");
-            assert!(profile.contains(&line), "expected {line:?} in the profile, got {profile:?}");
+            assert!(
+                profile.contains(&line),
+                "expected {line:?} in the profile, got {profile:?}"
+            );
         }
     }
 
@@ -4512,18 +4611,29 @@ mod tests {
 
         let roms_folder = emu.roms_folder();
         let ini_path = roms_folder.parent().unwrap().join("WinAPE.ini");
-        let rom_fnames = ["BRICBRAC.ROM", "MONOGAMS.ROM", "ORGEXT.ROM", "ORGAMS.ROM", "unidos.ROM"];
+        let rom_fnames = [
+            "BRICBRAC.ROM",
+            "MONOGAMS.ROM",
+            "ORGEXT.ROM",
+            "ORGAMS.ROM",
+            "unidos.ROM"
+        ];
         let _cleanup = CleanUpEmulatorCacheOnDrop::new(
             rom_fnames.iter().map(|f| roms_folder.join(f)).collect()
         )
         .snapshotting(ini_path.clone());
 
-        conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver).expect("args");
+        conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver)
+            .expect("args");
 
         let ini = Ini::load_from_file(&ini_path).expect("WinAPE.ini must have been written");
-        for (basename, slot) in
-            [("BRICBRAC", 12), ("MONOGAMS", 13), ("ORGEXT", 14), ("ORGAMS", 15), ("unidos", 6)]
-        {
+        for (basename, slot) in [
+            ("BRICBRAC", 12),
+            ("MONOGAMS", 13),
+            ("ORGEXT", 14),
+            ("ORGAMS", 15),
+            ("unidos", 6)
+        ] {
             assert!(
                 roms_folder.join(format!("{basename}.ROM")).exists(),
                 "{basename}.ROM must have been written to {roms_folder}"
@@ -4556,8 +4666,11 @@ mod tests {
         assert_eq!(before.len(), 8);
 
         let snapshot = Utf8PathBuf::from_path_buf(
-            std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../cpclib-basm/test.sna"))
-                .expect("test.sna must exist")
+            std::fs::canonicalize(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../cpclib-basm/test.sna"
+            ))
+            .expect("test.sna must exist")
         )
         .unwrap();
         let expected_bytes = {
@@ -4709,7 +4822,12 @@ mod tests {
     #[test]
     fn csl_flag_conflicts_with_snapshot_and_drives() {
         let args = [
-            "cpc", "--csl", "script.csl", "--snapshot", "game.sna", "run"
+            "cpc",
+            "--csl",
+            "script.csl",
+            "--snapshot",
+            "game.sna",
+            "run"
         ];
         assert!(
             EmuCli::try_parse_from(args).is_err(),
@@ -4803,9 +4921,9 @@ mod tests {
         // byte, read it back, exercise both directions against the same
         // address.
         let address = 0x4000u16;
-        robot.write_memory(address, &[0x2a]).expect("write");
+        robot.write_memory(address, &[0x2A]).expect("write");
         let read_back = robot.read_memory(address, 1).expect("read");
-        assert_eq!(read_back, vec![0x2a], "the byte just written reads back");
+        assert_eq!(read_back, vec![0x2A], "the byte just written reads back");
 
         // The real UI-automation path: click the hidden file input's label,
         // type the absolute path into the native GTK dialog, confirm. Then
@@ -4817,8 +4935,11 @@ mod tests {
         // unchanged and long enough for the (asynchronous) load to have
         // finished, because those two windows do not overlap.
         let snapshot = Utf8PathBuf::from_path_buf(
-            std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../cpclib-basm/test.sna"))
-                .expect("test.sna must exist")
+            std::fs::canonicalize(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../cpclib-basm/test.sna"
+            ))
+            .expect("test.sna must exist")
         )
         .unwrap();
         robot.load_snapshot(&snapshot).expect("load_snapshot");
@@ -4840,4 +4961,3 @@ mod tests {
         );
     }
 }
-

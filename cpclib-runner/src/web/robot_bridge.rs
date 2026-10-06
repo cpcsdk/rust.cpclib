@@ -235,11 +235,20 @@ mod tests {
     #[test]
     fn the_bridge_keeps_the_pieces_it_cannot_work_without() {
         for (needle, why) in [
-            ("__cpclib_robot_attach", "the emulator hands us its module through this"),
-            ("__cpclib_session", "the token is injected into the page, not the URL"),
+            (
+                "__cpclib_robot_attach",
+                "the emulator hands us its module through this"
+            ),
+            (
+                "__cpclib_session",
+                "the token is injected into the page, not the URL"
+            ),
             ("_poc_debug_mem_read", "memory reads go through this"),
             ("_poc_debug_mem_write_byte", "memory writes go through this"),
-            ("_poc_debug_pause", "a consistent read/write needs the CPU stopped first"),
+            (
+                "_poc_debug_pause",
+                "a consistent read/write needs the CPU stopped first"
+            ),
             ("_poc_debug_continue", "and running again afterwards"),
             ("_poc_key", "autotype presses real keys"),
             ("toDataURL", "screenshots are read straight off the canvas"),

@@ -41,7 +41,9 @@ fn send_command(port: u16, cmd: Value) -> Result<Value, String> {
     let addr = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(&addr)
         .map_err(|e| format!("Failed to connect to SugarBoxV2's debug server at {addr}: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
     let mut writer = stream.try_clone().map_err(|e| e.to_string())?;
     let mut reader = BufReader::new(stream);
 
@@ -92,7 +94,10 @@ pub fn get_screenshot_png(port: u16) -> Result<Vec<u8>, String> {
 /// `{"cmd":"readMemory","address":..,"size":..}` - confirmed live: response
 /// is `{"bytes":[<u8>, ...]}` (a plain JSON int array, not hex or base64).
 pub fn read_memory(port: u16, address: u16, count: u16) -> Result<Vec<u8>, String> {
-    let response = send_command(port, json!({"cmd": "readMemory", "address": address, "size": count}))?;
+    let response = send_command(
+        port,
+        json!({"cmd": "readMemory", "address": address, "size": count})
+    )?;
     let bytes = response
         .get("bytes")
         .and_then(|b| b.as_array())
@@ -112,13 +117,17 @@ pub fn read_memory(port: u16, address: u16, count: u16) -> Result<Vec<u8>, Strin
 /// a readback right after this returns already sees the new bytes), and
 /// answers `{"status":"ok","written":<count>}`.
 pub fn write_memory(port: u16, address: u16, data: &[u8]) -> Result<(), String> {
-    let response =
-        send_command(port, json!({"cmd": "writeMemory", "address": address, "bytes": data}))?;
+    let response = send_command(
+        port,
+        json!({"cmd": "writeMemory", "address": address, "bytes": data})
+    )?;
     if response.get("status").and_then(|s| s.as_str()) == Some("ok") {
         Ok(())
     }
     else {
-        Err(format!("SugarBoxV2 writeMemory did not report ok: {response}"))
+        Err(format!(
+            "SugarBoxV2 writeMemory did not report ok: {response}"
+        ))
     }
 }
 
@@ -132,8 +141,10 @@ fn check_media_response(response: &Value) -> Result<(), String> {
         Ok(())
     }
     else {
-        let message =
-            response.get("message").and_then(|m| m.as_str()).unwrap_or("no error message given");
+        let message = response
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("no error message given");
         Err(message.to_owned())
     }
 }
@@ -152,7 +163,9 @@ pub fn load_snapshot(port: u16, path: &Utf8Path) -> Result<(), String> {
 /// `{"cmd":"insertDisk","drive":<N>,"path":".."}` - confirmed live: a real
 /// `.dsk` answers `{"status":"ok"}` after a `mediaChanged` event.
 pub fn load_disc(port: u16, drive: u8, path: &Utf8Path) -> Result<(), String> {
-    let response =
-        send_command(port, json!({"cmd": "insertDisk", "drive": drive, "path": path.as_str()}))?;
+    let response = send_command(
+        port,
+        json!({"cmd": "insertDisk", "drive": drive, "path": path.as_str()})
+    )?;
     check_media_response(&response).map_err(|e| format!("SugarBoxV2 disc load failed: {e}"))
 }

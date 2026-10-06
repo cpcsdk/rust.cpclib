@@ -153,8 +153,9 @@ const FINGERPRINT_CACHE_TTL: std::time::Duration = std::time::Duration::from_mil
 /// long enough to matter for a startup burst (milliseconds apart), short
 /// enough that a genuine edit to an included file is picked up within a
 /// fraction of a second, not stale for any duration a person would notice.
-static FINGERPRINT_CACHE: std::sync::OnceLock<dashmap::DashMap<PathBuf, (std::time::Instant, u128)>> =
-    std::sync::OnceLock::new();
+static FINGERPRINT_CACHE: std::sync::OnceLock<
+    dashmap::DashMap<PathBuf, (std::time::Instant, u128)>
+> = std::sync::OnceLock::new();
 
 /// The fingerprint alone, without reading a single file.
 ///

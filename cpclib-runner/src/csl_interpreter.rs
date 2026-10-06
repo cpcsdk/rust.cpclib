@@ -317,7 +317,10 @@ mod tests {
         let resolved = resolve_relative_paths(&script, Utf8Path::new("/scripts/MODULE A"));
         match &resolved.instructions()[0] {
             CslInstruction::DiskInsert { filename, .. } => {
-                assert_eq!(filename, &Utf8PathBuf::from("/scripts/MODULE A/shaker26.dsk"));
+                assert_eq!(
+                    filename,
+                    &Utf8PathBuf::from("/scripts/MODULE A/shaker26.dsk")
+                );
             },
             other => panic!("expected DiskInsert, got {other:?}")
         }
@@ -372,7 +375,10 @@ mod tests {
             .build()
             .unwrap();
         let resolved = resolve_relative_paths(&script, Utf8Path::new("/scripts"));
-        assert!(matches!(resolved.instructions()[0], CslInstruction::Wait(1000)));
+        assert!(matches!(
+            resolved.instructions()[0],
+            CslInstruction::Wait(1000)
+        ));
     }
 
     #[test]
@@ -384,7 +390,9 @@ mod tests {
             .unwrap()
             .with_instruction(CslInstruction::Wait(1000))
             .unwrap()
-            .with_instruction(CslInstruction::key_output(KeyOutput::try_from("RUN").unwrap()))
+            .with_instruction(CslInstruction::key_output(
+                KeyOutput::try_from("RUN").unwrap()
+            ))
             .unwrap()
             .build()
             .unwrap();

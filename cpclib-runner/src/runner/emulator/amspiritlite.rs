@@ -12,7 +12,9 @@
 
 use cpclib_common::camino::Utf8Path;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, PostInstallFn, UrlGenerator};
+use crate::delegated::{
+    ArchiveFormat, DelegateApplicationDescription, PostInstallFn, UrlGenerator
+};
 use crate::event::EventObserver;
 
 pub const AMSPIRIT_LITE_CMD: &str = "amspiritlite";

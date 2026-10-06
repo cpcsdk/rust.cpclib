@@ -712,7 +712,10 @@ mod delegated_stdin_tests {
             .archive_format(ArchiveFormat::Raw)
             .exec_fname("cat")
             .build();
-        assert!(cfg.is_cached(), "the pre-placed binary must count as cached");
+        assert!(
+            cfg.is_cached(),
+            "the pre-placed binary must count as cached"
+        );
 
         let runner = DelegatedRunner::new(cfg, "cat".to_string());
         let observer = CapturingObserver::new();

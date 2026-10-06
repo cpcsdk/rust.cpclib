@@ -159,10 +159,11 @@ pub struct SourceMap {
 /// multi-byte character near the end cannot panic on a mid-character split.
 fn ends_with_ignore_case(s: &str, suffix: &str) -> bool {
     let mut chars = s.chars().rev();
-    suffix
-        .chars()
-        .rev()
-        .all(|want| chars.next().is_some_and(|have| have.eq_ignore_ascii_case(&want)))
+    suffix.chars().rev().all(|want| {
+        chars
+            .next()
+            .is_some_and(|have| have.eq_ignore_ascii_case(&want))
+    })
 }
 
 impl SourceMap {
@@ -352,8 +353,7 @@ impl SourceMap {
         self.files
             .iter()
             .position(|known| {
-                let known_canonical =
-                    fs_err::canonicalize(known).unwrap_or_else(|_| known.clone());
+                let known_canonical = fs_err::canonicalize(known).unwrap_or_else(|_| known.clone());
                 known_canonical == wanted || known == file
             })
             .map(|i| i as u16)
@@ -550,7 +550,12 @@ impl SourceMap {
             .spans
             .iter()
             .find(|s| s.page == page && address >= s.start && address < s.end)?;
-        Some(self.grow_extent_to_fixpoint(anchor.page, anchor.file, anchor.line, anchor.start..anchor.end))
+        Some(self.grow_extent_to_fixpoint(
+            anchor.page,
+            anchor.file,
+            anchor.line,
+            anchor.start..anchor.end
+        ))
     }
 
     /// `line_extent_at`, anchored by the exact `physical` address instead of a
@@ -567,7 +572,12 @@ impl SourceMap {
             .spans
             .iter()
             .find(|s| physical >= s.physical && physical < s.physical + (s.end - s.start))?;
-        Some(self.grow_extent_to_fixpoint(anchor.page, anchor.file, anchor.line, anchor.start..anchor.end))
+        Some(self.grow_extent_to_fixpoint(
+            anchor.page,
+            anchor.file,
+            anchor.line,
+            anchor.start..anchor.end
+        ))
     }
 
     /// The unbroken run of bytes one `(page, file, line)` occupies, starting

@@ -46,7 +46,9 @@ fn send_command(port: u16, cmd: Value) -> Result<Value, String> {
     let addr = format!("127.0.0.1:{port}");
     let stream = TcpStream::connect(&addr)
         .map_err(|e| format!("Failed to connect to ACE's web API at {addr}: {e}"))?;
-    stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
     let mut writer = stream.try_clone().map_err(|e| e.to_string())?;
     let mut reader = BufReader::new(stream);
 
@@ -61,11 +63,14 @@ fn send_command(port: u16, cmd: Value) -> Result<Value, String> {
             .read_line(&mut line)
             .map_err(|e| format!("Failed to read ACE's response to {cmd}: {e}"))?;
         if n == 0 {
-            return Err(format!("ACE closed the web-API connection without answering {cmd}"));
+            return Err(format!(
+                "ACE closed the web-API connection without answering {cmd}"
+            ));
         }
         buffer.push_str(&line);
 
-        let Ok(value) = serde_json::from_str::<Value>(buffer.trim()) else {
+        let Ok(value) = serde_json::from_str::<Value>(buffer.trim())
+        else {
             // Message not complete yet - keep accumulating lines.
             continue;
         };
@@ -306,7 +311,12 @@ mod tests {
         let port = 18765u16;
         let mut child = std::process::Command::new(conf.exec_fname())
             .current_dir(conf.cache_folder())
-            .args(["-enable_webapi", "-web_port", &port.to_string(), "-borderless"])
+            .args([
+                "-enable_webapi",
+                "-web_port",
+                &port.to_string(),
+                "-borderless"
+            ])
             .spawn()
             .expect("failed to spawn ACE");
 
@@ -342,8 +352,8 @@ mod tests {
             // only real way to check.
             let asm = "org 0x8000\nloop: jr loop\n";
             let snapshot = assemble_to_snapshot(asm);
-            let sna_path =
-                std::env::temp_dir().join(format!("cpclib-runner-ace-test-{}.sna", std::process::id()));
+            let sna_path = std::env::temp_dir()
+                .join(format!("cpclib-runner-ace-test-{}.sna", std::process::id()));
             fs_err::write(&sna_path, &snapshot).expect("cannot write the smoke snapshot");
             let sna_path = cpclib_common::camino::Utf8PathBuf::from_path_buf(sna_path).unwrap();
 
@@ -351,8 +361,13 @@ mod tests {
             let _ = fs_err::remove_file(&sna_path);
 
             // `jr loop` at 0x8000, targeting itself, assembles to `18 FE`.
-            let bytes = read_memory(port, 0x8000, 2).expect("readMemory after load_snapshot failed");
-            assert_eq!(bytes, vec![0x18, 0xFE], "the snapshot was not actually loaded");
+            let bytes =
+                read_memory(port, 0x8000, 2).expect("readMemory after load_snapshot failed");
+            assert_eq!(
+                bytes,
+                vec![0x18, 0xFE],
+                "the snapshot was not actually loaded"
+            );
         });
 
         let _ = child.kill();
@@ -376,8 +391,10 @@ mod tests {
         .map_err(|(_, _, e)| e)
         .unwrap();
         env.handle_post_actions(&listing).unwrap();
-        let temp =
-            std::env::temp_dir().join(format!("cpclib-runner-ace-test-src-{}.sna", std::process::id()));
+        let temp = std::env::temp_dir().join(format!(
+            "cpclib-runner-ace-test-src-{}.sna",
+            std::process::id()
+        ));
         let utf8 = cpclib_common::camino::Utf8PathBuf::from_path_buf(temp.clone()).unwrap();
         env.save_sna(&utf8).unwrap();
         let bytes = fs_err::read(&temp).unwrap();

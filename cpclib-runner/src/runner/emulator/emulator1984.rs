@@ -124,7 +124,9 @@ impl Emulator1984Version {
                         o.emit_stderr("  sudo cmake --install build\n");
                         o.emit_stderr("  sudo ldconfig\n");
                         o.emit_stderr("\n");
-                        o.emit_stderr("Emulator downloaded but will not run until SDL3 is installed.\n");
+                        o.emit_stderr(
+                            "Emulator downloaded but will not run until SDL3 is installed.\n"
+                        );
                     }
 
                     // Download required ROM files
@@ -278,58 +280,57 @@ impl crate::delegated::DownloadableInformation for Emulator1984Version {
 
     #[cfg(any(target_os = "macos", target_os = "openbsd"))]
     fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
-        let post_install: Box<PostInstallFn<E>> =
-            Box::new(
-                |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
-                    use std::thread::available_parallelism;
+        let post_install: Box<PostInstallFn<E>> = Box::new(
+            |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
+                use std::thread::available_parallelism;
 
-                    let source_root = locate_source_root(&desc.cache_folder())?;
+                let source_root = locate_source_root(&desc.cache_folder())?;
 
-                    ensure_autotools_available()?;
-                    ensure_sdl3_available()?;
+                ensure_autotools_available()?;
+                ensure_sdl3_available()?;
 
-                    run_command(
-                        "autoreconf",
-                        ["-iv"],
-                        source_root.as_std_path(),
-                        "autoreconf -iv"
-                    )?;
-                    run_command("./configure", [], source_root.as_std_path(), "./configure")?;
+                run_command(
+                    "autoreconf",
+                    ["-iv"],
+                    source_root.as_std_path(),
+                    "autoreconf -iv"
+                )?;
+                run_command("./configure", [], source_root.as_std_path(), "./configure")?;
 
-                    let jobs = available_parallelism().map(|n| n.get()).unwrap_or(1);
-                    let jobs_arg = jobs.to_string();
-                    run_command(
-                        "make",
-                        ["-j", jobs_arg.as_str()],
-                        source_root.as_std_path(),
-                        "make -j"
-                    )?;
+                let jobs = available_parallelism().map(|n| n.get()).unwrap_or(1);
+                let jobs_arg = jobs.to_string();
+                run_command(
+                    "make",
+                    ["-j", jobs_arg.as_str()],
+                    source_root.as_std_path(),
+                    "make -j"
+                )?;
 
-                    let built_binary = source_root.join("1984");
-                    let target_binary = desc.exec_fname();
-                    if built_binary.exists() && built_binary != target_binary {
-                        if target_binary.exists() {
-                            fs_err::remove_file(&target_binary)
-                                .or_else(|_| fs_err::remove_dir_all(&target_binary))
-                                .map_err(|e| {
-                                    format!(
-                                        "Failed to remove existing executable {}: {}",
-                                        target_binary, e
-                                    )
-                                })?;
-                        }
-
-                        fs_err::rename(&built_binary, &target_binary).map_err(|e| {
-                            format!(
-                                "Failed to move built executable from {} to {}: {}",
-                                built_binary, target_binary, e
-                            )
-                        })?;
+                let built_binary = source_root.join("1984");
+                let target_binary = desc.exec_fname();
+                if built_binary.exists() && built_binary != target_binary {
+                    if target_binary.exists() {
+                        fs_err::remove_file(&target_binary)
+                            .or_else(|_| fs_err::remove_dir_all(&target_binary))
+                            .map_err(|e| {
+                                format!(
+                                    "Failed to remove existing executable {}: {}",
+                                    target_binary, e
+                                )
+                            })?;
                     }
 
-                    Ok(())
+                    fs_err::rename(&built_binary, &target_binary).map_err(|e| {
+                        format!(
+                            "Failed to move built executable from {} to {}: {}",
+                            built_binary, target_binary, e
+                        )
+                    })?;
                 }
-            );
+
+                Ok(())
+            }
+        );
 
         Some(post_install.into())
     }

@@ -378,10 +378,12 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 cmd.env_remove(var);
             }
             let stdin_stdio = match stdin {
-                Some(TaskStdin::File(path)) => Stdio::from(
-                    std::fs::File::open(path.as_std_path())
-                        .map_err(|e| format!("Unable to open {path} for reading. {e}"))?
-                ),
+                Some(TaskStdin::File(path)) => {
+                    Stdio::from(
+                        std::fs::File::open(path.as_std_path())
+                            .map_err(|e| format!("Unable to open {path} for reading. {e}"))?
+                    )
+                },
                 Some(TaskStdin::Reader(reader)) => Stdio::from(reader),
                 Some(TaskStdin::Empty) => Stdio::null(),
                 // Matches shell semantics: a command with only its output

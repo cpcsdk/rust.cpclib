@@ -10,10 +10,10 @@ pub mod cpcec;
 pub mod cpcemu;
 pub mod cpcemupower;
 pub mod emulator1984;
-#[cfg(all(feature = "screenshot", unix))]
-pub mod native1984_monitor;
 #[cfg(feature = "screenshot")]
 pub mod js1984_robot_api;
+#[cfg(all(feature = "screenshot", unix))]
+pub mod native1984_monitor;
 pub mod retrovm;
 pub mod sugarbox;
 #[cfg(feature = "screenshot")]
@@ -265,12 +265,12 @@ mod test {
             !Emulator::AmspiritLite(crate::runner::emulator::AmspiritLiteVersion::default())
                 .accept_csl()
         );
-        assert!(!Emulator::Cadence(crate::runner::emulator::CadenceVersion::default()).accept_csl());
         assert!(
-            !Emulator::CapriceForever(
-                crate::runner::emulator::CapriceForeverVersion::default()
-            )
-            .accept_csl()
+            !Emulator::Cadence(crate::runner::emulator::CadenceVersion::default()).accept_csl()
+        );
+        assert!(
+            !Emulator::CapriceForever(crate::runner::emulator::CapriceForeverVersion::default())
+                .accept_csl()
         );
         assert!(!Emulator::CpcEmu(CpcEmuVersion::default()).accept_csl());
         assert!(!Emulator::Cpcec(crate::runner::emulator::CpcecVersion::default()).accept_csl());

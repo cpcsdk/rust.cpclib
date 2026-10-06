@@ -24,8 +24,9 @@ pub fn connect(pty_path: &Utf8Path) -> Result<Monitor, String> {
         .write(true)
         .open(pty_path)
         .map_err(|e| format!("cannot open the monitor PTY at {pty_path}: {e}"))?;
-    let mut writer =
-        file.try_clone().map_err(|e| format!("cannot clone the monitor PTY handle: {e}"))?;
+    let mut writer = file
+        .try_clone()
+        .map_err(|e| format!("cannot clone the monitor PTY handle: {e}"))?;
     // Confirmed live: the monitor's own read loop does not appear to be
     // listening the instant the PTY is opened - a real command sent as the
     // very first write was never answered at all. One priming CRLF (no
@@ -139,7 +140,10 @@ mod tests {
 
     #[test]
     fn parses_a_short_final_line() {
-        assert_eq!(parse_hex_dump_line(">00010 C3                     : ."), Some(vec![0xC3]));
+        assert_eq!(
+            parse_hex_dump_line(">00010 C3                     : ."),
+            Some(vec![0xC3])
+        );
     }
 
     #[test]

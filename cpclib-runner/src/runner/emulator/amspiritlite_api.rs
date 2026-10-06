@@ -80,8 +80,11 @@ impl Call {
     fn path_with_query(&self) -> String {
         let mut path = self.path.to_string();
         if !self.query.is_empty() {
-            let query: Vec<String> =
-                self.query.iter().map(|(key, value)| format!("{key}={value}")).collect();
+            let query: Vec<String> = self
+                .query
+                .iter()
+                .map(|(key, value)| format!("{key}={value}"))
+                .collect();
             path.push('?');
             path.push_str(&query.join("&"));
         }
@@ -164,13 +167,22 @@ fn bytes_body_of(response: &[u8]) -> &[u8] {
 /// POST raw bytes (not JSON/text) - `/api/media`'s own request body, the
 /// one call shape here that doesn't fit `Call`/`perform` (whose body is
 /// always a `String`, always sent as `application/json`).
-fn upload(endpoint: &str, path: &str, query: &[(&str, String)], body: &[u8]) -> std::io::Result<String> {
+fn upload(
+    endpoint: &str,
+    path: &str,
+    query: &[(&str, String)],
+    body: &[u8]
+) -> std::io::Result<String> {
     let host = host_of(endpoint)?;
     let mut full_path = path.to_string();
     if !query.is_empty() {
         full_path.push('?');
         full_path.push_str(
-            &query.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&")
+            &query
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join("&")
         );
     }
 
@@ -250,7 +262,9 @@ pub fn write_memory(endpoint: &str, address: u16, data: &[u8]) -> Result<(), Str
 /// left to the caller, so this module needs no image-decoding dependency
 /// of its own.
 pub fn get_screenshot_png(endpoint: &str) -> Result<Vec<u8>, String> {
-    let call = Call::get("/api/screenshot").query("crop", 1).query("full", 1);
+    let call = Call::get("/api/screenshot")
+        .query("crop", 1)
+        .query("full", 1);
     perform_bytes(endpoint, &call)
         .map_err(|e| format!("AMSpiriT Lite screenshot request failed: {e}"))
 }
@@ -261,7 +275,9 @@ pub fn get_screenshot_png(endpoint: &str) -> Result<Vec<u8>, String> {
 /// keystrokes would.
 pub fn keytype(endpoint: &str, text: &str) -> Result<(), String> {
     let call = Call::post("/api/keytype").body(json!({ "text": text }).to_string());
-    perform(endpoint, &call).map(|_| ()).map_err(|e| format!("AMSpiriT Lite keytype request failed: {e}"))
+    perform(endpoint, &call)
+        .map(|_| ())
+        .map_err(|e| format!("AMSpiriT Lite keytype request failed: {e}"))
 }
 
 /// `POST /api/media?drive=<N>&name=<filename>` - loads a media file
@@ -335,7 +351,10 @@ mod test {
         assert_eq!(call.path, "/api/ram");
         assert_eq!(
             call.query,
-            vec![("addr".to_string(), "40000".to_string()), ("len".to_string(), "5".to_string())]
+            vec![
+                ("addr".to_string(), "40000".to_string()),
+                ("len".to_string(), "5".to_string())
+            ]
         );
         assert_eq!(call.path_with_query(), "/api/ram?addr=40000&len=5");
 
@@ -358,7 +377,10 @@ mod test {
 
     #[test]
     fn body_of_splits_on_the_blank_line() {
-        assert_eq!(body_of("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"), "ok");
+        assert_eq!(
+            body_of("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok"),
+            "ok"
+        );
         assert_eq!(body_of("no headers here"), "");
     }
 

@@ -24,7 +24,9 @@ fn call(server: &ServerHandle, mut body: Value, timeout: Duration) -> Result<Val
         .expect("callers always pass a JSON object")
         .insert("id".to_owned(), json!(id));
 
-    server.send(body.to_string()).map_err(|e| format!("cannot reach the robot bridge: {e}"))?;
+    server
+        .send(body.to_string())
+        .map_err(|e| format!("cannot reach the robot bridge: {e}"))?;
 
     let deadline = Instant::now() + timeout;
     loop {
@@ -34,8 +36,10 @@ fn call(server: &ServerHandle, mut body: Value, timeout: Duration) -> Result<Val
                     return match reply.get("ok").and_then(Value::as_bool) {
                         Some(true) => Ok(reply),
                         Some(false) => {
-                            let error =
-                                reply.get("error").and_then(Value::as_str).unwrap_or("unknown error");
+                            let error = reply
+                                .get("error")
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown error");
                             Err(format!("robot bridge refused the request: {error}"))
                         },
                         None => Err(format!("robot bridge reply has no `ok` field: {reply}"))
@@ -73,7 +77,12 @@ pub fn screenshot_png(server: &ServerHandle) -> Result<Vec<u8>, String> {
 /// roughly the bridge's own 50ms press/release poll interval, so a long
 /// string genuinely needs more than the 5s deadline the other calls use.
 pub fn keytype(server: &ServerHandle, text: &str) -> Result<(), String> {
-    call(server, json!({"cmd": "keytype", "text": text}), Duration::from_secs(30)).map(|_| ())
+    call(
+        server,
+        json!({"cmd": "keytype", "text": text}),
+        Duration::from_secs(30)
+    )
+    .map(|_| ())
 }
 
 /// `{"cmd":"readMemory","address":..,"count":..}` - the reply carries
@@ -160,6 +169,10 @@ pub fn click_point(server: &ServerHandle, selector: &str) -> Result<ViewportPoin
 /// loaded program starts running, and altering its own memory, immediately.
 #[cfg(test)]
 pub fn text(server: &ServerHandle, selector: &str) -> Result<Option<String>, String> {
-    let reply = call(server, json!({"cmd": "text", "selector": selector}), Duration::from_secs(5))?;
+    let reply = call(
+        server,
+        json!({"cmd": "text", "selector": selector}),
+        Duration::from_secs(5)
+    )?;
     Ok(reply.get("text").and_then(Value::as_str).map(str::to_owned))
 }

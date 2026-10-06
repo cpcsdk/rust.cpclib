@@ -78,8 +78,9 @@ impl DownloadableInformation for SugarBoxV2Version {
                 use std::os::unix::fs::PermissionsExt;
 
                 fn make_executable(path: &cpclib_common::camino::Utf8Path) -> Result<(), String> {
-                    let mut perms =
-                        fs_err::metadata(path).map_err(|e| e.to_string())?.permissions();
+                    let mut perms = fs_err::metadata(path)
+                        .map_err(|e| e.to_string())?
+                        .permissions();
                     perms.set_mode(perms.mode() | 0o100);
                     fs_err::set_permissions(path, perms).map_err(|e| e.to_string())
                 }
