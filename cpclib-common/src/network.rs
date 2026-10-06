@@ -51,7 +51,14 @@ pub fn download(url: &str) -> Result<Box<dyn Read + Send + Sync>, String> {
 /// # Returns
 /// An http::Response<ureq::Body> for manual processing
 pub fn download_response(url: &str) -> Result<http::Response<ureq::Body>, String> {
+    // ureq 3.x has no timeout at all by default: a stalled connection would
+    // block the build (and CI) forever, so bound every phase of the request.
     ureq::get(url)
+        .config()
+        .timeout_connect(Some(std::time::Duration::from_secs(30)))
+        .timeout_recv_response(Some(std::time::Duration::from_secs(120)))
+        .timeout_global(Some(std::time::Duration::from_secs(30 * 60)))
+        .build()
         .header("Cache-Control", "max-age=1")
         .header("From", "krusty.benediction@gmail.com")
         .header("User-Agent", "cpclib")

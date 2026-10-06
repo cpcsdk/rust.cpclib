@@ -415,13 +415,16 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 None => Stdio::piped()
             };
 
-            let cmd = cmd
-                .stdin(stdin_stdio)
+            cmd.stdin(stdin_stdio)
                 .stderr(Stdio::piped())
                 .stdout(stdout_stdio);
             let mut child: Child = cmd
                 .spawn()
                 .map_err(|e| format!("Error while launching {}. {}", app, e))?;
+            // `Command` keeps its configured Stdio (e.g. the write end of an
+            // inter-stage pipe) open until dropped: release them now, or the
+            // downstream stage never sees EOF while this one is running.
+            drop(cmd);
             let child_pid = child.id();
             register_child_pid(child_pid);
             let child_stdout = capture_stdout.then(|| {
