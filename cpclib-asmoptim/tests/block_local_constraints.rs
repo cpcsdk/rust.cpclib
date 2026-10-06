@@ -99,7 +99,10 @@ fn a_gap_that_only_reads_the_carried_register_still_blocks_the_rule() {
     // `ld b, a` does not *modify* A, so `regsNotModified` is satisfied - only
     // `regsNotUsed` catches this. Removing the intermediate load would leave
     // this read seeing whatever A held before.
-    assert_blocked("    ld b, a\n", "the gap reads A even though it never writes it");
+    assert_blocked(
+        "    ld b, a\n",
+        "the gap reads A even though it never writes it"
+    );
 }
 
 #[test]
@@ -118,14 +121,20 @@ fn only_the_second_instruction_of_a_gap_needs_to_disturb_it() {
         "the gap's first instruction modifies HL"
     );
     // Control: two instructions, neither disturbing anything.
-    assert_fires("    nop\n    ld c, 1\n", "neither gap instruction touches HL or A");
+    assert_fires(
+        "    nop\n    ld c, 1\n",
+        "neither gap instruction touches HL or A"
+    );
 }
 
 #[test]
 fn a_gap_containing_data_is_unknown_and_blocks_the_rule() {
     // Same fail-closed policy as the forward walk: a region whose contents
     // cannot all be described must never come back "leaves things alone".
-    assert_blocked("    defb 0\n", "raw data in the gap cannot be reasoned about");
+    assert_blocked(
+        "    defb 0\n",
+        "raw data in the gap cannot be reasoned about"
+    );
 }
 
 #[test]
@@ -205,10 +214,7 @@ fn a_wildcard_in_the_replacement_writes_the_gap_back_out() {
 fn a_symbol_inside_a_preserved_gap_survives_verbatim() {
     // The bug class this codebase has been burned by more than once: case
     // folding a region that contains a real symbol silently retargets it.
-    let found = matches(
-        &with_gap("    call MyRoutine\n"),
-        INTERMEDIATE_REG
-    );
+    let found = matches(&with_gap("    call MyRoutine\n"), INTERMEDIATE_REG);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(
         found[0].replacement.iter().any(|l| l.contains("MyRoutine")),

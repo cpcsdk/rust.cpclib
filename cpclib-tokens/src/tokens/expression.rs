@@ -913,7 +913,7 @@ impl ExprElement for Expr {
     fn arg2(&self) -> &Self {
         match self {
             Self::BinaryOperation(_, _, arg2) => arg2.deref(),
-            Self::Range(_, end, _, _) => end.deref(),
+            Self::Range(_, end, ..) => end.deref(),
             _ => unreachable!()
         }
     }
@@ -1061,7 +1061,11 @@ impl Display for Expr {
                 write!(
                     f,
                     "{target}[{}]",
-                    indices.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+                    indices
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             },
             Expr::Rnd => write!(f, "RND()"),
@@ -1069,7 +1073,11 @@ impl Display for Expr {
                 write!(
                     f,
                     "({}) => {body}",
-                    params.iter().map(SmolStr::as_str).collect::<Vec<_>>().join(", ")
+                    params
+                        .iter()
+                        .map(SmolStr::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )
             }
         }
@@ -1293,8 +1301,12 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                 BinaryOperation::Different => Ok((a != b).into()),
                 BinaryOperation::LowerOrEqual => a.le_checked(&b).map_err(PureExprEvalError::from),
                 BinaryOperation::StrictlyLower => a.lt_checked(&b).map_err(PureExprEvalError::from),
-                BinaryOperation::GreaterOrEqual => a.ge_checked(&b).map_err(PureExprEvalError::from),
-                BinaryOperation::StrictlyGreater => a.gt_checked(&b).map_err(PureExprEvalError::from)
+                BinaryOperation::GreaterOrEqual => {
+                    a.ge_checked(&b).map_err(PureExprEvalError::from)
+                },
+                BinaryOperation::StrictlyGreater => {
+                    a.gt_checked(&b).map_err(PureExprEvalError::from)
+                },
             }
         },
         Expr::Ternary(cond, when_true, when_false) => {
@@ -1318,7 +1330,12 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                     "Range step must not be 0".to_string()
                 )));
             }
-            Ok(ExprResult::Range { start, end, inclusive: *inclusive, step })
+            Ok(ExprResult::Range {
+                start,
+                end,
+                inclusive: *inclusive,
+                step
+            })
         },
         Expr::Subscript(target, indices) => {
             let target = try_eval_expr_without_context(target)?;
@@ -1407,7 +1424,12 @@ impl ExprResult {
     /// behavior) rather than panicking or wrapping.
     pub fn range_len(start: i32, end: i32, inclusive: bool, step: i32) -> usize {
         debug_assert!(step != 0, "range_step_by must reject a zero step");
-        let span = if inclusive { end - start + 1 } else { end - start };
+        let span = if inclusive {
+            end - start + 1
+        }
+        else {
+            end - start
+        };
         if span <= 0 {
             0
         }
@@ -1431,7 +1453,12 @@ impl ExprResult {
     /// no-op `.clone()` for anything that isn't a `Range`.
     pub fn materialize(&self) -> Self {
         match self {
-            Self::Range { start, end, inclusive, step } => {
+            Self::Range {
+                start,
+                end,
+                inclusive,
+                step
+            } => {
                 let len = Self::range_len(*start, *end, *inclusive, *step);
                 Self::List(
                     (0..len)
@@ -1458,19 +1485,28 @@ impl ExprResult {
     pub fn subscript(&self, indices: &[ExprResult]) -> Result<ExprResult, ExpressionTypeError> {
         fn as_usize(v: &ExprResult) -> Result<usize, ExpressionTypeError> {
             let i = v.range_bound()?;
-            usize::try_from(i)
-                .map_err(|_| ExpressionTypeError(format!("Subscript index {i} must not be negative")))
+            usize::try_from(i).map_err(|_| {
+                ExpressionTypeError(format!("Subscript index {i} must not be negative"))
+            })
         }
 
         match indices {
-            [ExprResult::Range { start, end, inclusive, step }] => {
+            [
+                ExprResult::Range {
+                    start,
+                    end,
+                    inclusive,
+                    step
+                }
+            ] => {
                 let len = Self::range_len(*start, *end, *inclusive, *step);
                 match self {
                     Self::List(_) | Self::Range { .. } => {
                         let list = self.materialize();
                         let mut out = Vec::with_capacity(len);
                         for n in 0..len {
-                            let i = as_usize(&Self::Value(Self::range_nth_value(*start, *step, n)))?;
+                            let i =
+                                as_usize(&Self::Value(Self::range_nth_value(*start, *step, n)))?;
                             if i >= list.list_len() {
                                 return Err(ExpressionTypeError(format!(
                                     "Subscript index {i} out of range (length {})",
@@ -1485,7 +1521,8 @@ impl ExprResult {
                         let chars: Vec<char> = s.chars().collect();
                         let mut out = String::with_capacity(len);
                         for n in 0..len {
-                            let i = as_usize(&Self::Value(Self::range_nth_value(*start, *step, n)))?;
+                            let i =
+                                as_usize(&Self::Value(Self::range_nth_value(*start, *step, n)))?;
                             let c = chars.get(i).ok_or_else(|| {
                                 ExpressionTypeError(format!(
                                     "Subscript index {i} out of range (length {})",
@@ -1500,7 +1537,7 @@ impl ExprResult {
                         Err(ExpressionTypeError(format!(
                             "{self} cannot be sliced by a range"
                         )))
-                    }
+                    },
                 }
             },
             [ExprResult::List(idx_list)] => {
@@ -1528,14 +1565,17 @@ impl ExprResult {
                         Ok(list.list_get(i).clone())
                     },
                     Self::String(s) => {
-                        s.chars().nth(i).map(|c| Self::Char(c as u8)).ok_or_else(|| {
-                            ExpressionTypeError(format!(
-                                "Subscript index {i} out of range (length {})",
-                                s.chars().count()
-                            ))
-                        })
+                        s.chars()
+                            .nth(i)
+                            .map(|c| Self::Char(c as u8))
+                            .ok_or_else(|| {
+                                ExpressionTypeError(format!(
+                                    "Subscript index {i} out of range (length {})",
+                                    s.chars().count()
+                                ))
+                            })
                     },
-                    _ => Err(ExpressionTypeError(format!("{self} cannot be indexed"))),
+                    _ => Err(ExpressionTypeError(format!("{self} cannot be indexed")))
                 }
             },
             [x, y] => {
@@ -1566,7 +1606,7 @@ impl ExprResult {
                             "{self} needs exactly one index (or a range), not two - `[x, y]` only \
                              applies to a Matrix"
                         )))
-                    }
+                    },
                 }
             },
             _ => {
@@ -1574,7 +1614,7 @@ impl ExprResult {
                     "Wrong number of subscript indices ({}) - expected 1 or 2",
                     indices.len()
                 )))
-            }
+            },
         }
     }
 }
@@ -1736,7 +1776,8 @@ impl ExprResult {
                 let i = (raw + 0.5).floor() as i32; /* ensure 2.9 is treated as 3 */
                 let warnings = if raw == i as f64 {
                     vec![]
-                } else {
+                }
+                else {
                     vec![ExprWarning {
                         kind: ExprWarningKind::PrecisionLoss,
                         message: format!("real value {raw} truncated to integer {i}")
@@ -2108,13 +2149,14 @@ fn broadcast(
     let lhs = lhs.materialize();
     let rhs = rhs.materialize();
 
-    let combine = |pairs: Vec<(ExprResult, ExprResult)>| -> Result<ExprResult, ExpressionTypeError> {
-        let values = pairs
-            .into_iter()
-            .map(|(a, b)| op(a, b))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ExprResult::List(values.into()))
-    };
+    let combine =
+        |pairs: Vec<(ExprResult, ExprResult)>| -> Result<ExprResult, ExpressionTypeError> {
+            let values = pairs
+                .into_iter()
+                .map(|(a, b)| op(a, b))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(ExprResult::List(values.into()))
+        };
 
     Some(match (&lhs, &rhs) {
         (ExprResult::List(l), ExprResult::List(r)) => {
@@ -2216,9 +2258,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             // here, not a bug to guard against with an error.
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok(v1.wrapping_add(*v2).into()),
             (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok(v1.wrapping_add(*v2).into()),
-            (ExprResult::Value(v1), ExprResult::Char(v2)) => {
-                Ok(v1.wrapping_add(*v2 as i32).into())
-            },
+            (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok(v1.wrapping_add(*v2 as i32).into()),
             (ExprResult::Char(v1), ExprResult::Value(v2)) => {
                 Ok((*v2).wrapping_add(v1 as i32).into())
             },
@@ -2440,7 +2480,10 @@ impl ExprResult {
 
     /// `&`, warning-carrying form - see `shr_checked`. The `List`/`List` case
     /// never touches `int()` and so never warns.
-    pub fn bitand_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+    pub fn bitand_checked(
+        self,
+        rhs: Self
+    ) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
         if let Some(result) = broadcast_checked(&self, &rhs, |a, b| a.bitand_checked(b)) {
             return result;
         }
@@ -2462,7 +2505,10 @@ impl ExprResult {
     }
 
     /// `^`, warning-carrying form - see `shr_checked`.
-    pub fn bitxor_checked(self, rhs: Self) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
+    pub fn bitxor_checked(
+        self,
+        rhs: Self
+    ) -> Result<(Self, Vec<ExprWarning>), ExpressionTypeError> {
         let (a, mut warnings) = self.int()?;
         let (b, w2) = rhs.int()?;
         warnings.extend(w2);
@@ -2478,10 +2524,22 @@ impl ExprResult {
             (Self::Value(l0), Self::Value(r0)) => (l0 == r0, vec![]),
             (Self::String(l0), Self::String(r0)) => (l0 == r0, vec![]),
             (Self::List(l0), Self::List(r0)) => (l0 == r0, vec![]),
-            (Self::Matrix { content: l0, .. }, Self::Matrix { content: r0, .. }) => (l0 == r0, vec![]),
+            (Self::Matrix { content: l0, .. }, Self::Matrix { content: r0, .. }) => {
+                (l0 == r0, vec![])
+            },
             (
-                Self::Range { start: s0, end: e0, inclusive: i0, step: st0 },
-                Self::Range { start: s1, end: e1, inclusive: i1, step: st1 }
+                Self::Range {
+                    start: s0,
+                    end: e0,
+                    inclusive: i0,
+                    step: st0
+                },
+                Self::Range {
+                    start: s1,
+                    end: e1,
+                    inclusive: i1,
+                    step: st1
+                }
             ) => (s0 == s1 && e0 == e1 && i0 == i1 && st0 == st1, vec![]),
             (Self::Range { .. }, _) | (_, Self::Range { .. }) => (false, vec![]),
 
@@ -2656,7 +2714,12 @@ impl std::fmt::Display for ExprResult {
                         .join(",")
                 )
             },
-            ExprResult::Range { start, end, inclusive, step } => {
+            ExprResult::Range {
+                start,
+                end,
+                inclusive,
+                step
+            } => {
                 write!(f, "{start}..{}{end}", if *inclusive { "=" } else { "" })?;
                 if *step != 1 {
                     write!(f, " step {step}")?;
@@ -2780,15 +2843,24 @@ mod int_warning_tests {
     #[test]
     fn int_div_truncates_toward_zero_for_negative_operands() {
         assert_eq!(
-            ExprResult::Value(-7).int_div(ExprResult::Value(2)).unwrap().0,
+            ExprResult::Value(-7)
+                .int_div(ExprResult::Value(2))
+                .unwrap()
+                .0,
             ExprResult::Value(-3)
         );
         assert_eq!(
-            ExprResult::Value(7).int_div(ExprResult::Value(-2)).unwrap().0,
+            ExprResult::Value(7)
+                .int_div(ExprResult::Value(-2))
+                .unwrap()
+                .0,
             ExprResult::Value(-3)
         );
         assert_eq!(
-            ExprResult::Value(-7).int_div(ExprResult::Value(-2)).unwrap().0,
+            ExprResult::Value(-7)
+                .int_div(ExprResult::Value(-2))
+                .unwrap()
+                .0,
             ExprResult::Value(3)
         );
     }
@@ -2835,11 +2907,21 @@ mod range_and_broadcast_tests {
     use super::*;
 
     fn range(start: i32, end: i32, inclusive: bool) -> ExprResult {
-        ExprResult::Range { start, end, inclusive, step: 1 }
+        ExprResult::Range {
+            start,
+            end,
+            inclusive,
+            step: 1
+        }
     }
 
     fn stepped_range(start: i32, end: i32, inclusive: bool, step: i32) -> ExprResult {
-        ExprResult::Range { start, end, inclusive, step }
+        ExprResult::Range {
+            start,
+            end,
+            inclusive,
+            step
+        }
     }
 
     fn values(vs: &[i32]) -> Vec<ExprResult> {
@@ -2856,7 +2938,12 @@ mod range_and_broadcast_tests {
         );
         assert_eq!(
             try_eval_expr_without_context(&exclusive).unwrap(),
-            ExprResult::Range { start: 0, end: 5, inclusive: false, step: 1 }
+            ExprResult::Range {
+                start: 0,
+                end: 5,
+                inclusive: false,
+                step: 1
+            }
         );
 
         let inclusive = Expr::Range(
@@ -2867,7 +2954,12 @@ mod range_and_broadcast_tests {
         );
         assert_eq!(
             try_eval_expr_without_context(&inclusive).unwrap(),
-            ExprResult::Range { start: 0, end: 5, inclusive: true, step: 1 }
+            ExprResult::Range {
+                start: 0,
+                end: 5,
+                inclusive: true,
+                step: 1
+            }
         );
     }
 
@@ -3007,8 +3099,12 @@ mod range_and_broadcast_tests {
         assert_eq!(
             result,
             ExprResult::List(
-                vec![ExprResult::Bool(true), ExprResult::Bool(false), ExprResult::Bool(false)]
-                    .into()
+                vec![
+                    ExprResult::Bool(true),
+                    ExprResult::Bool(false),
+                    ExprResult::Bool(false)
+                ]
+                .into()
             )
         );
     }
@@ -3024,7 +3120,10 @@ mod range_and_broadcast_tests {
 
         let c = ExprResult::List(values(&[1, 2]).into());
         let (eq_scalar, _) = c.eq_checked(&ExprResult::Value(1));
-        assert!(!eq_scalar, "List == scalar is always false, never broadcast");
+        assert!(
+            !eq_scalar,
+            "List == scalar is always false, never broadcast"
+        );
     }
 
     #[test]
@@ -3100,7 +3199,10 @@ mod range_and_broadcast_tests {
     #[test]
     fn subscript_single_index_on_a_string_returns_a_char() {
         let s = ExprResult::String("hello".into());
-        assert_eq!(s.subscript(&[ExprResult::Value(1)]).unwrap(), ExprResult::Char(b'e'));
+        assert_eq!(
+            s.subscript(&[ExprResult::Value(1)]).unwrap(),
+            ExprResult::Char(b'e')
+        );
     }
 
     #[test]
@@ -3146,7 +3248,10 @@ mod range_and_broadcast_tests {
     #[test]
     fn subscript_two_indices_on_a_non_matrix_errors() {
         let list = ExprResult::List(values(&[1, 2, 3]).into());
-        assert!(list.subscript(&[ExprResult::Value(0), ExprResult::Value(0)]).is_err());
+        assert!(
+            list.subscript(&[ExprResult::Value(0), ExprResult::Value(0)])
+                .is_err()
+        );
     }
 
     #[test]
@@ -3154,8 +3259,12 @@ mod range_and_broadcast_tests {
         let list = ExprResult::List(values(&[1, 2, 3]).into());
         assert!(list.subscript(&[]).is_err());
         assert!(
-            list.subscript(&[ExprResult::Value(0), ExprResult::Value(0), ExprResult::Value(0)])
-                .is_err()
+            list.subscript(&[
+                ExprResult::Value(0),
+                ExprResult::Value(0),
+                ExprResult::Value(0)
+            ])
+            .is_err()
         );
     }
 }

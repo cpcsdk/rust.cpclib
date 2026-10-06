@@ -1,7 +1,7 @@
 #![feature(str_as_str)]
 
-use cpclib_asm::parser::{ctx_and_span, parse_string};
 use cpclib_asm::InnerZ80Span;
+use cpclib_asm::parser::{ctx_and_span, parse_string};
 use cpclib_common::winnow::Parser;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 

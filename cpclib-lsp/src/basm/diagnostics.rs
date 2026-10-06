@@ -113,11 +113,8 @@ impl AssemblyAnalyzer {
                 }
             }
             else {
-                match Self::parse_source(
-                    remaining,
-                    Some(&document.uri),
-                    disabled_parser_categories
-                ) {
+                match Self::parse_source(remaining, Some(&document.uri), disabled_parser_categories)
+                {
                     Ok(_) => break,
                     Err(e) => Arc::from(e)
                 }
@@ -136,7 +133,10 @@ impl AssemblyAnalyzer {
                     range: NO_LOCATION_RANGE,
                     severity: Some(DiagnosticSeverity::ERROR),
                     source: Some("basm".to_string()),
-                    message: format!("(exact location unknown) {}", strip_ansi(&format!("{error}"))),
+                    message: format!(
+                        "(exact location unknown) {}",
+                        strip_ansi(&format!("{error}"))
+                    ),
                     ..Default::default()
                 });
             }
@@ -1859,7 +1859,9 @@ mod tests {
         let main_document = Document::new(main_uri, main_text.to_string(), 1);
         let main_diags = AssemblyAnalyzer::new().analyze(&main_document);
         assert!(
-            main_diags.iter().all(|d| !d.message.contains("is never used")),
+            main_diags
+                .iter()
+                .all(|d| !d.message.contains("is never used")),
             "the includer must not show the included macro's own warning: {main_diags:?}"
         );
 
@@ -2036,10 +2038,11 @@ mod tests {
             "expected an overflow diagnostic: {diags:?}"
         );
         assert!(
-            diags.iter().any(|d| d
-                .tags
-                .as_ref()
-                .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))),
+            diags.iter().any(|d| {
+                d.tags
+                    .as_ref()
+                    .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))
+            }),
             "expected the dead `if false` branch to be faded: {diags:?}"
         );
     }

@@ -1044,7 +1044,11 @@ mod tests {
     fn test_parse_wait_ssm_accepts_other_hex_prefixes_too() {
         for input in ["wait_ssm &1234\n", "wait_ssm #1234\n", "wait_ssm 0X1234\n"] {
             let result = parse_test(parse_line, input);
-            assert_eq!(result.unwrap(), CslInstruction::WaitSsm(0x1234), "input {input:?}");
+            assert_eq!(
+                result.unwrap(),
+                CslInstruction::WaitSsm(0x1234),
+                "input {input:?}"
+            );
         }
     }
 
@@ -1060,11 +1064,17 @@ mod tests {
     fn test_wait_ssm_requires_csl_1_5() {
         let script = "csl_version 1.0\nwait_ssm 0xABCD\n";
         let result = parse_csl_with_rich_errors(script, None);
-        assert!(result.is_err(), "wait_ssm should be rejected under csl_version 1.0");
+        assert!(
+            result.is_err(),
+            "wait_ssm should be rejected under csl_version 1.0"
+        );
 
         let script = "csl_version 1.5\nwait_ssm 0xABCD\n";
         let result = parse_csl_with_rich_errors(script, None);
-        assert!(result.is_ok(), "wait_ssm should be accepted under csl_version 1.5: {result:?}");
+        assert!(
+            result.is_ok(),
+            "wait_ssm should be accepted under csl_version 1.5: {result:?}"
+        );
     }
 
     #[test]
@@ -1268,7 +1278,9 @@ wait 100000
     fn test_successful_parse_records_one_span_per_instruction() {
         let input = "csl_version 1.1\nreset\nwait 1000\n";
         let script = parse_csl_with_rich_errors(input, None).unwrap();
-        let spans = script.spans().expect("a successful parse must record spans");
+        let spans = script
+            .spans()
+            .expect("a successful parse must record spans");
         assert_eq!(spans.len(), script.instructions().len());
         assert_eq!(spans.len(), 3);
 
@@ -1295,8 +1307,7 @@ wait 100000
         // "rset" is a typo for "reset" on the second line - the error span
         // should cover that whole line, not a single synthesized byte.
         let input = "csl_version 1.1\nrset H\nwait 1000\n";
-        let error =
-            parse_csl_with_rich_errors(input, None).expect_err("typo must fail to parse");
+        let error = parse_csl_with_rich_errors(input, None).expect_err("typo must fail to parse");
         assert_eq!(&input[error.span.clone()], "rset H");
     }
 

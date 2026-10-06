@@ -147,11 +147,7 @@ impl PyBndTask {
 impl PyBndTask {
     /// Execute the stored task using the provided observer.
     /// This is a Rust-level helper where the observer is an argument.
-    fn execute_with_observer(
-        &self,
-        py: Python,
-        observer: Arc<PyConsoleObserver>
-    ) -> PyResult<()> {
+    fn execute_with_observer(&self, py: Python, observer: Arc<PyConsoleObserver>) -> PyResult<()> {
         // Execute the task without holding the GIL.
         py.detach(|| {
             let guard = self.inner.lock().unwrap();

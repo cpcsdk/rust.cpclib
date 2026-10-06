@@ -302,6 +302,10 @@ pub(super) fn workspace_fingerprint_of(uri: &Url) -> u128 {
         .and_then(cpclib_project::entry::root_of)
         .map(|root| cpclib_project::entry::fingerprint_of(&root))
         .unwrap_or(0);
-    tracing::debug!("workspace_fingerprint_of for {} took {:?}", uri, start.elapsed());
+    tracing::debug!(
+        "workspace_fingerprint_of for {} took {:?}",
+        uri,
+        start.elapsed()
+    );
     result
 }

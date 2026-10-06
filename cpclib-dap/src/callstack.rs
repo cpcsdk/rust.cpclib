@@ -273,7 +273,11 @@ mod tests {
 
         let frames = walk_paged(&stack(&[0x4003]), &[0, 1], read);
         assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].page, Some(0), "the first page found wins as the primary");
+        assert_eq!(
+            frames[0].page,
+            Some(0),
+            "the first page found wins as the primary"
+        );
         assert_eq!(frames[0].called, 0x5000);
         assert_eq!(
             frames[0].other_candidates,

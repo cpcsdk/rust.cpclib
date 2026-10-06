@@ -65,8 +65,10 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = lsp_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Hover info at a 1-based line/column: instruction timing, resolved \
-                           EQU/label values, firmware routine docs. Read-only.")]
+    #[tool(
+        description = "Hover info at a 1-based line/column: instruction timing, resolved \
+                           EQU/label values, firmware routine docs. Read-only."
+    )]
     async fn hover(
         &self,
         Parameters(input): Parameters<PositionInput>
@@ -74,8 +76,10 @@ impl McpServer {
         ok_or_tool_error(hover(&self.analyzer, input))
     }
 
-    #[tool(description = "Cross-file goto-definition (macros/labels, following real INCLUDEs) at \
-                           a 1-based line/column. Read-only.")]
+    #[tool(
+        description = "Cross-file goto-definition (macros/labels, following real INCLUDEs) at \
+                           a 1-based line/column. Read-only."
+    )]
     async fn goto_definition(
         &self,
         Parameters(input): Parameters<PositionInput>

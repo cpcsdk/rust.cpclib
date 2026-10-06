@@ -453,10 +453,7 @@ mod tests {
             },
             2
         );
-        assert_eq!(
-            d.text(),
-            "; commentaire en français\nld sp, 0\nline two\n"
-        );
+        assert_eq!(d.text(), "; commentaire en français\nld sp, 0\nline two\n");
     }
 }
 

@@ -20,12 +20,11 @@ use cpclib_asm::parser::{LocatedListing, LocatedToken, parse_z80_with_context_bu
 use cpclib_asm::{AssemblerError, AssemblingOptions, EnvOptions};
 use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::find_matches_with_resolver;
-use cpclib_tokens::ListingElement;
 pub use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, ProjectAddressResolver};
+use cpclib_tokens::ListingElement;
 
 /// What to check for, and which rules to check with.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Options {
     /// Which built-in rule set to use as the base - see
     /// [`cpclib_asmoptim::OptimizationGoal`]. Ignored entirely when
@@ -63,7 +62,6 @@ pub struct Options {
     /// opt-in for a real, possibly slow run, not noise for a quick check.
     pub show_progress: bool
 }
-
 
 /// Everything that can go wrong turning a real file into suggestions.
 #[derive(Debug, thiserror::Error)]
@@ -230,13 +228,17 @@ pub fn analyze_project(
         let _ = parser_options.add_search_path(dir.as_str());
     }
 
-    let builder = parser_options.clone().context_builder().set_current_filename(entry.as_str());
-    let entry_listing = parse_z80_with_context_builder(&entry_source, builder).map_err(|cause| {
-        BasmOptError::Parse {
-            path: entry.to_owned(),
-            cause: Box::new(cause)
-        }
-    })?;
+    let builder = parser_options
+        .clone()
+        .context_builder()
+        .set_current_filename(entry.as_str());
+    let entry_listing =
+        parse_z80_with_context_builder(&entry_source, builder).map_err(|cause| {
+            BasmOptError::Parse {
+                path: entry.to_owned(),
+                cause: Box::new(cause)
+            }
+        })?;
 
     let rules = build_rule_set(options, entry)?;
     let needs_addresses = cpclib_asmoptim::rules_need_addresses(&rules);
@@ -264,7 +266,10 @@ pub fn analyze_project(
         let (matches, assemble_warning) = match &env {
             Some(env) if needs_addresses => {
                 let resolver = ProjectAddressResolver::new(env, path.clone().into_std_path_buf());
-                (find_matches_with_resolver(&tokens, &rules, &resolver, options.goal), None)
+                (
+                    find_matches_with_resolver(&tokens, &rules, &resolver, options.goal),
+                    None
+                )
             },
             None if needs_addresses => {
                 (
@@ -276,9 +281,17 @@ pub fn analyze_project(
                     )
                 )
             },
-            _ => (cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal), None)
+            _ => {
+                (
+                    cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal),
+                    None
+                )
+            },
         };
-        let suggestions = matches.iter().map(|m| to_suggestion(&source, &tokens, m)).collect();
+        let suggestions = matches
+            .iter()
+            .map(|m| to_suggestion(&source, &tokens, m))
+            .collect();
 
         // Queue this file's own further INCLUDEs before its listing (which
         // `tokens` borrows from) is dropped at the end of this iteration.
@@ -290,7 +303,10 @@ pub fn analyze_project(
                 if !token.is_include() {
                     continue;
                 }
-                let Ok(fname) = env.build_fname(token.include_fname()) else { continue };
+                let Ok(fname) = env.build_fname(token.include_fname())
+                else {
+                    continue;
+                };
                 let Ok(resolved) = cpclib_asm::assembler::file::get_filename_to_read(
                     &fname,
                     &parser_options,
@@ -308,9 +324,18 @@ pub fn analyze_project(
                 if !seen.insert(canonical.clone()) {
                     continue; // already queued or being processed - mutual/repeated INCLUDE
                 }
-                let Ok(text) = fs_err::read_to_string(&canonical) else { continue };
-                let builder = parser_options.clone().context_builder().set_current_filename(canonical.as_str());
-                let Ok(nested) = parse_z80_with_context_builder(&text, builder) else { continue };
+                let Ok(text) = fs_err::read_to_string(&canonical)
+                else {
+                    continue;
+                };
+                let builder = parser_options
+                    .clone()
+                    .context_builder()
+                    .set_current_filename(canonical.as_str());
+                let Ok(nested) = parse_z80_with_context_builder(&text, builder)
+                else {
+                    continue;
+                };
                 queue.push((canonical, text, nested));
             }
         }
@@ -372,8 +397,7 @@ fn analyze_source(
     // PassProgress on its own once `show_progress` is set (below, on the
     // assemble), but *which file* is being parsed is something only the
     // caller knows, so it wraps the parse call itself.
-    let show_progress =
-        options.show_progress || cpclib_asm::progress::has_progress_sink();
+    let show_progress = options.show_progress || cpclib_asm::progress::has_progress_sink();
     let progress_name = cpclib_asm::progress::normalize(path).to_string();
     if show_progress {
         cpclib_asm::progress::Progress::instance().add_parse(&progress_name);
@@ -412,7 +436,7 @@ fn analyze_source(
                     cpclib_asmoptim::engine::find_matches(&tokens, &rules, options.goal),
                     Some(message)
                 )
-            }
+            },
         }
     }
     else {
@@ -448,7 +472,11 @@ pub fn parse_define(definition: &str) -> (String, cpclib_tokens::ExprResult) {
     let (name, raw) = definition.split_once('=').unwrap_or((definition, "1"));
     let raw = raw.trim();
     let (negative, digits) = raw.strip_prefix('-').map_or((false, raw), |d| (true, d));
-    let number = if let Some(hex) = digits.strip_prefix("0x").or_else(|| digits.strip_prefix('&')).or_else(|| digits.strip_prefix('#')) {
+    let number = if let Some(hex) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix('&'))
+        .or_else(|| digits.strip_prefix('#'))
+    {
         i32::from_str_radix(hex, 16).ok()
     }
     else if let Some(bin) = digits.strip_prefix("0b") {
@@ -687,8 +715,10 @@ pub fn apply_fixes_in_place(
             assemble_warning = outcome.assemble_warning;
         }
 
-        let (safe, skipped): (Vec<Suggestion>, Vec<Suggestion>) =
-            outcome.suggestions.into_iter().partition(|s| !s.bulk_unsafe);
+        let (safe, skipped): (Vec<Suggestion>, Vec<Suggestion>) = outcome
+            .suggestions
+            .into_iter()
+            .partition(|s| !s.bulk_unsafe);
         remaining_skipped = skipped.len();
 
         if safe.is_empty() {
@@ -755,10 +785,9 @@ fn asm_files_under(root: &Utf8Path) -> Vec<Utf8PathBuf> {
         .hidden(false)
         .filter_entry(|entry| {
             !entry.file_type().is_some_and(|t| t.is_dir())
-                || !entry
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|n| matches!(n, ".git" | ".hg" | ".svn" | "target" | "node_modules"))
+                || !entry.file_name().to_str().is_some_and(|n| {
+                    matches!(n, ".git" | ".hg" | ".svn" | "target" | "node_modules")
+                })
         });
 
     let found = std::sync::Mutex::new(Vec::new());
@@ -888,7 +917,6 @@ pub fn apply_fixes_in_place_project(root: &Utf8Path, options: &Options) -> Proje
     result
 }
 
-
 #[cfg(test)]
 mod analyze_project_tests {
     use super::*;
@@ -899,9 +927,19 @@ mod analyze_project_tests {
     #[test]
     fn a_project_wide_analysis_finds_suggestions_in_an_included_file() {
         let dir = camino_tempfile::tempdir().unwrap();
-        fs_err::write(dir.path().join("real_code.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
-        fs_err::write(dir.path().join("entry.asm"), "\torg 0x4000\n\tinclude \"real_code.asm\"\n").unwrap();
-        let entry = camino::Utf8Path::from_path(dir.path().join("entry.asm").as_std_path()).unwrap().to_owned();
+        fs_err::write(
+            dir.path().join("real_code.asm"),
+            "\tld a,0\n\tld a,0\n\tret\n"
+        )
+        .unwrap();
+        fs_err::write(
+            dir.path().join("entry.asm"),
+            "\torg 0x4000\n\tinclude \"real_code.asm\"\n"
+        )
+        .unwrap();
+        let entry = camino::Utf8Path::from_path(dir.path().join("entry.asm").as_std_path())
+            .unwrap()
+            .to_owned();
 
         let outcomes = analyze_project(&entry, &Options::default()).unwrap();
         assert_eq!(outcomes.len(), 2, "{outcomes:?}");
@@ -913,8 +951,14 @@ mod analyze_project_tests {
             entry_alone.suggestions
         );
 
-        let included = outcomes.iter().find(|(p, _)| p.as_str().ends_with("real_code.asm")).expect("real_code.asm must be queued");
-        assert!(!included.1.suggestions.is_empty(), "the duplicate `ld a,0` must be found inside the included file");
+        let included = outcomes
+            .iter()
+            .find(|(p, _)| p.as_str().ends_with("real_code.asm"))
+            .expect("real_code.asm must be queued");
+        assert!(
+            !included.1.suggestions.is_empty(),
+            "the duplicate `ld a,0` must be found inside the included file"
+        );
     }
 
     /// A chain of INCLUDEs (A includes B includes C) is walked fully, and a
@@ -923,16 +967,32 @@ mod analyze_project_tests {
     fn included_files_are_walked_transitively_and_deduplicated() {
         let dir = camino_tempfile::tempdir().unwrap();
         fs_err::write(dir.path().join("c.asm"), "\tret\n").unwrap();
-        fs_err::write(dir.path().join("b.asm"), "\tinclude \"c.asm\"\n\tinclude \"c.asm\"\n").unwrap();
-        fs_err::write(dir.path().join("a.asm"), "\torg 0x4000\n\tinclude \"b.asm\"\n").unwrap();
-        let entry = camino::Utf8Path::from_path(dir.path().join("a.asm").as_std_path()).unwrap().to_owned();
+        fs_err::write(
+            dir.path().join("b.asm"),
+            "\tinclude \"c.asm\"\n\tinclude \"c.asm\"\n"
+        )
+        .unwrap();
+        fs_err::write(
+            dir.path().join("a.asm"),
+            "\torg 0x4000\n\tinclude \"b.asm\"\n"
+        )
+        .unwrap();
+        let entry = camino::Utf8Path::from_path(dir.path().join("a.asm").as_std_path())
+            .unwrap()
+            .to_owned();
 
         let outcomes = analyze_project(&entry, &Options::default()).unwrap();
-        let names: Vec<String> = outcomes.iter().map(|(p, _)| p.file_name().unwrap().to_string()).collect();
+        let names: Vec<String> = outcomes
+            .iter()
+            .map(|(p, _)| p.file_name().unwrap().to_string())
+            .collect();
         assert_eq!(names.len(), 3, "{names:?}");
         assert!(names.contains(&"a.asm".to_string()));
         assert!(names.contains(&"b.asm".to_string()));
-        assert!(names.contains(&"c.asm".to_string()), "c.asm queued once despite two INCLUDEs: {names:?}");
+        assert!(
+            names.contains(&"c.asm".to_string()),
+            "c.asm queued once despite two INCLUDEs: {names:?}"
+        );
     }
 
     /// An unresolvable INCLUDE must not abort the whole walk - everything
@@ -946,11 +1006,20 @@ mod analyze_project_tests {
             "\torg 0x4000\n\tinclude \"does-not-exist.asm\"\n\tld a,0\n\tld a,0\n\tret\n"
         )
         .unwrap();
-        let entry = camino::Utf8Path::from_path(dir.path().join("entry.asm").as_std_path()).unwrap().to_owned();
+        let entry = camino::Utf8Path::from_path(dir.path().join("entry.asm").as_std_path())
+            .unwrap()
+            .to_owned();
 
         let outcomes = analyze_project(&entry, &Options::default()).unwrap();
-        assert_eq!(outcomes.len(), 1, "only the entry itself, the bad INCLUDE just isn't followed: {outcomes:?}");
-        assert!(!outcomes[0].1.suggestions.is_empty(), "the entry's own duplicate ld a,0 must still be found");
+        assert_eq!(
+            outcomes.len(),
+            1,
+            "only the entry itself, the bad INCLUDE just isn't followed: {outcomes:?}"
+        );
+        assert!(
+            !outcomes[0].1.suggestions.is_empty(),
+            "the entry's own duplicate ld a,0 must still be found"
+        );
     }
 }
 
@@ -962,15 +1031,28 @@ mod define_tests {
 
     #[test]
     fn a_define_parses_numbers_bare_names_and_strings() {
-        assert_eq!(parse_define("LINKED_VERSION=1"), ("LINKED_VERSION".to_string(), ExprResult::from(1)));
-        assert_eq!(parse_define("FLAG").1, ExprResult::from(1), "a bare name means 1");
+        assert_eq!(
+            parse_define("LINKED_VERSION=1"),
+            ("LINKED_VERSION".to_string(), ExprResult::from(1))
+        );
+        assert_eq!(
+            parse_define("FLAG").1,
+            ExprResult::from(1),
+            "a bare name means 1"
+        );
         assert_eq!(parse_define("A=0x10").1, ExprResult::from(16));
         assert_eq!(parse_define("A=&ff").1, ExprResult::from(255));
         assert_eq!(parse_define("A=#20").1, ExprResult::from(32));
         assert_eq!(parse_define("A=0b101").1, ExprResult::from(5));
         assert_eq!(parse_define("A=-3").1, ExprResult::from(-3));
-        assert_eq!(parse_define("A=\"hi\"").1, ExprResult::from("hi".to_string()));
-        assert_eq!(parse_define("A=word").1, ExprResult::from("word".to_string()));
+        assert_eq!(
+            parse_define("A=\"hi\"").1,
+            ExprResult::from("hi".to_string())
+        );
+        assert_eq!(
+            parse_define("A=word").1,
+            ExprResult::from("word".to_string())
+        );
     }
 
     /// The reason the option exists: without the define, this file cannot
@@ -980,18 +1062,37 @@ mod define_tests {
     fn a_define_lets_a_conditional_file_assemble_for_address_aware_rules() {
         let dir = camino_tempfile::tempdir().unwrap();
         let path = dir.path().join("cond.asm");
-        fs_err::write(&path, "if LINKED\nstart:\n jp target\ntarget:\n ret\nendif\n").unwrap();
-        let path = camino::Utf8Path::from_path(path.as_std_path()).unwrap().to_owned();
+        fs_err::write(
+            &path,
+            "if LINKED\nstart:\n jp target\ntarget:\n ret\nendif\n"
+        )
+        .unwrap();
+        let path = camino::Utf8Path::from_path(path.as_std_path())
+            .unwrap()
+            .to_owned();
 
-        let goal = Options { goal: cpclib_asmoptim::OptimizationGoal::Size, ..Default::default() };
+        let goal = Options {
+            goal: cpclib_asmoptim::OptimizationGoal::Size,
+            ..Default::default()
+        };
         let without = analyze_file(&path, &goal).unwrap();
-        assert!(without.assemble_warning.is_some(), "the unknown symbol must be reported");
+        assert!(
+            without.assemble_warning.is_some(),
+            "the unknown symbol must be reported"
+        );
 
         let with = analyze_file(
             &path,
-            &Options { defines: vec!["LINKED".to_string()], ..goal }
+            &Options {
+                defines: vec!["LINKED".to_string()],
+                ..goal
+            }
         )
         .unwrap();
-        assert!(with.assemble_warning.is_none(), "{:?}", with.assemble_warning);
+        assert!(
+            with.assemble_warning.is_none(),
+            "{:?}",
+            with.assemble_warning
+        );
     }
 }

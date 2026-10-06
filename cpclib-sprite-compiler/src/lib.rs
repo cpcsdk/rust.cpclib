@@ -163,7 +163,10 @@ impl DerefMut for Compiler {
 }
 
 impl Compiler {
-    pub fn build_stats<C: AmstradColor>(spr: &SpriteOutput<C>, msk: &SpriteOutput<C>) -> BTreeMap<u8, usize> {
+    pub fn build_stats<C: AmstradColor>(
+        spr: &SpriteOutput<C>,
+        msk: &SpriteOutput<C>
+    ) -> BTreeMap<u8, usize> {
         let mut set: BTreeMap<u8, usize> = Default::default();
         for b in spr
             .data()
@@ -190,7 +193,11 @@ impl Compiler {
         set
     }
 
-    pub fn compile<C: AmstradColor>(mut self, spr: &SpriteOutput<C>, msk: &SpriteOutput<C>) -> Listing {
+    pub fn compile<C: AmstradColor>(
+        mut self,
+        spr: &SpriteOutput<C>,
+        msk: &SpriteOutput<C>
+    ) -> Listing {
         assert_eq!(spr.bytes_width(), msk.bytes_width());
         assert_eq!(spr.height(), msk.height());
         assert_eq!(spr.encoding(), msk.encoding());

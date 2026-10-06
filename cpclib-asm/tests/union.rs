@@ -17,11 +17,14 @@
 /// `Ok(())` through the bare `assemble` path). This helper closes that gap
 /// by driving the same two-step pipeline the CLI uses, so a wrong assert
 /// here is a real test failure, not silently ignored.
-fn assemble_checking_asserts(code: &str) -> Result<Vec<u8>, Box<cpclib_asm::error::AssemblerError>> {
+fn assemble_checking_asserts(
+    code: &str
+) -> Result<Vec<u8>, Box<cpclib_asm::error::AssemblerError>> {
     let tokens = cpclib_asm::parser::parse_z80_str(code)?;
     let options = cpclib_asm::EnvOptions::default();
-    let (_tok, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(&tokens, options)
-        .map_err(|(_, _, e)| e)?;
+    let (_tok, mut env) =
+        cpclib_asm::assembler::visit_tokens_all_passes_with_options(&tokens, options)
+            .map_err(|(_, _, e)| e)?;
     env.handle_post_actions(&tokens)?;
     Ok(env.produced_bytes())
 }
@@ -83,7 +86,8 @@ fn struct_instantiation_member_the_broadened_shape_works() {
 
 #[test]
 fn single_member_no_nextu_is_legal() {
-    let bin = assemble_checking_asserts("org 0x4000\n UNION\n db 1, 2\n ENDU\n assert $ == 0x4002\n");
+    let bin =
+        assemble_checking_asserts("org 0x4000\n UNION\n db 1, 2\n ENDU\n assert $ == 0x4002\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
@@ -112,10 +116,8 @@ fn overlap_outside_a_union_is_still_flagged_under_forbid_memory_override() {
 
     // a genuine, real accidental overlap OUTSIDE any union must still be a
     // hard error - the union's own suppression must not leak past it.
-    let err = cpclib_asm::assemble_with_options(
-        "org 0x4000\n db 1, 2, 3\n org 0x4000\n db 4\n",
-        opts
-    );
+    let err =
+        cpclib_asm::assemble_with_options("org 0x4000\n db 1, 2, 3\n org 0x4000\n db 4\n", opts);
     assert!(err.is_err(), "{err:?}");
 }
 

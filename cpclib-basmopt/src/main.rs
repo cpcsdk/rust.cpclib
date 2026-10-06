@@ -121,8 +121,18 @@ fn run_in_place(cli: &Cli) -> i32 {
              {})",
             cli.source,
             outcome.remaining_skipped,
-            if outcome.remaining_skipped == 1 { "" } else { "s" },
-            if outcome.remaining_skipped == 1 { "it" } else { "them" }
+            if outcome.remaining_skipped == 1 {
+                ""
+            }
+            else {
+                "s"
+            },
+            if outcome.remaining_skipped == 1 {
+                "it"
+            }
+            else {
+                "them"
+            }
         );
     }
     0
@@ -153,7 +163,12 @@ fn run_project(cli: &Cli, root: &camino::Utf8Path) -> i32 {
              apply only handles rules that don't depend on real addresses; rerun per-file for \
              those",
             outcome.total_address_aware_skipped,
-            if outcome.total_address_aware_skipped == 1 { "" } else { "s" }
+            if outcome.total_address_aware_skipped == 1 {
+                ""
+            }
+            else {
+                "s"
+            }
         );
     }
     if outcome.files_with_errors > 0 {

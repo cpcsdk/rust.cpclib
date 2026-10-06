@@ -48,10 +48,10 @@ use crate::tools::emulator::parse_emulator;
 /// against one from a different call or a different process - `std`'s
 /// `DefaultHasher` is reseeded per process and would silently defeat that.
 fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut hash: u64 = 0xCBF2_9CE4_8422_2325;
     for &b in bytes {
         hash ^= b as u64;
-        hash = hash.wrapping_mul(0x100_0000_01b3);
+        hash = hash.wrapping_mul(0x100_0000_01B3);
     }
     hash
 }
@@ -133,9 +133,18 @@ async fn run_and_sample(
 
         let mut memory = Vec::with_capacity(memory_ranges.len());
         for r in memory_ranges {
-            memory.push(sessions.read_memory(&session_id, r.address, r.count).await?);
+            memory.push(
+                sessions
+                    .read_memory(&session_id, r.address, r.count)
+                    .await?
+            );
         }
-        let screen_png = if want_screen { Some(sessions.screenshot(&session_id).await?) } else { None };
+        let screen_png = if want_screen {
+            Some(sessions.screenshot(&session_id).await?)
+        }
+        else {
+            None
+        };
         Ok::<_, ToolError>(RunSample { memory, screen_png })
     };
     let result = run.await;
@@ -148,7 +157,10 @@ async fn run_and_sample(
 /// other, for the same real-time duration, and reports whether each
 /// requested memory range came out byte-identical - see this module's own
 /// doc comment for what that does and doesn't prove.
-pub(crate) async fn compare_behavior(sessions: &SessionManager, input: CompareBehaviorInput) -> ToolResult {
+pub(crate) async fn compare_behavior(
+    sessions: &SessionManager,
+    input: CompareBehaviorInput
+) -> ToolResult {
     if input.memory_ranges.is_empty() {
         return Err(ToolError::invalid_input(
             "memory_ranges must not be empty - name at least one address range the change could \
@@ -242,7 +254,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = behavior_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "MUTATING (of nothing you'll see again - both sessions are always \
+    #[tool(
+        description = "MUTATING (of nothing you'll see again - both sessions are always \
                            closed before this returns): confirms a candidate .sna behaves the \
                            same as a baseline .sna by actually running both, one after the \
                            other under a private headless display (Linux only), and comparing \
@@ -256,7 +269,8 @@ impl McpServer {
                            of RAM or the screen by default, since ordinary animation makes two \
                            genuinely equivalent programs disagree there. Pass include_screen: \
                            true for an extra (diagnostic-only, not part of the equivalent \
-                           verdict) screen comparison.")]
+                           verdict) screen comparison."
+    )]
     async fn compare_behavior(
         &self,
         Parameters(input): Parameters<CompareBehaviorInput>
@@ -272,8 +286,16 @@ mod tests {
     #[test]
     fn fnv1a_is_stable_and_sensitive_to_every_byte() {
         assert_eq!(fnv1a(b"hello"), fnv1a(b"hello"), "same input, same hash");
-        assert_ne!(fnv1a(b"hello"), fnv1a(b"hellp"), "a single differing byte must change the hash");
-        assert_ne!(fnv1a(b""), fnv1a(b"\0"), "empty vs. a single zero byte must differ");
+        assert_ne!(
+            fnv1a(b"hello"),
+            fnv1a(b"hellp"),
+            "a single differing byte must change the hash"
+        );
+        assert_ne!(
+            fnv1a(b""),
+            fnv1a(b"\0"),
+            "empty vs. a single zero byte must differ"
+        );
     }
 
     #[tokio::test]
@@ -283,8 +305,16 @@ mod tests {
             &sessions,
             CompareBehaviorInput {
                 emulator: "cpcec".to_string(),
-                baseline: RunSpec { snapshot: "a.sna".to_string(), drive_a: None, autorun: None },
-                candidate: RunSpec { snapshot: "b.sna".to_string(), drive_a: None, autorun: None },
+                baseline: RunSpec {
+                    snapshot: "a.sna".to_string(),
+                    drive_a: None,
+                    autorun: None
+                },
+                candidate: RunSpec {
+                    snapshot: "b.sna".to_string(),
+                    drive_a: None,
+                    autorun: None
+                },
                 seconds: None,
                 memory_ranges: vec![],
                 include_screen: None
@@ -302,10 +332,21 @@ mod tests {
             &sessions,
             CompareBehaviorInput {
                 emulator: "not_a_real_emulator".to_string(),
-                baseline: RunSpec { snapshot: "a.sna".to_string(), drive_a: None, autorun: None },
-                candidate: RunSpec { snapshot: "b.sna".to_string(), drive_a: None, autorun: None },
+                baseline: RunSpec {
+                    snapshot: "a.sna".to_string(),
+                    drive_a: None,
+                    autorun: None
+                },
+                candidate: RunSpec {
+                    snapshot: "b.sna".to_string(),
+                    drive_a: None,
+                    autorun: None
+                },
                 seconds: None,
-                memory_ranges: vec![MemoryRange { address: 0, count: 1 }],
+                memory_ranges: vec![MemoryRange {
+                    address: 0,
+                    count: 1
+                }],
                 include_screen: None
             }
         )

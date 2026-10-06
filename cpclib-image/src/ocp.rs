@@ -165,4 +165,3 @@ impl OcpPalette {
         Ok(Self::from_bytes(bytes))
     }
 }
-

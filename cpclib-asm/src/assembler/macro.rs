@@ -8,8 +8,8 @@ use cpclib_tokens::symbols::{SourceLocation, Struct, SymbolsTableTrait, ValueMac
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
 use crate::Env;
-use crate::parser::context::ExpansionColumnMap;
 use crate::error::AssemblerError;
+use crate::parser::context::ExpansionColumnMap;
 use crate::preamble::{Z80ParserError, Z80Span};
 
 /// Per-argument expansion of a macro call, resolved lazily - see
@@ -114,7 +114,12 @@ fn strip_raw_string_quotes<'a>(
 /// extra byte length (2, for `[`/`]`) the wrapping adds, or 0.
 #[inline]
 fn list_wrap_extra_len<P: MacroParamElement>(followed_by_bracket: bool, argvalue: &P) -> usize {
-    if followed_by_bracket && argvalue.is_list() { 2 } else { 0 }
+    if followed_by_bracket && argvalue.is_list() {
+        2
+    }
+    else {
+        0
+    }
 }
 
 /// `{*}[i]`/`{*[indexes]}[i]` - unlike a plain `{name}` (see
@@ -330,7 +335,9 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     }
                     self.push_memoized_arg(index, expanded_args, &mut expr_text, env)?;
                 },
-                MacroSegment::ArgOr { index, start, end, .. } => {
+                MacroSegment::ArgOr {
+                    index, start, end, ..
+                } => {
                     if self.args.get(index).is_some() {
                         self.push_memoized_arg(index, expanded_args, &mut expr_text, env)?;
                     }
@@ -368,9 +375,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         })?;
         let value = env
             .resolve_expr_must_never_fail(&expr_token)
-            .map_err(|e| {
-                Box::new(AssemblerError::AssemblingError { msg: e.to_string() })
-            })?;
+            .map_err(|e| Box::new(AssemblerError::AssemblingError { msg: e.to_string() }))?;
 
         // A single (non-list, non-range) value selects just that one
         // argument - a convenience so `{*[0]}` needs no list-literal
@@ -387,7 +392,8 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     msg: format!("{{*[{raw}]}}: {e}")
                 })
             })?;
-            let Ok(idx) = usize::try_from(idx) else {
+            let Ok(idx) = usize::try_from(idx)
+            else {
                 return Err(Box::new(AssemblerError::AssemblingError {
                     msg: format!(
                         "{{*[{raw}]}}: index {idx} is negative, {} argument(s) were passed",
@@ -440,7 +446,9 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 match *segment {
                     MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
                     MacroSegment::ArgCount => Ok(acc + arg_count.len()),
-                    MacroSegment::AllArgs { followed_by_bracket } => {
+                    MacroSegment::AllArgs {
+                        followed_by_bracket
+                    } => {
                         let text = self.expand_all_args_text(&mut expanded_args, env)?;
                         // `{*}[i]` needs the spread wrapped in `[...]` to be
                         // indexable - unconditional here (unlike `Arg`/
@@ -454,7 +462,11 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                         expanded_specials[segment_idx] = Some(text);
                         Ok(acc + len)
                     },
-                    MacroSegment::SelectedArgs { start, end, followed_by_bracket } => {
+                    MacroSegment::SelectedArgs {
+                        start,
+                        end,
+                        followed_by_bracket
+                    } => {
                         let text = self.expand_selected_args_text(
                             &self.r#macro.code()[start..end],
                             &mut expanded_args,
@@ -484,7 +496,9 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                                 }
                                 let arg_len = expanded.len();
                                 *slot = Some(expanded);
-                                Ok(acc + arg_len + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
+                                Ok(acc
+                                    + arg_len
+                                    + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
                             }
                             else {
                                 Ok(acc
@@ -524,7 +538,9 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                             }
                             let arg_len = expanded.len();
                             *slot = Some(expanded);
-                            Ok(acc + arg_len + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
+                            Ok(acc
+                                + arg_len
+                                + list_wrap_extra_len(followed_by_bracket, &self.args[index]))
                         }
                         else {
                             Ok(acc
@@ -620,7 +636,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                                 cursor
                                     .write_all(&listing.as_bytes()[start..end])
                                     .expect(MSG)
-                            }
+                            },
                         }
                     },
                     MacroSegment::Arg {

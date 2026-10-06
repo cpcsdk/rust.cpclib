@@ -352,7 +352,6 @@ impl LivenessContext for NoContext {
 ///
 /// Takes the captures mutably because some constraints legitimately *produce*
 /// bindings rather than only testing them - see [`regpair`].
-///
 pub fn evaluate<D, C>(
     constraint: &Constraint,
     captures: &mut Captures<'_, D>,
@@ -372,9 +371,13 @@ where
         "reachableByJr" => reachable_by_jr(constraint, captures, ctx, reasons),
         "regsNotUsedAfter" => regs_not_used_after(constraint, captures, ctx, reasons),
         "flagsNotUsedAfter" => flags_not_used_after(constraint, captures, ctx, reasons),
-        "regsNotModified" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Write, reasons),
+        "regsNotModified" => {
+            block_local(constraint, captures, ctx, Kind::Reg, Touch::Write, reasons)
+        },
         "regsNotUsed" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Read, reasons),
-        "flagsNotModified" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Write, reasons),
+        "flagsNotModified" => {
+            block_local(constraint, captures, ctx, Kind::Flag, Touch::Write, reasons)
+        },
         "flagsNotUsed" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Read, reasons),
         "regFlagEffectsNotUsedAfter" => reg_flag_effects_not_used_after(constraint, ctx, reasons),
         "atLeastOneCPUOp" => at_least_one_cpu_op(constraint, ctx),
@@ -457,7 +460,9 @@ fn even_push_pops_sp_not_read<C>(
     ctx: &C,
     reasons: &mut Vec<Reason>
 ) -> Verdict
-where C: LivenessContext {
+where
+    C: LivenessContext
+{
     let [line] = constraint.args.as_slice()
     else {
         return Verdict::Unknown;
@@ -616,13 +621,14 @@ fn reg_flag_effects_not_used_after<C>(
     ctx: &C,
     reasons: &mut Vec<Reason>
 ) -> Verdict
-where C: LivenessContext {
+where
+    C: LivenessContext
+{
     let [effects_line, after_line] = constraint.args.as_slice()
     else {
         return Verdict::Unknown;
     };
-    let (Some(effects_line), Some(after_line)) =
-        (line_index(effects_line), line_index(after_line))
+    let (Some(effects_line), Some(after_line)) = (line_index(effects_line), line_index(after_line))
     else {
         return Verdict::Unknown;
     };
@@ -768,7 +774,12 @@ where
     else {
         return Verdict::Unknown;
     };
-    not_used_after(args.line, args.items.into_iter().map(Dependency::Reg), ctx, reasons)
+    not_used_after(
+        args.line,
+        args.items.into_iter().map(Dependency::Reg),
+        ctx,
+        reasons
+    )
 }
 
 /// `flagsNotUsedAfter(#, flag1, ..., flagn)` - as above, for flags.
@@ -786,7 +797,12 @@ where
     else {
         return Verdict::Unknown;
     };
-    not_used_after(args.line, args.items.into_iter().map(Dependency::Flag), ctx, reasons)
+    not_used_after(
+        args.line,
+        args.items.into_iter().map(Dependency::Flag),
+        ctx,
+        reasons
+    )
 }
 
 /// The shared body: every dependency must be provably unused. One that is
@@ -799,7 +815,9 @@ fn not_used_after<C>(
     ctx: &C,
     reasons: &mut Vec<Reason>
 ) -> Verdict
-where C: LivenessContext {
+where
+    C: LivenessContext
+{
     let mut checked = Vec::new();
     // Any one example is enough to point at, and the first is the closest.
     let mut witness = None;
@@ -857,14 +875,19 @@ where
 
     // Numeric comparison first: this is what upstream overwhelmingly means
     // (`equal(?const,0)`, `notEqual(?8bitconst1,255)`).
-    if let (Some(a), Some(b)) = (eval_numeric(lhs, captures, ctx), eval_numeric(rhs, captures, ctx))
-    {
+    if let (Some(a), Some(b)) = (
+        eval_numeric(lhs, captures, ctx),
+        eval_numeric(rhs, captures, ctx)
+    ) {
         return Verdict::from_bool((a == b) == want_equal);
     }
 
     // Otherwise fall back to structural equality of the captured operands,
     // which is what a rule like `equal(?reg1,?reg2)` needs.
-    match (resolve_operand(lhs, captures), resolve_operand(rhs, captures)) {
+    match (
+        resolve_operand(lhs, captures),
+        resolve_operand(rhs, captures)
+    ) {
         (Some(a), Some(b)) => {
             let same = a.to_data_access() == b.to_data_access();
             Verdict::from_bool(same == want_equal)
@@ -929,20 +952,24 @@ where D: DataAccessElem {
         return Verdict::Failed;
     };
 
-    let ok = bind_or_check(high, expected_high, captures)
-        && bind_or_check(low, expected_low, captures);
+    let ok =
+        bind_or_check(high, expected_high, captures) && bind_or_check(low, expected_low, captures);
     Verdict::from_bool(ok)
 }
 
 /// Bind `pattern` to `value` when it is an unbound capture, or check it
 /// otherwise.
-fn bind_or_check<D>(pattern: &OperandPattern, value: String, captures: &mut Captures<'_, D>) -> bool
-where D: DataAccessElem {
+fn bind_or_check<D>(
+    pattern: &OperandPattern,
+    value: String,
+    captures: &mut Captures<'_, D>
+) -> bool
+where
+    D: DataAccessElem
+{
     match pattern {
         OperandPattern::Variable(name) => captures.bind_text(name, value),
-        other => {
-            render_operand_pattern(other).is_some_and(|text| text.eq_ignore_ascii_case(&value))
-        }
+        other => render_operand_pattern(other).is_some_and(|text| text.eq_ignore_ascii_case(&value))
     }
 }
 
@@ -1090,10 +1117,7 @@ fn bool_value(value: bool) -> i64 {
 }
 
 /// The real operand a pattern refers to, when it is a bare capture.
-fn resolve_operand<'a, D>(
-    pattern: &OperandPattern,
-    captures: &Captures<'a, D>
-) -> Option<&'a D>
+fn resolve_operand<'a, D>(pattern: &OperandPattern, captures: &Captures<'a, D>) -> Option<&'a D>
 where D: DataAccessElem {
     match pattern {
         OperandPattern::Variable(name) => captures.operand_of(name),
@@ -1104,8 +1128,13 @@ where D: DataAccessElem {
 /// The captured text for a variable, or the literal text of a non-variable
 /// pattern - what `regpair`'s three arguments need, since upstream sometimes
 /// passes literal register names rather than captures.
-fn capture_or_literal_text<D>(pattern: &OperandPattern, captures: &Captures<'_, D>) -> Option<String>
-where D: DataAccessElem {
+fn capture_or_literal_text<D>(
+    pattern: &OperandPattern,
+    captures: &Captures<'_, D>
+) -> Option<String>
+where
+    D: DataAccessElem
+{
     match pattern {
         OperandPattern::Variable(name) => captures.text_of(name),
         other => render_operand_pattern(other)
@@ -1139,7 +1168,9 @@ fn parse_regs_args<D>(
     constraint: &Constraint,
     captures: &Captures<'_, D>
 ) -> Option<LivenessArgs<Reg>>
-where D: DataAccessElem {
+where
+    D: DataAccessElem
+{
     parse_liveness_args(constraint, captures, Reg::parse)
 }
 
@@ -1149,7 +1180,9 @@ fn parse_flags_args<D>(
     constraint: &Constraint,
     captures: &Captures<'_, D>
 ) -> Option<LivenessArgs<Flag>>
-where D: DataAccessElem {
+where
+    D: DataAccessElem
+{
     parse_liveness_args(constraint, captures, Flag::parse)
 }
 
@@ -1185,12 +1218,10 @@ fn render_operand_pattern(pattern: &OperandPattern) -> Option<String> {
     match pattern {
         OperandPattern::Ident(name) => Some(name.clone()),
         OperandPattern::Number(value) => Some(value.to_string()),
-        OperandPattern::Indirect(inner) => {
-            Some(format!("({})", render_operand_pattern(inner)?))
-        },
-        OperandPattern::Variable(_) | OperandPattern::Unary { .. } | OperandPattern::Binary { .. } => {
-            None
-        }
+        OperandPattern::Indirect(inner) => Some(format!("({})", render_operand_pattern(inner)?)),
+        OperandPattern::Variable(_)
+        | OperandPattern::Unary { .. }
+        | OperandPattern::Binary { .. } => None
     }
 }
 
@@ -1204,7 +1235,8 @@ mod tests {
     /// constraint - so the tests below exercise the *real* parser, not a
     /// hand-built `Constraint` that might not match what the corpus produces.
     fn constraint_of(dsl: &str) -> Constraint {
-        let src = format!("pattern: x\n0: nop\n1: nop\n2: nop\nreplacement:\nconstraints:\n{dsl}\n");
+        let src =
+            format!("pattern: x\n0: nop\n1: nop\n2: nop\nreplacement:\nconstraints:\n{dsl}\n");
         RuleSet::parse(&src).unwrap().rules[0].constraints[0].clone()
     }
 
@@ -1216,10 +1248,13 @@ mod tests {
     #[test]
     fn a_real_regs_constraint_parses_into_typed_registers() {
         let c = constraint_of("regsNotUsedAfter(0,A)");
-        assert_eq!(parse_regs_args(&c, &no_captures()), Some(LivenessArgs {
-            line: 0,
-            items: vec![Reg::A]
-        }));
+        assert_eq!(
+            parse_regs_args(&c, &no_captures()),
+            Some(LivenessArgs {
+                line: 0,
+                items: vec![Reg::A]
+            })
+        );
     }
 
     /// The exact constraint from upstream's `czjump2c` - and the reason
@@ -1227,10 +1262,13 @@ mod tests {
     #[test]
     fn a_real_flags_constraint_parses_every_flag_including_the_slashed_one() {
         let c = constraint_of("flagsNotUsedAfter(2,Z,C,N,P/V,H,S)");
-        assert_eq!(parse_flags_args(&c, &no_captures()), Some(LivenessArgs {
-            line: 2,
-            items: vec![Flag::Z, Flag::C, Flag::N, Flag::PV, Flag::H, Flag::S]
-        }));
+        assert_eq!(
+            parse_flags_args(&c, &no_captures()),
+            Some(LivenessArgs {
+                line: 2,
+                items: vec![Flag::Z, Flag::C, Flag::N, Flag::PV, Flag::H, Flag::S]
+            })
+        );
     }
 
     /// Real rules track *pairs*, not just 8-bit registers - upstream's
@@ -1244,10 +1282,13 @@ mod tests {
         // ...but once the match has bound it, it resolves to a real pair.
         let mut captures = no_captures();
         assert!(captures.bind_text("regpair1", "BC".to_string()));
-        assert_eq!(parse_regs_args(&c, &captures), Some(LivenessArgs {
-            line: 1,
-            items: vec![Reg::Bc]
-        }));
+        assert_eq!(
+            parse_regs_args(&c, &captures),
+            Some(LivenessArgs {
+                line: 1,
+                items: vec![Reg::Bc]
+            })
+        );
     }
 
     /// Anything unrecognized must yield `None` (→ `Unknown` → the constraint
@@ -1255,11 +1296,17 @@ mod tests {
     #[test]
     fn an_unparsable_argument_rejects_the_whole_constraint() {
         assert_eq!(
-            parse_regs_args(&constraint_of("regsNotUsedAfter(0,A,nonsense)"), &no_captures()),
+            parse_regs_args(
+                &constraint_of("regsNotUsedAfter(0,A,nonsense)"),
+                &no_captures()
+            ),
             None
         );
         assert_eq!(
-            parse_flags_args(&constraint_of("flagsNotUsedAfter(0,Z,nonsense)"), &no_captures()),
+            parse_flags_args(
+                &constraint_of("flagsNotUsedAfter(0,Z,nonsense)"),
+                &no_captures()
+            ),
             None
         );
         // A constraint naming no registers at all is rejected rather than
@@ -1309,7 +1356,10 @@ mod tests {
                 }
             }
         }
-        assert!(checked > 50, "expected many real constraints, checked {checked}");
+        assert!(
+            checked > 50,
+            "expected many real constraints, checked {checked}"
+        );
     }
 
     #[test]

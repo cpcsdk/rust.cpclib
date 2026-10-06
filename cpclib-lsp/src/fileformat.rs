@@ -33,7 +33,12 @@ pub struct FileRegion {
 }
 
 fn region(offset: usize, length: usize, label: impl Into<String>, kind: &str) -> FileRegion {
-    FileRegion { offset, length, label: label.into(), kind: kind.to_string() }
+    FileRegion {
+        offset,
+        length,
+        label: label.into(),
+        kind: kind.to_string()
+    }
 }
 
 /// The structural regions of `bytes`, dispatched by `path`'s extension.
@@ -82,7 +87,12 @@ fn sna_regions(bytes: &[u8]) -> Vec<FileRegion> {
 
     for chunk in sna.chunks() {
         let len = 8 + chunk.data().len();
-        regions.push(region(offset, len, format!("Chunk '{}'", chunk.code()), "chunk"));
+        regions.push(region(
+            offset,
+            len,
+            format!("Chunk '{}'", chunk.code()),
+            "chunk"
+        ));
         offset += len;
     }
 
@@ -135,7 +145,10 @@ mod tests {
         let regions = file_regions(Utf8Path::new("test.sna"), &buffer);
 
         let header = &regions[0];
-        assert_eq!((header.offset, header.length, header.kind.as_str()), (0, 256, "header"));
+        assert_eq!(
+            (header.offset, header.length, header.kind.as_str()),
+            (0, 256, "header")
+        );
 
         let memory_size = sna.memory_size_header() as usize * 1024;
         let memory_regions: Vec<_> = regions.iter().filter(|r| r.kind == "memory").collect();
@@ -143,7 +156,8 @@ mod tests {
         assert_eq!(memory_total, memory_size);
         assert_eq!(memory_regions[0].offset, 256);
 
-        let last_memory_end = memory_regions.last().unwrap().offset + memory_regions.last().unwrap().length;
+        let last_memory_end =
+            memory_regions.last().unwrap().offset + memory_regions.last().unwrap().length;
         let chunk = regions
             .iter()
             .find(|r| r.kind == "chunk")
@@ -163,7 +177,14 @@ mod tests {
 
         let regions = file_regions(Utf8Path::new("test.cpr"), &buffer);
 
-        assert_eq!((regions[0].offset, regions[0].length, regions[0].kind.as_str()), (0, 12, "header"));
+        assert_eq!(
+            (
+                regions[0].offset,
+                regions[0].length,
+                regions[0].kind.as_str()
+            ),
+            (0, 12, "header")
+        );
         assert_eq!(regions[1].offset, 12);
         assert_eq!(regions[1].length, 8 + 0x4000);
         assert!(regions[1].label.contains("cb00"), "{}", regions[1].label);

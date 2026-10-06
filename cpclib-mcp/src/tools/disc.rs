@@ -3,7 +3,9 @@
 //! and its Amsdos catalog manager.
 
 use base64::Engine;
-use cpclib_disc::amsdos::{AmsdosAddBehavior, AmsdosFile, AmsdosFileName, AmsdosManagerMut, AmsdosManagerNonMut};
+use cpclib_disc::amsdos::{
+    AmsdosAddBehavior, AmsdosFile, AmsdosFileName, AmsdosManagerMut, AmsdosManagerNonMut
+};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use rmcp::handler::server::wrapper::{Json, Parameters};
@@ -18,8 +20,12 @@ fn open_disc(path: &str) -> Result<ExtendedDsk, ToolError> {
 }
 
 fn parse_filename(name: &str) -> Result<AmsdosFileName, ToolError> {
-    AmsdosFileName::try_from(name)
-        .map_err(|e| ToolError::new(ToolErrorKind::Amsdos, format!("invalid AMSDOS filename '{name}': {e}")))
+    AmsdosFileName::try_from(name).map_err(|e| {
+        ToolError::new(
+            ToolErrorKind::Amsdos,
+            format!("invalid AMSDOS filename '{name}': {e}")
+        )
+    })
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -148,8 +154,10 @@ impl McpServer {
         ok_or_tool_error(disc_list(input))
     }
 
-    #[tool(description = "MUTATING: adds a local file to a disc image's Amsdos catalog, \
-                           replacing any existing entry of the same name.")]
+    #[tool(
+        description = "MUTATING: adds a local file to a disc image's Amsdos catalog, \
+                           replacing any existing entry of the same name."
+    )]
     async fn disc_add_file(
         &self,
         Parameters(input): Parameters<DiscAddFileInput>
@@ -157,8 +165,10 @@ impl McpServer {
         ok_or_tool_error(disc_add_file(input))
     }
 
-    #[tool(description = "Extract a file's raw content from a disc image's Amsdos catalog, \
-                           base64-encoded. Read-only.")]
+    #[tool(
+        description = "Extract a file's raw content from a disc image's Amsdos catalog, \
+                           base64-encoded. Read-only."
+    )]
     async fn disc_extract_file(
         &self,
         Parameters(input): Parameters<DiscExtractFileInput>

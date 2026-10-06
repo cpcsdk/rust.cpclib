@@ -18,7 +18,11 @@ fn a_kit_entry_places_each_component_in_its_documented_nibble() {
     assert_eq!(color.get_blue().value(), 0xA);
     assert_eq!(color.get_green().value(), 0x5);
 
-    assert_eq!(color.to_bytes(), [0x4A, 0x05], "the bytes must come back out");
+    assert_eq!(
+        color.to_bytes(),
+        [0x4A, 0x05],
+        "the bytes must come back out"
+    );
     assert_eq!(AsicColor::new(0x4u8, 0x5u8, 0xAu8), color, "new() agrees");
 }
 
@@ -97,7 +101,10 @@ fn a_gate_array_palette_converts_pen_for_pen() {
 fn a_pixel_quantises_to_the_nearest_representable_colour() {
     use image::Rgb;
 
-    assert_eq!(AsicColor::from(Rgb([0, 0, 0])), AsicColor::new(0u8, 0u8, 0u8));
+    assert_eq!(
+        AsicColor::from(Rgb([0, 0, 0])),
+        AsicColor::new(0u8, 0u8, 0u8)
+    );
     assert_eq!(
         AsicColor::from(Rgb([255, 255, 255])),
         AsicColor::new(0xFu8, 0xFu8, 0xFu8)
@@ -148,8 +155,8 @@ fn a_malformed_colour_is_refused_with_a_reason() {
         ("zz", "hexadecimal"),
         ("", "empty")
     ] {
-        let error = AsicColor::from_str(spelling)
-            .expect_err(&format!("{spelling:?} must be refused"));
+        let error =
+            AsicColor::from_str(spelling).expect_err(&format!("{spelling:?} must be refused"));
         assert!(
             error.contains(expected),
             "{spelling:?} said {error:?}, expected it to mention {expected:?}"

@@ -18,17 +18,16 @@ use crate::constraints::{
     self, ConstraintContext, LivenessContext, Reason, RegionSummary, RegionUse, Writes
 };
 use crate::dependency::Dependency;
-use crate::regflag::Reg;
-use crate::effects::effects_of;
-use crate::liveness::{self, Liveness};
-use crate::match_cost::MatchCost;
-use crate::stream::AnalysisStream;
-use crate::noopt;
-use crate::smc;
 use crate::dsl::{
     BinOp, Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount,
     Rule, RuleSet
 };
+use crate::effects::effects_of;
+use crate::liveness::{self, Liveness};
+use crate::match_cost::MatchCost;
+use crate::regflag::Reg;
+use crate::stream::AnalysisStream;
+use crate::{noopt, smc};
 
 /// How many *instructions* a `*` wildcard may span.
 ///
@@ -616,12 +615,14 @@ where
     // selection criterion.
     let first_mnemonic: Vec<Option<&str>> = usable
         .iter()
-        .map(|rule| match rule.match_lines.first().map(|line| &line.instr) {
-            Some(InstrPattern::Instr {
-                mnemonic: MnemonicPattern::Literal(name),
-                ..
-            }) => Some(name.as_str()),
-            _ => None
+        .map(|rule| {
+            match rule.match_lines.first().map(|line| &line.instr) {
+                Some(InstrPattern::Instr {
+                    mnemonic: MnemonicPattern::Literal(name),
+                    ..
+                }) => Some(name.as_str()),
+                _ => None
+            }
         })
         .collect();
 
@@ -762,7 +763,7 @@ where
                     None => true,
                     Some((_, best_cost)) => {
                         cost.cmp_better(best_cost, goal) == std::cmp::Ordering::Greater
-                    }
+                    },
                 };
                 if is_better {
                     best = Some((attempt.m, cost));
@@ -847,7 +848,10 @@ where T: ListingElement + std::fmt::Display {
     // instead, for either `Token` or `LocatedToken`) and upper-cased once;
     // everything below borrows `&str` slices out of this rather than
     // re-rendering or re-allocating per token.
-    let lines: Vec<String> = tokens.iter().map(|t| t.to_string().to_ascii_uppercase()).collect();
+    let lines: Vec<String> = tokens
+        .iter()
+        .map(|t| t.to_string().to_ascii_uppercase())
+        .collect();
 
     // Every label immediately attached to this instruction - walk backward
     // until a non-label token (an earlier real instruction, or the start of
@@ -865,7 +869,9 @@ where T: ListingElement + std::fmt::Display {
 
     for label in labels {
         for (i, line) in lines.iter().enumerate() {
-            let loads_label = ["LD HL,", "LD DE,", "LD BC,"].iter().any(|p| line.contains(p))
+            let loads_label = ["LD HL,", "LD DE,", "LD BC,"]
+                .iter()
+                .any(|p| line.contains(p))
                 && contains_word(line, label);
             if !loads_label {
                 continue;
@@ -1062,7 +1068,6 @@ fn replacement_cost(
     Some((bytes, cycles))
 }
 
-
 /// Match `lines[line_idx..]` against `tokens[pos..]`, returning the position
 /// just past the match.
 ///
@@ -1102,7 +1107,9 @@ where
             for taken in 0..=limit {
                 let mut trial = captures.clone();
                 let mut trial_positions = positions.clone();
-                trial_positions.entry(line.index).or_insert(pos..pos + taken);
+                trial_positions
+                    .entry(line.index)
+                    .or_insert(pos..pos + taken);
                 if let Some(end) = match_lines(
                     lines,
                     line_idx + 1,
@@ -1317,8 +1324,14 @@ where
 }
 
 /// Match one operand pattern against one real operand.
-fn match_operand<'a, D>(pattern: &OperandPattern, operand: &'a D, captures: &mut Captures<'a, D>) -> bool
-where D: DataAccessElem {
+fn match_operand<'a, D>(
+    pattern: &OperandPattern,
+    operand: &'a D,
+    captures: &mut Captures<'a, D>
+) -> bool
+where
+    D: DataAccessElem
+{
     match pattern {
         OperandPattern::Variable(name) => {
             // The variable's *kind* is encoded in its name prefix, per the
@@ -1359,10 +1372,7 @@ where D: DataAccessElem {
         OperandPattern::Indirect(inner)
             if matches!(
                 inner.as_ref(),
-                OperandPattern::Binary {
-                    op: BinOp::Add,
-                    ..
-                }
+                OperandPattern::Binary { op: BinOp::Add, .. }
             ) && operand.is_indexregister_with_index() =>
         {
             let OperandPattern::Binary { lhs, rhs, .. } = inner.as_ref()
@@ -1419,14 +1429,15 @@ where D: DataAccessElem {
                     // `to_expr().to_simplified_string()` rather than `Display`:
                     // `ExprElement` is generic over the token type and carries
                     // no `Display` bound of its own.
-                    captures
-                        .bind_verbatim_text(name, offset.to_expr().to_simplified_string())
+                    captures.bind_verbatim_text(name, offset.to_expr().to_simplified_string())
                 },
                 _ => false
             }
         },
 
-        OperandPattern::Indirect(_) | OperandPattern::Binary { .. } | OperandPattern::Unary { .. } => {
+        OperandPattern::Indirect(_)
+        | OperandPattern::Binary { .. }
+        | OperandPattern::Unary { .. } => {
             // Everything else structural (`(hl)`, plain arithmetic) is still
             // compared by rendered text - enough for the rules that use it, and
             // never a false positive because a mismatch just fails the rule.

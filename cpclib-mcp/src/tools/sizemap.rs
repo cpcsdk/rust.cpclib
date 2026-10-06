@@ -43,15 +43,17 @@ pub(crate) fn size_map(input: SizeMapInput) -> ToolResult {
         cruncher: input.cruncher,
         top: input.top
     };
-    let report = cpclib_crunch::sizemap::size_map(Utf8Path::new(&input.path), &options).map_err(|e| {
-        let kind = if e.starts_with("unknown cruncher") || e.contains("address range is empty") {
-            ToolErrorKind::InvalidInput
-        }
-        else {
-            ToolErrorKind::Assembler
-        };
-        ToolError::new(kind, e)
-    })?;
+    let report =
+        cpclib_crunch::sizemap::size_map(Utf8Path::new(&input.path), &options).map_err(|e| {
+            let kind = if e.starts_with("unknown cruncher") || e.contains("address range is empty")
+            {
+                ToolErrorKind::InvalidInput
+            }
+            else {
+                ToolErrorKind::Assembler
+            };
+            ToolError::new(kind, e)
+        })?;
     Ok(serde_json::to_value(report).expect("SizeMapReport always serializes"))
 }
 
@@ -61,7 +63,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = sizemap_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Read-only: where do the bytes go? Assembles a source (like a build \
+    #[tool(
+        description = "Read-only: where do the bytes go? Assembles a source (like a build \
                            would - pass include_dirs/defines from project_context) and returns \
                            a markdown `table` of the biggest global labels: address, bytes to \
                            the next global label, share of the image, number of local labels. \
@@ -78,8 +81,12 @@ impl McpServer {
                            (LZ48/LZSHRINKLER/...) also gets its own breakdown of what went into \
                            it, region by region, since the image only holds its compressed \
                            output. Spans include any data placed between two labels; `SAVE` \
-                           directives are not executed.")]
-    async fn size_map(&self, Parameters(input): Parameters<SizeMapInput>) -> Result<Json<Value>, Json<Value>> {
+                           directives are not executed."
+    )]
+    async fn size_map(
+        &self,
+        Parameters(input): Parameters<SizeMapInput>
+    ) -> Result<Json<Value>, Json<Value>> {
         ok_or_tool_error(size_map(input))
     }
 }
@@ -107,7 +114,11 @@ mod tests {
         let dir = camino_tempfile::tempdir().unwrap();
         let path = dir.path().join("m.asm");
         fs_err::write(&path, "org 0x4000\nret\n").unwrap();
-        let err = size_map(SizeMapInput { cruncher: Some("not_a_real_cruncher".to_string()), ..base(path.as_str()) }).unwrap_err();
+        let err = size_map(SizeMapInput {
+            cruncher: Some("not_a_real_cruncher".to_string()),
+            ..base(path.as_str())
+        })
+        .unwrap_err();
         assert_eq!(err.kind, "invalid_input");
     }
 
@@ -121,12 +132,21 @@ mod tests {
     fn a_real_source_serializes_to_the_expected_json_shape() {
         let dir = camino_tempfile::tempdir().unwrap();
         let path = dir.path().join("m.asm");
-        fs_err::write(&path, "org 0x4000\nstart:\n ld hl,0x1234\n ret\ntable:\n db 1,2,3,4\n").unwrap();
+        fs_err::write(
+            &path,
+            "org 0x4000\nstart:\n ld hl,0x1234\n ret\ntable:\n db 1,2,3,4\n"
+        )
+        .unwrap();
         let out = size_map(base(path.as_str())).expect("size_map should succeed");
         let regions = out["regions"].as_array().unwrap();
         assert!(regions.iter().any(|r| r["label"] == "table"));
         assert!(out["table"].as_str().unwrap().contains("table"));
-        assert!(out["listing"]["files_table"].as_str().unwrap().contains("m.asm"));
+        assert!(
+            out["listing"]["files_table"]
+                .as_str()
+                .unwrap()
+                .contains("m.asm")
+        );
         assert_eq!(out["crunched_sections"].as_array().unwrap().len(), 0);
     }
 }

@@ -102,7 +102,9 @@ pub(crate) async fn start_emulator(
         .maybe_drive_b(input.drive_b.map(Utf8PathBuf::from))
         .build();
     let headless = input.headless.unwrap_or(false);
-    let session_id = sessions.start(emulator, label.clone(), conf, headless).await?;
+    let session_id = sessions
+        .start(emulator, label.clone(), conf, headless)
+        .await?;
 
     // The launch argument above is the only mechanism a classic, CLI-only
     // emulator has - already handled by `conf`. For an API-driven backend
@@ -213,7 +215,11 @@ pub(crate) async fn load_disc(
     input: LoadDiscInput
 ) -> ToolResult {
     sessions
-        .load_disc(&input.session_id, input.drive, Utf8PathBuf::from(input.path))
+        .load_disc(
+            &input.session_id,
+            input.drive,
+            Utf8PathBuf::from(input.path)
+        )
         .await?;
     Ok(json!({ "loaded": true }))
 }
@@ -355,7 +361,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = emulator_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Launch a new emulator session (a dedicated background process/window) \
+    #[tool(
+        description = "Launch a new emulator session (a dedicated background process/window) \
                            and return its session_id. Window-capture-backed backends need a real \
                            display, unless headless is set (Linux only): runs under a private \
                            virtual display, never touching the real desktop, but requires \
@@ -363,7 +370,8 @@ impl McpServer {
                            other session is open, and blocks any other session from starting \
                            until it closes. For a one-shot 'run and screenshot' need, prefer \
                            headless_screenshot instead - it handles the whole \
-                           start/run/capture/close sequence in one call.")]
+                           start/run/capture/close sequence in one call."
+    )]
     async fn start_emulator(
         &self,
         Parameters(input): Parameters<StartEmulatorInput>
@@ -379,13 +387,17 @@ impl McpServer {
         ok_or_tool_error(close_emulator(&self.sessions, input).await)
     }
 
-    #[tool(description = "List every live emulator session with its id, emulator, and idle time. \
-                           Read-only.")]
+    #[tool(
+        description = "List every live emulator session with its id, emulator, and idle time. \
+                           Read-only."
+    )]
     async fn list_sessions(&self) -> Result<Json<Value>, Json<Value>> {
         ok_or_tool_error(list_sessions(&self.sessions))
     }
 
-    #[tool(description = "MUTATING: types text into a live emulator session's window (\\n = Enter).")]
+    #[tool(
+        description = "MUTATING: types text into a live emulator session's window (\\n = Enter)."
+    )]
     async fn type_text(
         &self,
         Parameters(input): Parameters<TypeTextInput>
@@ -409,8 +421,10 @@ impl McpServer {
         ok_or_tool_error(load_disc(&self.sessions, input).await)
     }
 
-    #[tool(description = "Reads back a live emulator session's drive A/B disc image as base64. \
-                           Read-only.")]
+    #[tool(
+        description = "Reads back a live emulator session's drive A/B disc image as base64. \
+                           Read-only."
+    )]
     async fn save_disc(
         &self,
         Parameters(input): Parameters<SaveDiscInput>
@@ -426,8 +440,10 @@ impl McpServer {
         ok_or_tool_error(read_memory(&self.sessions, input).await)
     }
 
-    #[tool(description = "MUTATING: writes base64-encoded bytes into a live emulator session's \
-                           memory.")]
+    #[tool(
+        description = "MUTATING: writes base64-encoded bytes into a live emulator session's \
+                           memory."
+    )]
     async fn write_memory(
         &self,
         Parameters(input): Parameters<WriteMemoryInput>
@@ -435,8 +451,10 @@ impl McpServer {
         ok_or_tool_error(write_memory(&self.sessions, input).await)
     }
 
-    #[tool(description = "Takes a screenshot of a live emulator session's window as base64 PNG. \
-                           Read-only.")]
+    #[tool(
+        description = "Takes a screenshot of a live emulator session's window as base64 PNG. \
+                           Read-only."
+    )]
     async fn screenshot(
         &self,
         Parameters(input): Parameters<SessionIdInput>
@@ -444,14 +462,16 @@ impl McpServer {
         ok_or_tool_error(screenshot(&self.sessions, input).await)
     }
 
-    #[tool(description = "MUTATING (of nothing you'll see again - the session is always closed \
+    #[tool(
+        description = "MUTATING (of nothing you'll see again - the session is always closed \
                            before this returns): a short headless run ending in one screenshot. \
                            Launches an emulator under a private virtual display (Linux only - no \
                            window ever touches this server's real desktop), optionally types \
                            autorun, waits seconds, takes a screenshot, and closes the session - \
                            the whole start_emulator+type_text+sleep+screenshot+close_emulator \
                            sequence in one call. Requires exclusive access to this server: \
-                           refuses to run while any other session (headless or not) is open.")]
+                           refuses to run while any other session (headless or not) is open."
+    )]
     async fn headless_screenshot(
         &self,
         Parameters(input): Parameters<HeadlessScreenshotInput>

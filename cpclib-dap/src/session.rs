@@ -1979,17 +1979,21 @@ impl<P: DapPeer> Session<P> {
         // same idea. The count is only recognised in front of a width suffix,
         // so `label,w` alone still means exactly what it always has.
         let (name, count, width) = match expression.rsplit_once(',') {
-            Some((rest, "w" | "W")) => match rest.rsplit_once(',') {
-                Some((name, count)) if count.trim().parse::<usize>().is_ok_and(|n| n > 0) => {
-                    (name.trim(), count.trim().parse().unwrap(), 2usize)
-                },
-                _ => (rest.trim(), 1usize, 2usize)
+            Some((rest, "w" | "W")) => {
+                match rest.rsplit_once(',') {
+                    Some((name, count)) if count.trim().parse::<usize>().is_ok_and(|n| n > 0) => {
+                        (name.trim(), count.trim().parse().unwrap(), 2usize)
+                    },
+                    _ => (rest.trim(), 1usize, 2usize)
+                }
             },
-            Some((rest, "b" | "B")) => match rest.rsplit_once(',') {
-                Some((name, count)) if count.trim().parse::<usize>().is_ok_and(|n| n > 0) => {
-                    (name.trim(), count.trim().parse().unwrap(), 1usize)
-                },
-                _ => (rest.trim(), 1usize, 1usize)
+            Some((rest, "b" | "B")) => {
+                match rest.rsplit_once(',') {
+                    Some((name, count)) if count.trim().parse::<usize>().is_ok_and(|n| n > 0) => {
+                        (name.trim(), count.trim().parse().unwrap(), 1usize)
+                    },
+                    _ => (rest.trim(), 1usize, 1usize)
+                }
             },
             _ => (expression, 1usize, 1usize)
         };
@@ -2514,7 +2518,11 @@ impl<P: DapPeer> Session<P> {
     fn basic_listing_answer(&mut self, request: &Value, text: &str) -> Vec<Value> {
         if text.is_empty() {
             let seq = self.next_seq();
-            return vec![protocol::failure(request, "no BASIC program found in memory", seq)];
+            return vec![protocol::failure(
+                request,
+                "no BASIC program found in memory",
+                seq
+            )];
         }
         let seq = self.next_seq();
         let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
@@ -2528,7 +2536,8 @@ impl<P: DapPeer> Session<P> {
     }
 
     fn complete_basic_listing_text(&mut self, message: &Value) -> Vec<Value> {
-        let Some(request) = self.pending_basic_listing.take() else {
+        let Some(request) = self.pending_basic_listing.take()
+        else {
             return Vec::new();
         };
         let text = message
@@ -2548,7 +2557,8 @@ impl<P: DapPeer> Session<P> {
             .and_then(Value::as_str)
             .map(decode_base64)
             .unwrap_or_default();
-        let Some(chunk) = bytes.get(0..2) else {
+        let Some(chunk) = bytes.get(0..2)
+        else {
             let request = self.pending_basic_listing.take().unwrap();
             let seq = self.next_seq();
             return vec![protocol::failure(
@@ -2560,9 +2570,11 @@ impl<P: DapPeer> Session<P> {
         let end = u16::from_le_bytes([chunk[0], chunk[1]]) as u32;
         let base = crate::basic::PROGRAM_START as u32;
         let count = end.saturating_sub(base);
-        if let Err(problem) =
-            self.send_own("readMemory", json!({ "memoryReference": address_reference(base), "count": count }), Purpose::BasicListingRead)
-        {
+        if let Err(problem) = self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(base), "count": count }),
+            Purpose::BasicListingRead
+        ) {
             let request = self.pending_basic_listing.take().unwrap();
             let seq = self.next_seq();
             return vec![protocol::failure(&request, &problem.to_string(), seq)];
@@ -2571,7 +2583,8 @@ impl<P: DapPeer> Session<P> {
     }
 
     fn complete_basic_listing_read(&mut self, message: &Value) -> Vec<Value> {
-        let Some(request) = self.pending_basic_listing.take() else {
+        let Some(request) = self.pending_basic_listing.take()
+        else {
             return Vec::new();
         };
         let bytes = message
@@ -2664,7 +2677,8 @@ impl<P: DapPeer> Session<P> {
     }
 
     fn complete_screen_view_crtc(&mut self, message: &Value) -> Vec<Value> {
-        let Some(pending) = self.pending_screen_view.as_mut() else {
+        let Some(pending) = self.pending_screen_view.as_mut()
+        else {
             return Vec::new();
         };
         let regs = message
@@ -2674,7 +2688,8 @@ impl<P: DapPeer> Session<P> {
         pending.crtc_regs = Some(regs);
 
         let seq = self.next_seq();
-        if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::GATE_ARRAY_REFERENCE)
+        if let Some(command) =
+            crate::amspiritlite::chip_command(crate::inspect::GATE_ARRAY_REFERENCE)
         {
             if let Err(problem) = self.send_own(command, json!({}), Purpose::ScreenViewGa) {
                 let request = self.pending_screen_view.take().and_then(|p| p.request);
@@ -2697,7 +2712,8 @@ impl<P: DapPeer> Session<P> {
     }
 
     fn complete_screen_view_ga(&mut self, message: &Value) -> Vec<Value> {
-        let Some(pending) = self.pending_screen_view.as_mut() else {
+        let Some(pending) = self.pending_screen_view.as_mut()
+        else {
             return Vec::new();
         };
         let Some((mode, palette)) = message
@@ -2750,7 +2766,8 @@ impl<P: DapPeer> Session<P> {
     }
 
     fn complete_screen_view_memory(&mut self, message: &Value) -> Vec<Value> {
-        let Some(pending) = self.pending_screen_view.take() else {
+        let Some(pending) = self.pending_screen_view.take()
+        else {
             return Vec::new();
         };
         // `None` here is a silent refresh (`refresh_screen_view`, called on
@@ -2759,7 +2776,8 @@ impl<P: DapPeer> Session<P> {
         // rather than reported, same convention `refresh_memory_view`
         // already follows.
         let request = pending.request;
-        let Some(mode) = pending.mode else {
+        let Some(mode) = pending.mode
+        else {
             return match &request {
                 Some(request) => {
                     let seq = self.next_seq();
@@ -2768,7 +2786,8 @@ impl<P: DapPeer> Session<P> {
                 None => Vec::new()
             };
         };
-        let Some(palette) = pending.palette else {
+        let Some(palette) = pending.palette
+        else {
             return match &request {
                 Some(request) => {
                     let seq = self.next_seq();
@@ -2921,7 +2940,8 @@ impl<P: DapPeer> Session<P> {
         if let Some(command) = crate::amspiritlite::chip_command(reference)
             && self.peer_mut().supports(command)
         {
-            self.pending_simple_chip_views.push((reference, request.clone()));
+            self.pending_simple_chip_views
+                .push((reference, request.clone()));
             self.send_own(command, json!({}), Purpose::MachineState)?;
             return Ok(Vec::new());
         }
@@ -2937,7 +2957,8 @@ impl<P: DapPeer> Session<P> {
             )]);
         }
 
-        self.pending_simple_chip_views.push((reference, request.clone()));
+        self.pending_simple_chip_views
+            .push((reference, request.clone()));
         if self.pending_chip_scopes.is_empty()
             && self.pending_chip_prints.is_empty()
             && self.pending_crtc_views.is_empty()
@@ -3105,7 +3126,8 @@ impl<P: DapPeer> Session<P> {
     /// own doc comment), generalized here to be peer-driven instead of
     /// hardcoded for one chip.
     fn chip_scope_has_a_chance(&mut self, reference: i64) -> bool {
-        crate::amspiritlite::chip_command(reference).is_some_and(|cmd| self.peer_mut().supports(cmd))
+        crate::amspiritlite::chip_command(reference)
+            .is_some_and(|cmd| self.peer_mut().supports(cmd))
             || self.peer_mut().supports("cpclib/machineState")
     }
 
@@ -3206,7 +3228,12 @@ impl<P: DapPeer> Session<P> {
             }
             for (reference, request) in simple_viewing {
                 let variables = crate::amspiritlite::chip_variables(reference, &body);
-                out.extend(self.simple_chip_view_answer(&request, reference, variables, Some(&body)));
+                out.extend(self.simple_chip_view_answer(
+                    &request,
+                    reference,
+                    variables,
+                    Some(&body)
+                ));
             }
             if let Some(request) = screen_view.and_then(|p| p.request) {
                 let seq = self.next_seq();
@@ -3283,7 +3310,8 @@ impl<P: DapPeer> Session<P> {
         for (reference, request) in simple_viewing {
             match self.machine_state.as_deref() {
                 Some(sna) => {
-                    let variables = crate::inspect::chip_variables(reference, sna).unwrap_or_default();
+                    let variables =
+                        crate::inspect::chip_variables(reference, sna).unwrap_or_default();
                     out.extend(self.simple_chip_view_answer(&request, reference, variables, None));
                 },
                 None => {
@@ -3350,7 +3378,7 @@ impl<P: DapPeer> Session<P> {
                                     seq
                                 ));
                             }
-                        }
+                        },
                     }
                 },
                 // No machine to describe itself: a silent refresh drops
@@ -3362,7 +3390,7 @@ impl<P: DapPeer> Session<P> {
                         let seq = self.next_seq();
                         out.push(protocol::failure(request, &why, seq));
                     }
-                }
+                },
             }
         }
         out
@@ -3670,16 +3698,18 @@ impl<P: DapPeer> Session<P> {
                         open.count = count;
                         open.group = Some("registers");
                     },
-                    None => self.open_memory_views.push(OpenMemoryView {
-                        anchor: anchor.clone(),
-                        address: value,
-                        count,
-                        label: Some(name.to_string()),
-                        previous: Vec::new(),
-                        previous_address: None,
-                        group: Some("registers"),
-                        config_override
-                    })
+                    None => {
+                        self.open_memory_views.push(OpenMemoryView {
+                            anchor: anchor.clone(),
+                            address: value,
+                            count,
+                            label: Some(name.to_string()),
+                            previous: Vec::new(),
+                            previous_address: None,
+                            group: Some("registers"),
+                            config_override
+                        })
+                    },
                 }
                 // Only the first carries the request: DAP expects one
                 // response to the one `evaluate` request that asked for all
@@ -3735,30 +3765,37 @@ impl<P: DapPeer> Session<P> {
         }
         let register_use = match arguments.first() {
             None => Some(RegisterUse::Follow("PC".to_string())),
-            Some(where_) => match where_.split_once(',') {
-                Some((name, suffix)) if suffix.eq_ignore_ascii_case("follow") => {
-                    Some(RegisterUse::Follow(name.to_ascii_uppercase()))
-                },
-                // A comma-suffix is only ever meaningful as `,follow` in
-                // this command's grammar - routing a typo like `HL,folow`
-                // through the generic address/label parser below would
-                // report "neither an address nor a label" with
-                // `similar_symbols` suggestions drawn from the *program's*
-                // symbol table, which will never contain anything
-                // resembling a comma-suffixed register name. A direct hint
-                // is both cheaper and actually useful here.
-                Some((name, suffix)) => {
-                    return Ok(vec![protocol::failure(
-                        request,
-                        &format!("'{suffix}' is not a valid suffix - did you mean '{name},follow'?"),
-                        seq
-                    )]);
-                },
-                None if self.last_registers.contains_key(&where_.to_ascii_uppercase()) => {
-                    Some(RegisterUse::Snapshot(where_.to_ascii_uppercase()))
-                },
-                None => None
-            }
+            Some(where_) => {
+                match where_.split_once(',') {
+                    Some((name, suffix)) if suffix.eq_ignore_ascii_case("follow") => {
+                        Some(RegisterUse::Follow(name.to_ascii_uppercase()))
+                    },
+                    // A comma-suffix is only ever meaningful as `,follow` in
+                    // this command's grammar - routing a typo like `HL,folow`
+                    // through the generic address/label parser below would
+                    // report "neither an address nor a label" with
+                    // `similar_symbols` suggestions drawn from the *program's*
+                    // symbol table, which will never contain anything
+                    // resembling a comma-suffixed register name. A direct hint
+                    // is both cheaper and actually useful here.
+                    Some((name, suffix)) => {
+                        return Ok(vec![protocol::failure(
+                            request,
+                            &format!(
+                                "'{suffix}' is not a valid suffix - did you mean '{name},follow'?"
+                            ),
+                            seq
+                        )]);
+                    },
+                    None if self
+                        .last_registers
+                        .contains_key(&where_.to_ascii_uppercase()) =>
+                    {
+                        Some(RegisterUse::Snapshot(where_.to_ascii_uppercase()))
+                    },
+                    None => None
+                }
+            },
         };
 
         let (anchor, address) = if let Some(use_) = register_use {
@@ -3937,7 +3974,13 @@ impl<P: DapPeer> Session<P> {
         // Asked for by hand, so it stays until it is closed by hand - even if
         // an automatic view was what was on screen a moment ago.
         self.disassembly_view_is_ours = false;
-        self.ask_for_disassembly(address, count, label, Some(request.clone()), config_override)?;
+        self.ask_for_disassembly(
+            address,
+            count,
+            label,
+            Some(request.clone()),
+            config_override
+        )?;
         Ok(Vec::new())
     }
 
@@ -3991,8 +4034,12 @@ impl<P: DapPeer> Session<P> {
         else {
             return;
         };
-        let (anchor, count, fetched_at, config_override) =
-            (open.anchor, open.count, open.fetched_at, open.config_override);
+        let (anchor, count, fetched_at, config_override) = (
+            open.anchor,
+            open.count,
+            open.fetched_at,
+            open.config_override
+        );
 
         let address = match anchor {
             // A fixed view is re-read on every stop because the *bytes* may
@@ -4039,7 +4086,8 @@ impl<P: DapPeer> Session<P> {
     /// refresh from here would need to force that fetch itself rather than
     /// assume it has already happened, which this does not yet do.
     fn refresh_screen_view(&mut self) {
-        let Some(open) = self.open_screen_view.clone() else {
+        let Some(open) = self.open_screen_view.clone()
+        else {
             return;
         };
         self.pending_screen_view = Some(PendingScreenView {
@@ -4978,8 +5026,8 @@ impl<P: DapPeer> Session<P> {
             Some(physical) => self.map.line_extent_at_physical(physical),
             None => self.map.line_extent_at(page, pc)
         };
-        let Some(run) = run
-            .and_then(|run| Some(u16::try_from(run.start).ok()?..u16::try_from(run.end).ok()?))
+        let Some(run) =
+            run.and_then(|run| Some(u16::try_from(run.start).ok()?..u16::try_from(run.end).ok()?))
         else {
             // A run reaching the very top of memory has no address after it to
             // stop on. The line is still a `defs`, so it is not for the bytes
@@ -5551,11 +5599,15 @@ impl<P: DapPeer> Session<P> {
                 // addresses, so the name is sometimes a choice between several
                 // and the number is what makes that visible rather than
                 // silently authoritative.
-                let primary_name =
-                    match self.name_of_call_target(frame.called, frame.call_site, primary_page, &located) {
-                        Some(symbol) => format!("{symbol} @ 0x{:04X}", frame.called),
-                        None => format!("0x{:04X}", frame.called)
-                    };
+                let primary_name = match self.name_of_call_target(
+                    frame.called,
+                    frame.call_site,
+                    primary_page,
+                    &located
+                ) {
+                    Some(symbol) => format!("{symbol} @ 0x{:04X}", frame.called),
+                    None => format!("0x{:04X}", frame.called)
+                };
                 let alternatives: Vec<String> = frame
                     .other_candidates
                     .iter()
@@ -5744,7 +5796,8 @@ impl<P: DapPeer> Session<P> {
         };
 
         if let Some(best) = best.as_ref() {
-            self.call_target_names.insert((call_site, page), best.clone());
+            self.call_target_names
+                .insert((call_site, page), best.clone());
         }
         best
     }
@@ -6291,8 +6344,7 @@ impl<P: DapPeer> Session<P> {
                         else {
                             continue;
                         };
-                        let physical =
-                            (pc_physical & !0x3FFF) | u32::from(address & 0x3FFF);
+                        let physical = (pc_physical & !0x3FFF) | u32::from(address & 0x3FFF);
                         match self.map.location_at_physical(physical) {
                             Some(resolved) => resolved,
                             None => continue
@@ -6616,7 +6668,8 @@ fn parse_config_override(text: Option<&&str>) -> Option<ConfigOverride> {
     let mode = mode_text.parse::<u8>().ok().filter(|n| *n <= 7)?;
     let page = if page_text.is_empty() {
         None
-    } else {
+    }
+    else {
         page_text.parse::<u32>().ok()
     };
     Some(ConfigOverride { mode, page })
@@ -6700,7 +6753,7 @@ fn trailing_comment(line: &str) -> Option<&str> {
                     ';' => return Some(line[index + 1..].trim()),
                     _ => {}
                 }
-            }
+            },
         }
     }
     None
@@ -6734,8 +6787,14 @@ mod tests {
     fn trailing_comment_ignores_semicolons_inside_quotes() {
         use super::trailing_comment;
 
-        assert_eq!(trailing_comment("ld a,0 ; border black"), Some("border black"));
-        assert_eq!(trailing_comment("db 'a;b' ; real comment"), Some("real comment"));
+        assert_eq!(
+            trailing_comment("ld a,0 ; border black"),
+            Some("border black")
+        );
+        assert_eq!(
+            trailing_comment("db 'a;b' ; real comment"),
+            Some("real comment")
+        );
         assert_eq!(trailing_comment("db \"a;b\""), None);
         assert_eq!(trailing_comment("nop"), None);
         assert_eq!(trailing_comment("nop ;"), Some(""));
@@ -6760,7 +6819,11 @@ mod tests {
         assert_eq!(parse_config_override(None), None, "unset");
         assert_eq!(parse_config_override(Some(&"_")), None, "placeholder");
         assert_eq!(parse_config_override(Some(&"")), None, "blank");
-        assert_eq!(parse_config_override(Some(&"  ")), None, "blank, whitespace");
+        assert_eq!(
+            parse_config_override(Some(&"  ")),
+            None,
+            "blank, whitespace"
+        );
         assert_eq!(
             parse_config_override(Some(&"4")),
             mode(4),
@@ -6894,8 +6957,8 @@ mod tests {
                 // assembler records it.
                 rows: vec![SourceMapRow::flat(0, 4, 0x4002, 60)]
             });
-            let session = Session::new(RecordingPeer::new(), map)
-                .with_image(image_with(0x4002, &[0u8; 60]));
+            let session =
+                Session::new(RecordingPeer::new(), map).with_image(image_with(0x4002, &[0u8; 60]));
 
             for pc in [0x4002u16, 0x4003, 0x4020, 0x403D] {
                 assert_eq!(
@@ -7018,7 +7081,10 @@ mod tests {
             session.refresh_screen_view();
 
             assert!(
-                session.peer().commands().contains(&"cpclib/machineState".to_string()),
+                session
+                    .peer()
+                    .commands()
+                    .contains(&"cpclib/machineState".to_string()),
                 "expected a machineState fetch, got: {:?}",
                 session.peer().commands()
             );
@@ -7067,8 +7133,9 @@ mod tests {
 
             let out = session.complete_machine_state(&message);
             assert!(
-                out.iter().any(|m| m.get("event").and_then(serde_json::Value::as_str)
-                    == Some("cpclib/screenView")),
+                out.iter().any(|m| {
+                    m.get("event").and_then(serde_json::Value::as_str) == Some("cpclib/screenView")
+                }),
                 "expected a cpclib/screenView event, got: {out:?}"
             );
         }
@@ -7179,7 +7246,8 @@ mod tests {
             // "where we stopped" announcement, if any, come before it.
             let frame = &annotated.last().unwrap()["body"]["stackFrames"][0];
             assert_eq!(
-                frame["source"]["name"], json!("writter.asm"),
+                frame["source"]["name"],
+                json!("writter.asm"),
                 "page 0 is the lowest of the two ambiguous pages, and the \
                  existing fallback picks the lowest"
             );
@@ -7202,25 +7270,30 @@ mod tests {
         use crate::session::Session;
 
         fn map_with_two_routines() -> SourceMap {
-            let row = |file: u16, line: u32, logical: u32, physical: u32, page: u8| SourceMapRow {
-                file,
-                line,
-                logical,
-                physical,
-                page,
-                column: 1,
-                column_end: 1,
-                len: 1,
-                is_data: false
+            let row = |file: u16, line: u32, logical: u32, physical: u32, page: u8| {
+                SourceMapRow {
+                    file,
+                    line,
+                    logical,
+                    physical,
+                    page,
+                    column: 1,
+                    column_end: 1,
+                    len: 1,
+                    is_data: false
+                }
             };
             SourceMap::from_raw(&RawSourceMap {
                 files: vec!["routine_a.asm".into(), "routine_b.asm".into()],
-                rows: vec![row(0, 10, 0x5000, 0x5000, 1), row(1, 20, 0x7000, 0x27000, 2)]
+                rows: vec![
+                    row(0, 10, 0x5000, 0x5000, 1),
+                    row(1, 20, 0x7000, 0x27000, 2),
+                ]
             })
             .with_symbols(
                 [
                     ("routine_a".to_string(), 0x5000u32),
-                    ("routine_b".to_string(), 0x7000u32),
+                    ("routine_b".to_string(), 0x7000u32)
                 ]
                 .into_iter()
                 .collect()

@@ -251,7 +251,8 @@ impl BuildFileAnalyzer {
                     // column, not just the first - one byte short of the
                     // real position in the ordinary single-space case.
                     let mut col_offset = line.len() - content.len() + key.len() + 1;
-                    col_offset += rest_before_comment.len() - rest_before_comment.trim_start().len();
+                    col_offset +=
+                        rest_before_comment.len() - rest_before_comment.trim_start().len();
 
                     for tok in value.split_whitespace() {
                         // Still-unresolved Jinja expression (expansion fell
@@ -313,7 +314,8 @@ impl BuildFileAnalyzer {
                                                 character: byte_offset_to_utf16_col(
                                                     orig_line_text,
                                                     orig_line_text.len()
-                                                ) as u32
+                                                )
+                                                    as u32
                                             }
                                         }
                                     }
@@ -324,14 +326,16 @@ impl BuildFileAnalyzer {
                                                 character: byte_offset_to_utf16_col(
                                                     orig_line_text,
                                                     tok_start
-                                                ) as u32
+                                                )
+                                                    as u32
                                             },
                                             end: Position {
                                                 line: orig_line_num,
                                                 character: byte_offset_to_utf16_col(
                                                     orig_line_text,
                                                     tok_end
-                                                ) as u32
+                                                )
+                                                    as u32
                                             }
                                         }
                                     };
@@ -633,8 +637,7 @@ mod tests {
 
         assert_eq!(diags[0].range.start.line, 3);
         assert_eq!(
-            diags[0].range.start.character as usize,
-            expected_start,
+            diags[0].range.start.character as usize, expected_start,
             "{:?}",
             diags[0]
         );

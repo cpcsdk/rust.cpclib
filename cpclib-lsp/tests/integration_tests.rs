@@ -609,9 +609,11 @@ async fn test_code_action_offers_a_peephole_quickfix() {
 
     let actions = result.expect("expected at least one code action");
     assert!(
-        actions.iter().any(|a| match a {
-            CodeActionOrCommand::CodeAction(action) => action.title.contains("ld b,b"),
-            CodeActionOrCommand::Command(_) => false
+        actions.iter().any(|a| {
+            match a {
+                CodeActionOrCommand::CodeAction(action) => action.title.contains("ld b,b"),
+                CodeActionOrCommand::Command(_) => false
+            }
         }),
         "{actions:?}"
     );
@@ -1427,17 +1429,14 @@ async fn test_references_finds_a_match_in_an_unopened_on_disk_file() {
 
     let locations = result.expect("expected references");
     let real_uri = Url::from_file_path(tmp.path().join("real.asm")).unwrap();
-    assert!(
-        locations.iter().any(|l| l.uri == main_uri),
-        "{locations:?}"
-    );
-    assert!(
-        locations.iter().any(|l| l.uri == real_uri),
-        "{locations:?}"
-    );
+    assert!(locations.iter().any(|l| l.uri == main_uri), "{locations:?}");
+    assert!(locations.iter().any(|l| l.uri == real_uri), "{locations:?}");
     for i in 0..8 {
         let decoy_uri = Url::from_file_path(tmp.path().join(format!("decoy{i}.asm"))).unwrap();
-        assert!(!locations.iter().any(|l| l.uri == decoy_uri), "{locations:?}");
+        assert!(
+            !locations.iter().any(|l| l.uri == decoy_uri),
+            "{locations:?}"
+        );
     }
 }
 
@@ -1474,11 +1473,7 @@ async fn test_references_on_a_bare_local_label_resolves_to_its_canonical_scoped_
 
     // A second file, referencing `global1`'s own local via its qualified
     // form - never opened, only on disk, like a real cross-file caller.
-    std::fs::write(
-        tmp.path().join("caller.asm"),
-        "    call global1.local1\n"
-    )
-    .unwrap();
+    std::fs::write(tmp.path().join("caller.asm"), "    call global1.local1\n").unwrap();
 
     let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
     backend
@@ -1526,7 +1521,9 @@ async fn test_references_on_a_bare_local_label_resolves_to_its_canonical_scoped_
     );
     // Never conflated with `global2`'s own, unrelated `.local1` (lines 4-5).
     assert!(
-        !locations.iter().any(|l| l.uri == main_uri && l.range.start.line >= 3),
+        !locations
+            .iter()
+            .any(|l| l.uri == main_uri && l.range.start.line >= 3),
         "{locations:?}"
     );
 }
@@ -1548,11 +1545,7 @@ async fn test_find_unreferenced_labels_flags_a_genuinely_dead_label_across_files
     // `used_elsewhere` is referenced only from a third file, never opened
     // and never `INCLUDE`d by `main.asm` - only a true workspace scan finds
     // it.
-    std::fs::write(
-        tmp.path().join("caller.asm"),
-        "    call used_elsewhere\n"
-    )
-    .unwrap();
+    std::fs::write(tmp.path().join("caller.asm"), "    call used_elsewhere\n").unwrap();
 
     backend
         .initialize(InitializeParams {
@@ -1596,10 +1589,7 @@ async fn test_find_unreferenced_labels_flags_a_genuinely_dead_label_across_files
         .expect("expected a findings array");
 
     let findings = result.as_array().expect("expected a JSON array");
-    let names: Vec<&str> = findings
-        .iter()
-        .filter_map(|f| f["name"].as_str())
-        .collect();
+    let names: Vec<&str> = findings.iter().filter_map(|f| f["name"].as_str()).collect();
     assert!(names.contains(&"dead_label"), "{names:?}");
     assert!(!names.contains(&"used_elsewhere"), "{names:?}");
 }
@@ -2248,8 +2238,10 @@ async fn test_catart_document_gets_error_and_warning_diagnostics() {
                 && params.get("uri").and_then(|u| u.as_str()) == Some(uri.as_str())
                 && let Some(diags) = params.get("diagnostics").and_then(|d| d.as_array())
             {
-                let severities: Vec<i64> =
-                    diags.iter().filter_map(|d| d.get("severity")?.as_i64()).collect();
+                let severities: Vec<i64> = diags
+                    .iter()
+                    .filter_map(|d| d.get("severity")?.as_i64())
+                    .collect();
                 if !severities.is_empty() {
                     return severities;
                 }

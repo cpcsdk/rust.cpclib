@@ -138,8 +138,8 @@ FADEh_SUFFIX:
     nop
     jp FADEh_SUFFIX
 ";
-    let bytes = assemble(code)
-        .expect("a label with hex-looking text, h, then an underscore must assemble");
+    let bytes =
+        assemble(code).expect("a label with hex-looking text, h, then an underscore must assemble");
     assert_eq!(bytes, vec![0x00, 0xC3, 0x00, 0x80], "{bytes:?}");
 }
 
@@ -156,8 +156,8 @@ CAFE_BABE:
     nop
     jp CAFE_BABE
 ";
-    let bytes = assemble(code)
-        .expect("a label shaped like underscore-separated hex digits must assemble");
+    let bytes =
+        assemble(code).expect("a label shaped like underscore-separated hex digits must assemble");
     assert_eq!(bytes, vec![0x00, 0xC3, 0x00, 0x80], "{bytes:?}");
 }
 

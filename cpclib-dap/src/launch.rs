@@ -275,7 +275,9 @@ pub fn cached_program_for_debug(
         return None;
     }
     for name in &file.map.files {
-        let source = fs_err::metadata(name).ok().and_then(|m| m.modified().ok())?;
+        let source = fs_err::metadata(name)
+            .ok()
+            .and_then(|m| m.modified().ok())?;
         if source > written {
             why.push(format!(
                 "{name} changed since the last debug launch, so it is assembled again."
@@ -487,8 +489,8 @@ fn builder_for(
             .map_err(|e| format!("cannot read {build_file}: {e}"));
     }
 
-    let text = fs_err::read_to_string(build_file)
-        .map_err(|e| format!("cannot read {build_file}: {e}"))?;
+    let text =
+        fs_err::read_to_string(build_file).map_err(|e| format!("cannot read {build_file}: {e}"))?;
     let blocks = cpclib_project::embedded_build::blocks_in_source(&text);
     if blocks.is_empty() {
         return Err(format!(
@@ -595,7 +597,9 @@ struct DapAsmProgressForwarder(std::sync::mpsc::Sender<cpclib_bndbuild::progress
 
 impl cpclib_asm::progress::AsmProgressSink for DapAsmProgressForwarder {
     fn on_progress(&self, event: cpclib_asm::progress::AsmProgressEvent) {
-        let _ = self.0.send(cpclib_bndbuild::progress::ProgressUpdate::Asm(event));
+        let _ = self
+            .0
+            .send(cpclib_bndbuild::progress::ProgressUpdate::Asm(event));
     }
 }
 
@@ -834,8 +838,9 @@ pub fn find_debuggable_rule_for_entry(entry: &Path) -> Option<(PathBuf, String)>
             else {
                 continue;
             };
-            let snapshot_name =
-                cpclib_common::camino::Utf8Path::new(&snapshot).file_name().unwrap_or_default();
+            let snapshot_name = cpclib_common::camino::Utf8Path::new(&snapshot)
+                .file_name()
+                .unwrap_or_default();
             let Some(source) = entry_building(&builder, snapshot_name)
             else {
                 continue;
@@ -844,8 +849,8 @@ pub fn find_debuggable_rule_for_entry(entry: &Path) -> Option<(PathBuf, String)>
                 .parent()
                 .map(|dir| dir.join(&source))
                 .unwrap_or(source);
-            let matches = fs_err::canonicalize(resolved.as_std_path())
-                .is_ok_and(|p| p == canonical_entry);
+            let matches =
+                fs_err::canonicalize(resolved.as_std_path()).is_ok_and(|p| p == canonical_entry);
             if matches {
                 let target = rule.targets().first()?.to_string();
                 return Some((build_file, target));
@@ -918,10 +923,8 @@ mod progress_tests {
     fn build_rule_for_debug_reports_progress_for_its_own_dependency_build() {
         let _restore_cwd = RestoreCwd(std::env::current_dir().unwrap());
 
-        let dir = std::env::temp_dir().join(format!(
-            "cpclib-dap-progress-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("cpclib-dap-progress-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         std::fs::write(
@@ -933,12 +936,9 @@ mod progress_tests {
         std::fs::write(dir.join("main.asm"), "    org 0x4000\n    nop\n    ret\n").unwrap();
 
         let (progress_tx, progress_rx) = std::sync::mpsc::channel();
-        let launched = build_rule_for_debug(
-            &dir.join("build.bnd"),
-            "test_launch",
-            Some(progress_tx)
-        )
-        .unwrap_or_else(|e| panic!("build_rule_for_debug failed: {e}"));
+        let launched =
+            build_rule_for_debug(&dir.join("build.bnd"), "test_launch", Some(progress_tx))
+                .unwrap_or_else(|e| panic!("build_rule_for_debug failed: {e}"));
         assert_eq!(launched.snapshot, dir.join("main.bin"));
 
         let updates: Vec<_> = progress_rx.try_iter().collect();
@@ -949,12 +949,14 @@ mod progress_tests {
             "expected the rule-level '[1/1]' signal, got: {updates:?}"
         );
         assert!(
-            updates.iter().any(|u| matches!(
-                u,
-                cpclib_bndbuild::progress::ProgressUpdate::Asm(
-                    cpclib_asm::progress::AsmProgressEvent::PassStarted { .. }
+            updates.iter().any(|u| {
+                matches!(
+                    u,
+                    cpclib_bndbuild::progress::ProgressUpdate::Asm(
+                        cpclib_asm::progress::AsmProgressEvent::PassStarted { .. }
+                    )
                 )
-            )),
+            }),
             "expected basm's own internal pass progress while its dependency \
              build ran, got: {updates:?}"
         );
@@ -984,12 +986,14 @@ mod progress_tests {
 
         let updates: Vec<_> = progress_rx.try_iter().collect();
         assert!(
-            updates.iter().any(|u| matches!(
-                u,
-                cpclib_bndbuild::progress::ProgressUpdate::Asm(
-                    cpclib_asm::progress::AsmProgressEvent::Parse { .. }
+            updates.iter().any(|u| {
+                matches!(
+                    u,
+                    cpclib_bndbuild::progress::ProgressUpdate::Asm(
+                        cpclib_asm::progress::AsmProgressEvent::Parse { .. }
+                    )
                 )
-            )),
+            }),
             "expected basm's own internal Parse progress, got: {updates:?}"
         );
 
@@ -1007,10 +1011,8 @@ mod progress_tests {
     fn find_debuggable_rule_for_entry_matches_the_rule_that_builds_the_entry() {
         let _restore_cwd = RestoreCwd(std::env::current_dir().unwrap());
 
-        let dir = std::env::temp_dir().join(format!(
-            "cpclib-dap-find-rule-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("cpclib-dap-find-rule-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         std::fs::write(

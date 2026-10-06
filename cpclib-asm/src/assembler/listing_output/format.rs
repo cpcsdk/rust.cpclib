@@ -140,7 +140,8 @@ fn format_bytes_for_impl(
 }
 
 fn render_source_column_impl(line: Option<&str>) -> String {
-    let Some(line) = line else {
+    let Some(line) = line
+    else {
         return String::new();
     };
     let trimmed = line.trim_start();
@@ -152,7 +153,10 @@ fn render_source_column_impl(line: Option<&str>) -> String {
     if trimmed.len() <= MAX_RENDERED_SOURCE_COLUMN_CHARS {
         return trimmed.to_owned();
     }
-    trimmed.chars().take(MAX_RENDERED_SOURCE_COLUMN_CHARS).collect()
+    trimmed
+        .chars()
+        .take(MAX_RENDERED_SOURCE_COLUMN_CHARS)
+        .collect()
 }
 
 pub(crate) struct LineTemplateFields<'a> {
@@ -166,7 +170,10 @@ pub(crate) struct LineTemplateFields<'a> {
     pub source_line_expanded: Option<&'a str>
 }
 
-fn format_line_with_template_for_impl(format: &ListingOutputFormat, fields: LineTemplateFields<'_>) -> String {
+fn format_line_with_template_for_impl(
+    format: &ListingOutputFormat,
+    fields: LineTemplateFields<'_>
+) -> String {
     let LineTemplateFields {
         bytes_per_line,
         file_index,
@@ -302,16 +309,19 @@ fn format_deferred_line_with_template_for_impl(
 ) -> Vec<String> {
     let source_marker_raw = "\u{1f}SOURCE_RAW\u{1f}";
     let source_marker_expanded = "\u{1f}SOURCE_EXPANDED\u{1f}";
-    let rendered = format_line_with_template_for(format, LineTemplateFields {
-        bytes_per_line,
-        file_index,
-        logical_address: None,
-        physical_address_repr: &blank_impl(physical_field_width_impl(format)),
-        bytes: &[],
-        line_number,
-        source_line_raw: Some(source_marker_raw),
-        source_line_expanded: Some(source_marker_expanded)
-    });
+    let rendered = format_line_with_template_for(
+        format,
+        LineTemplateFields {
+            bytes_per_line,
+            file_index,
+            logical_address: None,
+            physical_address_repr: &blank_impl(physical_field_width_impl(format)),
+            bytes: &[],
+            line_number,
+            source_line_raw: Some(source_marker_raw),
+            source_line_expanded: Some(source_marker_expanded)
+        }
+    );
 
     let anchor = if format.show_line_numbers {
         line_number

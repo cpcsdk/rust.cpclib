@@ -331,7 +331,6 @@ pub struct SpanIdentity(usize, usize);
 #[cfg(test)]
 mod identity_tests {
     use super::super::context::ParserOptions;
-    
 
     /// Reproduces the real multi-file bug directly: two independently parsed
     /// sources (standing in for two files a project `include`s) each start

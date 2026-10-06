@@ -1245,11 +1245,11 @@ impl Disc for ExtendedDsk {
         bytes: &[u8]
     ) -> Result<(), String> {
         let head = head.into();
-        let sector = self.edsk_sector_mut(head, track, sector_id).ok_or_else(|| {
-            format!(
-                "Head {head:?} track {track} sector 0x{sector_id:X} missing",
-            )
-        })?;
+        let sector = self
+            .edsk_sector_mut(head, track, sector_id)
+            .ok_or_else(
+                || format!("Head {head:?} track {track} sector 0x{sector_id:X} missing",)
+            )?;
         sector.set_values(bytes)?;
 
         Ok(())

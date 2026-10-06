@@ -2,9 +2,9 @@ use std::io::Write;
 
 use anyhow::{self, Error};
 use camino_tempfile as tempfile;
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use cpclib::asm::preamble::defb_elements;
-use cpclib::asm::{assemble, assemble_to_amsdos_file, ListingExt};
+use cpclib::asm::{ListingExt, assemble, assemble_to_amsdos_file};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib::common::event::EventObserver;
 use cpclib::common::itertools::Itertools;
@@ -33,7 +33,7 @@ use cpclib::image::ocp::{self, OcpPalette};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-use cpclib::{sna, ExtendedDsk, Ink, Palette, Pen};
+use cpclib::{ExtendedDsk, Ink, Palette, Pen, sna};
 use cpclib_image::color::AnyColor;
 use fs_err::File;
 #[cfg(feature = "watch")]
@@ -1360,58 +1360,60 @@ where
 }
 
 pub fn build_cpc2img_args_parser() -> clap::Command {
-    specify_palette!(clap::Command::new("cpc2png")
-        .about("Generate PNG from CPC files")
-        //           .subcommand_required(true) # too write seems seems to forbid the use of --help
-        .arg(
-            Arg::new("MODE")
-                .short('m')
-                .long("mode")
-                .help("Screen mode of the image to convert.")
-                .value_name("MODE")
-                .value_parser(0..=2)
-                .action(clap::ArgAction::Set)
-                .default_value("0")
-        )
-        .arg(
-            Arg::new("MODE0RATIO")
-                .long("mode0ratio")
-                .help("Horizontally double the pixels")
-                .action(ArgAction::SetTrue)
-        )
-        .subcommand(
-            Command::new("OCPPALETTECMD")
-                .about("Load an ocp palette file")
-                .name("palette")
-        )
-        .subcommand(
-            Command::new("SPRITECMD")
-                .about("Load from a linear sprite data")
-                .name("sprite")
-                .arg(
-                    Arg::new("WIDTH")
-                        .long("width")
-                        .required(true)
-                        .help("Width of the sprite in pixels")
-                )
-        )
-        .subcommand(
-            Command::new("SCREENCMD")
-                .about("Load from a 16kb screen data")
-                .name("screen")
-                .arg(
-                    Arg::new("WIDTH")
-                        .long("width")
-                        .default_value("80")
-                        .help("Width of the screen in bytes")
-                )
-        )
-        .arg(
-            Arg::new("INPUT")
-                .help("File to Read. Can be a .scr, a .pal")
-                .required(true)
-        )
-        .arg(Arg::new("OUTPUT").required(true)))
+    specify_palette!(
+        clap::Command::new("cpc2png")
+            .about("Generate PNG from CPC files")
+            //           .subcommand_required(true) # too write seems seems to forbid the use of --help
+            .arg(
+                Arg::new("MODE")
+                    .short('m')
+                    .long("mode")
+                    .help("Screen mode of the image to convert.")
+                    .value_name("MODE")
+                    .value_parser(0..=2)
+                    .action(clap::ArgAction::Set)
+                    .default_value("0")
+            )
+            .arg(
+                Arg::new("MODE0RATIO")
+                    .long("mode0ratio")
+                    .help("Horizontally double the pixels")
+                    .action(ArgAction::SetTrue)
+            )
+            .subcommand(
+                Command::new("OCPPALETTECMD")
+                    .about("Load an ocp palette file")
+                    .name("palette")
+            )
+            .subcommand(
+                Command::new("SPRITECMD")
+                    .about("Load from a linear sprite data")
+                    .name("sprite")
+                    .arg(
+                        Arg::new("WIDTH")
+                            .long("width")
+                            .required(true)
+                            .help("Width of the sprite in pixels")
+                    )
+            )
+            .subcommand(
+                Command::new("SCREENCMD")
+                    .about("Load from a 16kb screen data")
+                    .name("screen")
+                    .arg(
+                        Arg::new("WIDTH")
+                            .long("width")
+                            .default_value("80")
+                            .help("Width of the screen in bytes")
+                    )
+            )
+            .arg(
+                Arg::new("INPUT")
+                    .help("File to Read. Can be a .scr, a .pal")
+                    .required(true)
+            )
+            .arg(Arg::new("OUTPUT").required(true))
+    )
 }
 
 pub fn build_img2cpc_args_parser() -> clap::Command {

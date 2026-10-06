@@ -34,7 +34,9 @@ fn private_protocol_writer() -> Option<tokio::fs::File> {
         if protocol_fd < 0 || libc::dup2(2, 1) < 0 {
             return None;
         }
-        Some(tokio::fs::File::from_std(std::fs::File::from_raw_fd(protocol_fd)))
+        Some(tokio::fs::File::from_std(std::fs::File::from_raw_fd(
+            protocol_fd
+        )))
     }
 }
 
@@ -55,8 +57,12 @@ fn private_protocol_writer() -> Option<tokio::fs::File> {
 fn private_protocol_writer() -> Option<tokio::fs::File> {
     use std::os::windows::io::FromRawHandle;
 
-    use windows_sys::Win32::Foundation::{DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle};
+    use windows_sys::Win32::Foundation::{
+        DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE
+    };
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle
+    };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
     // The C runtime's descriptor duplication. Linked from the CRT that
@@ -79,7 +85,15 @@ fn private_protocol_writer() -> Option<tokio::fs::File> {
         // Protocol channel: an independent duplicate of the real stdout.
         let mut protocol: HANDLE = std::ptr::null_mut();
         let process = GetCurrentProcess();
-        if DuplicateHandle(process, stdout, process, &mut protocol, 0, 0, DUPLICATE_SAME_ACCESS) == 0
+        if DuplicateHandle(
+            process,
+            stdout,
+            process,
+            &mut protocol,
+            0,
+            0,
+            DUPLICATE_SAME_ACCESS
+        ) == 0
             || unusable(protocol)
         {
             return None;
@@ -93,7 +107,9 @@ fn private_protocol_writer() -> Option<tokio::fs::File> {
         }
         SetStdHandle(STD_OUTPUT_HANDLE, stderr);
 
-        Some(tokio::fs::File::from_std(std::fs::File::from_raw_handle(protocol as _)))
+        Some(tokio::fs::File::from_std(std::fs::File::from_raw_handle(
+            protocol as _
+        )))
     }
 }
 

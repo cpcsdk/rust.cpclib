@@ -119,7 +119,11 @@ fn argument_completions(shape: ArgShape, arg_index: usize) -> Vec<CompletionItem
                 value_item("hard", Some("Full hardware reset")),
             ]
         },
-        (ArgShape::CrtcModel, 1) => lsp::crtc_model_tokens().map(|t| value_item(t, None)).collect(),
+        (ArgShape::CrtcModel, 1) => {
+            lsp::crtc_model_tokens()
+                .map(|t| value_item(t, None))
+                .collect()
+        },
         (ArgShape::GateArrayModel, 1) => {
             lsp::gate_array_model_tokens()
                 .map(|t| value_item(t, None))
@@ -151,7 +155,11 @@ fn argument_completions(shape: ArgShape, arg_index: usize) -> Vec<CompletionItem
         (ArgShape::DiskInsert, 1) => vec![value_item("A", None), value_item("B", None)],
         (ArgShape::OptionalVsyncFlag, 1) => vec![value_item("vsync", None)],
         (ArgShape::SnapshotVersion, 1) => {
-            vec![value_item("1", None), value_item("2", None), value_item("3", None)]
+            vec![
+                value_item("1", None),
+                value_item("2", None),
+                value_item("3", None),
+            ]
         },
         _ => Vec::new()
     }

@@ -93,7 +93,10 @@ fn parsed_rules_carry_plausible_mnemonics() {
             }
         }
     }
-    assert!(literal > 200, "expected many literal mnemonics, got {literal}");
+    assert!(
+        literal > 200,
+        "expected many literal mnemonics, got {literal}"
+    );
     assert!(variable > 0, "upstream uses ?op mnemonic variables");
 }
 

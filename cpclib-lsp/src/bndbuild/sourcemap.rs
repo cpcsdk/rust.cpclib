@@ -226,11 +226,12 @@ fn strip_marker(line: &str) -> (String, Option<u32>) {
     if let Some(marker_start) = line.rfind(MARKER_PREFIX) {
         let after = &line[marker_start + MARKER_PREFIX.len()..];
         if let Some(end) = after.find(MARKER_SUFFIX)
-            && let Ok(n) = after[..end].parse::<u32>() {
-                // Remove the marker (and any whitespace before it).
-                let clean = line[..marker_start].trim_end().to_string();
-                return (clean, Some(n));
-            }
+            && let Ok(n) = after[..end].parse::<u32>()
+        {
+            // Remove the marker (and any whitespace before it).
+            let clean = line[..marker_start].trim_end().to_string();
+            return (clean, Some(n));
+        }
     }
     (line.to_string(), None)
 }

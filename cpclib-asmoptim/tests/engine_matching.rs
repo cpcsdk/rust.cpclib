@@ -97,7 +97,10 @@ fn a_repeated_capture_requires_the_same_register_in_both_slots() {
     // whole point of binding a capture once and requiring equality after.
     let found = matches_for(" ld a, a\n", LD_SELF);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert!(found[0].replacement.is_empty(), "rule deletes the instruction");
+    assert!(
+        found[0].replacement.is_empty(),
+        "rule deletes the instruction"
+    );
 
     assert!(matches_for(" ld a, c\n", LD_SELF).is_empty());
 }
@@ -194,10 +197,10 @@ regpair(?regpair2,?reg2h,?reg2l)
     assert_eq!(found[0].range(), 0..2);
     // `regpair` binds the half-register names, which the replacement then
     // renders - proving constraints can feed captures back into the output.
-    assert_eq!(found[0].replacement, vec![
-        "ld d, h".to_string(),
-        "ld e, l".to_string()
-    ]);
+    assert_eq!(
+        found[0].replacement,
+        vec!["ld d, h".to_string(), "ld e, l".to_string()]
+    );
 }
 
 #[test]
@@ -427,7 +430,10 @@ pattern: Collapse shifts
 replacement:
 0: [?const1] rrca
 ";
-    assert_eq!(matches_for(" srl a\n srl a\n srl a\n ret\n", renderable).len(), 1);
+    assert_eq!(
+        matches_for(" srl a\n srl a\n srl a\n ret\n", renderable).len(),
+        1
+    );
 }
 
 /// Two rules that both match `cp 0`: one a genuine no-op rewrite (0 bytes/
@@ -516,7 +522,11 @@ replacement:
 
 #[test]
 fn the_size_goal_prefers_the_byte_cheaper_rule() {
-    let found = matches_for_goal(" nop\n pop hl\n ret\n", OPPOSED_BYTES_VS_CYCLES, OptimizationGoal::Size);
+    let found = matches_for_goal(
+        " nop\n pop hl\n ret\n",
+        OPPOSED_BYTES_VS_CYCLES,
+        OptimizationGoal::Size
+    );
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].rule_name.as_deref(), Some("smaller-rewrite"));
 }
@@ -526,7 +536,11 @@ fn the_speed_goal_prefers_the_cycle_cheaper_rule() {
     // Same two rules, same source - only the goal changes, and the winner
     // must flip: this is the whole point of threading the goal into the
     // engine rather than only using it to pick the rule *set*.
-    let found = matches_for_goal(" nop\n pop hl\n ret\n", OPPOSED_BYTES_VS_CYCLES, OptimizationGoal::Speed);
+    let found = matches_for_goal(
+        " nop\n pop hl\n ret\n",
+        OPPOSED_BYTES_VS_CYCLES,
+        OptimizationGoal::Speed
+    );
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].rule_name.as_deref(), Some("faster-rewrite"));
 }
@@ -537,10 +551,7 @@ fn matches_never_overlap_even_when_several_candidate_rules_compete() {
     // stress case for "does ranking still respect the non-overlap guarantee
     // every consumer (Fix All, basmopt's apply_fixes) relies on without
     // re-checking it themselves".
-    let found = matches_for(
-        " ld a, a\n ld b, b\n ld c, c\n ld d, d\n ret\n",
-        LD_SELF
-    );
+    let found = matches_for(" ld a, a\n ld b, b\n ld c, c\n ld d, d\n ret\n", LD_SELF);
     assert_eq!(found.len(), 4, "{found:?}");
     let mut last_end = 0usize;
     for m in &found {
@@ -607,9 +618,7 @@ fn a_rule_that_would_otherwise_fire_is_vetoed_by_a_trailing_noopt_comment() {
 
 #[test]
 fn a_rule_inside_a_noopt_block_is_vetoed() {
-    assert!(
-        matches_for("; noopt:begin\n ld a, a\n; noopt:end\n", LD_SELF).is_empty()
-    );
+    assert!(matches_for("; noopt:begin\n ld a, a\n; noopt:end\n", LD_SELF).is_empty());
     // Outside the block, the same rule still fires normally.
     assert_eq!(
         matches_for("; noopt:begin\n ret\n; noopt:end\n ld a, a\n", LD_SELF).len(),

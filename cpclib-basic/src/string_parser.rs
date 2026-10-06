@@ -27,7 +27,13 @@ type CommaSeparatedItem = (Vec<BasicToken>, Vec<BasicToken>);
 type OptCommaSeparatedList = Option<(Vec<BasicToken>, Vec<CommaSeparatedItem>)>;
 /// `('(', space, opt(parameter list), space, ')')` as parsed for a `DEF FN`
 /// parameter list.
-type OptParenthesizedParams = Option<(char, Vec<BasicToken>, OptCommaSeparatedList, Vec<BasicToken>, char)>;
+type OptParenthesizedParams = Option<(
+    char,
+    Vec<BasicToken>,
+    OptCommaSeparatedList,
+    Vec<BasicToken>,
+    char
+)>;
 
 /// Builds the single token a variable reference actually is on the wire -
 /// never the character-by-character `SimpleToken`s a plain identifier would
@@ -208,7 +214,9 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
 
     // I have seen code starting by ":"
     if opt(':').parse_next(input)?.is_some() {
-        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
+        tokens.push(BasicToken::SimpleToken(
+            BasicTokenNoPrefix::StatementSeparator
+        ));
     }
 
     loop {
@@ -228,7 +236,9 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
                 }
 
                 if opt(':').parse_next(input)?.is_some() {
-                    tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
+                    tokens.push(BasicToken::SimpleToken(
+                        BasicTokenNoPrefix::StatementSeparator
+                    ));
                     continue;
                 }
 
@@ -325,7 +335,12 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
                 parse_clg,
                 parse_mask
             )),
-            alt((parse_frame, parse_graphics_pen, parse_graphics_paper, parse_fill))
+            alt((
+                parse_frame,
+                parse_graphics_pen,
+                parse_graphics_paper,
+                parse_fill
+            ))
         )),
         // Screen/Display
         alt((
@@ -875,10 +890,8 @@ pub fn parse_print_stream_expression<'src>(
         // snake.bas's `"SCORE:"p`, and mines.bas's `"There are"nmines"mines."`
         // (both directions in the same line), all otherwise-unparseable
         // without this.
-        let just_closed_a_string = matches!(
-            tokens.last(),
-            Some(BasicToken::CommentOrString(_, _, true))
-        );
+        let just_closed_a_string =
+            matches!(tokens.last(), Some(BasicToken::CommentOrString(_, _, true)));
 
         let checkpoint = input.checkpoint();
         let had_sep = match one_of::<_, _, ContextError>([';', ',']).parse_next(input) {
@@ -1239,7 +1252,10 @@ pub fn parse_line_number_expression<'src>(input: &mut &'src str) -> BasicSeveral
             // the last silently fall through to the generic 16-bit form,
             // confirmed against a real CPC's own re-save of magic8b.bas's
             // `ON q GOSUB 100,110,...,290`.
-            peek(alt((eof.void(), one_of((' ', '\t', ':', '\r', '\n', ',')).void())))
+            peek(alt((
+                eof.void(),
+                one_of((' ', '\t', ':', '\r', '\n', ',')).void()
+            )))
         )
         .map(|val| {
             vec![BasicToken::Constant(
@@ -1600,7 +1616,9 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
                     let mut space_before = parse_basic_space0.parse_next(input)?;
                     if opt(':').parse_next(input)?.is_some() {
                         res.append(&mut space_before);
-                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
+                        res.push(BasicToken::SimpleToken(
+                            BasicTokenNoPrefix::StatementSeparator
+                        ));
                         let mut space_after = parse_basic_space0.parse_next(input)?;
                         res.append(&mut space_after);
                         // Continue to next statement
@@ -1652,7 +1670,9 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
                     let mut space_before = parse_basic_space0.parse_next(input)?;
                     if opt(':').parse_next(input)?.is_some() {
                         res.append(&mut space_before);
-                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
+                        res.push(BasicToken::SimpleToken(
+                            BasicTokenNoPrefix::StatementSeparator
+                        ));
                         let mut space_after = parse_basic_space0.parse_next(input)?;
                         res.append(&mut space_after);
                         // Continue to next statement
@@ -2402,9 +2422,7 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
 
     let (space_c, first_line) = (
         parse_basic_space1,
-        cut_err(
-            parse_line_number_expression.context(StrContext::Label("Line number expected"))
-        )
+        cut_err(parse_line_number_expression.context(StrContext::Label("Line number expected")))
     )
         .parse_next(input)?;
 
@@ -2412,11 +2430,11 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
     let rest_lines: Vec<Vec<BasicToken>> = repeat(
         0..,
         (parse_comma, parse_line_number_expression).map(|(mut c, mut line)| {
-                let mut tokens = vec![];
-                tokens.append(&mut c);
-                tokens.append(&mut line);
-                tokens
-            })
+            let mut tokens = vec![];
+            tokens.append(&mut c);
+            tokens.append(&mut line);
+            tokens
+        })
     )
     .parse_next(input)?;
 
@@ -2449,9 +2467,7 @@ pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
         parse_basic_space1,
         cut_err(Caseless("GOTO").context(StrContext::Label("GOTO expected"))),
         parse_basic_space1,
-        cut_err(
-            parse_line_number_expression.context(StrContext::Label("Line number expected"))
-        )
+        cut_err(parse_line_number_expression.context(StrContext::Label("Line number expected")))
     )
         .parse_next(input)?;
 
@@ -2730,9 +2746,7 @@ pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
                 BasicToken::SimpleToken(BasicTokenNoPrefix::Delete),
                 space,
                 start,
-                vec![BasicToken::SimpleToken(
-                    BasicTokenNoPrefix::CharHyphen
-                )],
+                vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharHyphen)],
                 end
             )
         }
@@ -2831,7 +2845,7 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
                     parse_base_variable_name.map(|n| vec![variable_token(n, None)])
                 )
             )
-                .map(|v: Vec<(Vec<BasicToken>, Vec<BasicToken>)>| v)
+            .map(|v: Vec<(Vec<BasicToken>, Vec<BasicToken>)>| v)
         )),
         parse_basic_space0,
         ')'
@@ -2895,9 +2909,7 @@ pub fn parse_edit<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     let (_, space, line_num) = (
         Caseless("EDIT"),
         parse_basic_space1,
-        cut_err(
-            parse_line_number_expression.context(StrContext::Label("Line number expected"))
-        )
+        cut_err(parse_line_number_expression.context(StrContext::Label("Line number expected")))
     )
         .parse_next(input)?;
 
@@ -2992,9 +3004,7 @@ pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
         let mut tokens = vec![BasicToken::SimpleToken(first.into())];
         if let Some((_, second)) = range {
-            tokens.push(BasicToken::SimpleToken(
-                BasicTokenNoPrefix::CharHyphen
-            ));
+            tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharHyphen));
             tokens.push(BasicToken::SimpleToken(second.into()));
         }
         Ok(tokens)
@@ -3045,9 +3055,7 @@ pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
 
         let mut tokens = vec![BasicToken::SimpleToken(first.into())];
         if let Some((_, second)) = range {
-            tokens.push(BasicToken::SimpleToken(
-                BasicTokenNoPrefix::CharHyphen
-            ));
+            tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharHyphen));
             tokens.push(BasicToken::SimpleToken(second.into()));
         }
         Ok(tokens)
@@ -3098,9 +3106,7 @@ pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
         let mut tokens = vec![BasicToken::SimpleToken(first.into())];
         if let Some((_, second)) = range {
-            tokens.push(BasicToken::SimpleToken(
-                BasicTokenNoPrefix::CharHyphen
-            ));
+            tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharHyphen));
             tokens.push(BasicToken::SimpleToken(second.into()));
         }
         Ok(tokens)
@@ -5454,7 +5460,9 @@ pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
 /// for how the ROM encodes those (in practice the leading `-` is stripped
 /// by `parse_unary_operator` before this ever runs, so `neg` is always
 /// `None` on this call path regardless).
-pub fn parse_decimal_value_16bits_compact<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
+pub fn parse_decimal_value_16bits_compact<'src>(
+    input: &mut &'src str
+) -> BasicOneTokenResult<'src> {
     (
         opt('-'),
         terminated(dec_u16_inner, cpclib_common::winnow::combinator::not('.'))
@@ -6411,7 +6419,10 @@ mod test {
         let bytes = prog.as_bytes();
 
         // length(2) + line number(2) + THETA reference(8) + ...
-        assert_eq!(&bytes[4..12], &[0x0D, 0x00, 0x00, b't', b'h', b'e', b't', b'a' | 0x80]);
+        assert_eq!(
+            &bytes[4..12],
+            &[0x0D, 0x00, 0x00, b't', b'h', b'e', b't', b'a' | 0x80]
+        );
     }
 
     #[test]

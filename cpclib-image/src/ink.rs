@@ -3,9 +3,8 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use image as im;
 use nutype::nutype;
 
-use crate::color::AmstradColor;
-
 use self::im::Pixel;
+use crate::color::AmstradColor;
 
 /// Number of inks managed by the system. Do not take into account the few duplicates
 const NB_INKS: u8 = 27 + 5;

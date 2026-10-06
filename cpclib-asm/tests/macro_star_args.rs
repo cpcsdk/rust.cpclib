@@ -25,20 +25,18 @@
 
 #[test]
 fn star_expands_every_argument_joined_with_commas() {
-    let bin = cpclib_asm::assemble(
-        "MACRO ALLARGS(...)\n db {*}\nENDM\n org 0x4000\n ALLARGS(1, 2, 3)\n"
-    )
-    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    let bin =
+        cpclib_asm::assemble("MACRO ALLARGS(...)\n db {*}\nENDM\n org 0x4000\n ALLARGS(1, 2, 3)\n")
+            .unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bin, vec![1, 2, 3], "{bin:?}");
 }
 
 #[test]
 fn star_works_for_named_parameters_too_not_just_variadic_extras() {
     // No trailing `...` at all - `{*}` is not gated behind variadic.
-    let bin = cpclib_asm::assemble(
-        "MACRO THREE(a, b, c)\n db {*}\nENDM\n org 0x4000\n THREE(4, 5, 6)\n"
-    )
-    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    let bin =
+        cpclib_asm::assemble("MACRO THREE(a, b, c)\n db {*}\nENDM\n org 0x4000\n THREE(4, 5, 6)\n")
+            .unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bin, vec![4, 5, 6], "{bin:?}");
 }
 
@@ -74,10 +72,9 @@ fn star_with_a_literal_list_of_indices_selects_in_the_given_order() {
 
 #[test]
 fn star_with_a_single_index_selects_just_that_one_argument() {
-    let bin = cpclib_asm::assemble(
-        "MACRO SEL(...)\n db {*[1]}\nENDM\n org 0x4000\n SEL(10, 20, 30)\n"
-    )
-    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    let bin =
+        cpclib_asm::assemble("MACRO SEL(...)\n db {*[1]}\nENDM\n org 0x4000\n SEL(10, 20, 30)\n")
+            .unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bin, vec![20], "{bin:?}");
 }
 
@@ -110,10 +107,9 @@ fn an_argument_referenced_both_directly_and_via_star_expands_consistently() {
     // referenced both ways got evaluated twice. Both references must still
     // agree, and (per the fix) only cost one evaluation of the shared
     // {eval}-marked expression.
-    let bin = cpclib_asm::assemble(
-        "MACRO M(...)\n db {0}\n db {*}\nENDM\n org 0x4000\n M({eval}1+1)\n"
-    )
-    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    let bin =
+        cpclib_asm::assemble("MACRO M(...)\n db {0}\n db {*}\nENDM\n org 0x4000\n M({eval}1+1)\n")
+            .unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bin, vec![2, 2], "{bin:?}");
 }
 
@@ -137,9 +133,7 @@ fn a_named_parameter_used_only_inside_a_star_selector_is_not_flagged_unused() {
 
 #[test]
 fn star_selector_out_of_range_index_is_a_clear_error() {
-    let err = cpclib_asm::assemble(
-        "MACRO SEL(...)\n db {*[5]}\nENDM\n org 0x4000\n SEL(10, 20)\n"
-    );
+    let err = cpclib_asm::assemble("MACRO SEL(...)\n db {*[5]}\nENDM\n org 0x4000\n SEL(10, 20)\n");
     let err = err.expect_err("an out-of-range {*[...]} index must be a clear error");
     let text = err.to_string();
     assert!(text.contains("out of range"), "{text}");
@@ -147,9 +141,8 @@ fn star_selector_out_of_range_index_is_a_clear_error() {
 
 #[test]
 fn star_selector_negative_index_is_a_clear_error() {
-    let err = cpclib_asm::assemble(
-        "MACRO SEL(...)\n db {*[0-1]}\nENDM\n org 0x4000\n SEL(10, 20)\n"
-    );
+    let err =
+        cpclib_asm::assemble("MACRO SEL(...)\n db {*[0-1]}\nENDM\n org 0x4000\n SEL(10, 20)\n");
     assert!(err.is_err(), "{err:?}");
 }
 
@@ -185,9 +178,7 @@ fn star_selector_result_can_be_indexed_right_after_it() {
 fn star_alone_without_a_following_bracket_still_spreads_flat() {
     // Regression guard for the indexing fix above: `{*}` with no `[...]`
     // right after it must keep spreading flat, not get wrapped anyway.
-    let bin = cpclib_asm::assemble(
-        "MACRO ALL(...)\n db {*}\nENDM\n org 0x4000\n ALL(1, 2, 3)\n"
-    )
-    .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    let bin = cpclib_asm::assemble("MACRO ALL(...)\n db {*}\nENDM\n org 0x4000\n ALL(1, 2, 3)\n")
+        .unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bin, vec![1, 2, 3], "{bin:?}");
 }

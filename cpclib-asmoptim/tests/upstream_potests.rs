@@ -41,9 +41,9 @@ fn inputs() -> Vec<PathBuf> {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| {
             p.extension().is_some_and(|e| e == "asm")
-                && !p.file_stem().is_some_and(|s| {
-                    s.to_string_lossy().ends_with("-expected")
-                })
+                && !p
+                    .file_stem()
+                    .is_some_and(|s| s.to_string_lossy().ends_with("-expected"))
         })
         .collect();
     paths.sort();
@@ -93,7 +93,11 @@ fn removed(before: &[Token], after: &[Token]) -> std::collections::HashMap<Strin
 fn optimize(source: &str) -> String {
     let listing = parse_z80_str(source).expect("fixture must parse");
     let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
-    let matches = find_matches(&tokens, builtin_rules(OptimizationGoal::Size), OptimizationGoal::Size);
+    let matches = find_matches(
+        &tokens,
+        builtin_rules(OptimizationGoal::Size),
+        OptimizationGoal::Size
+    );
 
     let mut edits: Vec<_> = matches
         .iter()

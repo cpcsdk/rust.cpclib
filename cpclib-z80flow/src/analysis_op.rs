@@ -260,8 +260,14 @@ mod tests {
         let op = AnalysisOp::Real(&token);
 
         assert_eq!(op.mnemonic(), Some(Mnemonic::Ld));
-        assert_eq!(op.arg1().as_deref(), Some(&DataAccess::Register8(Register8::A)));
-        assert_eq!(op.arg2().as_deref(), Some(&DataAccess::Register8(Register8::B)));
+        assert_eq!(
+            op.arg1().as_deref(),
+            Some(&DataAccess::Register8(Register8::A))
+        );
+        assert_eq!(
+            op.arg2().as_deref(),
+            Some(&DataAccess::Register8(Register8::B))
+        );
         assert_eq!(op.arg3(), None);
         assert!(!op.is_expanded());
         assert_eq!(op.expansion_position(), None);
@@ -341,7 +347,10 @@ mod tests {
     #[test]
     fn every_op_is_classified_for_a_fail_closed_analysis() {
         let nop = opcode(Mnemonic::Nop, None, None, None);
-        assert_eq!(AnalysisOp::<Token>::Real(&nop).classify(), OpClass::Executes);
+        assert_eq!(
+            AnalysisOp::<Token>::Real(&nop).classify(),
+            OpClass::Executes
+        );
 
         let origin = opcode(Mnemonic::Ld, None, None, None);
         let expanded = AnalysisOp::Expanded {
@@ -353,7 +362,10 @@ mod tests {
         assert_eq!(expanded.classify(), OpClass::Executes);
 
         let label = Token::Label("start".into(), None);
-        assert_eq!(AnalysisOp::<Token>::Other(&label).classify(), OpClass::Inert);
+        assert_eq!(
+            AnalysisOp::<Token>::Other(&label).classify(),
+            OpClass::Inert
+        );
 
         let comment = Token::Comment("; hi".into());
         assert_eq!(

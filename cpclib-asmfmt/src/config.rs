@@ -26,8 +26,8 @@ pub fn find_config_file() -> Option<PathBuf> {
 }
 
 pub fn load_config_from(path: &Path) -> Result<AsmFormatOptions, String> {
-    let content = fs_err::read_to_string(path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let content =
+        fs_err::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     toml::from_str(&content).map_err(|e| format!("invalid config in {}: {e}", path.display()))
 }
 
@@ -81,11 +81,19 @@ mod tests {
     #[test]
     fn reads_the_ignore_list_out_of_a_config_document() {
         let content = "ignore = [\"sub/*.asm\", \"vendor/**\"]\nindent_size = 2\n";
-        assert_eq!(parse_ignore_patterns(content), vec!["sub/*.asm", "vendor/**"]);
+        assert_eq!(
+            parse_ignore_patterns(content),
+            vec!["sub/*.asm", "vendor/**"]
+        );
         // The same document's real options must still parse fine through the
         // normal path - the `ignore` key is simply unknown to
         // `AsmFormatOptions` and dropped by serde, not a hard error.
-        assert_eq!(toml::from_str::<AsmFormatOptions>(content).unwrap().indent_size, 2);
+        assert_eq!(
+            toml::from_str::<AsmFormatOptions>(content)
+                .unwrap()
+                .indent_size,
+            2
+        );
     }
 
     #[test]

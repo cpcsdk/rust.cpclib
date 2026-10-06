@@ -67,9 +67,10 @@ pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
         if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
             &mut listing.listing_mut()[i]
-            && let Some(target) = resolve_jr_djnz_target(e, Some(this_address)) {
-                *e = Expr::Value(target as i32);
-            }
+            && let Some(target) = resolve_jr_djnz_target(e, Some(this_address))
+        {
+            *e = Expr::Value(target as i32);
+        }
 
         let token = &listing.listing()[i];
         let Ok(length) = token.number_of_bytes()
@@ -204,9 +205,10 @@ pub fn overlay_data_rows(
             // to detect staleness, so the source map's claim is still the
             // best available evidence and the overlay proceeds.
             if let Some(assembled) = live_bytes(row_start, row_len as usize)
-                && assembled != bytes {
-                    return None;
-                }
+                && assembled != bytes
+            {
+                return None;
+            }
 
             let text = render_data_bytes(&bytes);
             Some((
@@ -373,7 +375,7 @@ mod tests {
     #[test]
     fn a_string_run_and_a_terminator_are_rendered_separately() {
         let mut bytes = b"HELLO, WORLD".to_vec();
-        bytes.extend_from_slice(&[0x0a, 0x0d, 0x00]);
+        bytes.extend_from_slice(&[0x0A, 0x0D, 0x00]);
         assert_eq!(
             render_data_bytes(&bytes),
             "DB \"HELLO, WORLD\",0x0a,0x0d,0x00"
@@ -385,7 +387,10 @@ mod tests {
     /// noise, and might mislead about what the bytes actually are.
     #[test]
     fn a_short_printable_run_stays_numeric() {
-        assert_eq!(render_data_bytes(&[0x00, b'H', b'i', 0x00]), "DB 0x00,0x48,0x69,0x00");
+        assert_eq!(
+            render_data_bytes(&[0x00, b'H', b'i', 0x00]),
+            "DB 0x00,0x48,0x69,0x00"
+        );
     }
 
     /// A quote inside the run does not break the quoting.
@@ -406,7 +411,10 @@ mod tests {
     /// numeric, exactly as before this feature existed.
     #[test]
     fn pure_binary_data_is_unaffected() {
-        assert_eq!(render_data_bytes(&[0x00, 0xFF, 0x01, 0x02]), "DB 0x00,0xff,0x01,0x02");
+        assert_eq!(
+            render_data_bytes(&[0x00, 0xFF, 0x01, 0x02]),
+            "DB 0x00,0xff,0x01,0x02"
+        );
     }
 
     /// The DAP form carries the bytes as hex, which is what the panel prints

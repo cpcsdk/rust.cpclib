@@ -27,9 +27,9 @@
 
 use cpclib_tokens::ListingElement;
 
+use crate::cfg::{Successor, Terminator, build_cfg};
 pub use crate::cost::InstructionCost;
 use crate::cost::{CostModel, instruction_cost};
-use crate::cfg::{Successor, Terminator, build_cfg};
 
 /// The min/max cost summary for a token selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -118,10 +118,8 @@ fn call_cost<T: ListingElement>(
 
     // Where does it go? An operand that is not a plain label - a computed
     // `call (hl)`-alike, or an expression - is not something to guess about.
-    let target = crate::flow::jump::condition_and_target(
-        token.mnemonic_arg1(),
-        token.mnemonic_arg2()
-    );
+    let target =
+        crate::flow::jump::condition_and_target(token.mnemonic_arg1(), token.mnemonic_arg2());
     let Some((conditional, target)) = target
     else {
         return RunCost {
@@ -183,7 +181,7 @@ fn call_cost<T: ListingElement>(
                     incomplete: true,
                     ..RunCost::default()
                 }
-            }
+            },
         };
         calls.in_progress.remove(&key);
         calls.memo.insert(key, body);
@@ -410,20 +408,21 @@ fn cost_range_inner<T: ListingElement>(
                 );
                 incomplete |= prefix.incomplete;
                 let branch_token = tokens[block.end];
-                let (branch_taken_cost, branch_not_taken_cost) = match instruction_cost(branch_token, cost) {
-                    InstructionCost::Conditional { taken, not_taken } => {
-                        instruction_count += 1;
-                        (taken, not_taken)
-                    },
-                    InstructionCost::Fixed(n) => {
-                        instruction_count += 1;
-                        (n, n)
-                    },
-                    InstructionCost::Unknown => {
-                        unrecognized_count += 1;
-                        (0, 0)
-                    }
-                };
+                let (branch_taken_cost, branch_not_taken_cost) =
+                    match instruction_cost(branch_token, cost) {
+                        InstructionCost::Conditional { taken, not_taken } => {
+                            instruction_count += 1;
+                            (taken, not_taken)
+                        },
+                        InstructionCost::Fixed(n) => {
+                            instruction_count += 1;
+                            (n, n)
+                        },
+                        InstructionCost::Unknown => {
+                            unrecognized_count += 1;
+                            (0, 0)
+                        }
+                    };
 
                 let not_taken_min = branch_not_taken_cost + best_min[*not_taken];
                 let not_taken_max = branch_not_taken_cost + best_max[*not_taken];

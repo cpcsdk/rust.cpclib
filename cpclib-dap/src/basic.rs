@@ -16,9 +16,9 @@
 //! and program-start pointers come from the ROM disassembly's `Execution.asm`
 //! and `LoadSaveRun.asm`, which is the only source of the two.
 
+use cpclib_basic::BasicLine;
 use cpclib_basic::binary_parser::line_or_end;
 use cpclib_basic::tokens::{BasicFloat, BasicToken, BasicTokenNoPrefix};
-use cpclib_basic::BasicLine;
 use cpclib_common::winnow::Parser;
 
 /// Pointer to the current statement (advances on every `:`-separated
@@ -202,7 +202,8 @@ pub fn build_statement_index(
     program_start: u16,
     source_text: &str
 ) -> Vec<StatementPosition> {
-    let Ok(addressed_lines) = program_with_addresses(program_bytes, program_start) else {
+    let Ok(addressed_lines) = program_with_addresses(program_bytes, program_start)
+    else {
         return Vec::new();
     };
     let source_lines: Vec<&str> = source_text.lines().collect();
@@ -303,7 +304,10 @@ pub enum BasicVariableValue {
     Real(f64),
     /// The string's characters live elsewhere in RAM; decoding them is a
     /// second `readMemory(address, len)` the caller issues, not done here.
-    StringRef { len: u8, address: u16 },
+    StringRef {
+        len: u8,
+        address: u16
+    },
     /// `DEF FN` - opaque, not decoded.
     DefFn,
     Unknown(u8)
@@ -430,10 +434,10 @@ fn read_name(buffer: &[u8], mut idx: usize) -> Option<(String, usize)> {
     let mut name = String::new();
     loop {
         let byte = *buffer.get(idx)?;
-        let masked = byte & 0x7f;
+        let masked = byte & 0x7F;
         name.push(match masked {
             0x10..=0x19 => (b'0' + (masked - 0x10)) as char,
-            0x0e => '.',
+            0x0E => '.',
             other => other as char
         });
         idx += 1;
@@ -502,7 +506,10 @@ mod tests {
     use super::*;
 
     fn peek16(sna: &cpclib_sna::Snapshot, address: u16) -> u16 {
-        u16::from_le_bytes([sna.get_byte(address as u32), sna.get_byte(address as u32 + 1)])
+        u16::from_le_bytes([
+            sna.get_byte(address as u32),
+            sna.get_byte(address as u32 + 1)
+        ])
     }
 
     #[test]
@@ -687,7 +694,14 @@ mod tests {
         let mut bytes = next.to_le_bytes().to_vec();
         let chars: Vec<u8> = name
             .bytes()
-            .map(|c| if c.is_ascii_digit() || c == b'.' { c & !0x20 } else { c })
+            .map(|c| {
+                if c.is_ascii_digit() || c == b'.' {
+                    c & !0x20
+                }
+                else {
+                    c
+                }
+            })
             .collect();
         for (i, &c) in chars.iter().enumerate() {
             let last = i == chars.len() - 1;

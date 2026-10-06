@@ -26,11 +26,29 @@ static PROGRESS: LazyLock<Arc<Mutex<Progress>>> =
 /// and not trying to predict how many passes remain).
 #[derive(Debug, Clone)]
 pub enum AsmProgressEvent {
-    Parse { item: String, done: u64, total: u64 },
-    Load { item: String, done: u64, total: u64 },
-    PassStarted { pass: usize },
-    PassProgress { pass: usize, visited: u64, expected: u64 },
-    Save { item: String, done: u64, total: u64 },
+    Parse {
+        item: String,
+        done: u64,
+        total: u64
+    },
+    Load {
+        item: String,
+        done: u64,
+        total: u64
+    },
+    PassStarted {
+        pass: usize
+    },
+    PassProgress {
+        pass: usize,
+        visited: u64,
+        expected: u64
+    },
+    Save {
+        item: String,
+        done: u64,
+        total: u64
+    },
     SaveFinished
 }
 

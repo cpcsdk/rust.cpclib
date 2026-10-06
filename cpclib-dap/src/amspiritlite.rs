@@ -138,7 +138,9 @@ pub fn call_for(request: &Value) -> Option<Call> {
         // as key events on the CPC") and is exactly what this emulator's own
         // web UI calls to auto-run a BASIC program it just injected into RAM.
         "cpclib/autotype" => {
-            let text = arguments.and_then(|a| a.get("text")).and_then(Value::as_str)?;
+            let text = arguments
+                .and_then(|a| a.get("text"))
+                .and_then(Value::as_str)?;
             Call::post("/api/keytype").body(json!({ "text": text }).to_string())
         },
 
@@ -157,7 +159,9 @@ pub fn call_for(request: &Value) -> Option<Call> {
         // emulator's native API - this sidesteps the question of why by
         // not depending on the answer.
         "cpclib/basicInject" => {
-            let source = arguments.and_then(|a| a.get("source")).and_then(Value::as_str)?;
+            let source = arguments
+                .and_then(|a| a.get("source"))
+                .and_then(Value::as_str)?;
             Call::post("/api/basic").body(source.to_string())
         },
 
@@ -211,10 +215,17 @@ pub fn call_for(request: &Value) -> Option<Call> {
         // running. The native equivalent of BasicSession's own
         // StepStatement/StepLine distinction.
         "cpclib/basicStep" => {
-            let by_line = arguments.and_then(|a| a.get("mode")).and_then(Value::as_str)
+            let by_line = arguments
+                .and_then(|a| a.get("mode"))
+                .and_then(Value::as_str)
                 == Some("line");
             let call = Call::post("/api/basic_step");
-            if by_line { call.query("mode", "line") } else { call }
+            if by_line {
+                call.query("mode", "line")
+            }
+            else {
+                call
+            }
         },
 
         // Which page is mapped where. The whole reason this backend is worth
@@ -445,8 +456,16 @@ fn tape_pane(body: &Value) -> Vec<Value> {
         ("position", "tapePos", "counter: position on the tape"),
         ("length", "length", ""),
         ("current block", "currentBlock", "index into the block list"),
-        ("current block type", "currentBlockType", "TZX/CDT block type id"),
-        ("inversions", "nbInversions", "counter: signal-edge inversions read")
+        (
+            "current block type",
+            "currentBlockType",
+            "TZX/CDT block type id"
+        ),
+        (
+            "inversions",
+            "nbInversions",
+            "counter: signal-edge inversions read"
+        )
     ] {
         if let Some(value) = body.get(key) {
             out.push(scalar(name, value, meaning));
@@ -454,7 +473,11 @@ fn tape_pane(body: &Value) -> Vec<Value> {
         }
     }
     if let Some(blocks) = body.get("blocks").and_then(Value::as_array) {
-        out.push(scalar("blocks", &json!(blocks.len()), "number of TZX/CDT blocks on this tape"));
+        out.push(scalar(
+            "blocks",
+            &json!(blocks.len()),
+            "number of TZX/CDT blocks on this tape"
+        ));
         consumed.push("blocks");
     }
 
@@ -520,7 +543,11 @@ fn psg_pane(body: &Value) -> Vec<Value> {
         consumed.push(key);
     }
     if let Some((key, value)) = first_present(body, &["envShape", "env_shape"]) {
-        out.push(scalar("Envelope shape", value, "raw AY-3-8912 envelope shape register (R13)"));
+        out.push(scalar(
+            "Envelope shape",
+            value,
+            "raw AY-3-8912 envelope shape register (R13)"
+        ));
         consumed.push(key);
     }
     if let Some(registers) = body.get("registers").and_then(Value::as_array) {
@@ -689,7 +716,11 @@ fn gate_array_pane(body: &Value) -> Vec<Value> {
     }
 
     if let Some(pen) = body.get("pen") {
-        out.push(scalar("selected pen", pen, "the pen the next &7Fxx colour write lands in"));
+        out.push(scalar(
+            "selected pen",
+            pen,
+            "the pen the next &7Fxx colour write lands in"
+        ));
     }
 
     if let Some(inks) = body.get("ink_idx").and_then(Value::as_array) {
@@ -2571,7 +2602,8 @@ mod tests {
         .unwrap();
 
         assert!(
-            call.query.contains(&("view".to_string(), "cpu".to_string())),
+            call.query
+                .contains(&("view".to_string(), "cpu".to_string())),
             "readMemory must ask for the CPU's mapped view, not /api/ram's own \
              raw-physical-bank-0 default: {:?}",
             call.query
@@ -2737,9 +2769,16 @@ mod tests {
         let (sender, receiver) = std::sync::mpsc::channel();
         read_events(&addr.to_string(), &sender);
 
-        let logged = receiver.try_recv().expect("a console echo of the raw SSE event");
+        let logged = receiver
+            .try_recv()
+            .expect("a console echo of the raw SSE event");
         assert_eq!(logged["event"], json!("output"));
-        assert!(logged["body"]["output"].as_str().unwrap().contains("basic_bp"));
+        assert!(
+            logged["body"]["output"]
+                .as_str()
+                .unwrap()
+                .contains("basic_bp")
+        );
 
         let event = receiver.try_recv().expect("a stopped event");
         assert_eq!(event["event"], json!("stopped"));
@@ -2888,14 +2927,18 @@ mod tests {
         let mut regs = vec![0; 18];
         regs[0] = 63;
         regs[2] = 60;
-        regs[3] = 0x8c;
+        regs[3] = 0x8C;
         let body = json!({ "regs": regs, "selected_reg": 0, "rasterline": 0 });
 
         let pane = chip_variables(crate::inspect::CRTC_REFERENCE, &body);
         assert!(
-            pane.iter()
-                .any(|v| v["name"].as_str().unwrap_or_default().contains("R2")
-                    && v["value"].as_str().unwrap_or_default().contains("horizontal sync")),
+            pane.iter().any(|v| {
+                v["name"].as_str().unwrap_or_default().contains("R2")
+                    && v["value"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .contains("horizontal sync")
+            }),
             "{pane:?}"
         );
     }
@@ -3099,7 +3142,11 @@ mod tests {
 
     #[test]
     fn basic_set_breakpoints_with_none_clears_the_set() {
-        let call = call_for(&request("cpclib/basicSetBreakpoints", json!({ "lines": [] }))).unwrap();
+        let call = call_for(&request(
+            "cpclib/basicSetBreakpoints",
+            json!({ "lines": [] })
+        ))
+        .unwrap();
         assert_eq!(call.body.as_deref(), Some(""));
     }
 

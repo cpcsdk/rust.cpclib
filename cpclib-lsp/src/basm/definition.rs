@@ -108,7 +108,12 @@ impl AssemblyAnalyzer {
     /// included (`reference_count_code_lenses`,
     /// `find_unreferenced_labels_in_workspace`), have no need for this -
     /// they already have the canonical name in hand.
-    pub fn canonicalize_label_query(&self, document: &Document, position: Position, word: &str) -> String {
+    pub fn canonicalize_label_query(
+        &self,
+        document: &Document,
+        position: Position,
+        word: &str
+    ) -> String {
         if word.starts_with('.')
             && let Ok(listing) = self.parse_document(document)
             && let Some((owner, _scope)) =
@@ -873,11 +878,7 @@ fn names_match(a: &str, b: &str, case_sensitive: bool) -> bool {
 /// directly since it needs its own, different trailing-boundary rule (a
 /// match immediately followed by `.` must be *accepted*, not rejected —
 /// `.` is itself an `is_ident_byte` character).
-fn pattern_starts_on_line(
-    line: &str,
-    pattern: &str,
-    case_sensitive: bool
-) -> Vec<(usize, usize)> {
+fn pattern_starts_on_line(line: &str, pattern: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
     let line_for_match = if case_sensitive {
         line.to_string()
     }
@@ -908,11 +909,7 @@ fn pattern_starts_on_line(
 /// character) — the strict "whole word" match `find_references_in`,
 /// `find_local_matches_in_scope`, `find_bare_word_matches_in_scope`, and
 /// `bare_word_matches_on_line` all need.
-fn word_matches_on_line(
-    line: &str,
-    pattern: &str,
-    case_sensitive: bool
-) -> Vec<(usize, usize)> {
+fn word_matches_on_line(line: &str, pattern: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
     let bytes = line.as_bytes();
     pattern_starts_on_line(line, pattern, case_sensitive)
         .into_iter()
@@ -1247,9 +1244,9 @@ impl AssemblyAnalyzer {
         };
         let reachable = graph.reachable_from(&program_root);
 
-        candidates.into_iter().partition(|p| {
-            fs_err::canonicalize(p).is_ok_and(|c| reachable.contains(&c))
-        })
+        candidates
+            .into_iter()
+            .partition(|p| fs_err::canonicalize(p).is_ok_and(|c| reachable.contains(&c)))
     }
 }
 
@@ -1694,10 +1691,10 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
 
         let a_uri = tower_lsp::lsp_types::Url::from_file_path(&a).unwrap();
         let analyzer = AssemblyAnalyzer::new();
-        let (same, other) = analyzer.same_program_split(&a_uri, vec![
-            a.clone().into_std_path_buf(),
-            b.clone().into_std_path_buf()
-        ]);
+        let (same, other) = analyzer.same_program_split(
+            &a_uri,
+            vec![a.clone().into_std_path_buf(), b.clone().into_std_path_buf()]
+        );
         assert_eq!(same, vec![a.into_std_path_buf()], "{same:?}");
         assert_eq!(other, vec![b.into_std_path_buf()], "{other:?}");
     }

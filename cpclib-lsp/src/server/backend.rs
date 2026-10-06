@@ -145,9 +145,11 @@ impl CpcLspBackend {
     /// regresses for a client that never adopts this.
     fn should_fully_assemble(&self, uri: &Url) -> bool {
         match self.active_document.read() {
-            Ok(guard) => match guard.as_ref() {
-                None => true,
-                Some(active) => active == uri
+            Ok(guard) => {
+                match guard.as_ref() {
+                    None => true,
+                    Some(active) => active == uri
+                }
             },
             Err(_) => true
         }
@@ -314,7 +316,11 @@ impl CpcLspBackend {
             // scheduled onto the blocking pool at all (real contention for
             // that pool, or something upstream of it), not in the work
             // itself.
-            tracing::debug!("spawn_deferred_analysis for {} took {:?}", uri, blocking_start.elapsed());
+            tracing::debug!(
+                "spawn_deferred_analysis for {} took {:?}",
+                uri,
+                blocking_start.elapsed()
+            );
             client.publish_diagnostics(uri, diagnostics, None).await;
         });
     }
@@ -522,8 +528,7 @@ impl CpcLspBackend {
         let mut refs = Vec::new();
 
         for filename in crate::basm::definition::extract_include_filenames(document_text) {
-            if let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri)
-            {
+            if let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri) {
                 refs.extend(references_at_path_with(
                     &self.documents,
                     &self.asm_analyzer,
@@ -548,7 +553,9 @@ impl CpcLspBackend {
         let results: Vec<Location> = tokio::task::spawn_blocking(move || {
             paths
                 .par_iter()
-                .flat_map(|path| references_at_path_with(&documents, &asm_analyzer, path, &word_owned))
+                .flat_map(|path| {
+                    references_at_path_with(&documents, &asm_analyzer, path, &word_owned)
+                })
                 .collect()
         })
         .await
@@ -575,7 +582,10 @@ impl CpcLspBackend {
     /// (rather than one `references_at_path_with` call per label) since
     /// every file's full text is needed for every label's count, not just
     /// one.
-    async fn find_unreferenced_labels_in_workspace(&self, from_uri: &Url) -> Vec<(String, Location)> {
+    async fn find_unreferenced_labels_in_workspace(
+        &self,
+        from_uri: &Url
+    ) -> Vec<(String, Location)> {
         let Some(document) = self.load_document(from_uri)
         else {
             return Vec::new();
@@ -853,7 +863,8 @@ impl CpcLspBackend {
 
         let roots: Vec<PathBuf> = self.workspace_roots();
         let graph = self.build_analyzer.build_include_graph_cached(&roots);
-        let includers = crate::bndbuild::definition::files_transitively_including(&graph, &from_path);
+        let includers =
+            crate::bndbuild::definition::files_transitively_including(&graph, &from_path);
 
         for (target_uri, doc) in self.load_related_documents(includers) {
             if changes.contains_key(&target_uri) {
@@ -938,7 +949,10 @@ impl CpcLspBackend {
     /// repeated after diverging on how `paths` was found
     /// (`files_transitively_including` vs `files_transitively_included_by`)
     /// and on what they do with the result.
-    fn load_related_documents(&self, paths: impl IntoIterator<Item = PathBuf>) -> Vec<(Url, Document)> {
+    fn load_related_documents(
+        &self,
+        paths: impl IntoIterator<Item = PathBuf>
+    ) -> Vec<(Url, Document)> {
         paths
             .into_iter()
             .filter_map(|path| {
@@ -1466,9 +1480,9 @@ fn start_build_progress_with_token(
         client
             .send_notification::<notification::Progress>(ProgressParams {
                 token,
-                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(
-                    WorkDoneProgressEnd { message: None }
-                ))
+                value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(WorkDoneProgressEnd {
+                    message: None
+                }))
             })
             .await;
     });
@@ -2016,12 +2030,14 @@ impl LanguageServer for CpcLspBackend {
             // Same class of bug already fixed for `hover`/`document_symbol`/
             // etc: `find_references` reaches `parse_document` at the exact
             // version.
-            let references = match tokio::task::spawn_blocking(move || match doc_type {
-                DocumentType::BuildFile => build_analyzer.find_references(&document, position),
-                DocumentType::Basic | DocumentType::CatartBasic => {
-                    basic_analyzer.find_references(&document, position)
-                },
-                _ => Vec::new()
+            let references = match tokio::task::spawn_blocking(move || {
+                match doc_type {
+                    DocumentType::BuildFile => build_analyzer.find_references(&document, position),
+                    DocumentType::Basic | DocumentType::CatartBasic => {
+                        basic_analyzer.find_references(&document, position)
+                    },
+                    _ => Vec::new()
+                }
             })
             .await
             {
@@ -2216,9 +2232,10 @@ impl LanguageServer for CpcLspBackend {
                     Err(_join_error) => return Ok(None)
                 };
                 if let Some(edit) = local_edit
-                    && let Some(local_changes) = edit.changes {
-                        changes.extend(local_changes);
-                    }
+                    && let Some(local_changes) = edit.changes
+                {
+                    changes.extend(local_changes);
+                }
                 if !changes.is_empty() {
                     self.rename_jinja_variable_across_workspace(
                         &uri,
@@ -2267,11 +2284,8 @@ impl LanguageServer for CpcLspBackend {
 
                     let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
                         std::collections::HashMap::new();
-                    let current_edits = asm_analyzer.rename_occurrences_in(
-                        &document,
-                        &target,
-                        &new_name_owned
-                    );
+                    let current_edits =
+                        asm_analyzer.rename_occurrences_in(&document, &target, &new_name_owned);
                     if !current_edits.is_empty() {
                         changes.insert(uri_owned, current_edits);
                     }
@@ -2332,17 +2346,19 @@ impl LanguageServer for CpcLspBackend {
         // already-transitive files, a different (and, per that cache,
         // usually cheap) cost profile from the basm reparse this fix exists
         // for.
-        let item = match tokio::task::spawn_blocking(move || match doc_type {
-            DocumentType::Assembly => {
-                asm_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
-            },
-            DocumentType::Basic | DocumentType::CatartBasic => {
-                basic_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
-            },
-            DocumentType::BuildFile => {
-                build_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
-            },
-            DocumentType::Csl | DocumentType::Unknown => None
+        let item = match tokio::task::spawn_blocking(move || {
+            match doc_type {
+                DocumentType::Assembly => {
+                    asm_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
+                },
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    basic_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
+                },
+                DocumentType::BuildFile => {
+                    build_analyzer.prepare_call_hierarchy(&document_for_blocking, position)
+                },
+                DocumentType::Csl | DocumentType::Unknown => None
+            }
         })
         .await
         {
@@ -2396,7 +2412,8 @@ impl LanguageServer for CpcLspBackend {
                         if doc_entry.value().doc_type != DocumentType::Assembly {
                             continue;
                         }
-                        calls.extend(asm_analyzer.incoming_calls_in(doc_entry.value(), &name_upper));
+                        calls
+                            .extend(asm_analyzer.incoming_calls_in(doc_entry.value(), &name_upper));
                     }
                     calls
                 })
@@ -2412,7 +2429,11 @@ impl LanguageServer for CpcLspBackend {
             ) => {
                 let asm_analyzer = Arc::clone(&self.asm_analyzer);
                 tokio::task::spawn_blocking(move || {
-                    asm_analyzer.incoming_calls_for_embedded_basic_line(&document, line_number, start)
+                    asm_analyzer.incoming_calls_for_embedded_basic_line(
+                        &document,
+                        line_number,
+                        start
+                    )
                 })
                 .await
                 .unwrap_or_default()
@@ -2440,9 +2461,8 @@ impl LanguageServer for CpcLspBackend {
             ) => {
                 let asm_analyzer = Arc::clone(&self.asm_analyzer);
                 tokio::task::spawn_blocking(move || {
-                    asm_analyzer.incoming_calls_for_embedded_bndbuild_target(
-                        &document, &target, start
-                    )
+                    asm_analyzer
+                        .incoming_calls_for_embedded_bndbuild_target(&document, &target, start)
                 })
                 .await
                 .unwrap_or_default()
@@ -2567,7 +2587,11 @@ impl LanguageServer for CpcLspBackend {
             ) => {
                 let asm_analyzer = Arc::clone(&self.asm_analyzer);
                 tokio::task::spawn_blocking(move || {
-                    asm_analyzer.outgoing_calls_for_embedded_basic_line(&document, line_number, start)
+                    asm_analyzer.outgoing_calls_for_embedded_basic_line(
+                        &document,
+                        line_number,
+                        start
+                    )
                 })
                 .await
                 .unwrap_or_default()
@@ -2595,9 +2619,8 @@ impl LanguageServer for CpcLspBackend {
             ) => {
                 let asm_analyzer = Arc::clone(&self.asm_analyzer);
                 tokio::task::spawn_blocking(move || {
-                    asm_analyzer.outgoing_calls_for_embedded_bndbuild_target(
-                        &document, &target, start
-                    )
+                    asm_analyzer
+                        .outgoing_calls_for_embedded_bndbuild_target(&document, &target, start)
                 })
                 .await
                 .unwrap_or_default()
@@ -2680,7 +2703,10 @@ impl LanguageServer for CpcLspBackend {
         // identical root cause) can't apply here either - re-serving the
         // last real answer for an already-superseded version is the only
         // safe way to skip the recomputation.
-        if self.pending_versions.get(&uri).is_some_and(|v| *v != version)
+        if self
+            .pending_versions
+            .get(&uri)
+            .is_some_and(|v| *v != version)
             && let Some(cached) = self.last_document_symbols.get(&uri)
         {
             return Ok(Some(DocumentSymbolResponse::Nested(
@@ -2712,7 +2738,9 @@ impl LanguageServer for CpcLspBackend {
         // (`parse_document`'s exact-version cache keying against a version
         // that changes on every keystroke).
         let data = match tokio::task::spawn_blocking(move || {
-            if pending_versions.get(&cache_key).is_some_and(|v| *v != version)
+            if pending_versions
+                .get(&cache_key)
+                .is_some_and(|v| *v != version)
                 && let Some(cached) = last_document_symbols.get(&cache_key)
             {
                 return (*cached.value()).to_vec();
@@ -2777,7 +2805,10 @@ impl LanguageServer for CpcLspBackend {
         // (see either's own doc comment for the full reasoning): a
         // `CodeLens`' `range` is also an exact position, so completion's
         // `ParseFreshness::ToleratesStale` fix doesn't transfer here either.
-        if self.pending_versions.get(&uri).is_some_and(|v| *v != version)
+        if self
+            .pending_versions
+            .get(&uri)
+            .is_some_and(|v| *v != version)
             && let Some(cached) = self.last_code_lens.get(&uri)
         {
             return Ok(Some((*cached.value()).to_vec()));
@@ -2803,7 +2834,9 @@ impl LanguageServer for CpcLspBackend {
         // parsed at that exact version - the same ~98% wasted-reparse shape
         // `semantic_tokens_full`/`document_symbol` had.
         let result = match tokio::task::spawn_blocking(move || {
-            if pending_versions.get(&cache_key).is_some_and(|v| *v != version)
+            if pending_versions
+                .get(&cache_key)
+                .is_some_and(|v| *v != version)
                 && let Some(cached) = last_code_lens.get(&cache_key)
             {
                 return (*cached.value()).to_vec();
@@ -3443,14 +3476,13 @@ impl LanguageServer for CpcLspBackend {
             };
             let song_path = camino::Utf8PathBuf::from(fname);
 
-            let is_sid = cpclib_bndbuild::pipeline::song_uses_sid(&song_path)
-                .map_err(|e| {
-                    tower_lsp::jsonrpc::Error {
-                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
-                        message: format!("could not inspect {song_path}: {e}").into(),
-                        data: None
-                    }
-                })?;
+            let is_sid = cpclib_bndbuild::pipeline::song_uses_sid(&song_path).map_err(|e| {
+                tower_lsp::jsonrpc::Error {
+                    code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                    message: format!("could not inspect {song_path}: {e}").into(),
+                    data: None
+                }
+            })?;
             let default_wait_line_count = crate::common::config::load_config(
                 self.workspace_roots().first().map(|p| p.as_path())
             )
@@ -3484,8 +3516,10 @@ impl LanguageServer for CpcLspBackend {
             // the config default when present. Absent for a non-SID song
             // (the client only prompts/sends this when `musicSidInfo` said
             // `isSid`) or when this is invoked some other way.
-            let sid_wait_line_count_override =
-                args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
+            let sid_wait_line_count_override = args
+                .next()
+                .and_then(|v| v.as_u64())
+                .and_then(|v| u16::try_from(v).ok());
             // Third argument: the player the user picked client-side
             // (`MusicPlayer::name`) - overrides `[music] player`.
             let player_override = args.next().and_then(|v| v.as_str().map(str::to_string));
@@ -3537,7 +3571,8 @@ impl LanguageServer for CpcLspBackend {
             };
 
             let outcome = tokio::task::spawn_blocking(move || {
-                let observer = std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
+                let observer =
+                    std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
                 cpclib_bndbuild::pipeline::music_run::run_music_in_emulator(
                     &song_path,
                     &name_hint,
@@ -3584,8 +3619,10 @@ impl LanguageServer for CpcLspBackend {
                 return Ok(None);
             };
             // See `cpclib.musicPlay`'s identical second argument.
-            let sid_wait_line_count_override =
-                args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
+            let sid_wait_line_count_override = args
+                .next()
+                .and_then(|v| v.as_u64())
+                .and_then(|v| u16::try_from(v).ok());
             // Third argument: the player the user picked client-side
             // (`MusicPlayer::name`) - overrides `[music] player`.
             let player_override = args.next().and_then(|v| v.as_str().map(str::to_string));
@@ -3643,10 +3680,7 @@ impl LanguageServer for CpcLspBackend {
                     let observer =
                         std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
                     let dsk_path = cpclib_bndbuild::pipeline::music_run::build_music_dsk(
-                        &song_path,
-                        &name_hint,
-                        &options,
-                        &observer
+                        &song_path, &name_hint, &options, &observer
                     )?;
                     fs_err::copy(&dsk_path, &dest_path)
                         .map_err(|e| format!("Could not write {dest_path}: {e}"))?;
@@ -3765,12 +3799,14 @@ impl LanguageServer for CpcLspBackend {
             };
 
             let (progress_tx, progress_task) = match client_token {
-                Some(token) => start_build_progress_with_token(
-                    &self.client,
-                    "Assembling…".to_string(),
-                    NumberOrString::String(token),
-                    true
-                ),
+                Some(token) => {
+                    start_build_progress_with_token(
+                        &self.client,
+                        "Assembling…".to_string(),
+                        NumberOrString::String(token),
+                        true
+                    )
+                },
                 None => start_build_progress(&self.client, "Assembling…".to_string())
             };
 
@@ -4448,7 +4484,10 @@ impl LanguageServer for CpcLspBackend {
         // synchronization between overlapping requests). See the
         // `spawn_blocking` closure below for why re-parsing can't simply be
         // made cheaper here the way it was for completion.
-        if self.pending_versions.get(&uri).is_some_and(|v| *v != version)
+        if self
+            .pending_versions
+            .get(&uri)
+            .is_some_and(|v| *v != version)
             && let Some(cached) = self.last_semantic_tokens.get(&uri)
         {
             return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
@@ -4500,7 +4539,9 @@ impl LanguageServer for CpcLspBackend {
             // Re-checked here: time may have passed waiting in the blocking
             // pool's own queue, during which an even newer edit could have
             // arrived.
-            if pending_versions.get(&cache_key).is_some_and(|v| *v != version)
+            if pending_versions
+                .get(&cache_key)
+                .is_some_and(|v| *v != version)
                 && let Some(cached) = last_semantic_tokens.get(&cache_key)
             {
                 return (*cached.value()).to_vec();
@@ -4520,7 +4561,11 @@ impl LanguageServer for CpcLspBackend {
             Ok(data) => data,
             Err(_join_error) => return Ok(None)
         };
-        tracing::debug!("Semantic tokens request for {} took {:?}", uri, start.elapsed());
+        tracing::debug!(
+            "Semantic tokens request for {} took {:?}",
+            uri,
+            start.elapsed()
+        );
 
         if !data.is_empty() {
             return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
@@ -4568,10 +4613,8 @@ impl LanguageServer for CpcLspBackend {
             let asm_analyzer = Arc::clone(&self.asm_analyzer);
             // Same class of bug already fixed for `hover`/`document_symbol`/
             // etc: formatting re-tokenizes the whole file.
-            return match tokio::task::spawn_blocking(move || {
-                asm_analyzer.format(&document, &opt)
-            })
-            .await
+            return match tokio::task::spawn_blocking(move || asm_analyzer.format(&document, &opt))
+                .await
             {
                 Ok(edits) => Ok(edits),
                 Err(_join_error) => Ok(None)
@@ -4582,8 +4625,7 @@ impl LanguageServer for CpcLspBackend {
             DocumentType::Basic | DocumentType::CatartBasic
         ) {
             let basic_analyzer = Arc::clone(&self.basic_analyzer);
-            return match tokio::task::spawn_blocking(move || basic_analyzer.format(&document))
-                .await
+            return match tokio::task::spawn_blocking(move || basic_analyzer.format(&document)).await
             {
                 Ok(edits) => Ok(edits),
                 Err(_join_error) => Ok(None)
@@ -4603,12 +4645,14 @@ impl LanguageServer for CpcLspBackend {
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
         // Same class of bug already fixed for `hover`/`document_symbol`/etc,
         // run inline on the async thread until now.
-        match tokio::task::spawn_blocking(move || match document.doc_type {
-            DocumentType::Assembly => asm_analyzer.document_colors(&document),
-            DocumentType::Basic | DocumentType::CatartBasic => {
-                basic_analyzer.document_colors(&document)
-            },
-            _ => Vec::new()
+        match tokio::task::spawn_blocking(move || {
+            match document.doc_type {
+                DocumentType::Assembly => asm_analyzer.document_colors(&document),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    basic_analyzer.document_colors(&document)
+                },
+                _ => Vec::new()
+            }
         })
         .await
         {
@@ -4629,14 +4673,16 @@ impl LanguageServer for CpcLspBackend {
 
         let asm_analyzer = Arc::clone(&self.asm_analyzer);
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
-        match tokio::task::spawn_blocking(move || match document.doc_type {
-            DocumentType::Assembly => {
-                asm_analyzer.color_presentations(&document, params.color, params.range)
-            },
-            DocumentType::Basic | DocumentType::CatartBasic => {
-                basic_analyzer.color_presentations(params.color, params.range)
-            },
-            _ => Vec::new()
+        match tokio::task::spawn_blocking(move || {
+            match document.doc_type {
+                DocumentType::Assembly => {
+                    asm_analyzer.color_presentations(&document, params.color, params.range)
+                },
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    basic_analyzer.color_presentations(params.color, params.range)
+                },
+                _ => Vec::new()
+            }
         })
         .await
         {
@@ -4665,14 +4711,16 @@ impl LanguageServer for CpcLspBackend {
         // Fires on essentially every Enter keystroke in a BASIC (or
         // embedded-BASIC) document - same class of bug already fixed for
         // `hover`/`document_symbol`/etc.
-        match tokio::task::spawn_blocking(move || match document.doc_type {
-            // Continue BASIC line numbering on the new line.
-            DocumentType::Basic | DocumentType::CatartBasic => {
-                basic_analyzer.on_type_newline(&document, position)
-            },
-            // Same, but for BASIC embedded in a LOCOMOTIVE block.
-            DocumentType::Assembly => asm_analyzer.on_type_newline(&document, position),
-            _ => None
+        match tokio::task::spawn_blocking(move || {
+            match document.doc_type {
+                // Continue BASIC line numbering on the new line.
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    basic_analyzer.on_type_newline(&document, position)
+                },
+                // Same, but for BASIC embedded in a LOCOMOTIVE block.
+                DocumentType::Assembly => asm_analyzer.on_type_newline(&document, position),
+                _ => None
+            }
         })
         .await
         {
@@ -6785,7 +6833,8 @@ mod spawn_deferred_analysis_tests {
             while let Some(request) = requests.next().await {
                 if request.method() == "textDocument/publishDiagnostics"
                     && let Some(params) = request.params()
-                    && let Ok(p) = serde_json::from_value::<PublishDiagnosticsParams>(params.clone())
+                    && let Ok(p) =
+                        serde_json::from_value::<PublishDiagnosticsParams>(params.clone())
                 {
                     let _ = tx.send(p);
                 }
@@ -6856,7 +6905,8 @@ mod active_document_tests {
             while let Some(request) = requests.next().await {
                 if request.method() == "textDocument/publishDiagnostics"
                     && let Some(params) = request.params()
-                    && let Ok(p) = serde_json::from_value::<PublishDiagnosticsParams>(params.clone())
+                    && let Ok(p) =
+                        serde_json::from_value::<PublishDiagnosticsParams>(params.clone())
                 {
                     let _ = tx.send(p);
                 }

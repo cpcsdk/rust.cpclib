@@ -78,7 +78,7 @@ enum ArgSpec {
     /// condition": each form reads a different flag (`NZ`/`Z` read `Z`,
     /// `NC`/`C` read `C`, `PO`/`PE` read `P/V`, `P`/`M` read `S`), so a row
     /// matching the wrong one would report the wrong flag as read - a silent
-    ///, wrong "safe to optimize" answer.
+    /// , wrong "safe to optimize" answer.
     Cond(FlagTest),
     /// Any immediate: `n`, `nn`, `o`, `b`, or a literal number (`RST 8H`,
     /// `IM 1`).
@@ -407,7 +407,12 @@ fn parse_arg_spec(raw: &str, mnemonic: Mnemonic) -> Option<ArgSpec> {
 fn arg_matches(spec: &ArgSpec, operand: &DataAccess) -> bool {
     match spec {
         ArgSpec::Reg(expected) => concrete_reg(operand) == Some(*expected),
-        ArgSpec::AfAlt => matches!(operand, DataAccess::Register16(cpclib_tokens::Register16::Af)),
+        ArgSpec::AfAlt => {
+            matches!(
+                operand,
+                DataAccess::Register16(cpclib_tokens::Register16::Af)
+            )
+        },
         ArgSpec::MemReg(expected) => {
             match operand {
                 DataAccess::MemoryRegister16(r) => Reg::from(*r) == *expected,
@@ -687,7 +692,11 @@ mod tests {
     /// backwards, and getting it wrong would let a rule clobber `B`.
     #[test]
     fn djnz_reads_b_and_no_flag_at_all() {
-        let e = effects(&op(Mnemonic::Djnz, Some(DataAccess::Expression(0.into())), None));
+        let e = effects(&op(
+            Mnemonic::Djnz,
+            Some(DataAccess::Expression(0.into())),
+            None
+        ));
         assert_eq!(e.reads, vec![Reg::B]);
         assert!(e.reads_flags.is_empty(), "{e:?}");
         assert!(e.writes.contains(&Reg::B));
@@ -697,10 +706,18 @@ mod tests {
     /// dead - it must not be reported as reading them.
     #[test]
     fn push_reads_the_pair_but_pop_does_not() {
-        let push = effects(&op(Mnemonic::Push, Some(DataAccess::Register16(Register16::Bc)), None));
+        let push = effects(&op(
+            Mnemonic::Push,
+            Some(DataAccess::Register16(Register16::Bc)),
+            None
+        ));
         assert!(push.reads.contains(&Reg::Bc), "{push:?}");
 
-        let pop = effects(&op(Mnemonic::Pop, Some(DataAccess::Register16(Register16::Bc)), None));
+        let pop = effects(&op(
+            Mnemonic::Pop,
+            Some(DataAccess::Register16(Register16::Bc)),
+            None
+        ));
         assert!(!pop.reads.contains(&Reg::Bc), "{pop:?}");
         assert!(pop.writes.contains(&Reg::Bc), "{pop:?}");
     }
@@ -740,7 +757,11 @@ mod tests {
         assert!(is_placeholder("IXp"));
         assert!(!is_placeholder("IXH"));
 
-        let e = effects(&op(Mnemonic::Ld, r8(Register8::A), Some(DataAccess::SpecialRegisterR)));
+        let e = effects(&op(
+            Mnemonic::Ld,
+            r8(Register8::A),
+            Some(DataAccess::SpecialRegisterR)
+        ));
         assert_eq!(e.reads, vec![Reg::R], "{e:?}");
     }
 

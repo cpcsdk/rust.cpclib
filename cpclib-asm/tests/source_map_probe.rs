@@ -359,7 +359,10 @@ fn snainit_can_start_from_an_embedded_snapshot() {
     // The machine it started from is a real one: the firmware ROM is paged in
     // and its memory is the size the header claims.
     let sna = env.sna();
-    assert!(sna.memory_dump().unwrap().len() >= 0x1_0000, "a whole machine");
+    assert!(
+        sna.memory_dump().unwrap().len() >= 0x1_0000,
+        "a whole machine"
+    );
 }
 
 /// A name that is not embedded says which ones are, rather than reporting a
@@ -1081,7 +1084,8 @@ fn crunched_sections_expose_their_decrunched_bytes() {
 /// stashed spans.
 #[test]
 fn a_print_and_pause_inside_a_macro_survive_the_token_tree_being_dropped_first() {
-    let src = "\tmacro M\n\tprint \"in the body\"\n\tpause\n\tendm\n\torg 0x4000\n\tM(void)\n\tM(void)\n";
+    let src =
+        "\tmacro M\n\tprint \"in the body\"\n\tpause\n\tendm\n\torg 0x4000\n\tM(void)\n\tM(void)\n";
     let listing = cpclib_asm::parser::parse_z80_str(src).expect("parses");
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);

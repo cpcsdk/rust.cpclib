@@ -1,13 +1,12 @@
 //! Register/flag liveness over real parsed Z80 source. See `cost_range.rs` in
 //! this directory for why these tests live outside the crate they exercise.
 
+use cpclib_asm::flatten::flatten_for_analysis;
+use cpclib_asm::parser::{LocatedToken, parse_z80_str};
 use cpclib_z80flow::dependency::Dependency;
 use cpclib_z80flow::liveness::{Usage, is_used_after, label_index};
 use cpclib_z80flow::regflag::{Flag, Reg};
 use cpclib_z80flow::stream::build_without_addresses;
-use cpclib_asm::flatten::flatten_for_analysis;
-use cpclib_asm::parser::{LocatedToken, parse_z80_str};
-
 
 /// Walk from just after the instruction on 0-based `after_index` (counting
 /// only real instructions, so tests read like the source).
@@ -56,7 +55,11 @@ fn a_value_overwritten_before_any_read_is_not_used() {
 #[test]
 fn writing_one_half_leaves_the_other_half_live() {
     assert_eq!(
-        usage("    ld bc, 0\n    ld b, 1\n    ld a, c\n    ret\n", 0, reg(Reg::Bc)),
+        usage(
+            "    ld bc, 0\n    ld b, 1\n    ld a, c\n    ret\n",
+            0,
+            reg(Reg::Bc)
+        ),
         Usage::Used
     );
     // ...and once *both* halves are rewritten, the original is dead.
@@ -83,7 +86,10 @@ fn returning_to_an_unknown_caller_is_unknown() {
 /// stream is only what we can see.
 #[test]
 fn running_out_of_instructions_is_unknown() {
-    assert_eq!(usage("    ld a, 1\n    nop\n", 0, reg(Reg::A)), Usage::Unknown);
+    assert_eq!(
+        usage("    ld a, 1\n    nop\n", 0, reg(Reg::A)),
+        Usage::Unknown
+    );
 }
 
 /// The loop cases the memoized worklist exists for.

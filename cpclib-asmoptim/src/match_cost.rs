@@ -81,7 +81,7 @@ where
                 token.mnemonic_arg1(),
                 token.mnemonic_arg2()
             )
-        }
+        },
     }
 }
 
@@ -100,7 +100,9 @@ where
     T: ListingElement + 'a,
     T::DataAccess: DataAccessElem
 {
-    tokens.into_iter().try_fold(0u32, |acc, t| Some(acc + token_cycles(t)?))
+    tokens
+        .into_iter()
+        .try_fold(0u32, |acc, t| Some(acc + token_cycles(t)?))
 }
 
 /// Total byte size of a span of tokens, assembling each one standalone
@@ -128,7 +130,9 @@ pub(crate) fn span_cost<'a, T>(
     tokens: impl IntoIterator<Item = &'a T>,
     cache: &ByteCostCache
 ) -> (Option<usize>, Option<u32>)
-where T: TokenExt + std::fmt::Display + 'a {
+where
+    T: TokenExt + std::fmt::Display + 'a
+{
     let mut bytes = Some(0usize);
     let mut cycles = Some(0u32);
     for token in tokens {

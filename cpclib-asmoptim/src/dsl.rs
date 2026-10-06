@@ -345,10 +345,7 @@ impl RuleSet {
         Self::parse_with_includes_inner(source, &mut resolve)
     }
 
-    fn parse_with_includes_inner<F>(
-        source: &str,
-        resolve: &mut F
-    ) -> Result<Self, RuleParseError>
+    fn parse_with_includes_inner<F>(source: &str, resolve: &mut F) -> Result<Self, RuleParseError>
     where F: FnMut(&str) -> Option<String> {
         let (mut set, includes) = Self::parse_inner(source)?;
         let mut all = Vec::new();
@@ -727,9 +724,12 @@ fn indirect(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextError>
 }
 
 fn variable(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextError> {
-    preceded('?', take_while(1.., |c: char| c.is_ascii_alphanumeric() || c == '_'))
-        .map(|name: &str| OperandPattern::Variable(name.to_string()))
-        .parse_next(input)
+    preceded(
+        '?',
+        take_while(1.., |c: char| c.is_ascii_alphanumeric() || c == '_')
+    )
+    .map(|name: &str| OperandPattern::Variable(name.to_string()))
+    .parse_next(input)
 }
 
 fn number(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextError> {
@@ -748,8 +748,11 @@ fn hex_number(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextErro
 }
 
 fn binary_number(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextError> {
-    let digits = preceded(alt(("0b", "0B", "%")), take_while(1.., |c: char| c == '0' || c == '1'))
-        .parse_next(input)?;
+    let digits = preceded(
+        alt(("0b", "0B", "%")),
+        take_while(1.., |c: char| c == '0' || c == '1')
+    )
+    .parse_next(input)?;
     i64::from_str_radix(digits, 2)
         .map(OperandPattern::Number)
         .map_err(|_| ParserError::from_input(input))
@@ -764,7 +767,8 @@ fn decimal_number(input: &mut Stream<'_>) -> ModalResult<OperandPattern, Context
 }
 
 fn ident(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextError> {
-    let first = one_of(|c: char| c.is_ascii_alphabetic() || c == '_' || c == '.').parse_next(input)?;
+    let first =
+        one_of(|c: char| c.is_ascii_alphabetic() || c == '_' || c == '.').parse_next(input)?;
     let rest: &str = take_while(0.., |c: char| {
         c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '\''
     })
@@ -874,23 +878,28 @@ flagsNotUsedAfter(0,N,P/V)
         let rule = &set.rules[0];
         assert_eq!(rule.description, "Replace cp 0 with or a");
         assert_eq!(rule.name.as_deref(), Some("cp02ora"));
-        assert_eq!(rule.match_lines, vec![NumberedInstr {
-            index: 0,
-            instr: instr("cp", vec![OperandPattern::Number(0)])
-        }]);
-        assert_eq!(rule.replacement_lines, vec![NumberedInstr {
-            index: 0,
-            instr: instr("or", vec![id("a")])
-        }]);
+        assert_eq!(
+            rule.match_lines,
+            vec![NumberedInstr {
+                index: 0,
+                instr: instr("cp", vec![OperandPattern::Number(0)])
+            }]
+        );
+        assert_eq!(
+            rule.replacement_lines,
+            vec![NumberedInstr {
+                index: 0,
+                instr: instr("or", vec![id("a")])
+            }]
+        );
         assert_eq!(rule.constraints.len(), 1);
         assert_eq!(rule.constraints[0].name, "flagsNotUsedAfter");
         assert_eq!(rule.constraints[0].check_after, None);
         // `P/V` is one flag, not `P` divided by `V` - see `ident`.
-        assert_eq!(rule.constraints[0].args, vec![
-            OperandPattern::Number(0),
-            id("N"),
-            id("P/V")
-        ]);
+        assert_eq!(
+            rule.constraints[0].args,
+            vec![OperandPattern::Number(0), id("N"), id("P/V")]
+        );
     }
 
     /// `P/V` (the parity/overflow flag) must survive the expression grammar
@@ -904,15 +913,18 @@ flagsNotUsedAfter(0,N,P/V)
             "pattern: x\n0: nop\nreplacement:\nconstraints:\nflagsNotUsedAfter(0,S,Z,H,P/V,N,C)\n"
         )
         .unwrap();
-        assert_eq!(set.rules[0].constraints[0].args, vec![
-            OperandPattern::Number(0),
-            id("S"),
-            id("Z"),
-            id("H"),
-            id("P/V"),
-            id("N"),
-            id("C")
-        ]);
+        assert_eq!(
+            set.rules[0].constraints[0].args,
+            vec![
+                OperandPattern::Number(0),
+                id("S"),
+                id("Z"),
+                id("H"),
+                id("P/V"),
+                id("N"),
+                id("C")
+            ]
+        );
     }
 
     /// ...while a real division of two operands still parses as one. The
@@ -925,10 +937,7 @@ flagsNotUsedAfter(0,N,P/V)
         assert!(
             matches!(
                 &set.rules[0].constraints[0].args[0],
-                OperandPattern::Binary {
-                    op: BinOp::Div,
-                    ..
-                }
+                OperandPattern::Binary { op: BinOp::Div, .. }
             ),
             "{:?}",
             set.rules[0].constraints[0].args[0]
@@ -950,15 +959,15 @@ equal(?const,0)
 flagsNotUsedAfter(0,S,Z,H,P/V,N,C)
 ";
         let rule = &RuleSet::parse(src).unwrap().rules[0];
-        assert_eq!(rule.match_lines[0].instr, instr("ld", vec![
-            id("a"),
-            var("const")
-        ]));
+        assert_eq!(
+            rule.match_lines[0].instr,
+            instr("ld", vec![id("a"), var("const")])
+        );
         assert_eq!(rule.constraints[0].name, "equal");
-        assert_eq!(rule.constraints[0].args, vec![
-            var("const"),
-            OperandPattern::Number(0)
-        ]);
+        assert_eq!(
+            rule.constraints[0].args,
+            vec![var("const"), OperandPattern::Number(0)]
+        );
         assert!(rule.variables().contains("const"));
     }
 
@@ -979,12 +988,15 @@ reachableByJr(0,?const1)
         let rule = &RuleSet::parse(src).unwrap().rules[0];
         assert_eq!(rule.tags, vec!["cpc".to_string()]);
         assert_eq!(rule.match_lines[0].instr, instr("jp", vec![var("const1")]));
-        assert_eq!(rule.replacement_lines[0].instr, instr("jr", vec![var("const1")]));
+        assert_eq!(
+            rule.replacement_lines[0].instr,
+            instr("jr", vec![var("const1")])
+        );
         assert_eq!(rule.constraints[0].name, "reachableByJr");
-        assert_eq!(rule.constraints[0].args, vec![
-            OperandPattern::Number(0),
-            var("const1")
-        ]);
+        assert_eq!(
+            rule.constraints[0].args,
+            vec![OperandPattern::Number(0), var("const1")]
+        );
     }
 
     /// An empty `replacement:` section means "delete the matched
@@ -1035,13 +1047,17 @@ notEqual(?8bitconst1,255)
         assert_eq!(mnemonic, &MnemonicPattern::Variable("op1".to_string()));
 
         // `?8bitconst1+1` must parse as real arithmetic, not as one identifier.
-        assert_eq!(rule.replacement_lines[0].instr, instr("cp", vec![
-            OperandPattern::Binary {
-                lhs: Box::new(var("8bitconst1")),
-                op: BinOp::Add,
-                rhs: Box::new(OperandPattern::Number(1))
-            }
-        ]));
+        assert_eq!(
+            rule.replacement_lines[0].instr,
+            instr(
+                "cp",
+                vec![OperandPattern::Binary {
+                    lhs: Box::new(var("8bitconst1")),
+                    op: BinOp::Add,
+                    rhs: Box::new(OperandPattern::Number(1))
+                }]
+            )
+        );
     }
 
     /// `*` wildcards and `[?var] instr` repeats - both real upstream forms
@@ -1057,19 +1073,26 @@ replacement:
 1: and #ff >> ?const1
 ";
         let rule = &RuleSet::parse(src).unwrap().rules[0];
-        assert_eq!(rule.match_lines[0].instr, InstrPattern::Repeat {
-            count: RepeatCount::Variable("const1".to_string()),
-            instr: Box::new(instr("srl", vec![id("a")]))
-        });
+        assert_eq!(
+            rule.match_lines[0].instr,
+            InstrPattern::Repeat {
+                count: RepeatCount::Variable("const1".to_string()),
+                instr: Box::new(instr("srl", vec![id("a")]))
+            }
+        );
         assert_eq!(rule.match_lines[1].instr, InstrPattern::Wildcard);
         // `#ff >> ?const1`: hex literal, shift operator, variable.
-        assert_eq!(rule.replacement_lines[1].instr, instr("and", vec![
-            OperandPattern::Binary {
-                lhs: Box::new(OperandPattern::Number(0xFF)),
-                op: BinOp::ShiftRight,
-                rhs: Box::new(var("const1"))
-            }
-        ]));
+        assert_eq!(
+            rule.replacement_lines[1].instr,
+            instr(
+                "and",
+                vec![OperandPattern::Binary {
+                    lhs: Box::new(OperandPattern::Number(0xFF)),
+                    op: BinOp::ShiftRight,
+                    rhs: Box::new(var("const1"))
+                }]
+            )
+        );
     }
 
     #[test]
@@ -1081,18 +1104,27 @@ replacement:
 0: ld (hl), ?const4
 ";
         let rule = &RuleSet::parse(src).unwrap().rules[0];
-        assert_eq!(rule.match_lines[0].instr, instr("ld", vec![
-            OperandPattern::Indirect(Box::new(OperandPattern::Binary {
-                lhs: Box::new(var("regixiy")),
-                op: BinOp::Add,
-                rhs: Box::new(var("const1"))
-            })),
-            var("const4")
-        ]));
-        assert_eq!(rule.replacement_lines[0].instr, instr("ld", vec![
-            OperandPattern::Indirect(Box::new(id("hl"))),
-            var("const4")
-        ]));
+        assert_eq!(
+            rule.match_lines[0].instr,
+            instr(
+                "ld",
+                vec![
+                    OperandPattern::Indirect(Box::new(OperandPattern::Binary {
+                        lhs: Box::new(var("regixiy")),
+                        op: BinOp::Add,
+                        rhs: Box::new(var("const1"))
+                    })),
+                    var("const4")
+                ]
+            )
+        );
+        assert_eq!(
+            rule.replacement_lines[0].instr,
+            instr(
+                "ld",
+                vec![OperandPattern::Indirect(Box::new(id("hl"))), var("const4")]
+            )
+        );
     }
 
     #[test]

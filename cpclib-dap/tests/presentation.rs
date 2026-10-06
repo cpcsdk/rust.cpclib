@@ -448,7 +448,10 @@ fn two_memory_views_stay_open_side_by_side() {
         "seq": 7, "type": "event", "event": "stopped", "body": {"reason": "step"}
     }));
     let refreshed_fixed = session.peer().last("readMemory").unwrap().clone();
-    assert_eq!(refreshed_fixed["arguments"]["memoryReference"], json!("0x9000"));
+    assert_eq!(
+        refreshed_fixed["arguments"]["memoryReference"],
+        json!("0x9000")
+    );
 
     session.on_emulator_message(&json!({
         "seq": 8, "type": "response", "request_seq": refreshed_fixed["seq"], "success": true,
@@ -1337,15 +1340,21 @@ fn the_chip_scopes_share_one_snapshot() {
 /// scopes offered, rather than five permanently-empty "(unavailable)" rows.
 #[test]
 fn chip_scopes_are_omitted_for_a_peer_that_can_never_answer_them() {
-    let mut session =
-        Session::new(RecordingPeer::new().denying(&["cpclib/machineState"]), map_with(&[]));
+    let mut session = Session::new(
+        RecordingPeer::new().denying(&["cpclib/machineState"]),
+        map_with(&[])
+    );
     let out = session.on_emulator_message(&json!({
         "type": "response", "command": "scopes", "success": true,
         "body": {"scopes": [{"name": "Registers", "variablesReference": 17}]}
     }));
     let scopes = out[0]["body"]["scopes"].as_array().unwrap();
     let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
-    assert_eq!(names, vec!["Registers"], "no chip scope has any chance of data");
+    assert_eq!(
+        names,
+        vec!["Registers"],
+        "no chip scope has any chance of data"
+    );
 }
 
 /// A peer with a direct endpoint for exactly one chip (but no
@@ -1624,7 +1633,11 @@ fn crtcview_decodes_a_real_sugarbox_getcrtcstate_answer() {
     let registers = out[0]["body"]["registers"].as_array().unwrap();
     assert_eq!(registers.len(), 18, "{registers:?}");
     assert_eq!(registers[12]["value"], json!(32), "R12");
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// `-crtcview` flags a known-bad register combination, with every register
@@ -1638,7 +1651,7 @@ fn crtcview_flags_a_known_bad_configuration() {
         .unwrap();
     sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 60)
         .unwrap();
-    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(3)), 0x8c)
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(3)), 0x8C)
         .unwrap();
 
     let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
@@ -1674,7 +1687,11 @@ fn crtcview_flags_a_known_bad_configuration() {
         .map(|r| r.as_str().unwrap())
         .collect();
     assert_eq!(flagged, vec!["R0", "R2", "R3"]);
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// A well-formed configuration raises nothing to look at.
@@ -1780,7 +1797,11 @@ fn psgview_falls_back_to_a_full_snapshot_when_the_peer_has_no_psg_endpoint() {
     assert_eq!(named("R0")["value"], json!("0xAB (171)"));
     assert_eq!(named("R15")["value"], json!("0xCD (205)"));
     assert_eq!(named("selected")["value"], json!("0x07 (7)"));
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// A peer with neither a direct PSG endpoint nor `cpclib/machineState` -
@@ -1928,7 +1949,9 @@ fn psgview_decodes_a_real_amspiritlite_psg_answer() {
     assert_eq!(named("Mixer")["value"], json!("0x3F (63)"));
     assert_eq!(named("Envelope shape")["value"], json!("0x00 (0)"));
     assert!(
-        !registers.iter().any(|v| v["name"].as_str().unwrap_or_default().starts_with('R')),
+        !registers
+            .iter()
+            .any(|v| v["name"].as_str().unwrap_or_default().starts_with('R')),
         "AmspiritLite sends no raw register array - none should be invented: {registers:?}"
     );
 }
@@ -2003,7 +2026,11 @@ fn fdcview_falls_back_to_a_full_snapshot_when_the_peer_has_no_fdc_endpoint() {
     };
     assert_eq!(named("motor")["value"], json!("0x01 (1)"));
     assert_eq!(named("track")["value"], json!("0x28 (40)"));
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// SugarboxV2's real `getFdcState` answer, captured live 2026-09-06 with an
@@ -2064,10 +2091,18 @@ fn fdcview_forwards_a_real_sugarbox_sector_table_verbatim() {
     assert_eq!(drives[0]["present"], json!(true));
     let sectors = drives[0]["sectors"].as_array().unwrap();
     assert_eq!(sectors.len(), 1);
-    assert_eq!(sectors[0]["r"], json!(193), "real C/H/R/N naming, not track/side/sector");
+    assert_eq!(
+        sectors[0]["r"],
+        json!(193),
+        "real C/H/R/N naming, not track/side/sector"
+    );
     assert_eq!(sectors[0]["size"], json!(512));
     assert_eq!(drives[1]["present"], json!(false));
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// SugarboxV2's real `getPpiState` answer (captured live, 2026-09-06, from
@@ -2107,7 +2142,11 @@ fn ppiview_decodes_a_real_sugarbox_getppistate_answer() {
     assert_eq!(named("B")["value"], json!("0x1E (30)"));
     assert_eq!(named("C")["value"], json!("0x00 (0)"));
     assert_eq!(named("control")["value"], json!("0x12 (18)"));
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// A peer with no PPI endpoint (1984js, and AmspiritLite too - confirmed
@@ -2118,9 +2157,12 @@ fn ppiview_falls_back_to_a_full_snapshot_when_the_peer_has_no_ppi_endpoint() {
     use cpclib_sna::{Snapshot, SnapshotVersion};
 
     let mut sna = Snapshot::default();
-    sna.set_value(cpclib_sna::SnapshotFlag::PPI_A, 0x11).unwrap();
-    sna.set_value(cpclib_sna::SnapshotFlag::PPI_B, 0x22).unwrap();
-    sna.set_value(cpclib_sna::SnapshotFlag::PPI_C, 0x33).unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PPI_A, 0x11)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PPI_B, 0x22)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::PPI_C, 0x33)
+        .unwrap();
 
     let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
     session
@@ -2150,7 +2192,11 @@ fn ppiview_falls_back_to_a_full_snapshot_when_the_peer_has_no_ppi_endpoint() {
     assert_eq!(named("A")["value"], json!("0x11 (17)"));
     assert_eq!(named("B")["value"], json!("0x22 (34)"));
     assert_eq!(named("C")["value"], json!("0x33 (51)"));
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// SugarboxV2's real `getTapeState` answer (captured live, 2026-09-06, from
@@ -2193,7 +2239,11 @@ fn tapeview_decodes_a_real_sugarbox_gettapestate_answer() {
     assert_eq!(named("inserted")["value"], json!("false"));
     assert_eq!(named("motor")["value"], json!("false"));
     assert_eq!(named("blocks")["value"], json!("0x00 (0)"));
-    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+    assert_eq!(
+        out[1]["success"],
+        json!(true),
+        "the console line is answered too"
+    );
 }
 
 /// A peer with no tape endpoint (1984js, and AmspiritLite too - confirmed
@@ -2212,7 +2262,10 @@ fn tapeview_fails_immediately_with_no_machinestate_round_trip_when_unsupported()
 
     assert_eq!(out[0]["success"], json!(false));
     assert!(
-        out[0]["message"].as_str().unwrap_or_default().contains("tape"),
+        out[0]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("tape"),
         "{:?}",
         out[0]
     );

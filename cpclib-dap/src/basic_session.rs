@@ -27,8 +27,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 
 use crate::basic::{
-    self, BasicVariableValue, STATEMENT_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
-    PTR_VARIABLES_START, VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
+    self, BasicVariableValue, PTR_CURRENT_STATEMENT, PTR_VARIABLES_START,
+    STATEMENT_BREAKPOINT_TARGET, VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
 };
 use crate::peer::{DapPeer, OWN_REQUEST_BASE, OwnRequestTracker};
 use crate::protocol::{self, address_reference};
@@ -109,11 +109,13 @@ BASIC debug console commands:
 /// debugged.
 pub(crate) fn format_amspirit_basic_listing(body: &Value) -> String {
     let mut out = String::new();
-    let Some(lines) = body.get("lines").and_then(Value::as_array) else {
+    let Some(lines) = body.get("lines").and_then(Value::as_array)
+    else {
         return out;
     };
     for line in lines {
-        let Some(num) = line.get("num").and_then(Value::as_u64) else {
+        let Some(num) = line.get("num").and_then(Value::as_u64)
+        else {
             continue;
         };
         let stmts: Vec<&str> = line
@@ -300,7 +302,10 @@ enum Purpose {
     /// one shared `machineState` snapshot fetch), each chip here has its own
     /// endpoint and its own round trip, so there is nothing to batch and no
     /// reason to force them to serialize through one shared slot.
-    NativeChipScope { reference: i64, request: Value },
+    NativeChipScope {
+        reference: i64,
+        request: Value
+    },
     /// A chip scope on the generic peer, which has no per-chip endpoint of
     /// its own - `cpclib/machineState`'s answer is a whole snapshot,
     /// decoded the exact same way the Z80 session's own `Purpose::MachineState`
@@ -310,7 +315,10 @@ enum Purpose {
     /// batching across every pane opened at once - this session does not
     /// open them in bulk the way that one's `-chips` console command does,
     /// so there is nothing worth batching here.
-    GenericChipScope { reference: i64, request: Value },
+    GenericChipScope {
+        reference: i64,
+        request: Value
+    },
     /// `-mv <address> [count]` - see the Z80 session's own `Purpose::MemoryView`
     /// for the same idea. No `,follow`/register-anchored flavour here: unlike
     /// the Z80 session, this one has no register scope to resolve one
@@ -336,10 +344,14 @@ enum Purpose {
     /// `-bv` on a peer with `cpclib/basicListing` - see `basic_listing_view`'s
     /// own doc comment for why AMSpiriT's own answer is trusted directly
     /// rather than re-derived.
-    AmspiritBasicListingText { request: Value },
+    AmspiritBasicListingText {
+        request: Value
+    },
     /// `-bv` on the generic peer - the raw program bytes read live, decoded
     /// with `cpclib_basic::BasicProgram` once they arrive.
-    GenericBasicListingRead { request: Value },
+    GenericBasicListingRead {
+        request: Value
+    },
     /// `-sv [address] [width] [height] [mode]` - see the Z80 session's own
     /// `Purpose::ScreenViewCrtc` for the same two-mechanism idea and
     /// override semantics. Each step here carries everything accumulated
@@ -426,7 +438,9 @@ enum ResumeKind {
     StepStatement,
     /// `next`/`stepOut`: stop only once execution reaches a *different*
     /// line than `from_line` - a multi-statement line is one step.
-    StepLine { from_line: Option<u16> },
+    StepLine {
+        from_line: Option<u16>
+    },
     Continue
 }
 
@@ -652,7 +666,8 @@ impl<P: DapPeer> BasicSession<P> {
         program_bytes: &[u8]
     ) -> Self {
         let line_index = line_index_from_source(source_text);
-        let statement_index = basic::build_statement_index(program_bytes, program_start, source_text);
+        let statement_index =
+            basic::build_statement_index(program_bytes, program_start, source_text);
         Self {
             tracker: OwnRequestTracker::new(peer, OWN_REQUEST_BASE),
             source_path,
@@ -734,8 +749,14 @@ impl<P: DapPeer> BasicSession<P> {
         self.tracker.next_seq()
     }
 
-    fn send_own(&mut self, command: &str, arguments: Value, purpose: Purpose) -> std::io::Result<()> {
-        self.tracker.send_own(command, arguments, OwnRequest { purpose })
+    fn send_own(
+        &mut self,
+        command: &str,
+        arguments: Value,
+        purpose: Purpose
+    ) -> std::io::Result<()> {
+        self.tracker
+            .send_own(command, arguments, OwnRequest { purpose })
     }
 
     fn is_our_answer(&mut self, response: &Value) -> Option<OwnRequest> {
@@ -839,7 +860,11 @@ impl<P: DapPeer> BasicSession<P> {
         if self.attached && self.configured && self.injection_landed && !self.started {
             self.started = true;
             self.resuming_as = Some(ResumeKind::Continue);
-            self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::LaunchResumed)?;
+            self.send_own(
+                "continue",
+                json!({ "threadId": THREAD_ID }),
+                Purpose::LaunchResumed
+            )?;
         }
         Ok(())
     }
@@ -851,7 +876,11 @@ impl<P: DapPeer> BasicSession<P> {
     /// answer, before that was found to be too early to trust.
     fn proceed_once_injection_landed(&mut self) -> Vec<Value> {
         if self.peer_mut().supports("cpclib/basicListing") {
-            let _ = self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
+            let _ = self.send_own(
+                "cpclib/basicListing",
+                json!({}),
+                Purpose::NativeListingFetched
+            );
         }
         else if let Err(problem) = self.resume_after_injection_landed() {
             return vec![protocol::stderr_output_event(format!("{problem}\n"), 1)];
@@ -1051,7 +1080,7 @@ impl<P: DapPeer> BasicSession<P> {
                         ResumeKind::StepLine {
                             from_line: self.current_line
                         }
-                    }
+                    },
                 });
                 self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
                 let seq = self.next_seq();
@@ -1177,14 +1206,16 @@ impl<P: DapPeer> BasicSession<P> {
     /// fixed-address snapshot. Re-type the command to refresh it.
     fn memory_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
         let seq = self.next_seq();
-        let Some(where_) = arguments.first() else {
+        let Some(where_) = arguments.first()
+        else {
             return Ok(vec![protocol::failure(
                 request,
                 "-mv needs an address: -mv 0xC000 [count]",
                 seq
             )]);
         };
-        let Some(address) = parse_address(where_) else {
+        let Some(address) = parse_address(where_)
+        else {
             return Ok(vec![protocol::failure(
                 request,
                 &format!("'{where_}' is not a number - BASIC debugging has no labels to look up"),
@@ -1212,16 +1243,22 @@ impl<P: DapPeer> BasicSession<P> {
     /// `crate::disassemble` (the assembler's own instruction tables, not the
     /// peer's) and emitted as the same `cpclib/disassemblyView` event the
     /// Z80 session's own panel already renders.
-    fn disassembly_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
+    fn disassembly_view(
+        &mut self,
+        request: &Value,
+        arguments: &[&str]
+    ) -> std::io::Result<Vec<Value>> {
         let seq = self.next_seq();
-        let Some(where_) = arguments.first() else {
+        let Some(where_) = arguments.first()
+        else {
             return Ok(vec![protocol::failure(
                 request,
                 "-dv needs an address: -dv 0x4000 [count]",
                 seq
             )]);
         };
-        let Some(address) = parse_address(where_) else {
+        let Some(address) = parse_address(where_)
+        else {
             return Ok(vec![protocol::failure(
                 request,
                 &format!("'{where_}' is not a number - BASIC debugging has no labels to look up"),
@@ -1430,7 +1467,8 @@ impl<P: DapPeer> BasicSession<P> {
         let mut verified = Vec::new();
         let mut lines = Vec::new();
         for bp in &requested {
-            let Some(source_line) = bp.get("line").and_then(Value::as_i64) else {
+            let Some(source_line) = bp.get("line").and_then(Value::as_i64)
+            else {
                 verified.push(json!({ "verified": false }));
                 continue;
             };
@@ -1465,7 +1503,11 @@ impl<P: DapPeer> BasicSession<P> {
         }
 
         let seq = self.next_seq();
-        Ok(vec![protocol::response(message, json!({ "breakpoints": verified }), seq)])
+        Ok(vec![protocol::response(
+            message,
+            json!({ "breakpoints": verified }),
+            seq
+        )])
     }
 
     fn stack_trace(&mut self, message: &Value) -> Value {
@@ -1524,7 +1566,7 @@ impl<P: DapPeer> BasicSession<P> {
                 "name": "Workspace",
                 "variablesReference": WORKSPACE_REFERENCE,
                 "expensive": false
-            })
+            }),
         ];
         // The chips behind the BASIC program: added on request, to help
         // diagnose a screen/timing problem the BASIC variables alone cannot
@@ -1538,7 +1580,11 @@ impl<P: DapPeer> BasicSession<P> {
         if self.native_amspirit {
             for (name, reference, command) in [
                 ("CRTC", crate::inspect::CRTC_REFERENCE, "cpclib/crtc"),
-                ("Gate Array", crate::inspect::GATE_ARRAY_REFERENCE, "cpclib/ga"),
+                (
+                    "Gate Array",
+                    crate::inspect::GATE_ARRAY_REFERENCE,
+                    "cpclib/ga"
+                ),
                 ("PSG", crate::inspect::PSG_REFERENCE, "cpclib/psg"),
                 ("Disc", crate::inspect::DISC_REFERENCE, "cpclib/fdc")
             ] {
@@ -1604,9 +1650,14 @@ impl<P: DapPeer> BasicSession<P> {
             )?;
             return Ok(Vec::new());
         }
-        let Some(command) = crate::amspiritlite::chip_command(reference) else {
+        let Some(command) = crate::amspiritlite::chip_command(reference)
+        else {
             let seq = self.next_seq();
-            return Ok(vec![protocol::response(message, json!({ "variables": [] }), seq)]);
+            return Ok(vec![protocol::response(
+                message,
+                json!({ "variables": [] }),
+                seq
+            )]);
         };
         self.send_own(
             command,
@@ -1637,9 +1688,12 @@ impl<P: DapPeer> BasicSession<P> {
         let txttop = self.variables_base();
 
         let mut entries = vec![
-            Self::workspace_entry("Program start", address_reference(self.program_start as u32)),
+            Self::workspace_entry(
+                "Program start",
+                address_reference(self.program_start as u32)
+            ),
             Self::workspace_entry("Program size", format!("{} B", self.program_len)),
-            Self::workspace_entry("BASIC version", "1.1")
+            Self::workspace_entry("BASIC version", "1.1"),
         ];
         if let Some(vartop) = vartop {
             entries.push(Self::workspace_entry(
@@ -1665,7 +1719,11 @@ impl<P: DapPeer> BasicSession<P> {
             ));
         }
 
-        Some(vec![protocol::response(&request, json!({ "variables": entries }), seq)])
+        Some(vec![protocol::response(
+            &request,
+            json!({ "variables": entries }),
+            seq
+        )])
     }
 
     /// The Workspace scope on a peer with native BASIC debugging - every
@@ -1708,14 +1766,18 @@ impl<P: DapPeer> BasicSession<P> {
         if let (Some(v), Some(a)) = (vartop, arrend) {
             entries.push(Self::workspace_entry(
                 "Arrays zone",
-                format!("{}\u{2013}{}", address_reference(v as u32), address_reference(a as u32))
+                format!(
+                    "{}\u{2013}{}",
+                    address_reference(v as u32),
+                    address_reference(a as u32)
+                )
             ));
         }
         if let Some(end) = arrend {
             // Matches this emulator's own web UI (`basicRefresh`'s "Free
             // RAM" field): the gap from the array zone's end to the fixed
             // start of the BASIC system workspace.
-            let free = 0xae14_u64.saturating_sub(end);
+            let free = 0xAE14_u64.saturating_sub(end);
             entries.push(Self::workspace_entry("Free RAM", format!("{free} B")));
         }
         if let Some(version) = field("basic_ver") {
@@ -1731,7 +1793,11 @@ impl<P: DapPeer> BasicSession<P> {
             ));
         }
 
-        Some(vec![protocol::response(&request, json!({ "variables": entries }), seq)])
+        Some(vec![protocol::response(
+            &request,
+            json!({ "variables": entries }),
+            seq
+        )])
     }
 
     fn begin_variables(&mut self, message: &Value) -> std::io::Result<()> {
@@ -1799,7 +1865,8 @@ impl<P: DapPeer> BasicSession<P> {
         // it. An empty variables list is a far better answer than a panic.
         let mut heads = [0u16; VARIABLE_CHAIN_HEADS_COUNT];
         for (i, h) in heads.iter_mut().enumerate() {
-            let Some(pair) = chain_heads.get(i * 2..i * 2 + 2) else {
+            let Some(pair) = chain_heads.get(i * 2..i * 2 + 2)
+            else {
                 return self.fail_variables();
             };
             *h = u16::from_le_bytes([pair[0], pair[1]]);
@@ -1811,7 +1878,8 @@ impl<P: DapPeer> BasicSession<P> {
         };
         let def_fn_head = u16::from_le_bytes([def_fn_bytes[0], def_fn_bytes[1]]);
 
-        let vars = basic::decode_variable_chains(&heads, def_fn_head, pending.variables_base, storage);
+        let vars =
+            basic::decode_variable_chains(&heads, def_fn_head, pending.variables_base, storage);
 
         let request = self.pending_variables.take()?.request?;
         let seq = self.next_seq();
@@ -1957,7 +2025,8 @@ impl<P: DapPeer> BasicSession<P> {
                     // this answers - what is left is reading where it
                     // landed, to decide whether to report a stop or step
                     // past it.
-                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeContinueState);
+                    let _ =
+                        self.send_own("cpclib/basicState", json!({}), Purpose::NativeContinueState);
                 },
                 Purpose::NativeContinueState => {
                     // Stale-read guard, reported live: a `basicState` read
@@ -1983,7 +2052,8 @@ impl<P: DapPeer> BasicSession<P> {
                     return self.decide_continue_stop(line);
                 },
                 Purpose::NativeAwaitRun => {
-                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunState);
+                    let _ =
+                        self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunState);
                 },
                 Purpose::NativeAwaitRunState => {
                     let prog_size = message
@@ -2038,7 +2108,9 @@ impl<P: DapPeer> BasicSession<P> {
                             );
                             return vec![protocol::stderr_output_event(note, 1)];
                         }
-                        else if self.native_reinjection_attempts == MAX_NATIVE_REINJECTION_ATTEMPTS {
+                        else if self.native_reinjection_attempts
+                            == MAX_NATIVE_REINJECTION_ATTEMPTS
+                        {
                             // One-shot: move past the cap so this does not
                             // re-warn on every subsequent poll while still
                             // corrupted - falls through to the pre-recovery
@@ -2083,7 +2155,7 @@ impl<P: DapPeer> BasicSession<P> {
                         // SSE heartbeat (ten times a second, see
                         // `amspiritlite.rs`), which it already sustains
                         // without trouble.
-                        None | Some(0xffff) => {
+                        None | Some(0xFFFF) => {
                             // A real line was seen before (recorded below,
                             // in the "not a reason to stop, keep running"
                             // arm) and now it is back in direct mode: the
@@ -2142,13 +2214,18 @@ impl<P: DapPeer> BasicSession<P> {
                     }
                 },
                 Purpose::NativeAwaitRunPaused => {
-                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunSettled);
+                    let _ = self.send_own(
+                        "cpclib/basicState",
+                        json!({}),
+                        Purpose::NativeAwaitRunSettled
+                    );
                 },
                 Purpose::NativeAwaitRunSettled => {
                     let line = self.apply_native_basic_state(message);
                     return match line {
                         Some(line)
-                            if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) =>
+                            if self.breakpoints.contains(&line)
+                                && self.is_first_statement_of_line(line) =>
                         {
                             self.report_stopped("breakpoint")
                         },
@@ -2159,7 +2236,11 @@ impl<P: DapPeer> BasicSession<P> {
                     let body = message.get("body").cloned().unwrap_or_default();
                     let variables = crate::amspiritlite::chip_variables(reference, &body);
                     let seq = self.next_seq();
-                    return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                    return vec![protocol::response(
+                        &request,
+                        json!({ "variables": variables }),
+                        seq
+                    )];
                 },
                 Purpose::GenericChipScope { reference, request } => {
                     let variables = message
@@ -2172,7 +2253,11 @@ impl<P: DapPeer> BasicSession<P> {
                         .and_then(|sna| crate::inspect::chip_variables(reference, &sna))
                         .unwrap_or_default();
                     let seq = self.next_seq();
-                    return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                    return vec![protocol::response(
+                        &request,
+                        json!({ "variables": variables }),
+                        seq
+                    )];
                 },
                 Purpose::ScreenViewCrtc {
                     address_override,
@@ -2272,8 +2357,17 @@ impl<P: DapPeer> BasicSession<P> {
                 } => {
                     let bytes = Self::read_memory_bytes(message);
                     return self.screen_view_answer(
-                        &request, address, width, height, row_height_override, &palette_override,
-                        encoding_override, &crtc_regs, mode, &palette, &bytes
+                        &request,
+                        address,
+                        width,
+                        height,
+                        row_height_override,
+                        &palette_override,
+                        encoding_override,
+                        &crtc_regs,
+                        mode,
+                        &palette,
+                        &bytes
                     );
                 },
                 Purpose::ScreenViewSnapshot {
@@ -2442,10 +2536,15 @@ impl<P: DapPeer> BasicSession<P> {
                         .unwrap_or_default();
                     if text.is_empty() {
                         let seq = self.next_seq();
-                        return vec![protocol::failure(&request, "the emulator answered no listing", seq)];
+                        return vec![protocol::failure(
+                            &request,
+                            "the emulator answered no listing",
+                            seq
+                        )];
                     }
                     let seq = self.next_seq();
-                    let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+                    let event =
+                        protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
                     let seq = self.next_seq();
                     let receipt = protocol::response(
                         &request,
@@ -2468,7 +2567,8 @@ impl<P: DapPeer> BasicSession<P> {
                         }
                     };
                     let seq = self.next_seq();
-                    let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+                    let event =
+                        protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
                     let seq = self.next_seq();
                     let receipt = protocol::response(
                         &request,
@@ -2486,8 +2586,11 @@ impl<P: DapPeer> BasicSession<P> {
                     return self.complete_workspace_native(message).unwrap_or_default();
                 },
                 Purpose::NativeInjected => {
-                    let _ =
-                        self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitInjectionState);
+                    let _ = self.send_own(
+                        "cpclib/basicState",
+                        json!({}),
+                        Purpose::NativeAwaitInjectionState
+                    );
                 },
                 Purpose::NativeAwaitInjectionState => {
                     let prog_size = message
@@ -2541,9 +2644,15 @@ impl<P: DapPeer> BasicSession<P> {
             return Vec::new();
         }
 
-        let kind = message.get("type").and_then(Value::as_str).unwrap_or_default();
+        let kind = message
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if kind == "event" {
-            let event = message.get("event").and_then(Value::as_str).unwrap_or_default();
+            let event = message
+                .get("event")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             // See `native_operation_pending`'s own doc comment: this
             // session's own step/continue loop makes the peer pause and
             // resume as a normal, internal part of itself, and both are
@@ -2581,10 +2690,9 @@ impl<P: DapPeer> BasicSession<P> {
                 let seq = self.next_seq();
                 return vec![protocol::event(
                     "continued",
-                    message
-                        .get("body")
-                        .cloned()
-                        .unwrap_or_else(|| json!({ "threadId": THREAD_ID, "allThreadsContinued": true })),
+                    message.get("body").cloned().unwrap_or_else(
+                        || json!({ "threadId": THREAD_ID, "allThreadsContinued": true })
+                    ),
                     seq
                 )];
             }
@@ -2696,7 +2804,7 @@ impl<P: DapPeer> BasicSession<P> {
             self.known_txttop = Some(t as u16);
         }
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
-        if line == 0xffff {
+        if line == 0xFFFF {
             return None;
         }
         self.current_line = Some(line);
@@ -2708,7 +2816,12 @@ impl<P: DapPeer> BasicSession<P> {
             .filter(|address| program_range.contains(address))
         {
             self.current_statement_address = Some(address);
-            if let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i) {
+            if let Some(source_line) = self
+                .line_index
+                .iter()
+                .find(|(l, _)| *l == line)
+                .map(|(_, i)| *i)
+            {
                 let position = self.statement_position_in_line(line, source_line, address);
                 let statement = self
                     .statement_index
@@ -2760,10 +2873,15 @@ impl<P: DapPeer> BasicSession<P> {
     /// position cannot be resolved, since a real breakpoint should never go
     /// silently unreported over an unrelated resolution gap.
     fn is_first_statement_of_line(&self, line: u16) -> bool {
-        let Some(address) = self.current_statement_address else {
+        let Some(address) = self.current_statement_address
+        else {
             return true;
         };
-        let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i)
+        let Some(source_line) = self
+            .line_index
+            .iter()
+            .find(|(l, _)| *l == line)
+            .map(|(_, i)| *i)
         else {
             return true;
         };
@@ -2777,7 +2895,9 @@ impl<P: DapPeer> BasicSession<P> {
     /// them is answering.
     fn decide_continue_stop(&mut self, line: Option<u16>) -> Vec<Value> {
         match line {
-            Some(line) if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) => {
+            Some(line)
+                if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) =>
+            {
                 self.resuming_as = None;
                 self.report_stopped("breakpoint")
             },
@@ -2787,8 +2907,11 @@ impl<P: DapPeer> BasicSession<P> {
             },
             // Not a line the user cares about: keep stepping.
             Some(_) => {
-                let _ =
-                    self.send_own("cpclib/basicStep", json!({ "mode": "stmt" }), Purpose::NativeContinueStep);
+                let _ = self.send_own(
+                    "cpclib/basicStep",
+                    json!({ "mode": "stmt" }),
+                    Purpose::NativeContinueStep
+                );
                 Vec::new()
             },
             // Direct mode. Reached from the very first resume, this loop is
@@ -2801,8 +2924,11 @@ impl<P: DapPeer> BasicSession<P> {
             // mode with a real line already behind it is the program
             // genuinely ending.
             None if self.current_line.is_none() => {
-                let _ =
-                    self.send_own("cpclib/basicStep", json!({ "mode": "stmt" }), Purpose::NativeContinueStep);
+                let _ = self.send_own(
+                    "cpclib/basicStep",
+                    json!({ "mode": "stmt" }),
+                    Purpose::NativeContinueStep
+                );
                 Vec::new()
             },
             None => {
@@ -2833,7 +2959,11 @@ impl<P: DapPeer> BasicSession<P> {
     /// line by line), silently misattributing it to an earlier statement on
     /// the same line instead - the wrong token, still on the right line.
     fn statement_position_in_line(&self, line: u16, source_line: usize, address: u16) -> usize {
-        if let Some(spans) = self.native_listing.as_ref().and_then(|listing| listing.get(&line)) {
+        if let Some(spans) = self
+            .native_listing
+            .as_ref()
+            .and_then(|listing| listing.get(&line))
+        {
             return spans
                 .iter()
                 .enumerate()
@@ -2866,10 +2996,12 @@ impl<P: DapPeer> BasicSession<P> {
         };
         let mut listing = HashMap::new();
         for line in lines {
-            let Some(num) = line.get("num").and_then(Value::as_u64) else {
+            let Some(num) = line.get("num").and_then(Value::as_u64)
+            else {
                 continue;
             };
-            let Some(stmts) = line.get("stmts").and_then(Value::as_array) else {
+            let Some(stmts) = line.get("stmts").and_then(Value::as_array)
+            else {
                 continue;
             };
             let spans: Vec<(u16, u16)> = stmts
@@ -2889,7 +3021,8 @@ impl<P: DapPeer> BasicSession<P> {
 
     fn on_line_pointer_read(&mut self, message: &Value) -> Vec<Value> {
         let bytes = Self::read_memory_bytes(message);
-        let Some(chunk) = bytes.get(0..4) else {
+        let Some(chunk) = bytes.get(0..4)
+        else {
             return Vec::new();
         };
         // PTR_CURRENT_STATEMENT's own value needs no *pointer* dereference,
@@ -2954,7 +3087,8 @@ impl<P: DapPeer> BasicSession<P> {
                     self.report_stopped("pause")
                 }
                 else {
-                    let _ = self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
+                    let _ =
+                        self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
                     Vec::new()
                 }
             }
@@ -2963,7 +3097,8 @@ impl<P: DapPeer> BasicSession<P> {
 
     fn on_line_value_read(&mut self, message: &Value) -> Vec<Value> {
         let bytes = Self::read_memory_bytes(message);
-        let Some(line_bytes) = bytes.get(0..2) else {
+        let Some(line_bytes) = bytes.get(0..2)
+        else {
             return Vec::new();
         };
         let line = basic::decode_line_number([line_bytes[0], line_bytes[1]]);
@@ -2976,7 +3111,7 @@ impl<P: DapPeer> BasicSession<P> {
             // statement still on it.
             Some(ResumeKind::Continue) | None => {
                 self.breakpoints.contains(&line) && self.is_first_statement_of_line(line)
-            }
+            },
         };
 
         self.current_line = Some(line);
@@ -3067,7 +3202,10 @@ fn format_variable_value(value: &BasicVariableValue) -> String {
         BasicVariableValue::Integer(i) => i.to_string(),
         BasicVariableValue::Real(f) => f.to_string(),
         BasicVariableValue::StringRef { len, address } => {
-            format!("<string, {len} bytes at {}>", address_reference(*address as u32))
+            format!(
+                "<string, {len} bytes at {}>",
+                address_reference(*address as u32)
+            )
         },
         BasicVariableValue::DefFn => "<DEF FN>".to_string(),
         BasicVariableValue::Unknown(code) => format!("<unknown type {code:#04x}>")
@@ -3099,18 +3237,18 @@ fn line_index_from_source(source: &str) -> Vec<(u16, usize)> {
         let trimmed = text.trim_start();
         let digits: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
         if let Ok(number) = digits.parse::<u16>()
-            && !digits.is_empty() {
-                index.push((number, line_idx));
-            }
+            && !digits.is_empty()
+        {
+            index.push((number, line_idx));
+        }
     }
     index
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::peer::RecordingPeer;
-
     use super::*;
+    use crate::peer::RecordingPeer;
 
     #[test]
     fn line_index_pairs_basic_line_numbers_with_source_line_indices() {
@@ -3129,8 +3267,7 @@ mod tests {
     const SOURCE: &str = "10 PRINT \"HI\"\n20 GOTO 10\n";
 
     fn encode_base64(bytes: &[u8]) -> String {
-        const ALPHABET: &[u8] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let mut out = String::new();
         for chunk in bytes.chunks(3) {
             let b0 = chunk[0] as u32;
@@ -3297,7 +3434,10 @@ mod tests {
         // STATEMENT_BREAKPOINT_TARGET's doc comment) - so every breakpoint
         // comparison was off by one line and a real breakpoint could go the
         // whole session without ever matching.
-        let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
+        let armed = session
+            .peer_mut()
+            .last("setInstructionBreakpoints")
+            .unwrap();
         assert_eq!(
             armed["arguments"]["breakpoints"][0]["instructionReference"],
             address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
@@ -3310,7 +3450,10 @@ mod tests {
         complete_attach(&mut session);
 
         assert!(
-            session.peer_mut().last("setInstructionBreakpoints").is_none(),
+            session
+                .peer_mut()
+                .last("setInstructionBreakpoints")
+                .is_none(),
             "AMSpiriT Lite resolves its own breakpoints; nothing generic to arm"
         );
     }
@@ -3340,7 +3483,10 @@ mod tests {
             }))
             .unwrap();
 
-        let armed = session.peer_mut().last("cpclib/basicSetBreakpoints").unwrap();
+        let armed = session
+            .peer_mut()
+            .last("cpclib/basicSetBreakpoints")
+            .unwrap();
         assert_eq!(armed["arguments"]["lines"], json!([20]));
     }
 
@@ -3356,13 +3502,18 @@ mod tests {
             }))
             .unwrap();
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
         }
 
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
         let seq = last_sent_seq(&mut session);
         let events = answer(
             &mut session,
@@ -3380,7 +3531,9 @@ mod tests {
         let mut session = native_session(SOURCE);
         complete_attach(&mut session);
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -3439,7 +3592,10 @@ mod tests {
         session
             .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
             .unwrap();
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicStep");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep"
+        );
 
         // The step loop's own cpclib/basicStep is now in flight - an
         // unsolicited pair arriving before it answers must not reach the
@@ -3554,7 +3710,9 @@ mod tests {
     #[test]
     fn a_native_stop_resolves_the_statement_column_by_range_not_exact_match() {
         let source = "10 a=1:b=2\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
         assert_eq!(index.len(), 2, "{index:?}");
         let second_statement = index[1].clone();
@@ -3569,7 +3727,9 @@ mod tests {
             let mut session = native_session(source);
             complete_attach(&mut session);
 
-            session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+            session
+                .peer_mut()
+                .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
             let incoming = session.peer_mut().drain();
             for message in incoming {
                 session.on_emulator_message(&message);
@@ -3591,7 +3751,10 @@ mod tests {
                 .unwrap();
             let frame = &frame[0]["body"]["stackFrames"][0];
             assert_eq!(frame["column"], second_statement.column, "offset {offset}");
-            assert_eq!(frame["endColumn"], second_statement.end_column, "offset {offset}");
+            assert_eq!(
+                frame["endColumn"], second_statement.end_column,
+                "offset {offset}"
+            );
         }
     }
 
@@ -3611,7 +3774,9 @@ mod tests {
         let mut session = native_session(source);
         complete_attach(&mut session);
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -3645,7 +3810,9 @@ mod tests {
     #[test]
     fn a_native_stop_never_attributes_a_statement_to_the_wrong_line() {
         let source = "10 a=1:b=2\n20 c=3\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
         assert_eq!(index.len(), 3, "{index:?}");
         let line_20_statement = index[2].clone();
@@ -3654,7 +3821,9 @@ mod tests {
         let mut session = native_session(source);
         complete_attach(&mut session);
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -3677,7 +3846,10 @@ mod tests {
             .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
             .unwrap();
         let frame = &frame[0]["body"]["stackFrames"][0];
-        assert_eq!(frame["line"], 2, "must stay on line 20, not spill back into line 10");
+        assert_eq!(
+            frame["line"], 2,
+            "must stay on line 20, not spill back into line 10"
+        );
         assert_eq!(frame["column"], line_20_statement.column);
         assert_eq!(frame["endColumn"], line_20_statement.end_column);
     }
@@ -3694,7 +3866,9 @@ mod tests {
     #[test]
     fn a_native_stop_with_basic_listing_resolves_the_right_statement_despite_drift() {
         let source = "10 a=1:b=2:c=3\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
         assert_eq!(index.len(), 3, "{index:?}");
         let second_statement = index[1].clone();
@@ -3713,7 +3887,10 @@ mod tests {
         // see `Purpose::NativeAwaitInjectionState`'s own doc comment.
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         // Confirmed landed: only now does the basic_listing fetch happen.
         let landed_seq = last_sent_seq(&mut session);
@@ -3722,7 +3899,10 @@ mod tests {
             landed_seq,
             json!({ "body": { "prog_size": bytes.len() } })
         );
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicListing"
+        );
 
         // The second statement's own address, from AMSpiriT Lite's own
         // tokeniser, deliberately *below* this session's own tokeniser's
@@ -3748,7 +3928,9 @@ mod tests {
             })
         );
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -3785,19 +3967,30 @@ mod tests {
     fn injection_is_confirmed_landed_before_run_is_typed() {
         let mut session = native_session(SOURCE);
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
         complete_attach(&mut session);
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicInject"
+        );
 
         // Injection's own answer must not immediately hand off to
         // start_if_ready (which would send `continue`) - a poll confirming
         // the write landed comes first.
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
         assert!(
-            !session.peer_mut().commands().contains(&"continue".to_string()),
+            !session
+                .peer_mut()
+                .commands()
+                .contains(&"continue".to_string()),
             "{:?}",
             session.peer_mut().commands()
         );
@@ -3805,8 +3998,16 @@ mod tests {
         // Still the empty-program baseline: keep polling, not start_if_ready.
         let seq = last_sent_seq(&mut session);
         answer(&mut session, seq, json!({ "body": { "prog_size": 2 } }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
-        assert!(!session.peer_mut().commands().contains(&"continue".to_string()));
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
+        assert!(
+            !session
+                .peer_mut()
+                .commands()
+                .contains(&"continue".to_string())
+        );
 
         // Landed: only now does the launch actually proceed.
         let seq = last_sent_seq(&mut session);
@@ -3828,15 +4029,23 @@ mod tests {
     fn configuration_done_does_not_race_ahead_of_injection_landing() {
         let mut session = native_session(SOURCE);
         complete_attach(&mut session);
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicInject"
+        );
 
         // `configurationDone` arrives before injection's own answer has
         // even come back - must not fire `continue`.
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
         assert!(
-            !session.peer_mut().commands().contains(&"continue".to_string()),
+            !session
+                .peer_mut()
+                .commands()
+                .contains(&"continue".to_string()),
             "{:?}",
             session.peer_mut().commands()
         );
@@ -3845,8 +4054,16 @@ mod tests {
         // still must not fire `continue` yet.
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
-        assert!(!session.peer_mut().commands().contains(&"continue".to_string()));
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
+        assert!(
+            !session
+                .peer_mut()
+                .commands()
+                .contains(&"continue".to_string())
+        );
 
         // Landed: only now, even though `configurationDone` arrived long
         // ago, does the launch actually proceed.
@@ -3869,7 +4086,10 @@ mod tests {
         let seq = last_sent_seq(&mut session);
         answer(&mut session, seq, json!({ "success": true }));
         // basic_step's own answer triggers a follow-up basic_state read.
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         let seq = last_sent_seq(&mut session);
         let events = answer(
@@ -3895,7 +4115,9 @@ mod tests {
     #[test]
     fn a_stale_step_in_read_is_retried_not_reported_as_no_movement() {
         let source = "10 a=1:b=2:c=3\n20 d=4\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
         let second_statement_address = index[1].address; // line 10's "b=2"
         let third_statement_address = index[2].address; // line 10's "c=3"
@@ -3931,7 +4153,10 @@ mod tests {
             seq,
             json!({ "body": { "cur_linenum": 10, "stmt_addr": second_statement_address } })
         );
-        assert!(events.is_empty(), "a stale echo must not be reported as a stop: {events:?}");
+        assert!(
+            events.is_empty(),
+            "a stale echo must not be reported as a stop: {events:?}"
+        );
         assert_eq!(
             session.peer_mut().commands().last().unwrap(),
             "cpclib/basicState",
@@ -4029,7 +4254,9 @@ mod tests {
     /// rest of that same pass.
     fn a_breakpoint_stops_once_per_line_entry_not_once_per_statement_on_it() {
         let source = "10 x=0\n20 a=1:b=2:GOTO 20\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&[
                 "cpclib/basicState",
@@ -4047,8 +4274,10 @@ mod tests {
         let first = basic::PROGRAM_START + 10;
         let second = basic::PROGRAM_START + 15;
         let third = basic::PROGRAM_START + 20;
-        session.native_listing =
-            Some(HashMap::from([(20u16, vec![(first, second), (second, third), (third, third + 6)])]));
+        session.native_listing = Some(HashMap::from([(
+            20u16,
+            vec![(first, second), (second, third), (third, third + 6)]
+        )]));
 
         session
             .on_editor_message(&json!({
@@ -4107,7 +4336,9 @@ mod tests {
     /// only when nothing appears to have moved, must resolve it instead.
     #[test]
     fn a_stale_step_read_that_echoes_the_old_position_is_retried_not_reported_twice() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, SOURCE);
         let line_10_address = index[0].address; // "10 PRINT ..."
         let line_20_address = index[1].address; // "20 GOTO 10"
@@ -4124,7 +4355,9 @@ mod tests {
 
         // A real stop at the armed line first, establishing a known
         // "before" position.
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -4150,7 +4383,10 @@ mod tests {
             seq,
             json!({ "body": { "cur_linenum": 20, "stmt_addr": line_20_address } })
         );
-        assert!(events.is_empty(), "a stale echo must not be reported as a stop: {events:?}");
+        assert!(
+            events.is_empty(),
+            "a stale echo must not be reported as a stop: {events:?}"
+        );
         assert_eq!(
             session.peer_mut().commands().last().unwrap(),
             "cpclib/basicState",
@@ -4166,7 +4402,10 @@ mod tests {
             json!({ "body": { "cur_linenum": 10, "stmt_addr": line_10_address } })
         );
         assert!(events.is_empty(), "line 10 is not armed: {events:?}");
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicStep");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep"
+        );
     }
 
     /// Same race as the generic path's own (`pause_requested`'s doc
@@ -4187,7 +4426,9 @@ mod tests {
         let step_seq = last_sent_seq(&mut session);
 
         session
-            .on_editor_message(&json!({ "seq": 2, "command": "pause", "arguments": { "threadId": 1 } }))
+            .on_editor_message(
+                &json!({ "seq": 2, "command": "pause", "arguments": { "threadId": 1 } })
+            )
             .unwrap();
         session.peer_mut().push_incoming(json!({
             "type": "response",
@@ -4288,7 +4529,9 @@ mod tests {
         complete_attach(&mut session);
 
         let response = session
-            .on_editor_message(&json!({ "seq": 7, "command": "pause", "arguments": { "threadId": 1 } }))
+            .on_editor_message(
+                &json!({ "seq": 7, "command": "pause", "arguments": { "threadId": 1 } })
+            )
             .unwrap();
         assert!(
             response.is_empty(),
@@ -4328,7 +4571,9 @@ mod tests {
         complete_attach(&mut session);
 
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "pause", "arguments": { "threadId": 1 } }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "pause", "arguments": { "threadId": 1 } })
+            )
             .unwrap();
         session.peer_mut().push_incoming(json!({
             "type": "response",
@@ -4341,18 +4586,24 @@ mod tests {
             session.on_emulator_message(&message);
         }
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         for message in session.peer_mut().drain() {
             session.on_emulator_message(&message);
         }
         let seq = last_sent_seq(&mut session);
         let field_target = 0x9000u16;
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&field_target.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
 
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+        let events = answer(
+            &mut session,
+            seq,
+            read_memory_response(&20u16.to_le_bytes())
+        );
 
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
@@ -4371,7 +4622,9 @@ mod tests {
 
         let before = session.peer_mut().commands().len();
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
         let commands = session.peer_mut().commands();
@@ -4381,7 +4634,9 @@ mod tests {
 
     #[test]
     fn the_first_resume_types_run_on_a_peer_that_supports_autotype() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&["cpclib/autotype"]),
             PathBuf::from("test.bas"),
@@ -4391,7 +4646,9 @@ mod tests {
         );
         complete_attach(&mut session);
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
         // The peer answering the very first `continue` is what triggers the
@@ -4410,7 +4667,9 @@ mod tests {
         let mut session = new_session(SOURCE);
         complete_attach(&mut session);
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
         let continue_seq = last_sent_seq(&mut session);
@@ -4433,7 +4692,9 @@ mod tests {
     /// is honored right where the poll-and-pause lands.
     #[test]
     fn a_breakpoint_armed_before_launch_is_caught_on_the_first_run() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&[
                 "cpclib/basicState",
@@ -4454,7 +4715,11 @@ mod tests {
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
         let landed_seq = last_sent_seq(&mut session);
-        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+        answer(
+            &mut session,
+            landed_seq,
+            json!({ "body": { "prog_size": 20 } })
+        );
 
         session
             .on_editor_message(&json!({
@@ -4464,19 +4729,27 @@ mod tests {
             }))
             .unwrap();
         session
-            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 2, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
         // The bare `continue` that unfreezes the machine so RUN can be typed.
         let continue_seq = last_sent_seq(&mut session);
         answer(&mut session, continue_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/autotype");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/autotype"
+        );
 
         // Autotype's own answer must now kick off the poll loop, not stop
         // here trusting /api/basic_bp.
         let autotype_seq = last_sent_seq(&mut session);
         answer(&mut session, autotype_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         // A couple of polls still typing RUN: direct mode, nothing reported,
         // and critically no `basicStep` in between - stepping this window is
@@ -4489,19 +4762,29 @@ mod tests {
                 json!({ "body": { "cur_linenum": 65535, "prog_size": 20 } })
             );
             assert!(events.is_empty(), "{events:?}");
-            assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+            assert_eq!(
+                session.peer_mut().commands().last().unwrap(),
+                "cpclib/basicState"
+            );
         }
 
         // A real line at last: stop free-running before doing anything else.
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20, "prog_size": 20 } }));
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "prog_size": 20 } })
+        );
         assert!(events.is_empty(), "{events:?}");
         assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
 
         let pause_seq = last_sent_seq(&mut session);
         let events = answer(&mut session, pause_seq, json!({ "success": true }));
         assert!(events.is_empty(), "{events:?}");
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         // Only now does this session start caring about breakpoints: line
         // 20, the one armed before launch, is honored on this very first
@@ -4529,7 +4812,9 @@ mod tests {
     /// pausing and reporting a stop nobody asked for - and that a later
     /// breakpoint line is still honored once actually reached.
     fn a_real_line_with_no_breakpoint_and_no_stop_on_entry_keeps_running() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&[
                 "cpclib/basicState",
@@ -4547,7 +4832,11 @@ mod tests {
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
         let landed_seq = last_sent_seq(&mut session);
-        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+        answer(
+            &mut session,
+            landed_seq,
+            json!({ "body": { "prog_size": 20 } })
+        );
 
         // A breakpoint on line 20 only - line 10 is not one.
         session
@@ -4558,7 +4847,9 @@ mod tests {
             }))
             .unwrap();
         session
-            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 2, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
         let continue_seq = last_sent_seq(&mut session);
@@ -4569,7 +4860,11 @@ mod tests {
         // Line 10 at last - a real line, but not a breakpoint. No pause: the
         // session keeps polling instead.
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 10, "prog_size": 20 } }));
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "prog_size": 20 } })
+        );
         assert!(events.is_empty(), "{events:?}");
         assert_eq!(
             session.peer_mut().commands().last().unwrap(),
@@ -4579,7 +4874,11 @@ mod tests {
 
         // Line 20 - the armed breakpoint - is still honored once reached.
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20, "prog_size": 20 } }));
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "prog_size": 20 } })
+        );
         assert!(events.is_empty(), "{events:?}");
         assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
     }
@@ -4595,7 +4894,9 @@ mod tests {
     /// by re-injecting and retyping `RUN` instead of polling a direct-mode
     /// prompt forever with nothing to explain why.
     fn prog_size_reverting_mid_poll_triggers_a_reinjection_and_retype() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&[
                 "cpclib/basicState",
@@ -4619,16 +4920,25 @@ mod tests {
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
         let landed_seq = last_sent_seq(&mut session);
-        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+        answer(
+            &mut session,
+            landed_seq,
+            json!({ "body": { "prog_size": 20 } })
+        );
 
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
         let continue_seq = last_sent_seq(&mut session);
         answer(&mut session, continue_seq, json!({ "success": true }));
         let autotype_seq = last_sent_seq(&mut session);
         answer(&mut session, autotype_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         // The poll sees `prog_size` back at the empty baseline, despite
         // injection already having been confirmed landed once - the
@@ -4642,22 +4952,35 @@ mod tests {
         );
         assert_eq!(events.len(), 1, "{events:?}");
         assert_eq!(events[0]["event"], "output");
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicInject"
+        );
 
         // The recovery re-injection lands, confirmed the same way the launch
         // itself confirms it.
         let reinject_seq = last_sent_seq(&mut session);
         answer(&mut session, reinject_seq, json!({ "success": true }));
         let relanded_seq = last_sent_seq(&mut session);
-        answer(&mut session, relanded_seq, json!({ "body": { "prog_size": 20 } }));
+        answer(
+            &mut session,
+            relanded_seq,
+            json!({ "body": { "prog_size": 20 } })
+        );
 
         // Unlike the very first landing, `self.started` is already `true` at
         // this point - `start_if_ready` would be a silent no-op, so this
         // must retype `RUN` directly instead.
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/autotype");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/autotype"
+        );
         let reautotype_seq = last_sent_seq(&mut session);
         answer(&mut session, reautotype_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         // From here on, a clean run proceeds exactly like any other.
         let seq = last_sent_seq(&mut session);
@@ -4683,7 +5006,9 @@ mod tests {
     /// chain.
     #[test]
     fn a_pause_after_run_lands_past_the_line_the_poll_saw_and_still_stops_cleanly() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&[
                 "cpclib/basicState",
@@ -4708,10 +5033,16 @@ mod tests {
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
         let landed_seq = last_sent_seq(&mut session);
-        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+        answer(
+            &mut session,
+            landed_seq,
+            json!({ "body": { "prog_size": 20 } })
+        );
 
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
         let continue_seq = last_sent_seq(&mut session);
@@ -4722,7 +5053,11 @@ mod tests {
         // The poll sees a real line (10, no breakpoint on it) and asks to
         // pause.
         let seq = last_sent_seq(&mut session);
-        answer(&mut session, seq, json!({ "body": { "cur_linenum": 10, "prog_size": 20 } }));
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "prog_size": 20 } })
+        );
         assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
 
         // By the time the pause actually lands, the machine has moved on to
@@ -4730,7 +5065,10 @@ mod tests {
         // triggered the pause.
         let pause_seq = last_sent_seq(&mut session);
         answer(&mut session, pause_seq, json!({ "success": true }));
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         let seq = last_sent_seq(&mut session);
         let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20 } }));
@@ -4741,7 +5079,10 @@ mod tests {
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "entry");
         assert!(
-            !session.peer_mut().commands().contains(&"cpclib/basicStep".to_string()),
+            !session
+                .peer_mut()
+                .commands()
+                .contains(&"cpclib/basicStep".to_string()),
             "{:?}",
             session.peer_mut().commands()
         );
@@ -4799,7 +5140,9 @@ mod tests {
         // `new_session`, since the parser itself does not tolerate one
         // (irrelevant here: `line_index_from_source` is a separate, plain
         // text scan, and only it is under test).
-        let program_bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let program_bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new(),
             PathBuf::from("test.bas"),
@@ -4840,13 +5183,17 @@ mod tests {
         // read.
         let seq = last_sent_seq(session);
         let field_target = 0x9000u16;
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&field_target.to_le_bytes());
         answer(session, seq, read_memory_response(&response_bytes));
 
         // Second round trip: dereferencing that pointer -> the line number.
         let seq = last_sent_seq(session);
-        answer(session, seq, read_memory_response(&current_line.to_le_bytes()))
+        answer(
+            session,
+            seq,
+            read_memory_response(&current_line.to_le_bytes())
+        )
     }
 
     #[test]
@@ -4885,7 +5232,10 @@ mod tests {
         let commands_before = session.peer_mut().commands().len();
         let events = stop_at_line(&mut session, 10); // not a breakpoint
 
-        assert!(events.is_empty(), "no stopped event should reach the editor");
+        assert!(
+            events.is_empty(),
+            "no stopped event should reach the editor"
+        );
         let commands = session.peer_mut().commands();
         assert!(commands.len() > commands_before);
         assert_eq!(commands.last().unwrap(), "continue");
@@ -4899,18 +5249,24 @@ mod tests {
             .on_editor_message(&json!({ "seq": 1, "command": "next", "arguments": {} }))
             .unwrap();
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
         }
         let seq = last_sent_seq(&mut session);
         let field_target = 0x9000u16;
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&field_target.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+        let events = answer(
+            &mut session,
+            seq,
+            read_memory_response(&10u16.to_le_bytes())
+        );
 
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
@@ -4924,7 +5280,9 @@ mod tests {
         // reported directly: `next` executes a multi-statement line whole,
         // which is expected, but `stepIn` did too, which is not.
         let source = "10 a=1:b=2:c=3\n20 d=4\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new(),
             PathBuf::from("test.bas"),
@@ -4937,7 +5295,9 @@ mod tests {
             .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
             .unwrap();
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -4946,11 +5306,15 @@ mod tests {
         // The hit reports line 10 again (its second statement) - stepIn
         // must stop here even though the *line* has not changed.
         let seq = last_sent_seq(&mut session);
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+        let events = answer(
+            &mut session,
+            seq,
+            read_memory_response(&10u16.to_le_bytes())
+        );
 
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
@@ -4961,7 +5325,9 @@ mod tests {
     #[test]
     fn next_skips_every_statement_on_the_current_line_and_stops_only_on_a_new_one() {
         let source = "10 a=1:b=2:c=3\n20 d=4\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new(),
             PathBuf::from("test.bas"),
@@ -4983,7 +5349,9 @@ mod tests {
         session
             .on_editor_message(&json!({ "seq": 2, "command": "next", "arguments": {} }))
             .unwrap();
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -4992,27 +5360,37 @@ mod tests {
         // First hit after "next": still line 10 (its second statement) -
         // must NOT stop, matching "step over the whole line".
         let seq = last_sent_seq(&mut session);
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+        let events = answer(
+            &mut session,
+            seq,
+            read_memory_response(&10u16.to_le_bytes())
+        );
         assert!(events.is_empty(), "{events:?}");
 
         // Silently continuing sent its own "continue"; the peer, having run
         // on, hits the breakpoint again for line 20 - which "next" does
         // stop at.
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
         }
         let seq = last_sent_seq(&mut session);
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0x9100u16.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+        let events = answer(
+            &mut session,
+            seq,
+            read_memory_response(&20u16.to_le_bytes())
+        );
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "step");
@@ -5037,13 +5415,15 @@ mod tests {
             .on_editor_message(&json!({ "seq": 2, "command": "next", "arguments": {} }))
             .unwrap();
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
         }
         let seq = last_sent_seq(&mut session);
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0u16.to_le_bytes());
         let events = answer(&mut session, seq, read_memory_response(&response_bytes));
 
@@ -5066,17 +5446,21 @@ mod tests {
         let mut session = new_session(SOURCE);
         complete_attach(&mut session);
         session
-            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .on_editor_message(
+                &json!({ "seq": 1, "command": "configurationDone", "arguments": {} })
+            )
             .unwrap();
 
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
         }
         let commands_before = session.peer_mut().commands().len();
         let seq = last_sent_seq(&mut session);
-        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        let mut response_bytes = 0xFFFFu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0u16.to_le_bytes());
         let events = answer(&mut session, seq, read_memory_response(&response_bytes));
 
@@ -5115,7 +5499,17 @@ mod tests {
             .unwrap();
         let scopes = response[0]["body"]["scopes"].as_array().unwrap();
         let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
-        assert_eq!(names, ["Variables", "Workspace", "CRTC", "Gate Array", "PSG", "Disc"]);
+        assert_eq!(
+            names,
+            [
+                "Variables",
+                "Workspace",
+                "CRTC",
+                "Gate Array",
+                "PSG",
+                "Disc"
+            ]
+        );
         let crtc = scopes.iter().find(|s| s["name"] == "CRTC").unwrap();
         assert_eq!(crtc["variablesReference"], crate::inspect::CRTC_REFERENCE);
         // Opt-in only: this session has already seen what hammering AMSpiriT
@@ -5170,7 +5564,9 @@ mod tests {
     /// fallback - confirms that scope is now offered here too, reusing (not
     /// reimplementing) the exact same decode.
     fn scopes_offers_chip_panes_on_a_generic_peer_with_machine_state() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&["cpclib/machineState"]),
             PathBuf::from("test.bas"),
@@ -5186,7 +5582,15 @@ mod tests {
         let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
         assert_eq!(
             names,
-            ["Variables", "Workspace", "CRTC", "Gate Array", "PSG", "PPI", "Disc"]
+            [
+                "Variables",
+                "Workspace",
+                "CRTC",
+                "Gate Array",
+                "PSG",
+                "PPI",
+                "Disc"
+            ]
         );
     }
 
@@ -5196,7 +5600,9 @@ mod tests {
     /// session's own `Purpose::MachineState` does - not just that the scope
     /// is offered.
     fn a_generic_chip_scope_decodes_the_machine_state_snapshot() {
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
         let mut session = BasicSession::new(
             RecordingPeer::new().also_supporting(&["cpclib/machineState"]),
             PathBuf::from("test.bas"),
@@ -5213,7 +5619,10 @@ mod tests {
             }))
             .unwrap();
         assert!(response.is_empty(), "{response:?}");
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/machineState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/machineState"
+        );
 
         let sna = cpclib_sna::Snapshot::new_6128().unwrap();
         let mut snapshot_bytes = Vec::new();
@@ -5230,7 +5639,10 @@ mod tests {
         assert_eq!(events[0]["request_seq"], 9);
         assert!(events[0]["body"]["variables"].is_array());
         assert!(
-            !events[0]["body"]["variables"].as_array().unwrap().is_empty(),
+            !events[0]["body"]["variables"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
             "a real snapshot must decode to real CRTC register entries, {events:?}"
         );
     }
@@ -5243,11 +5655,17 @@ mod tests {
     /// `cpclib/screenView` event, not just that each step is dispatched.
     fn sv_console_command_renders_a_screen_on_the_native_path() {
         let mut session = BasicSession::new(
-            RecordingPeer::new().also_supporting(&["cpclib/basicState", "cpclib/crtc", "cpclib/ga"]),
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/crtc",
+                "cpclib/ga"
+            ]),
             PathBuf::from("test.bas"),
             SOURCE,
             basic::PROGRAM_START,
-            &cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes()
+            &cpclib_basic::BasicProgram::parse(SOURCE)
+                .unwrap()
+                .as_bytes()
         );
         complete_attach(&mut session);
 
@@ -5262,7 +5680,11 @@ mod tests {
         assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/crtc");
 
         let seq = last_sent_seq(&mut session);
-        answer(&mut session, seq, json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } }));
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } })
+        );
         assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/ga");
 
         let seq = last_sent_seq(&mut session);
@@ -5277,7 +5699,11 @@ mod tests {
         let events = answer(&mut session, seq, read_memory_response(&[0u8; 0x4000]));
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "cpclib/screenView");
-        assert!(events[0]["body"]["png"].as_str().is_some_and(|s| !s.is_empty()));
+        assert!(
+            events[0]["body"]["png"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        );
         assert_eq!(events[1]["command"], "evaluate");
         assert_eq!(events[1]["request_seq"], 9);
     }
@@ -5292,11 +5718,17 @@ mod tests {
     /// asks for mode 2), and width/height land in the event body verbatim.
     fn sv_console_command_with_all_four_arguments_honours_every_override() {
         let mut session = BasicSession::new(
-            RecordingPeer::new().also_supporting(&["cpclib/basicState", "cpclib/crtc", "cpclib/ga"]),
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/crtc",
+                "cpclib/ga"
+            ]),
             PathBuf::from("test.bas"),
             SOURCE,
             basic::PROGRAM_START,
-            &cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes()
+            &cpclib_basic::BasicProgram::parse(SOURCE)
+                .unwrap()
+                .as_bytes()
         );
         complete_attach(&mut session);
 
@@ -5309,7 +5741,11 @@ mod tests {
             .unwrap();
 
         let seq = last_sent_seq(&mut session);
-        answer(&mut session, seq, json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } }));
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } })
+        );
 
         let seq = last_sent_seq(&mut session);
         answer(
@@ -5322,9 +5758,15 @@ mod tests {
         let events = answer(&mut session, seq, read_memory_response(&[0u8; 0x10000]));
         assert_eq!(events[0]["event"], "cpclib/screenView", "{events:?}");
         let body = &events[0]["body"];
-        assert_eq!(body["address"], 0x8000, "address override was not honoured: {body}");
+        assert_eq!(
+            body["address"], 0x8000,
+            "address override was not honoured: {body}"
+        );
         assert_eq!(body["width"], 40, "width override was not honoured: {body}");
-        assert_eq!(body["height"], 100, "height override was not honoured: {body}");
+        assert_eq!(
+            body["height"], 100,
+            "height override was not honoured: {body}"
+        );
         assert_eq!(body["mode"], 2, "mode override was not honoured: {body}");
     }
 
@@ -5342,7 +5784,10 @@ mod tests {
             }))
             .unwrap();
         assert!(response.is_empty(), "{response:?}");
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/machineState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/machineState"
+        );
 
         let sna = cpclib_sna::Snapshot::new_6128().unwrap();
         let mut snapshot_bytes = Vec::new();
@@ -5356,7 +5801,11 @@ mod tests {
         );
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "cpclib/screenView");
-        assert!(events[0]["body"]["png"].as_str().is_some_and(|s| !s.is_empty()));
+        assert!(
+            events[0]["body"]["png"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        );
     }
 
     #[test]
@@ -5377,7 +5826,10 @@ mod tests {
 
         let request = session.peer_mut().sent.last().unwrap().clone();
         assert_eq!(request["command"], "readMemory");
-        assert_eq!(request["arguments"]["memoryReference"], address_reference(0xC000));
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(0xC000)
+        );
         assert_eq!(request["arguments"]["count"], 4);
 
         let seq = last_sent_seq(&mut session);
@@ -5406,15 +5858,26 @@ mod tests {
 
         let request = session.peer_mut().sent.last().unwrap().clone();
         assert_eq!(request["command"], "readMemory");
-        assert_eq!(request["arguments"]["memoryReference"], address_reference(0x4000));
-        assert_eq!(request["arguments"]["count"], 8, "2 instructions, 4 bytes worst case each");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(0x4000)
+        );
+        assert_eq!(
+            request["arguments"]["count"], 8,
+            "2 instructions, 4 bytes worst case each"
+        );
 
         let seq = last_sent_seq(&mut session);
         // Two NOPs decode cleanly with no ambiguity.
         let events = answer(&mut session, seq, read_memory_response(&[0x00, 0x00]));
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "cpclib/disassemblyView");
-        assert!(!events[0]["body"]["instructions"].as_array().unwrap().is_empty());
+        assert!(
+            !events[0]["body"]["instructions"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -5426,7 +5889,9 @@ mod tests {
     /// launch-time tokenising already goes through.
     fn bv_console_command_decodes_program_bytes_on_the_generic_peer() {
         let mut session = new_session(SOURCE);
-        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE)
+            .unwrap()
+            .as_bytes();
 
         let response = session
             .on_editor_message(&json!({
@@ -5468,7 +5933,10 @@ mod tests {
             }))
             .unwrap();
         assert!(response.is_empty(), "{response:?}");
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicListing"
+        );
 
         let seq = last_sent_seq(&mut session);
         let events = answer(
@@ -5507,11 +5975,20 @@ mod tests {
         );
 
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&0x200u16.to_le_bytes()));
+        let events = answer(
+            &mut session,
+            seq,
+            read_memory_response(&0x200u16.to_le_bytes())
+        );
 
         assert_eq!(events.len(), 1, "{events:?}");
         let vars = &events[0]["body"]["variables"];
-        let names: Vec<&str> = vars.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+        let names: Vec<&str> = vars
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["name"].as_str().unwrap())
+            .collect();
         assert!(names.contains(&"Program size"), "{names:?}");
         assert!(names.contains(&"Variables zone"), "{names:?}");
         assert!(names.contains(&"BASIC version"), "{names:?}");
@@ -5529,7 +6006,10 @@ mod tests {
             }))
             .unwrap();
         assert!(response.is_empty());
-        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState"
+        );
 
         let seq = last_sent_seq(&mut session);
         let events = answer(
@@ -5550,7 +6030,12 @@ mod tests {
 
         assert_eq!(events.len(), 1, "{events:?}");
         let vars = &events[0]["body"]["variables"];
-        let names: Vec<&str> = vars.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+        let names: Vec<&str> = vars
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["name"].as_str().unwrap())
+            .collect();
         for expected in [
             "Program size",
             "Variables zone",
@@ -5559,7 +6044,10 @@ mod tests {
             "BASIC version",
             "Current instruction"
         ] {
-            assert!(names.contains(&expected), "missing {expected:?} in {names:?}");
+            assert!(
+                names.contains(&expected),
+                "missing {expected:?} in {names:?}"
+            );
         }
     }
 
@@ -5592,7 +6080,9 @@ mod tests {
         // per-instruction highlight instead of only ever pointing at the
         // start of the line.
         let source = "10 a=1:b=2\n";
-        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
         assert_eq!(index.len(), 2, "{index:?}");
         let second_statement = index[1].clone();
@@ -5605,7 +6095,9 @@ mod tests {
             &bytes
         );
         complete_attach(&mut session);
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        session
+            .peer_mut()
+            .push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
@@ -5615,11 +6107,19 @@ mod tests {
         // PTR_CURRENT_STATEMENT holds the byte *before* the statement's own
         // first token (see `on_line_pointer_read`'s doc comment) - `- 1` is
         // what a real ROM would actually report here.
-        let mut response_bytes = second_statement.address.wrapping_sub(1).to_le_bytes().to_vec();
+        let mut response_bytes = second_statement
+            .address
+            .wrapping_sub(1)
+            .to_le_bytes()
+            .to_vec();
         response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
-        answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+        answer(
+            &mut session,
+            seq,
+            read_memory_response(&10u16.to_le_bytes())
+        );
 
         let response = session
             .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
@@ -5656,7 +6156,11 @@ mod tests {
         // comment) happens first, ahead of the chain-heads/storage reads
         // this test is actually about.
         let seq = session.tracker.smallest_pending_own_seq().unwrap();
-        answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+        answer(
+            &mut session,
+            seq,
+            read_memory_response(&20u16.to_le_bytes())
+        );
 
         let seq = session.tracker.smallest_pending_own_seq().unwrap();
         let refused = json!({
@@ -5701,7 +6205,11 @@ mod tests {
         // comment) happens first, ahead of the chain-heads/storage reads
         // this test is actually about.
         let seq = session.tracker.smallest_pending_own_seq().unwrap();
-        answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+        answer(
+            &mut session,
+            seq,
+            read_memory_response(&20u16.to_le_bytes())
+        );
 
         // 27 chain heads: 'I' (9th letter) points at offset 1.
         let mut heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
@@ -5790,7 +6298,11 @@ mod tests {
 
         let live_txttop = computed - 8;
         let seq = last_sent_seq(&mut session);
-        answer(&mut session, seq, read_memory_response(&live_txttop.to_le_bytes()));
+        answer(
+            &mut session,
+            seq,
+            read_memory_response(&live_txttop.to_le_bytes())
+        );
 
         let heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
         let seq = last_sent_seq(&mut session);

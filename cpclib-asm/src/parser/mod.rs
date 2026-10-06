@@ -1,7 +1,7 @@
 pub mod common;
 pub mod context;
-pub mod dispatch;
 pub mod directives;
+pub mod dispatch;
 pub mod error;
 pub mod expression;
 pub mod instructions;
@@ -17,8 +17,8 @@ pub mod macros;
 #[allow(ambiguous_glob_reexports)]
 pub use common::*;
 pub use context::*;
-pub use dispatch::ctx_and_span;
 pub use directives::*;
+pub use dispatch::ctx_and_span;
 pub use error::*;
 pub use expression::*;
 pub use instructions::*;

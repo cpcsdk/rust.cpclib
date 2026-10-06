@@ -9,7 +9,7 @@
 use image::RgbImage;
 
 use super::lab::{
-    lab_distance, linear_to_lab, nearest_in_palette, rgb8_to_lab, rgb8_to_linear, LabF32, LinRgbF32
+    LabF32, LinRgbF32, lab_distance, linear_to_lab, nearest_in_palette, rgb8_to_lab, rgb8_to_linear
 };
 use crate::color::AmstradColor;
 use crate::image::ColorMatrix;
@@ -187,12 +187,7 @@ pub fn ordered_arbitrary_dither<C: AmstradColor>(
                 };
                 let level = (frac_hi * levels as f32).round() as u32;
                 let threshold = bayer[(y as usize) % bayer_size][(x as usize) % bayer_size];
-                if threshold < level {
-                    hi
-                }
-                else {
-                    lo
-                }
+                if threshold < level { hi } else { lo }
             };
             out.set_color(x as usize, y as usize, chosen);
         }

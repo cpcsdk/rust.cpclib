@@ -193,7 +193,8 @@ fn a_client_that_accepts_progress_gets_it_around_launch() {
     assert_eq!(messages[2]["event"], json!("progressEnd"));
     assert_eq!(messages[2]["body"]["progressId"], json!("launch"));
     assert_eq!(
-        messages[3]["success"], json!(false),
+        messages[3]["success"],
+        json!(false),
         "the launch response itself still follows: {:?}",
         messages[3]
     );
@@ -212,9 +213,7 @@ fn a_client_that_never_said_so_gets_no_progress_events() {
 
     let mut stdin = child.stdin.take().unwrap();
     stdin
-        .write_all(
-            frame(&json!({"seq": 1, "type": "request", "command": "initialize"})).as_bytes()
-        )
+        .write_all(frame(&json!({"seq": 1, "type": "request", "command": "initialize"})).as_bytes())
         .unwrap();
     stdin
         .write_all(
@@ -233,7 +232,8 @@ fn a_client_that_never_said_so_gets_no_progress_events() {
 
     assert_eq!(messages[0]["command"], json!("initialize"));
     assert_eq!(
-        messages[1]["success"], json!(false),
+        messages[1]["success"],
+        json!(false),
         "no progressStart/progressEnd in between: {:?}",
         messages
     );
@@ -348,10 +348,16 @@ fn progress_updates_are_throttled_not_forwarded_one_for_one() {
         .iter()
         .find(|m| m["type"] == json!("response") && m["command"] == json!("launch"))
         .expect("a launch response must arrive");
-    assert_eq!(launch_response["success"], json!(true), "{launch_response:?}");
+    assert_eq!(
+        launch_response["success"],
+        json!(true),
+        "{launch_response:?}"
+    );
 
-    let progress_updates =
-        messages.iter().filter(|m| m["event"] == json!("progressUpdate")).count();
+    let progress_updates = messages
+        .iter()
+        .filter(|m| m["event"] == json!("progressUpdate"))
+        .count();
     assert!(
         progress_updates < 100,
         "expected throttling to keep this well under 100 messages for a 20000-token repeat, \

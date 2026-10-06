@@ -1,11 +1,10 @@
 //! `balance_branches` over real parsed Z80 source. See `cost_range.rs` in this
 //! directory for why these tests live outside the crate they exercise.
 
-use cpclib_z80flow::branch_balance::{InstructionCost, StabilizeEdit, balance_branches};
-use cpclib_tokens::{DataAccessElem, ListingElement, Mnemonic};
-
 use cpclib_asm::parser::obtained::LocatedToken;
 use cpclib_asm::parser::parse_z80_str;
+use cpclib_tokens::{DataAccessElem, ListingElement, Mnemonic};
+use cpclib_z80flow::branch_balance::{InstructionCost, StabilizeEdit, balance_branches};
 
 /// A tiny, test-only cost source mirroring the real Z80/CPC "NOPs"
 /// timing convention (1 NOP = 4 T-states) this whole feature is built
@@ -40,7 +39,6 @@ fn test_cost(token: &LocatedToken) -> InstructionCost {
         _ => InstructionCost::Fixed(0)
     }
 }
-
 
 fn balance(code: &str) -> Result<Vec<StabilizeEdit>, String> {
     // `LocatedToken::clone()` is an `unimplemented!()` stub in this

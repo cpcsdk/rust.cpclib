@@ -173,10 +173,15 @@ mod tests {
     /// `value_source` at all.
     #[test]
     fn apply_cli_overrides_does_not_panic_with_no_flags() {
-        let matches = Cli::command().try_get_matches_from(["basm-fmt", "file.asm"]).unwrap();
+        let matches = Cli::command()
+            .try_get_matches_from(["basm-fmt", "file.asm"])
+            .unwrap();
         let base = AsmFormatOptions::default();
         let merged = apply_cli_overrides(base.clone(), &matches);
-        assert_eq!(merged.indent_size, base.indent_size, "no flag given - the config-file base must survive untouched");
+        assert_eq!(
+            merged.indent_size, base.indent_size,
+            "no flag given - the config-file base must survive untouched"
+        );
     }
 
     /// An explicitly-given flag must still win over the config-file base -
@@ -186,7 +191,10 @@ mod tests {
         let matches = Cli::command()
             .try_get_matches_from(["basm-fmt", "--indent-size", "2", "file.asm"])
             .unwrap();
-        let base = AsmFormatOptions { indent_size: 8, ..Default::default() };
+        let base = AsmFormatOptions {
+            indent_size: 8,
+            ..Default::default()
+        };
         let merged = apply_cli_overrides(base, &matches);
         assert_eq!(merged.indent_size, 2);
     }

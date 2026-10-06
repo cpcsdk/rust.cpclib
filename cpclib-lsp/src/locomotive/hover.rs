@@ -28,36 +28,36 @@ impl BasicAnalyzer {
             && let Some(&(_, doc)) = KEYWORD_DOCS
                 .iter()
                 .find(|(kw, _)| kw.to_uppercase() == word_upper)
-            {
-                let mut md = doc.to_string();
-                if let Some((label, bytes)) = tok.map(|t| &t.kind).and_then(token_bytes) {
-                    md.push_str("\n\n");
-                    md.push_str(&crate::common::render::format_labeled_bytes(&[(
-                        label.as_str(),
-                        bytes.as_slice()
-                    )]));
-                }
-                // `CHR$(n)` - show the real Amstrad CPC ROM glyph for
-                // character code `n`, if the argument is a plain numeric
-                // literal in range. Rasterized (not Unicode block art -
-                // there's no way to represent every one of the 256 CPC
-                // characters, including graphics-redefinable ones,
-                // accurately with block-drawing characters) into a tiny
-                // image embedded directly in the hover markdown.
-                if word_upper == "CHR$"
-                    && let Some(open) = line[col..].find('(')
-                    && let Some(close_rel) = line[col + open + 1..].find(')')
-                {
-                    let arg_text = line[col + open + 1..col + open + 1 + close_rel].trim();
-                    if let Some(value) = parse_basic_integer(arg_text)
-                        && (0..=255).contains(&value)
-                    {
-                        md.push_str("\n\n");
-                        md.push_str(&glyph_hover_markdown(value as u8));
-                    }
-                }
-                return Some(make_hover(md));
+        {
+            let mut md = doc.to_string();
+            if let Some((label, bytes)) = tok.map(|t| &t.kind).and_then(token_bytes) {
+                md.push_str("\n\n");
+                md.push_str(&crate::common::render::format_labeled_bytes(&[(
+                    label.as_str(),
+                    bytes.as_slice()
+                )]));
             }
+            // `CHR$(n)` - show the real Amstrad CPC ROM glyph for
+            // character code `n`, if the argument is a plain numeric
+            // literal in range. Rasterized (not Unicode block art -
+            // there's no way to represent every one of the 256 CPC
+            // characters, including graphics-redefinable ones,
+            // accurately with block-drawing characters) into a tiny
+            // image embedded directly in the hover markdown.
+            if word_upper == "CHR$"
+                && let Some(open) = line[col..].find('(')
+                && let Some(close_rel) = line[col + open + 1..].find(')')
+            {
+                let arg_text = line[col + open + 1..col + open + 1 + close_rel].trim();
+                if let Some(value) = parse_basic_integer(arg_text)
+                    && (0..=255).contains(&value)
+                {
+                    md.push_str("\n\n");
+                    md.push_str(&glyph_hover_markdown(value as u8));
+                }
+            }
+            return Some(make_hover(md));
+        }
 
         // Number hover: find a Number token at the cursor and show base conversions.
         let tok = tok?;
@@ -174,30 +174,31 @@ pub(crate) fn locomotive_basic_hover(
         && let Some(&(_, doc)) = KEYWORD_DOCS
             .iter()
             .find(|(kw, _)| kw.to_uppercase() == word_upper)
-        {
-            let mut md = doc.to_string();
-            if let Some((label, bytes)) = tok.map(|t| &t.kind).and_then(token_bytes) {
-                md.push_str("\n\n");
-                md.push_str(&crate::common::render::format_labeled_bytes(&[(
-                    label.as_str(),
-                    bytes.as_slice()
-                )]));
-            }
-            return Some(make_hover(md));
+    {
+        let mut md = doc.to_string();
+        if let Some((label, bytes)) = tok.map(|t| &t.kind).and_then(token_bytes) {
+            md.push_str("\n\n");
+            md.push_str(&crate::common::render::format_labeled_bytes(&[(
+                label.as_str(),
+                bytes.as_slice()
+            )]));
         }
+        return Some(make_hover(md));
+    }
 
     // 2. Number hover (token already resolved above)
     if let Some(tok) = tok {
         if let LocatedTokenKind::Number(num_text) = &tok.kind
-            && let Some(value) = parse_basic_integer(num_text) {
-                let mut md = crate::common::render::format_number_hover(num_text, value);
-                if firmware_docs_enabled
-                    && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
-                {
-                    md.push_str(&format!("\n\n---\n\n**{}**\n\n{}", doc.symbol, doc.doc));
-                }
-                return Some(make_hover(md));
+            && let Some(value) = parse_basic_integer(num_text)
+        {
+            let mut md = crate::common::render::format_number_hover(num_text, value);
+            if firmware_docs_enabled
+                && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
+            {
+                md.push_str(&format!("\n\n---\n\n**{}**\n\n{}", doc.symbol, doc.doc));
             }
+            return Some(make_hover(md));
+        }
 
         // 3. Space, statement separator, operator, or any other raw
         // passthrough character → show its own byte(s) directly.

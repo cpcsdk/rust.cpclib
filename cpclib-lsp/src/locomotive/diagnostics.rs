@@ -60,24 +60,26 @@ impl BasicAnalyzer {
                     },
                     LocatedTokenKind::Number(n) if after_jump => {
                         if let Ok(target) = n.parse::<u16>()
-                            && warn_undefined_line && !defined.contains(&target) {
-                                diagnostics.push(Diagnostic {
-                                    range: Range {
-                                        start: Position {
-                                            line: tok.span.line,
-                                            character: tok.span.col
-                                        },
-                                        end: Position {
-                                            line: tok.span.line,
-                                            character: tok.span.col + tok.span.len
-                                        }
+                            && warn_undefined_line
+                            && !defined.contains(&target)
+                        {
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position {
+                                        line: tok.span.line,
+                                        character: tok.span.col
                                     },
-                                    severity: Some(DiagnosticSeverity::WARNING),
-                                    message: format!("Undefined BASIC line {target}"),
-                                    source: Some("cpclib-lsp".into()),
-                                    ..Default::default()
-                                });
-                            }
+                                    end: Position {
+                                        line: tok.span.line,
+                                        character: tok.span.col + tok.span.len
+                                    }
+                                },
+                                severity: Some(DiagnosticSeverity::WARNING),
+                                message: format!("Undefined BASIC line {target}"),
+                                source: Some("cpclib-lsp".into()),
+                                ..Default::default()
+                            });
+                        }
                         // Keep after_jump: comma-separated targets for ON GOTO.
                     },
                     LocatedTokenKind::Other(',') => {}, // keep state for ON GOTO n,n,n
@@ -182,19 +184,20 @@ pub(super) fn collect_vars_after_input(
     }
     // Skip optional prompt string followed by `;` or `,`.
     if i < toks.len()
-        && let LocatedTokenKind::StringLit(_) = &toks[i].kind {
+        && let LocatedTokenKind::StringLit(_) = &toks[i].kind
+    {
+        i += 1;
+        // Skip the `;` or `,` separator.
+        while i < toks.len()
+            && matches!(
+                &toks[i].kind,
+                LocatedTokenKind::Space
+                    | LocatedTokenKind::Other(';')
+                    | LocatedTokenKind::Other(',')
+            )
+        {
             i += 1;
-            // Skip the `;` or `,` separator.
-            while i < toks.len()
-                && matches!(
-                    &toks[i].kind,
-                    LocatedTokenKind::Space
-                        | LocatedTokenKind::Other(';')
-                        | LocatedTokenKind::Other(',')
-                )
-            {
-                i += 1;
-            }
         }
+    }
     collect_comma_separated_vars(toks, i, seen);
 }

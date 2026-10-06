@@ -325,7 +325,10 @@ impl Transcript {
     /// GUI-launched editor often has nowhere visible to show stderr - the
     /// same reasoning `cpclib-lsp.toml`'s `log` field exists for.
     fn record_timing(&self, phase: &str, elapsed: std::time::Duration) {
-        self.record("   timing  ", &json!({ "phase": phase, "elapsedMs": elapsed.as_millis() }));
+        self.record(
+            "   timing  ",
+            &json!({ "phase": phase, "elapsedMs": elapsed.as_millis() })
+        );
     }
 }
 
@@ -540,11 +543,7 @@ pub fn run_stdio() -> std::io::Result<()> {
                     if client_accepts_progress {
                         seq += 1;
                         emit(
-                            &protocol::event(
-                                "progressEnd",
-                                json!({ "progressId": "launch" }),
-                                seq
-                            ),
+                            &protocol::event("progressEnd", json!({ "progressId": "launch" }), seq),
                             &mut output
                         )?;
                     }
@@ -1060,19 +1059,20 @@ fn start_session(
     }
     let wants_sugarbox = chosen_emulator.eq_ignore_ascii_case("sugarbox");
     if wants_sugarbox {
-        notices.push(
-            "Debugging through SugarboxV2, in its own window.".to_string()
-        );
+        notices.push("Debugging through SugarboxV2, in its own window.".to_string());
     }
     let wants_ace = chosen_emulator.eq_ignore_ascii_case("ace");
     if wants_ace {
         notices.push("Debugging through ACE, in its own window.".to_string());
     }
     if wants_lite {
-        notices.push("Debugging through AMSpiriT Lite, in its own window. Its web page is \
+        notices.push(
+            "Debugging through AMSpiriT Lite, in its own window. Its web page is \
              deliberately not opened here: that page drives the emulator too, and \
              would resume it behind this session. It knows its own banking, so \
-             addresses in paged code resolve exactly rather than by comparing bytes.".to_string());
+             addresses in paged code resolve exactly rather than by comparing bytes."
+                .to_string()
+        );
     }
 
     // The emulator refuses everything until attached, so ask immediately; the
@@ -1162,11 +1162,7 @@ fn connect_backend(
     // below and to refuse cleanly on a peer that has no disk-drive concept.
     let disk_path = named_path
         .as_deref()
-        .filter(|p| {
-            p.to_string_lossy()
-                .to_ascii_lowercase()
-                .ends_with(".dsk")
-        });
+        .filter(|p| p.to_string_lossy().to_ascii_lowercase().ends_with(".dsk"));
 
     let (chosen_emulator, dap_config) = resolve_emulator_choice(arguments);
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
@@ -1219,10 +1215,17 @@ fn connect_backend(
                 // afterward. See `launch_without_snapshot`'s own doc
                 // comment for the full story.
                 let (endpoint, child) = if is_basic {
-                    amspiritlite::launch_without_snapshot(port, &cpclib_common::event::DiscardObserver)?
+                    amspiritlite::launch_without_snapshot(
+                        port,
+                        &cpclib_common::event::DiscardObserver
+                    )?
                 }
                 else if let Some(disk) = disk_path {
-                    amspiritlite::launch_with_disk(disk, port, &cpclib_common::event::DiscardObserver)?
+                    amspiritlite::launch_with_disk(
+                        disk,
+                        port,
+                        &cpclib_common::event::DiscardObserver
+                    )?
                 }
                 else {
                     amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?
@@ -1527,8 +1530,9 @@ mod tests {
                 "stopOnEntry": false
             }
         });
-        let (_session, url, notices) = start_session(&request, None)
-            .expect("a raw .sna launch must succeed with no assembly step - run from the crate root");
+        let (_session, url, notices) = start_session(&request, None).expect(
+            "a raw .sna launch must succeed with no assembly step - run from the crate root"
+        );
         assert!(url.starts_with("http://"), "{url}");
         // Nothing was ever assembled for this launch, so nothing should
         // complain about a missing entry/build - only the (harmless)
@@ -1570,10 +1574,7 @@ mod tests {
             Ok(_) => panic!("a .dsk launch on the default (1984js) emulator must fail"),
             Err(error) => error
         };
-        assert!(
-            error.to_lowercase().contains("amspiritlite"),
-            "{error}"
-        );
+        assert!(error.to_lowercase().contains("amspiritlite"), "{error}");
     }
 
     /// `cpclib/emulatorReady`'s own `supports` list
@@ -1645,10 +1646,17 @@ mod resolve_emulator_choice_tests {
     /// resolution doesn't panic or misbehave on either shape of argument.
     #[test]
     fn accepts_either_program_or_build_file_as_the_project_hint() {
-        let (chosen_program, _) = resolve_emulator_choice(&json!({ "program": "does/not/exist.asm" }));
+        let (chosen_program, _) =
+            resolve_emulator_choice(&json!({ "program": "does/not/exist.asm" }));
         let (chosen_build_file, _) =
             resolve_emulator_choice(&json!({ "buildFile": "does/not/exist.bnd" }));
-        assert!(chosen_program.eq_ignore_ascii_case("1984js"), "{chosen_program}");
-        assert!(chosen_build_file.eq_ignore_ascii_case("1984js"), "{chosen_build_file}");
+        assert!(
+            chosen_program.eq_ignore_ascii_case("1984js"),
+            "{chosen_program}"
+        );
+        assert!(
+            chosen_build_file.eq_ignore_ascii_case("1984js"),
+            "{chosen_build_file}"
+        );
     }
 }

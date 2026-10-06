@@ -36,7 +36,9 @@ fn parse_lines_arg(raw: &str) -> Result<(usize, usize), String> {
         return Err("--lines: line numbers are 1-based, 0 is not valid".to_string());
     }
     if start > end {
-        return Err(format!("--lines: start ({start}) must not be after end ({end})"));
+        return Err(format!(
+            "--lines: start ({start}) must not be after end ({end})"
+        ));
     }
     Ok((start, end))
 }
@@ -148,7 +150,12 @@ fn run() -> i32 {
                 Ok(g) => {
                     builder.add(g);
                 },
-                Err(e) => eprintln!("warning: {}: invalid ignore pattern {pattern:?}: {e}", path.display())
+                Err(e) => {
+                    eprintln!(
+                        "warning: {}: invalid ignore pattern {pattern:?}: {e}",
+                        path.display()
+                    )
+                },
             }
         }
         builder.build().ok().map(|set| (base_dir, set))

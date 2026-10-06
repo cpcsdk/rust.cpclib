@@ -233,9 +233,7 @@ pub enum ColorConversionStrategy {
     Fail
 }
 
-
-impl<C:AmstradColor> ColorMatrix<C> {
-
+impl<C: AmstradColor> ColorMatrix<C> {
     /// Build a representation of a palette
     pub fn from_palette(pal: &Palette<C>, ink_size: usize) -> Self {
         let height = ink_size;
@@ -458,13 +456,18 @@ impl<C: AmstradColor> ColorMatrix<C> {
         }
     }
 
-    pub fn to_ansi_string(&self) ->String{
-        self.data.iter().map(|line| {
-            line.iter().map(|ink| {
-                let color = ink.owo_color();
-                format!("{}", "   ".on_color(color))
-            }).join("")
-        }).join("\n")
+    pub fn to_ansi_string(&self) -> String {
+        self.data
+            .iter()
+            .map(|line| {
+                line.iter()
+                    .map(|ink| {
+                        let color = ink.owo_color();
+                        format!("{}", "   ".on_color(color))
+                    })
+                    .join("")
+            })
+            .join("\n")
     }
 
     /// The matrix represents both the mask (with an unexpected color), and the sprite (<ith the expected color).
@@ -488,7 +491,6 @@ impl<C: AmstradColor> ColorMatrix<C> {
         (mask_data, sprite_data)
     }
 
-
     /// Destroy the image to build the mask according to the background ink
     pub fn convert_to_mask(&mut self, mask: C) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
@@ -503,7 +505,6 @@ impl<C: AmstradColor> ColorMatrix<C> {
         });
         self
     }
-
 
     /// Exchange all the occurrences of `from` Ink with `to` ink
     pub fn replace_color(&mut self, from: C, to: C) -> &mut Self {
@@ -879,12 +880,9 @@ impl<C: AmstradColor> ColorMatrix<C> {
             data: encode(&pens, mode, missing_pen)
         })
     }
-
 }
 
 impl ColorMatrix<Ink> {
-
-
     /// Convert the matrix as a sprite in mode1. Pen 1/2/3 are changed at each line. Pen 0 is constant
     pub fn as_mode1_sprite_with_different_inks_per_line(
         &self,
@@ -1271,7 +1269,7 @@ impl<C: AmstradColor> ColorMatrixList<C> {
 
 /// List of sprites for animations
 #[derive(Debug)]
-pub struct SpriteList<C: AmstradColor>(Vec<Sprite<C>>);    
+pub struct SpriteList<C: AmstradColor>(Vec<Sprite<C>>);
 
 impl<C: AmstradColor> From<Vec<Sprite<C>>> for SpriteList<C> {
     fn from(src: Vec<Sprite<C>>) -> Self {
@@ -1457,13 +1455,7 @@ impl<C: AmstradColor> Sprite<C> {
         missing_pen: Option<Pen>
     ) -> anyhow::Result<Self> {
         let img = im::open(fname.as_ref())?;
-        Self::convert(
-            &img.to_rgb8(),
-            mode,
-            conversion,
-            palette,
-            missing_pen
-        )
+        Self::convert(&img.to_rgb8(), mode, conversion, palette, missing_pen)
     }
 
     /// Apply a transformation function on each line
@@ -1483,7 +1475,7 @@ impl<C: AmstradColor> Sprite<C> {
 /// The palette is assumed to be the same on all the lines
 #[derive(Clone, Debug)]
 #[allow(missing_docs, unused)]
-pub struct MultiModeSprite<C: AmstradColor>  {
+pub struct MultiModeSprite<C: AmstradColor> {
     mode: Vec<Mode>,
     palette: Palette<C>,
     data: Vec<Vec<u8>>
@@ -1678,11 +1670,15 @@ mod tests {
         assert_eq!(wrapped_offset, 0xC7F0);
         data[wrapped_offset] = 0xFF; // one full byte "on" - Mode::Two, 8 lit pixels
 
-        let matrix = ColorMatrix::from_screen_at(&data, base_address, 1, 16, 8, Mode::Two, &palette);
+        let matrix =
+            ColorMatrix::from_screen_at(&data, base_address, 1, 16, 8, Mode::Two, &palette);
 
         let line0_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 0) == Ink::WHITE);
         let line1_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 1) == Ink::WHITE);
-        assert!(!line0_lit, "line 0 reads an untouched (zero) byte, must stay background");
+        assert!(
+            !line0_lit,
+            "line 0 reads an untouched (zero) byte, must stay background"
+        );
         assert!(
             line1_lit,
             "line 1 must read the marker byte wrapped within the same 16K bank, not panic or miss it"
@@ -1721,7 +1717,10 @@ mod tests {
             lit(8),
             "line 8 (RA=8, wraps to RA=0) must read the same byte line 0 did, not a blank one"
         );
-        assert!(!lit(1), "line 1 (RA=1) reads an untouched, still-blank byte");
+        assert!(
+            !lit(1),
+            "line 1 (RA=1) reads an untouched, still-blank byte"
+        );
     }
 
     /// WinAPE's "CPC" encoding, next to its "Screen" one: plain sequential
@@ -1821,22 +1820,16 @@ mod tests {
     /// stretch `-sv`'s screen viewer applies on every mode alike.
     #[test]
     fn double_vertically_repeats_each_row_immediately_after_itself() {
-        let mut matrix: ColorMatrix<Ink> = vec![
-            vec![Ink::BLACK, Ink::WHITE],
-            vec![Ink::WHITE, Ink::BLACK]
-        ]
-        .into();
+        let mut matrix: ColorMatrix<Ink> =
+            vec![vec![Ink::BLACK, Ink::WHITE], vec![Ink::WHITE, Ink::BLACK]].into();
 
         matrix.double_vertically();
 
         assert_eq!(matrix.width(), 2);
         assert_eq!(matrix.height(), 4);
-        assert_eq!(
-            *matrix.get_color(0, 0), Ink::BLACK
-        );
+        assert_eq!(*matrix.get_color(0, 0), Ink::BLACK);
         assert_eq!(*matrix.get_color(0, 1), Ink::BLACK);
         assert_eq!(*matrix.get_color(0, 2), Ink::WHITE);
         assert_eq!(*matrix.get_color(0, 3), Ink::WHITE);
     }
-
 }

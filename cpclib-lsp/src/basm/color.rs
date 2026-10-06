@@ -214,8 +214,9 @@ fn skip_lines_for(
 /// the case this whole feature exists for. Deliberately narrower than "any
 /// directive": `ORG`/`EQU`/`IF`/... taking a number that happens to match a
 /// GA byte is essentially always a coincidence, not a color.
-const BYTE_OR_WORD_DIRECTIVES: &[&str] =
-    &["DB", "DEFB", "BYTE", "TEXT", "DM", "DEFM", "DW", "DEFW", "WORD"];
+const BYTE_OR_WORD_DIRECTIVES: &[&str] = &[
+    "DB", "DEFB", "BYTE", "TEXT", "DM", "DEFM", "DW", "DEFW", "WORD"
+];
 
 /// Whether a numeral literal or symbol reference at column `col` of
 /// `code` (already comment-stripped) should get a `documentColor` swatch,
@@ -561,7 +562,13 @@ mod tests {
 
     #[test]
     fn other_non_ld_instructions_are_also_excluded() {
-        for line in ["AND 0x40\n", "OR 0x54\n", "ADD A, 0x40\n", "SUB 0x54\n", "XOR 0x40\n"] {
+        for line in [
+            "AND 0x40\n",
+            "OR 0x54\n",
+            "ADD A, 0x40\n",
+            "SUB 0x54\n",
+            "XOR 0x40\n"
+        ] {
             let colors = colors_for(line);
             assert!(colors.is_empty(), "{line:?}: {colors:?}");
         }
@@ -585,7 +592,13 @@ mod tests {
 
     #[test]
     fn db_dw_synonyms_all_still_colorize() {
-        for line in ["DEFB 0x54\n", "BYTE 0x54\n", "DW 0x40\n", "DEFW 0x40\n", "WORD 0x40\n"] {
+        for line in [
+            "DEFB 0x54\n",
+            "BYTE 0x54\n",
+            "DW 0x40\n",
+            "DEFW 0x40\n",
+            "WORD 0x40\n"
+        ] {
             let colors = colors_for(line);
             assert_eq!(colors.len(), 1, "{line:?}: {colors:?}");
         }

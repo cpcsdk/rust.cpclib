@@ -217,7 +217,9 @@ fn resolve16(state: &TrackedState, access: &LocatedDataAccess, env: &mut Env) ->
     match access {
         LocatedDataAccess::Register16(r, _) => state.get16(*r),
         LocatedDataAccess::IndexRegister16(r, _) => state.get_index16(*r),
-        LocatedDataAccess::Expression(expr) => expr.resolve(env).ok().and_then(|v| v.int_value().ok()),
+        LocatedDataAccess::Expression(expr) => {
+            expr.resolve(env).ok().and_then(|v| v.int_value().ok())
+        },
         _ => None
     }
 }
@@ -393,7 +395,11 @@ pub fn apply(state: &mut TrackedState, token: &LocatedToken, env: &mut Env) {
             // but if one somehow does, the safe behavior is a full reset.
             state.invalidate_all();
         },
-        Mnemonic::Jp | Mnemonic::Jr | Mnemonic::Jq | Mnemonic::Djnz | Mnemonic::Reti
+        Mnemonic::Jp
+        | Mnemonic::Jr
+        | Mnemonic::Jq
+        | Mnemonic::Djnz
+        | Mnemonic::Reti
         | Mnemonic::Retn => {
             state.invalidate_all();
         },

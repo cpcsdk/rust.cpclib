@@ -15,5 +15,10 @@ fn main() {
     println!("AE1D (cur line field ptr) = {:#06x}", get16(0xAE1D));
     println!("AE1B (cur stmt ptr) = {:#06x}", get16(0xAE1B));
     println!("ADB7 (chain A) = {:#06x}", get16(0xADB7));
-    println!("bytes at 0x170: {:02x?}", (0x170u32..0x180).map(|a| sna.get_byte(a)).collect::<Vec<_>>());
+    println!(
+        "bytes at 0x170: {:02x?}",
+        (0x170u32..0x180)
+            .map(|a| sna.get_byte(a))
+            .collect::<Vec<_>>()
+    );
 }

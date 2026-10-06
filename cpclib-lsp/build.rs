@@ -1,6 +1,6 @@
+use std::env;
 use std::io::Write;
 use std::path::Path;
-use std::env;
 
 use fs_err as fs;
 
@@ -32,11 +32,7 @@ fn generate_instr_forms() {
         "/// Valid instruction forms: (MNEMONIC, operand patterns)."
     )
     .unwrap();
-    writeln!(
-        out,
-        "pub static INSTR_FORMS: &[(&str, &[&str])] = &["
-    )
-    .unwrap();
+    writeln!(out, "pub static INSTR_FORMS: &[(&str, &[&str])] = &[").unwrap();
 
     let mut emit_form = |pattern: &str| {
         let pattern = pattern.trim();

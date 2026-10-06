@@ -44,8 +44,8 @@ fn raw_lines(content: &[u8]) -> Vec<Vec<u8>> {
 /// The AMSDOS file's content bytes (header stripped), read from `dsk`.
 fn read_amsdos_content(dsk: &str, filename: &str) -> Vec<u8> {
     let path = cpclib_common::camino::Utf8PathBuf::from(dsk);
-    let disc = cpclib_disc::open_disc(&path, true)
-        .unwrap_or_else(|e| panic!("could not open {dsk}: {e}"));
+    let disc =
+        cpclib_disc::open_disc(&path, true).unwrap_or_else(|e| panic!("could not open {dsk}: {e}"));
     let fname = AmsdosFileName::try_from(filename)
         .unwrap_or_else(|e| panic!("{filename}: invalid AMSDOS filename: {e:?}"));
     let file = disc

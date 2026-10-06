@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
@@ -11,7 +12,6 @@ use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext,
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
-use cpclib_common::smol_str::SmolStr;
 use cpclib_sna::FlagValue;
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
@@ -386,28 +386,34 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                 };
                 match b {
                     b'0'..=b'9' | b'+' => positive_number.parse_next(input),
-                    b'"' => parse_string
-                        .map(|s| {
-                            if s.as_ref().len() == 1 {
-                                LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
-                            }
-                            else {
-                                LocatedExpr::String(s)
-                            }
-                        })
-                        .parse_next(input),
-                    b'_' => alt((
-                        parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
-                        parse_label(false).map(|l| LocatedExpr::Label(l.into()))
-                    ))
-                    .parse_next(input),
+                    b'"' => {
+                        parse_string
+                            .map(|s| {
+                                if s.as_ref().len() == 1 {
+                                    LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
+                                }
+                                else {
+                                    LocatedExpr::String(s)
+                                }
+                            })
+                            .parse_next(input)
+                    },
+                    b'_' => {
+                        alt((
+                            parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
+                            parse_label(false).map(|l| LocatedExpr::Label(l.into()))
+                        ))
+                        .parse_next(input)
+                    },
                     b'(' => alt((parse_lambda, parens)).parse_next(input),
                     b'[' if !is_orgams => parse_expr_bracketed_list.parse_next(input),
-                    b'G'..=b'Z' | b'g'..=b'z' => alt((
-                        parse_bool_value,
-                        parse_label(false).map(|l| LocatedExpr::Label(l.into()))
-                    ))
-                    .parse_next(input),
+                    b'G'..=b'Z' | b'g'..=b'z' => {
+                        alt((
+                            parse_bool_value,
+                            parse_label(false).map(|l| LocatedExpr::Label(l.into()))
+                        ))
+                        .parse_next(input)
+                    },
                     b'A'..=b'F' | b'a'..=b'f' => {
                         if looks_like_unprefixed_hex_literal(input.as_bstr()) {
                             positive_number.parse_next(input)
@@ -723,7 +729,9 @@ where
 /// special one.
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_factor_with_subscript(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+pub fn parse_factor_with_subscript(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let mut result = parse_factor(input)?;
     loop {
         let input_start = input.checkpoint();

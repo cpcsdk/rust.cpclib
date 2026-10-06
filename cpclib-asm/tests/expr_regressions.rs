@@ -15,11 +15,14 @@ fn test_negative_expression() {
 /// pipeline the CLI uses instead, so a wrong assert here is a real test
 /// failure, not silently ignored. See `cpclib-asm/tests/union.rs`'s own
 /// copy of this same helper.
-fn assemble_checking_asserts(code: &str) -> Result<Vec<u8>, Box<cpclib_asm::error::AssemblerError>> {
+fn assemble_checking_asserts(
+    code: &str
+) -> Result<Vec<u8>, Box<cpclib_asm::error::AssemblerError>> {
     let tokens = cpclib_asm::parser::parse_z80_str(code)?;
     let options = cpclib_asm::EnvOptions::default();
-    let (_tok, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(&tokens, options)
-        .map_err(|(_, _, e)| e)?;
+    let (_tok, mut env) =
+        cpclib_asm::assembler::visit_tokens_all_passes_with_options(&tokens, options)
+            .map_err(|(_, _, e)| e)?;
     env.handle_post_actions(&tokens)?;
     Ok(env.produced_bytes())
 }
@@ -42,7 +45,10 @@ fn assemble_checking_asserts(code: &str) -> Result<Vec<u8>, Box<cpclib_asm::erro
 #[test]
 fn negating_i32_min_wraps_instead_of_panicking() {
     let result = assemble_checking_asserts("org 0x4000\n assert -2147483648 == -2147483648\n");
-    assert!(result.is_ok(), "assert should have held after wrapping negation");
+    assert!(
+        result.is_ok(),
+        "assert should have held after wrapping negation"
+    );
 }
 
 /// Plain arithmetic overflow (no macros, no `{*}`, nothing exotic) also
@@ -60,5 +66,8 @@ fn integer_overflow_wraps_instead_of_panicking() {
          assert -2147483648 - 1 == 2147483647\n\
          assert 2147483647 * 2 == -2\n"
     );
-    assert!(result.is_ok(), "wrapping-arithmetic asserts should have held");
+    assert!(
+        result.is_ok(),
+        "wrapping-arithmetic asserts should have held"
+    );
 }

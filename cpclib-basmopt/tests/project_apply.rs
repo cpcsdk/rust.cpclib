@@ -93,7 +93,11 @@ fn skips_bulk_unsafe_matches_same_as_single_file_mode() {
         "pattern: Remove unused ld ?reg, ?any\nname: unused-ld-any\n0: ld ?reg,?any\n\
          replacement:\nconstraints:\nregsNotUsedAfter(0,?reg)\n"
     );
-    write(&dir, "test.asm", "start:\n    ld a, 1\n    ld a, 2\n    ret\n");
+    write(
+        &dir,
+        "test.asm",
+        "start:\n    ld a, 1\n    ld a, 2\n    ret\n"
+    );
 
     let options = Options {
         no_builtin: true,
@@ -133,11 +137,7 @@ fn continues_past_a_file_that_fails_to_parse() {
 #[test]
 fn noopt_marked_instructions_survive_project_wide_apply() {
     let dir = camino_tempfile::tempdir().unwrap();
-    write(
-        &dir,
-        "test.asm",
-        "start:\n    ld b, b ; noopt\n    ret\n"
-    );
+    write(&dir, "test.asm", "start:\n    ld b, b ; noopt\n    ret\n");
 
     let outcome = apply_fixes_in_place_project(dir.path(), &Options::default());
     assert_eq!(outcome.total_applied, 0, "{outcome:?}");

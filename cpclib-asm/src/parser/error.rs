@@ -135,7 +135,10 @@ impl Z80ParserError {
         listing: std::sync::Arc<LocatedListing>,
         error: Box<Z80ParserError>
     ) -> Self {
-        Self(SmallVec::from_buf([(*input, Z80ParserErrorKind::Inner { listing, error })]))
+        Self(SmallVec::from_buf([(
+            *input,
+            Z80ParserErrorKind::Inner { listing, error }
+        )]))
     }
 
     /// Create a new error from input - convenience method that delegates to the trait method

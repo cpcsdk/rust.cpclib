@@ -756,10 +756,7 @@ mod tests {
             "expected `.foo` to show up bare, not qualified against the \
              macro's name: {symbols:?}"
         );
-        assert!(
-            !symbols.iter().any(|s| s.name == "m.foo"),
-            "{symbols:?}"
-        );
+        assert!(!symbols.iter().any(|s| s.name == "m.foo"), "{symbols:?}");
     }
 
     #[test]

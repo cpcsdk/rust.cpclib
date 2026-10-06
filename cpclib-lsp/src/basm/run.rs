@@ -17,7 +17,9 @@ use std::sync::Arc;
 use cpclib_project::config::AsmConfig;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::bndbuild::command::{OutputLine, ProgressUpdate, StreamingObserver, run_with_progress_sink};
+use crate::bndbuild::command::{
+    OutputLine, ProgressUpdate, StreamingObserver, run_with_progress_sink
+};
 use crate::common::document::Document;
 
 /// Which program to build for a document.
@@ -126,8 +128,7 @@ pub fn run_document_in_emulator(
     // dependencies and all, exactly as `cpclib.runRule` would - is what
     // "Run in emulator" is actually supposed to do; a direct assemble is
     // only the fallback for a file no build file mentions.
-    if let Some((build_file, target)) = cpclib_dap::launch::find_debuggable_rule_for_entry(&entry)
-    {
+    if let Some((build_file, target)) = cpclib_dap::launch::find_debuggable_rule_for_entry(&entry) {
         let Ok(text) = fs_err::read_to_string(&build_file)
         else {
             return failure(format!("cannot read {}", build_file.display()));
@@ -137,8 +138,12 @@ pub fn run_document_in_emulator(
             return failure(format!("{} has no file URL", build_file.display()));
         };
         let document = Document::new(uri, text, 0);
-        let outcome =
-            crate::bndbuild::BuildFileAnalyzer::new().run_rule(&document, &target, Some(tx), progress);
+        let outcome = crate::bndbuild::BuildFileAnalyzer::new().run_rule(
+            &document,
+            &target,
+            Some(tx),
+            progress
+        );
         return AssemblyRunOutcome {
             success: outcome.success,
             message: outcome.message
@@ -225,10 +230,12 @@ mod progress_tests {
             updates.push(update);
         }
         assert!(
-            updates.iter().any(|u| matches!(
-                u,
-                ProgressUpdate::Asm(cpclib_asm::progress::AsmProgressEvent::Parse { .. })
-            )),
+            updates.iter().any(|u| {
+                matches!(
+                    u,
+                    ProgressUpdate::Asm(cpclib_asm::progress::AsmProgressEvent::Parse { .. })
+                )
+            }),
             "expected basm's own internal Parse progress, got: {updates:?}"
         );
     }

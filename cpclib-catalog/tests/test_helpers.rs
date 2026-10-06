@@ -285,7 +285,9 @@ fn generate_comparison_png_from_interpreters(
 }
 
 /// Helper to convert a color matrix to RGB image
-fn color_matrix_to_rgb_image(color_matrix: &cpclib_image::image::ColorMatrix<cpclib_image::ga::Ink>) -> RgbImage {
+fn color_matrix_to_rgb_image(
+    color_matrix: &cpclib_image::image::ColorMatrix<cpclib_image::ga::Ink>
+) -> RgbImage {
     let width = color_matrix.width() as u32;
     let height = color_matrix.height() as u32;
 

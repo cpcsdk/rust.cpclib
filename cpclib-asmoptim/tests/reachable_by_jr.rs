@@ -47,7 +47,10 @@ fn a_jp_to_a_nearby_label_becomes_jr() {
         .find(|m| m.rule_name.as_deref() == Some("jp2jr"))
         .unwrap_or_else(|| panic!("expected jp2jr to fire: {found:?}"));
     assert_eq!(hit.replacement, vec!["jr target".to_string()]);
-    assert!(!hit.bulk_unsafe, "an ordinary jp2jr should not be flagged unsafe: {hit:?}");
+    assert!(
+        !hit.bulk_unsafe,
+        "an ordinary jp2jr should not be flagged unsafe: {hit:?}"
+    );
 }
 
 /// Real bug report: `jp2jr` proposed `jp INTERx -> jr INTERx` for a 3-byte
@@ -70,7 +73,10 @@ fn a_jp_whose_bytes_are_copied_elsewhere_is_flagged_bulk_unsafe() {
         .iter()
         .find(|m| m.rule_name.as_deref() == Some("jp2jr"))
         .unwrap_or_else(|| panic!("expected jp2jr to still fire: {found:?}"));
-    assert!(hit.bulk_unsafe, "a relocated jump table must be flagged unsafe: {hit:?}");
+    assert!(
+        hit.bulk_unsafe,
+        "a relocated jump table must be flagged unsafe: {hit:?}"
+    );
 }
 
 /// The relocation check must not over-fire on ordinary code that merely
@@ -88,7 +94,10 @@ fn loading_a_labels_address_without_a_block_copy_is_not_flagged() {
         .iter()
         .find(|m| m.rule_name.as_deref() == Some("jp2jr"))
         .unwrap_or_else(|| panic!("expected jp2jr to fire: {found:?}"));
-    assert!(!hit.bulk_unsafe, "no block copy is nearby, so this should not be flagged: {hit:?}");
+    assert!(
+        !hit.bulk_unsafe,
+        "no block copy is nearby, so this should not be flagged: {hit:?}"
+    );
 }
 
 #[test]
@@ -102,7 +111,9 @@ fn a_jp_to_a_far_label_is_left_alone() {
 
     let found = suggestions(&source, OptimizationGoal::Size);
     assert!(
-        !found.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+        !found
+            .iter()
+            .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
         "jp2jr must not fire when the target is unreachable by jr: {found:?}"
     );
 }
@@ -147,7 +158,9 @@ fn a_resolver_still_cannot_help_token_which_never_had_a_position() {
     );
 
     assert!(
-        !found.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+        !found
+            .iter()
+            .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
         "jp2jr must stay silent for a Token stream, which has no position to resolve: {found:?}"
     );
 }
@@ -165,7 +178,9 @@ fn without_a_resolver_jp2jr_never_fires_even_when_it_would_be_valid() {
         OptimizationGoal::Size
     );
     assert!(
-        !found.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+        !found
+            .iter()
+            .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
         "jp2jr must stay silent without real address information: {found:?}"
     );
 }
@@ -190,7 +205,10 @@ fn there_is_a_real_boundary_between_reachable_and_not() {
     };
 
     assert!(reaches(0), "adjacent target must be reachable");
-    assert!(!reaches(200), "a target 200 bytes away must not be reachable");
+    assert!(
+        !reaches(200),
+        "a target 200 bytes away must not be reachable"
+    );
 
     // There must be some gap size where it flips from reachable to not -
     // i.e. the constraint is a real range check, not always-true/always-false.

@@ -108,7 +108,7 @@ pub fn matrix_set_col(
                     matrix.matrix_set_col(x, col.list_content());
                     Ok(matrix)
                 },
-                _ => Err(not_a(&matrix, "list")),
+                _ => Err(not_a(&matrix, "list"))
             }
         },
 
@@ -160,7 +160,7 @@ pub fn matrix_set_row(
                     std::sync::Arc::make_mut(content)[y] = row.clone();
                     Ok(matrix)
                 },
-                _ => Err(not_a(&matrix, "list")),
+                _ => Err(not_a(&matrix, "list"))
             }
         },
 
@@ -268,7 +268,7 @@ mod matrix_from_list_tests {
         let result = matrix_from_list(&ExprResult::List(
             vec![
                 ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)].into()),
-                ExprResult::List(vec![ExprResult::Value(3)].into())
+                ExprResult::List(vec![ExprResult::Value(3)].into()),
             ]
             .into()
         ));
@@ -280,7 +280,7 @@ mod matrix_from_list_tests {
         let result = matrix_from_list(&ExprResult::List(
             vec![
                 ExprResult::List(vec![ExprResult::Value(1), ExprResult::Value(2)].into()),
-                ExprResult::List(vec![ExprResult::Value(3), ExprResult::Value(4)].into())
+                ExprResult::List(vec![ExprResult::Value(3), ExprResult::Value(4)].into()),
             ]
             .into()
         ))

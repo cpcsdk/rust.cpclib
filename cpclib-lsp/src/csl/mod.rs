@@ -24,7 +24,10 @@ pub mod run;
 /// `Ok` (clean parse) and `Err` (parse error, but still useful for
 /// diagnostics) cases are cached, mirroring `basm::AssemblyAnalyzer::
 /// parse_document`'s own reasoning.
-type ParseCacheEntry = (i32, Result<Arc<cpclib_csl::CslScript>, Arc<cpclib_csl::CslError>>);
+type ParseCacheEntry = (
+    i32,
+    Result<Arc<cpclib_csl::CslScript>, Arc<cpclib_csl::CslError>>
+);
 
 /// Analyzer for CSL files.
 ///

@@ -334,8 +334,14 @@ impl BuildFileAnalyzer {
         // exact same command/arguments as the per-rule lens below; only the
         // range and title differ.
         let top_of_file = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 0, character: 0 }
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: 0,
+                character: 0
+            }
         };
         for (rule_line, syms) in &groups {
             let names = syms
@@ -690,8 +696,14 @@ mod tests {
         // land on line 0 - the summary one is the exact-zero range, the
         // per-rule one still spans the symbol's own selection range.
         let zero = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 0, character: 0 }
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: 0,
+                character: 0
+            }
         };
         let at_rule = run_rule_lenses
             .iter()
@@ -705,7 +717,10 @@ mod tests {
             .iter()
             .find(|l| l.range == zero)
             .unwrap_or_else(|| panic!("no top-of-file summary lens: {lenses:?}"));
-        assert_eq!(summary.command.as_ref().unwrap().title, "Build: a.asm, b.asm");
+        assert_eq!(
+            summary.command.as_ref().unwrap().title,
+            "Build: a.asm, b.asm"
+        );
 
         let task_lenses: Vec<_> = lenses
             .iter()

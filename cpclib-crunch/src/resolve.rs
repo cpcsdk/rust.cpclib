@@ -39,8 +39,19 @@ pub const CRUNCHER_TIMEOUT: Duration = Duration::from_secs(90);
 /// already does) and `zx0`/`zx0_backward`. No `aplib` - the crate has no
 /// separate implementation, only `apultra` (LZAPU).
 pub const ALL_FORMATS: &[&str] = &[
-    "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa1", "lzsa2", "pucrunch", "shrinkler", "upkr",
-    "zx0", "zx0_backward", "zx7"
+    "apultra",
+    "exomizer",
+    "lz4",
+    "lz48",
+    "lz49",
+    "lzsa1",
+    "lzsa2",
+    "pucrunch",
+    "shrinkler",
+    "upkr",
+    "zx0",
+    "zx0_backward",
+    "zx7"
 ];
 
 /// A format name (see [`ALL_FORMATS`]) into the method that implements it,
@@ -55,20 +66,28 @@ pub fn resolve_cruncher(name: &str) -> Result<CompressMethod, String> {
         "lz49" => Ok(CompressMethod::Lz49),
         "lzsa1" => {
             let version = cpclib_crunchers::lzsa::LzsaVersion::V1;
-            Ok(CompressMethod::Lzsa(version, Some(version.default_minmatch())))
+            Ok(CompressMethod::Lzsa(
+                version,
+                Some(version.default_minmatch())
+            ))
         },
         "lzsa2" => {
             let version = cpclib_crunchers::lzsa::LzsaVersion::V2;
-            Ok(CompressMethod::Lzsa(version, Some(version.default_minmatch())))
+            Ok(CompressMethod::Lzsa(
+                version,
+                Some(version.default_minmatch())
+            ))
         },
         // `log: false` trims two of Shrinkler's `printf` lines - unrelated
         // to correctness, just less noise on stderr for a caller that
         // doesn't want it.
         "shrinkler" => {
-            Ok(CompressMethod::Shrinkler(cpclib_crunchers::shrinkler::ShrinklerConfiguration {
-                iterations: 9,
-                log: false
-            }))
+            Ok(CompressMethod::Shrinkler(
+                cpclib_crunchers::shrinkler::ShrinklerConfiguration {
+                    iterations: 9,
+                    log: false
+                }
+            ))
         },
         "pucrunch" => Ok(CompressMethod::Pucrunch),
         "upkr" => Ok(CompressMethod::Upkr),
@@ -80,7 +99,7 @@ pub fn resolve_cruncher(name: &str) -> Result<CompressMethod, String> {
                 "unknown cruncher '{other}' - expected one of: none, {}",
                 ALL_FORMATS.join(", ")
             ))
-        }
+        },
     }
 }
 
@@ -95,7 +114,11 @@ pub fn resolve_cruncher(name: &str) -> Result<CompressMethod, String> {
 /// thread; a hung cruncher leaks that one thread (unavoidable - safe Rust
 /// has no way to force-kill a thread) but this call still returns on time,
 /// with a clear per-format error instead of hanging the caller.
-pub fn compress_with_timeout(name: String, data: Vec<u8>, timeout: Duration) -> Result<cpclib_crunchers::CompressionResult, String> {
+pub fn compress_with_timeout(
+    name: String,
+    data: Vec<u8>,
+    timeout: Duration
+) -> Result<cpclib_crunchers::CompressionResult, String> {
     let key = CacheKey::new(&name, &data);
     if let Some(hit) = cache_lookup(&key) {
         return Ok(hit);
@@ -132,17 +155,22 @@ impl CacheKey {
         let mut a = std::collections::hash_map::DefaultHasher::new();
         data.hash(&mut a);
         let mut b = std::collections::hash_map::DefaultHasher::new();
-        0x9e37_79b9_7f4a_7c15u64.hash(&mut b);
+        0x9E37_79B9_7F4A_7C15u64.hash(&mut b);
         data.hash(&mut b);
-        Self { name: name.to_string(), len: data.len(), hashes: (a.finish(), b.finish()) }
+        Self {
+            name: name.to_string(),
+            len: data.len(),
+            hashes: (a.finish(), b.finish())
+        }
     }
 }
 
 const CACHE_LIMIT: usize = 512;
 
 fn cache() -> &'static std::sync::Mutex<HashMap<CacheKey, cpclib_crunchers::CompressionResult>> {
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<CacheKey, cpclib_crunchers::CompressionResult>>> =
-        std::sync::OnceLock::new();
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<HashMap<CacheKey, cpclib_crunchers::CompressionResult>>
+    > = std::sync::OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
@@ -206,13 +234,20 @@ mod tests {
             std::thread::sleep(Duration::from_secs(30));
             Ok(1)
         });
-        assert!(start.elapsed() < Duration::from_secs(2), "{:?}", start.elapsed());
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
         assert!(result.unwrap_err().contains("timed out"));
     }
 
     #[test]
     fn run_with_timeout_returns_the_result_when_in_time() {
-        assert_eq!(run_with_timeout(Duration::from_secs(5), || Ok::<_, String>(7)), Ok(7));
+        assert_eq!(
+            run_with_timeout(Duration::from_secs(5), || Ok::<_, String>(7)),
+            Ok(7)
+        );
     }
 
     /// Regression for a real bug: a long run of one byte used to hang
@@ -220,8 +255,12 @@ mod tests {
     /// `cpclib-crunchers/extra/pucrunch.c`).
     #[test]
     fn pucrunch_finishes_on_a_maximally_repetitive_block() {
-        let result = compress_with_timeout("pucrunch".to_string(), vec![0u8; 256], Duration::from_secs(20))
-            .expect("pucrunch must finish, not time out");
+        let result = compress_with_timeout(
+            "pucrunch".to_string(),
+            vec![0u8; 256],
+            Duration::from_secs(20)
+        )
+        .expect("pucrunch must finish, not time out");
         assert!(result.stream.len() < 32, "{}", result.stream.len());
     }
 }

@@ -225,14 +225,18 @@ fn install_cli_progress_reporting(app: &mut cpclib_bndbuild::app::BndBuilderApp)
     impl BndBuilderObserver for CliRuleProgressObserver {
         fn update(&self, event: BndBuilderEvent) {
             let update = match event {
-                BndBuilderEvent::StartRule { rule, nb, out_of } => Some(ProgressUpdate::Rule {
-                    rule: rule.to_string(),
-                    nb,
-                    out_of
-                }),
-                BndBuilderEvent::StartTask(_rule, task) => Some(ProgressUpdate::Task {
-                    command: task.to_string()
-                }),
+                BndBuilderEvent::StartRule { rule, nb, out_of } => {
+                    Some(ProgressUpdate::Rule {
+                        rule: rule.to_string(),
+                        nb,
+                        out_of
+                    })
+                },
+                BndBuilderEvent::StartTask(_rule, task) => {
+                    Some(ProgressUpdate::Task {
+                        command: task.to_string()
+                    })
+                },
                 _ => None
             };
             if let Some(update) = update {
@@ -281,13 +285,15 @@ fn run_as_emu_list() -> ! {
     let json = serde_json::json!(
         entries
             .iter()
-            .map(|e| serde_json::json!({
-                "id": e.id,
-                "label": e.label,
-                "debuggable": e.debuggable,
-                "installed": e.installed,
-                "dapId": e.debugger_launch_id
-            }))
+            .map(|e| {
+                serde_json::json!({
+                    "id": e.id,
+                    "label": e.label,
+                    "debuggable": e.debuggable,
+                    "installed": e.installed,
+                    "dapId": e.debugger_launch_id
+                })
+            })
             .collect::<Vec<_>>()
     );
     println!("{json}");
@@ -387,31 +393,31 @@ async fn main() {
                 .as_deref()
                 .and_then(std::path::Path::parent)
                 .map(|dir| dir.join(configured))
-                .unwrap_or_else(|| {
-                    workspace_root.clone().unwrap_or_default().join(configured)
-                })
+                .unwrap_or_else(|| workspace_root.clone().unwrap_or_default().join(configured))
         }
     });
 
     match log_path {
-        Some(path) => match std::fs::File::create(&path) {
-            Ok(file) => {
-                tracing_subscriber::fmt()
-                    .with_env_filter(
-                        tracing_subscriber::EnvFilter::try_from_default_env()
-                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"))
-                    )
-                    .with_writer(std::sync::Mutex::new(file))
-                    .with_ansi(false)
-                    .init();
-                tracing::info!("cpclib-lsp: writing trace log to {}", path.display());
-            },
-            Err(e) => {
-                tracing_subscriber::fmt()
-                    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-                    .with_writer(std::io::stderr)
-                    .init();
-                tracing::warn!("cpclib-lsp: cannot write log file {}: {e}", path.display());
+        Some(path) => {
+            match std::fs::File::create(&path) {
+                Ok(file) => {
+                    tracing_subscriber::fmt()
+                        .with_env_filter(
+                            tracing_subscriber::EnvFilter::try_from_default_env()
+                                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"))
+                        )
+                        .with_writer(std::sync::Mutex::new(file))
+                        .with_ansi(false)
+                        .init();
+                    tracing::info!("cpclib-lsp: writing trace log to {}", path.display());
+                },
+                Err(e) => {
+                    tracing_subscriber::fmt()
+                        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                        .with_writer(std::io::stderr)
+                        .init();
+                    tracing::warn!("cpclib-lsp: cannot write log file {}: {e}", path.display());
+                }
             }
         },
         None => {

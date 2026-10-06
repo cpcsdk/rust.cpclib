@@ -4,14 +4,13 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
-use fs_err::PathExt;
-
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::winnow::BStr;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
 use cpclib_tokens::{AssemblerFlavor, ListingElement, Token};
 use either::Either;
 use enumflags2::BitFlags;
+use fs_err::PathExt;
 use regex::Regex;
 
 use super::line_col::LineColLookup;

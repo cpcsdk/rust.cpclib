@@ -130,8 +130,7 @@ pub(crate) fn run_with_progress_sink<R: Send>(
         return work();
     };
 
-    let sink: Arc<dyn cpclib_asm::progress::AsmProgressSink> =
-        Arc::new(AsmProgressForwarder(tx));
+    let sink: Arc<dyn cpclib_asm::progress::AsmProgressSink> = Arc::new(AsmProgressForwarder(tx));
 
     let pool = match cpclib_common::rayon::ThreadPoolBuilder::new().build() {
         Ok(pool) => pool,
@@ -397,10 +396,9 @@ impl BuildFileAnalyzer {
                         },
                         cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
                             match source.as_ref() {
-                                cpclib_bndbuild::BndBuilderError::ExecuteError {
-                                    fname,
-                                    msg
-                                } => (fname.clone(), msg.clone()),
+                                cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
+                                    (fname.clone(), msg.clone())
+                                },
                                 other => (rule.to_string(), other.to_string())
                             }
                         },
@@ -624,10 +622,9 @@ impl BuildFileAnalyzer {
                         },
                         cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
                             match source.as_ref() {
-                                cpclib_bndbuild::BndBuilderError::ExecuteError {
-                                    fname,
-                                    msg
-                                } => (fname.clone(), msg.clone()),
+                                cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
+                                    (fname.clone(), msg.clone())
+                                },
                                 other => (rule.to_string(), other.to_string())
                             }
                         },
@@ -1502,21 +1499,25 @@ mod tests {
         }
 
         assert!(
-            updates.iter().any(|u| matches!(
-                u,
-                ProgressUpdate::Rule {
-                    nb: 1,
-                    out_of: 1,
-                    ..
-                }
-            )),
+            updates.iter().any(|u| {
+                matches!(
+                    u,
+                    ProgressUpdate::Rule {
+                        nb: 1,
+                        out_of: 1,
+                        ..
+                    }
+                )
+            }),
             "expected the rule-level '[1/1]' signal, got: {updates:?}"
         );
         assert!(
-            updates.iter().any(|u| matches!(
-                u,
-                ProgressUpdate::Asm(cpclib_asm::progress::AsmProgressEvent::Parse { .. })
-            )),
+            updates.iter().any(|u| {
+                matches!(
+                    u,
+                    ProgressUpdate::Asm(cpclib_asm::progress::AsmProgressEvent::Parse { .. })
+                )
+            }),
             "expected basm's own internal Parse progress even though the rule's command \
              never passed --progress, got: {updates:?}"
         );
@@ -1999,7 +2000,10 @@ mod tests {
         // above - `ignored_error_diagnostics` builds its Range from the same
         // kind of byte-length arithmetic.
         let bnd_content = "- tgt: café\n  cmd:\n    - café échoué\n";
-        let document = doc(camino_tempfile::tempdir().unwrap().path().as_std_path(), bnd_content);
+        let document = doc(
+            camino_tempfile::tempdir().unwrap().path().as_std_path(),
+            bnd_content
+        );
 
         let diags = ignored_error_diagnostics(
             &document,
@@ -2164,8 +2168,14 @@ mod tests {
         // fixture: the failing task is at block-relative (0-based) line 4.
         let yaml_text = "- tgt: multi\n  phony: true\n  cmd:\n    - echo first task ok\n    - cp does_not_exist_anywhere.src dst.bin\n    - echo third task never runs";
 
-        let outcome =
-            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "multi", None, None);
+        let outcome = BuildFileAnalyzer::new().run_embedded_rule(
+            &host_document,
+            yaml_text,
+            2,
+            "multi",
+            None,
+            None
+        );
         assert!(!outcome.success);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];
@@ -2195,8 +2205,14 @@ mod tests {
         );
         let yaml_text = "- tgt: count\n  phony: true\n  cmd: extern wc -l data.txt";
 
-        let outcome =
-            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 1, "count", None, None);
+        let outcome = BuildFileAnalyzer::new().run_embedded_rule(
+            &host_document,
+            yaml_text,
+            1,
+            "count",
+            None,
+            None
+        );
         assert!(outcome.success, "{}", outcome.message);
     }
 
@@ -2277,8 +2293,14 @@ mod tests {
         );
         let yaml_text = "- tgt: lax\n  phony: true\n  cmd:\n    - -cp does_not_exist_anywhere.src dst.bin\n    - echo still runs";
 
-        let outcome =
-            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "lax", None, None);
+        let outcome = BuildFileAnalyzer::new().run_embedded_rule(
+            &host_document,
+            yaml_text,
+            2,
+            "lax",
+            None,
+            None
+        );
         assert!(outcome.success, "{}", outcome.message);
         assert_eq!(outcome.diagnostics.len(), 1);
         let diag = &outcome.diagnostics[0];

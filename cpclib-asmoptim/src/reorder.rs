@@ -22,8 +22,8 @@
 
 use cpclib_tokens::{ListingElement, Mnemonic};
 
-use crate::effects::{Effects, effects_of};
 use crate::dependency::Dependency;
+use crate::effects::{Effects, effects_of};
 use crate::stream::build_without_addresses;
 
 /// Whether `mnemonic` can transfer control elsewhere (a jump, call, return,
@@ -193,7 +193,11 @@ pub fn legal_reorderings<T: ListingElement>(tokens: &[&T]) -> Vec<Vec<usize>> {
     // Hard barrier: a window containing any branch/call/ret/djnz/rst/halt
     // is never reorderable, regardless of what the dependency check below
     // would otherwise allow - see `is_control_flow`'s own doc comment.
-    if stream.ops().iter().any(|op| op.mnemonic().is_some_and(is_control_flow)) {
+    if stream
+        .ops()
+        .iter()
+        .any(|op| op.mnemonic().is_some_and(is_control_flow))
+    {
         return Vec::new();
     }
 
@@ -252,7 +256,10 @@ mod tests {
     fn a_true_dependency_forbids_any_reordering() {
         // `ld a,1` / `ld b,a` - the second instruction reads what the first
         // just wrote, a real RAW dependency. No legal reordering exists.
-        let tokens = vec![ld_reg_imm(Register8::A, 1), ld_reg_reg(Register8::B, Register8::A)];
+        let tokens = vec![
+            ld_reg_imm(Register8::A, 1),
+            ld_reg_reg(Register8::B, Register8::A),
+        ];
         assert_eq!(legal_reorderings(&refs(&tokens)), Vec::<Vec<usize>>::new());
     }
 
@@ -276,7 +283,10 @@ mod tests {
         ];
         let perms = legal_reorderings(&refs(&tokens));
         assert_eq!(perms.len(), 5, "{perms:?}");
-        assert!(!perms.contains(&vec![0, 1, 2]), "identity must be excluded: {perms:?}");
+        assert!(
+            !perms.contains(&vec![0, 1, 2]),
+            "identity must be excluded: {perms:?}"
+        );
     }
 
     #[test]
@@ -296,7 +306,10 @@ mod tests {
         for perm in &perms {
             let pos_a = perm.iter().position(|&x| x == 0).unwrap();
             let pos_c = perm.iter().position(|&x| x == 2).unwrap();
-            assert!(pos_a < pos_c, "a must stay before c in every legal permutation: {perm:?}");
+            assert!(
+                pos_a < pos_c,
+                "a must stay before c in every legal permutation: {perm:?}"
+            );
         }
         assert!(perms.contains(&vec![1, 0, 2]), "{perms:?}");
         assert!(perms.contains(&vec![0, 2, 1]), "{perms:?}");
@@ -340,9 +353,15 @@ mod tests {
             Mnemonic::Rst,
             Mnemonic::Halt
         ] {
-            assert!(is_control_flow(mnemonic), "{mnemonic:?} should be a hard barrier");
+            assert!(
+                is_control_flow(mnemonic),
+                "{mnemonic:?} should be a hard barrier"
+            );
         }
-        assert!(!is_control_flow(Mnemonic::Ld), "Ld must not be treated as control flow");
+        assert!(
+            !is_control_flow(Mnemonic::Ld),
+            "Ld must not be treated as control flow"
+        );
     }
 
     #[test]
@@ -353,7 +372,13 @@ mod tests {
         let five: Vec<Token> = (0..5)
             .map(|i| {
                 ld_reg_imm(
-                    [Register8::A, Register8::B, Register8::C, Register8::D, Register8::E][i],
+                    [
+                        Register8::A,
+                        Register8::B,
+                        Register8::C,
+                        Register8::D,
+                        Register8::E
+                    ][i],
                     i as i32
                 )
             })

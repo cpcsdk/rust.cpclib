@@ -24,7 +24,11 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::list::{list_extend, list_filter, list_fold, list_map, list_position_predicate, list_position_value, list_reverse, list_split_by_value, string_filter, string_get, string_len, string_map, string_upper_case};
+use crate::list::{
+    list_extend, list_filter, list_fold, list_map, list_position_predicate, list_position_value,
+    list_reverse, list_split_by_value, string_filter, string_get, string_len, string_map,
+    string_upper_case
+};
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
@@ -606,7 +610,7 @@ impl HardCodedFunction {
             HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(0),
             HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::StringUpperCase => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1)
         }
     }
 
@@ -633,7 +637,7 @@ impl HardCodedFunction {
             .unwrap() // Cannot fail by definition
     }
 
-    pub fn eval<E: AsRef<ExprResult>+Clone>(
+    pub fn eval<E: AsRef<ExprResult> + Clone>(
         &self,
         env: &mut Env,
         params: &[E]
@@ -644,47 +648,72 @@ impl HardCodedFunction {
         expected_nb_args.validate(nb_args, self.name())?;
 
         match self {
-            HardCodedFunction::Clamp => Ok(maths::clamp(params[0].as_ref(), params[1].as_ref(), params[2].as_ref())?),
+            HardCodedFunction::Clamp => {
+                Ok(maths::clamp(
+                    params[0].as_ref(),
+                    params[1].as_ref(),
+                    params[2].as_ref()
+                )?)
+            },
             HardCodedFunction::BinaryFunction(bf) => {
                 match bf {
                     BinaryFunction::Pow => Ok(maths::pow(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Fmod => Ok(maths::fmod(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Atan2 => Ok(maths::atan2(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Hypot => Ok(maths::hypot(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Ldexp => Ok(maths::ldexp(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Fdim => Ok(maths::fdim(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Fstep => Ok(maths::fstep(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Fmax => Ok(maths::fmax(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Fmin => Ok(maths::fmin(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::IsGreater => Ok(maths::isgreater(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::IsLess => Ok(maths::isless(params[0].as_ref(), params[1].as_ref())?),
-                    BinaryFunction::Fremain => Ok(maths::fremain(params[0].as_ref(), params[1].as_ref())?)
+                    BinaryFunction::Fmod => {
+                        Ok(maths::fmod(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Atan2 => {
+                        Ok(maths::atan2(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Hypot => {
+                        Ok(maths::hypot(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Ldexp => {
+                        Ok(maths::ldexp(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Fdim => {
+                        Ok(maths::fdim(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Fstep => {
+                        Ok(maths::fstep(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Fmax => {
+                        Ok(maths::fmax(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Fmin => {
+                        Ok(maths::fmin(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::IsGreater => {
+                        Ok(maths::isgreater(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::IsLess => {
+                        Ok(maths::isless(params[0].as_ref(), params[1].as_ref())?)
+                    },
+                    BinaryFunction::Fremain => {
+                        Ok(maths::fremain(params[0].as_ref(), params[1].as_ref())?)
+                    },
                 }
             },
             // ...existing code...
             HardCodedFunction::Mode0ByteToPenAt => {
-                Ok(
-                    cpclib_image::pixels::mode0::byte_to_pens(env.int_forward(params[0].as_ref())? as _)
-                        [env.int_forward(params[1].as_ref())? as usize % 2]
-                        .number()
-                        .into()
-                )
+                Ok(cpclib_image::pixels::mode0::byte_to_pens(
+                    env.int_forward(params[0].as_ref())? as _
+                )[env.int_forward(params[1].as_ref())? as usize % 2]
+                    .number()
+                    .into())
             },
             HardCodedFunction::Mode1ByteToPenAt => {
-                Ok(
-                    cpclib_image::pixels::mode1::byte_to_pens(env.int_forward(params[0].as_ref())? as _)
-                        [env.int_forward(params[1].as_ref())? as usize % 4]
-                        .number()
-                        .into()
-                )
+                Ok(cpclib_image::pixels::mode1::byte_to_pens(
+                    env.int_forward(params[0].as_ref())? as _
+                )[env.int_forward(params[1].as_ref())? as usize % 4]
+                    .number()
+                    .into())
             },
             HardCodedFunction::Mode2ByteToPenAt => {
-                Ok(
-                    cpclib_image::pixels::mode2::byte_to_pens(env.int_forward(params[0].as_ref())? as _)
-                        [env.int_forward(params[1].as_ref())? as usize % 8]
-                        .number()
-                        .into()
-                )
+                Ok(cpclib_image::pixels::mode2::byte_to_pens(
+                    env.int_forward(params[0].as_ref())? as _
+                )[env.int_forward(params[1].as_ref())? as usize % 8]
+                    .number()
+                    .into())
             },
             HardCodedFunction::PenAtToMode0Byte => {
                 Ok(cpclib_image::pixels::mode0::pen_to_pixel_byte(
@@ -736,40 +765,74 @@ impl HardCodedFunction {
                 )
                 .into())
             },
-            HardCodedFunction::ListNew => Ok(list_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone())),
+            HardCodedFunction::ListNew => {
+                Ok(list_new(
+                    params[0].as_ref().int_value()? as _,
+                    params[1].as_ref().clone()
+                ))
+            },
             HardCodedFunction::ListSet => {
-                let (result, warnings) = list_set(params[0].as_ref().materialize(), params[1].as_ref().int_value()? as _, params[2].as_ref().clone())?;
+                let (result, warnings) = list_set(
+                    params[0].as_ref().materialize(),
+                    params[1].as_ref().int_value()? as _,
+                    params[2].as_ref().clone()
+                )?;
                 env.add_expression_warnings(warnings);
                 Ok(result)
             },
-            HardCodedFunction::ListGet => list_get(params[0].as_ref(), params[1].as_ref().int_value()? as _),
+            HardCodedFunction::ListGet => {
+                list_get(params[0].as_ref(), params[1].as_ref().int_value()? as _)
+            },
             HardCodedFunction::RangeStepBy => {
                 range_step_by(params[0].as_ref(), params[1].as_ref().int_value()?)
             },
-            HardCodedFunction::ListPush => list_push(params[0].as_ref().materialize(), params[1].as_ref().clone()),
-            HardCodedFunction::ListExtend => list_extend(params[0].as_ref().materialize(), params[1].as_ref().clone()),
+            HardCodedFunction::ListPush => {
+                list_push(params[0].as_ref().materialize(), params[1].as_ref().clone())
+            },
+            HardCodedFunction::ListExtend => {
+                list_extend(params[0].as_ref().materialize(), params[1].as_ref().clone())
+            },
             HardCodedFunction::ListLen => list_len(params[0].as_ref()),
             HardCodedFunction::ListReverse => list_reverse(params[0].as_ref().materialize()),
-            HardCodedFunction::ListFilter => list_filter(env, &params[0].as_ref().materialize(), params[1].as_ref()),
-            HardCodedFunction::ListMap => list_map(env, &params[0].as_ref().materialize(), params[1].as_ref()),
-            HardCodedFunction::ListFold => list_fold(env, &params[0].as_ref().materialize(), params[1].as_ref(), params[2].as_ref()),
-            HardCodedFunction::ListPositionPredicate => list_position_predicate(env, &params[0].as_ref().materialize(), params[1].as_ref()),
+            HardCodedFunction::ListFilter => {
+                list_filter(env, &params[0].as_ref().materialize(), params[1].as_ref())
+            },
+            HardCodedFunction::ListMap => {
+                list_map(env, &params[0].as_ref().materialize(), params[1].as_ref())
+            },
+            HardCodedFunction::ListFold => {
+                list_fold(
+                    env,
+                    &params[0].as_ref().materialize(),
+                    params[1].as_ref(),
+                    params[2].as_ref()
+                )
+            },
+            HardCodedFunction::ListPositionPredicate => {
+                list_position_predicate(env, &params[0].as_ref().materialize(), params[1].as_ref())
+            },
             HardCodedFunction::ListPositionValue => {
                 list_position_value(env, &params[0].as_ref().materialize(), params[1].as_ref())
             },
-            
+
             HardCodedFunction::ListSublist => {
                 if params.len() == 2 {
                     list_sublist_by_range(params[0].as_ref(), params[1].as_ref())
                 }
                 else {
-                    list_sublist(params[0].as_ref(), params[1].as_ref().int_value()? as _, params[2].as_ref().int_value()? as _)
+                    list_sublist(
+                        params[0].as_ref(),
+                        params[1].as_ref().int_value()? as _,
+                        params[2].as_ref().int_value()? as _
+                    )
                 }
             },
             HardCodedFunction::ListSplitByValue => {
                 list_split_by_value(&params[0].as_ref().materialize(), params[1].as_ref())
             },
-            HardCodedFunction::StringPush => string_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
+            HardCodedFunction::StringPush => {
+                string_push(params[0].as_ref().clone(), params[1].as_ref().clone())
+            },
             HardCodedFunction::StringFromList => string_from_list(params[0].as_ref().clone()),
             HardCodedFunction::StringFormat => {
                 let (result, warnings) = string_format(params)?;
@@ -787,11 +850,20 @@ impl HardCodedFunction {
             HardCodedFunction::ListSort => list_sort(params[0].as_ref().materialize()),
             HardCodedFunction::ListArgsort => list_argsort(&params[0].as_ref().materialize()),
 
-            HardCodedFunction::StringNew => string_new(params[0].as_ref().int_value()? as _, params[1].as_ref().clone()),
-            HardCodedFunction::StringFilter => string_filter(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::StringNew => {
+                string_new(
+                    params[0].as_ref().int_value()? as _,
+                    params[1].as_ref().clone()
+                )
+            },
+            HardCodedFunction::StringFilter => {
+                string_filter(env, params[0].as_ref(), params[1].as_ref())
+            },
             HardCodedFunction::StringMap => string_map(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::StringLen => string_len(params[0].as_ref()),
-            HardCodedFunction::StringGet => string_get(params[0].as_ref(), params[1].as_ref().int_value()? as _),
+            HardCodedFunction::StringGet => {
+                string_get(params[0].as_ref(), params[1].as_ref().int_value()? as _)
+            },
             HardCodedFunction::StringUpperCase => string_upper_case(params[0].as_ref()),
             HardCodedFunction::MatrixNew => {
                 if nb_args == 3 {
@@ -815,15 +887,31 @@ impl HardCodedFunction {
                 )
             },
             HardCodedFunction::MatrixGet => {
-                matrix_get(params[0].as_ref(), params[1].as_ref().int_value()? as _, params[2].as_ref().int_value()? as _)
+                matrix_get(
+                    params[0].as_ref(),
+                    params[1].as_ref().int_value()? as _,
+                    params[2].as_ref().int_value()? as _
+                )
             },
-            HardCodedFunction::MatrixCol => matrix_col(params[0].as_ref(), params[1].as_ref().int_value()? as _),
-            HardCodedFunction::MatrixRow => matrix_row(params[0].as_ref(), params[1].as_ref().int_value()? as _),
+            HardCodedFunction::MatrixCol => {
+                matrix_col(params[0].as_ref(), params[1].as_ref().int_value()? as _)
+            },
+            HardCodedFunction::MatrixRow => {
+                matrix_row(params[0].as_ref(), params[1].as_ref().int_value()? as _)
+            },
             HardCodedFunction::MatrixSetRow => {
-                matrix_set_row(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref())
+                matrix_set_row(
+                    params[0].as_ref().clone(),
+                    params[1].as_ref().int_value()? as _,
+                    params[2].as_ref()
+                )
             },
             HardCodedFunction::MatrixSetCol => {
-                matrix_set_col(params[0].as_ref().clone(), params[1].as_ref().int_value()? as _, params[2].as_ref())
+                matrix_set_col(
+                    params[0].as_ref().clone(),
+                    params[1].as_ref().int_value()? as _,
+                    params[2].as_ref()
+                )
             },
             HardCodedFunction::MatrixWidth => matrix_width(params[0].as_ref()),
             HardCodedFunction::MatrixHeight => matrix_height(params[0].as_ref()),
@@ -834,7 +922,8 @@ impl HardCodedFunction {
                 // downgrade the `Into<Fname>` bound actually needs - not a
                 // no-op, despite clippy's heuristic (it misses that case).
                 #[allow(clippy::useless_asref)]
-                let (data, _) = file::load_file((fname, env.as_ref()), env.options().parse_options())?;
+                let (data, _) =
+                    file::load_file((fname, env.as_ref()), env.options().parse_options())?;
                 let data = Vec::from(data);
                 Ok(ExprResult::from(data.as_slice()))
             },
@@ -884,7 +973,8 @@ impl HardCodedFunction {
                     }
                 };
 
-                let (oks, errs): (Vec<u8>, Vec<ExpressionTypeError>) = params[0].as_ref()
+                let (oks, errs): (Vec<u8>, Vec<ExpressionTypeError>) = params[0]
+                    .as_ref()
                     .list_content()
                     .iter()
                     .map(|item| env.int_forward(item).map(|v| v as u8))
@@ -986,7 +1076,7 @@ impl Function {
         }
     }
 
-    pub fn eval<E: AsRef<ExprResult>+Clone>(
+    pub fn eval<E: AsRef<ExprResult> + Clone>(
         &self,
         env: &mut Env,
         params: &[E]

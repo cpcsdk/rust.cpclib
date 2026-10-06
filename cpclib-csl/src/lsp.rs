@@ -243,7 +243,7 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
         name: "csl_load",
         min_version: V1_0,
         args: ArgShape::QuotedPath
-    },
+    }
 ];
 
 /// `CrtcModel`'s tokens, in declaration order - matches

@@ -188,9 +188,8 @@ mod tests {
     #[test]
     fn a_multi_register_push_pairs_with_each_of_its_reverse_order_pops() {
         let analyzer = AssemblyAnalyzer::new();
-        let document = doc(
-            "start:\n    push af, bc, hl\n    pop hl\n    pop bc\n    pop af\n    ret\n"
-        );
+        let document =
+            doc("start:\n    push af, bc, hl\n    pop hl\n    pop bc\n    pop af\n    ret\n");
         // Cursor on the multi-push: it contributed 3 slots, so it must be
         // paired with all 3 single-register pops that drained them.
         let highlights = analyzer.push_pop_highlights(
@@ -224,9 +223,8 @@ mod tests {
         // non-local exit) - `second`'s own pop must not be silently matched
         // against it just because it's the next one in the file.
         let analyzer = AssemblyAnalyzer::new();
-        let document = doc(
-            "first:\n    push hl\n    ret\nsecond:\n    push de\n    pop de\n    ret\n"
-        );
+        let document =
+            doc("first:\n    push hl\n    ret\nsecond:\n    push de\n    pop de\n    ret\n");
         let highlights = analyzer.push_pop_highlights(
             &document,
             Position {

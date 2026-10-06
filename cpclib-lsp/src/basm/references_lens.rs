@@ -159,9 +159,8 @@ mod tests {
     #[test]
     fn a_label_used_twice_in_the_same_file_reports_two_references() {
         let analyzer = AssemblyAnalyzer::new();
-        let lenses = analyzer.reference_count_code_lenses(&doc(
-            "start:\n    call start\n    jp start\n"
-        ));
+        let lenses =
+            analyzer.reference_count_code_lenses(&doc("start:\n    call start\n    jp start\n"));
         assert_eq!(lenses.len(), 1);
         assert_eq!(lenses[0].command.as_ref().unwrap().title, "2 references");
     }
@@ -181,11 +180,7 @@ mod tests {
         // is simply unknown - this lens never walks the directory to go
         // find it.
         let tmp = camino_tempfile::tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("sibling.asm"),
-            "    call start\n"
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("sibling.asm"), "    call start\n").unwrap();
         let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
         let document = Document::new(uri, "start:\n    ret\n".to_string(), 0);
 
@@ -198,11 +193,7 @@ mod tests {
     #[test]
     fn a_reference_in_a_directly_included_file_is_counted() {
         let tmp = camino_tempfile::tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("caller.asm"),
-            "    call start\n"
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("caller.asm"), "    call start\n").unwrap();
         let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
         let document = Document::new(
             uri,
@@ -258,9 +249,8 @@ mod tests {
         // form a same-named `.local1` under a different global can never be
         // mistaken for.
         let analyzer = AssemblyAnalyzer::new();
-        let document = doc(
-            "global1\n.local1\n    ret\nglobal2\n    call global1.local1\n    ret\n"
-        );
+        let document =
+            doc("global1\n.local1\n    ret\nglobal2\n    call global1.local1\n    ret\n");
         let lenses = analyzer.reference_count_code_lenses(&document);
         let local_lens = lenses
             .iter()
@@ -287,7 +277,10 @@ mod tests {
             .iter()
             .find(|l| l.range.start.line == 5)
             .unwrap_or_else(|| panic!("no lens for global2's .local1: {lenses:?}"));
-        assert_eq!(global1_local.command.as_ref().unwrap().title, "2 references");
+        assert_eq!(
+            global1_local.command.as_ref().unwrap().title,
+            "2 references"
+        );
         assert_eq!(global2_local.command.as_ref().unwrap().title, "1 reference");
     }
 }

@@ -7,18 +7,18 @@
 
 pub mod asm;
 pub mod basic;
-pub mod behavior;
 pub mod basmopt;
+pub mod behavior;
 pub mod build;
 pub mod common;
 pub mod crunch;
 pub mod disc;
 pub mod emulator;
 pub mod lsp;
+pub mod project;
 pub mod render;
 pub mod reorder;
+pub mod sandbox;
+pub mod sizemap;
 pub mod sna;
 pub mod variants;
-pub mod project;
-pub mod sizemap;
-pub mod sandbox;

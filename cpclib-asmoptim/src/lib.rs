@@ -30,9 +30,8 @@ pub mod smc;
 
 // Re-exported so existing consumers keep one import path for "the optimizer's
 // analysis vocabulary", now that the analysis half lives a crate below.
-pub use cpclib_z80flow::{analysis_op, dependency, effects, liveness, regflag, stream};
-
 pub use builtin_rules::{OptimizationGoal, builtin_rules};
 pub use constraints::rules_need_addresses;
 pub use cpclib_asm::flatten::{flatten_for_analysis, flatten_listing};
+pub use cpclib_z80flow::{analysis_op, dependency, effects, liveness, regflag, stream};
 pub use env_resolver::{EnvAddressResolver, ProjectAddressResolver};

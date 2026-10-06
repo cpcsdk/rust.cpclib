@@ -1,4 +1,3 @@
-
 #[test]
 fn assemble_simple_db() {
     let code = "org 0\n db 1,2,3,4\n";

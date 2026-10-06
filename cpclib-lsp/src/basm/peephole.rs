@@ -226,7 +226,10 @@ impl AssemblyAnalyzer {
     }
 
     /// The project's include graph, rebuilt only when the project changed.
-    pub(super) fn project_graph_cached(&self, root: &std::path::Path) -> (u128, Arc<entry::ProjectGraph>) {
+    pub(super) fn project_graph_cached(
+        &self,
+        root: &std::path::Path
+    ) -> (u128, Arc<entry::ProjectGraph>) {
         self.projects.graph_for(root)
     }
 
@@ -275,7 +278,10 @@ impl AssemblyAnalyzer {
         document: &Document,
         own_assemble_complete: impl FnOnce() -> bool
     ) -> Arc<AddressSource> {
-        let key = (document.version, super::workspace_fingerprint_of(&document.uri));
+        let key = (
+            document.version,
+            super::workspace_fingerprint_of(&document.uri)
+        );
 
         if let Some(cached) = self.address_source_cache.get(&document.uri)
             && cached.0 == key

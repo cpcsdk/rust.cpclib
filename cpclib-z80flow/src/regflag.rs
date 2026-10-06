@@ -232,6 +232,9 @@ pub enum Flag {
 }
 
 impl Flag {
+    /// Every flag, for the "this instruction overwrites all of them" case.
+    pub const ALL: [Flag; 6] = [Flag::S, Flag::Z, Flag::H, Flag::PV, Flag::N, Flag::C];
+
     /// Parse a flag name as written in a pattern constraint or in the
     /// vendored instruction table. Case-insensitive.
     ///
@@ -263,9 +266,6 @@ impl Flag {
             Self::C => "C"
         }
     }
-
-    /// Every flag, for the "this instruction overwrites all of them" case.
-    pub const ALL: [Flag; 6] = [Flag::S, Flag::Z, Flag::H, Flag::PV, Flag::N, Flag::C];
 }
 
 impl std::fmt::Display for Flag {

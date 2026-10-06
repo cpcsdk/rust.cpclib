@@ -1496,9 +1496,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         // Compute the information to access the first sector
         let sector_pos = bloc_idx.sector();
         let min_sector = self.disc.track_min_sector(self.head, 0).ok_or_else(|| {
-            AmsdosError::Various(
-                "Disc has no formatted track 0: cannot locate bloc.".to_string()
-            )
+            AmsdosError::Various("Disc has no formatted track 0: cannot locate bloc.".to_string())
         })?;
         let track = {
             let mut track = bloc_idx.track();

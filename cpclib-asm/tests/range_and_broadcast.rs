@@ -20,9 +20,9 @@ fn range_inclusive_emits_the_right_bytes() {
 fn descending_range_emits_zero_bytes_both_forms() {
     // Matches Rust exactly - no auto-descending.
     let bin = cpclib_asm::assemble("org 0x4000\n db 5..1\n ret\n").unwrap();
-    assert_eq!(bin, vec![0xc9]);
+    assert_eq!(bin, vec![0xC9]);
     let bin = cpclib_asm::assemble("org 0x4000\n db 5..=1\n ret\n").unwrap();
-    assert_eq!(bin, vec![0xc9]);
+    assert_eq!(bin, vec![0xC9]);
 }
 
 #[test]
@@ -104,28 +104,23 @@ fn a_range_used_as_an_if_condition_errors_exactly_like_a_plain_list() {
 
 #[test]
 fn range_step_by_steps_through_iterate() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n iterate i in range_step_by(0..10, 2)\n db {i}\n endi\n"
-    )
-    .unwrap();
+    let bin =
+        cpclib_asm::assemble("org 0x4000\n iterate i in range_step_by(0..10, 2)\n db {i}\n endi\n")
+            .unwrap();
     assert_eq!(bin, vec![0, 2, 4, 6, 8]);
 }
 
 #[test]
 fn list_sublist_with_a_range_selector_gathers_the_right_elements() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n db list_sublist([10,20,30,40,50], 1..3)\n"
-    )
-    .unwrap();
+    let bin =
+        cpclib_asm::assemble("org 0x4000\n db list_sublist([10,20,30,40,50], 1..3)\n").unwrap();
     assert_eq!(bin, vec![20, 30]);
 }
 
 #[test]
 fn list_sublist_three_argument_form_still_works_unchanged() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n db list_sublist([10,20,30,40,50], 1, 3)\n"
-    )
-    .unwrap();
+    let bin =
+        cpclib_asm::assemble("org 0x4000\n db list_sublist([10,20,30,40,50], 1, 3)\n").unwrap();
     assert_eq!(bin, vec![20, 30]);
 }
 

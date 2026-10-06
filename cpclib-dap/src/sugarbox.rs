@@ -93,12 +93,14 @@ impl SugarBoxPeer {
         let mut line = command.to_string();
         line.push('\n');
         self.write.write_all(line.as_bytes())?;
-        self.acks.recv_timeout(self.round_trip_timeout).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "SugarboxV2's debug server did not answer in time"
-            )
-        })
+        self.acks
+            .recv_timeout(self.round_trip_timeout)
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "SugarboxV2's debug server did not answer in time"
+                )
+            })
     }
 
     /// Sent once, right after connecting for a fresh launch: the machine is
@@ -111,7 +113,11 @@ impl SugarBoxPeer {
         Ok(())
     }
 
-    pub fn insert_disk(&mut self, drive: u64, path: &cpclib_common::camino::Utf8Path) -> std::io::Result<()> {
+    pub fn insert_disk(
+        &mut self,
+        drive: u64,
+        path: &cpclib_common::camino::Utf8Path
+    ) -> std::io::Result<()> {
         self.round_trip(json!({"cmd": "insertDisk", "drive": drive, "path": path.as_str()}))?;
         Ok(())
     }
@@ -133,7 +139,8 @@ fn read_loop(stream: TcpStream, events_out: mpsc::Sender<Value>, acks: mpsc::Sen
                 if trimmed.is_empty() {
                     continue;
                 }
-                let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+                let Ok(value) = serde_json::from_str::<Value>(trimmed)
+                else {
                     continue;
                 };
                 if value.get("type").and_then(Value::as_str) == Some("event") {
@@ -198,7 +205,10 @@ fn sugarbox_call_for(request: &Value) -> Option<Value> {
     let command = request.get("command").and_then(Value::as_str)?;
     let args = request.get("arguments").cloned().unwrap_or(json!({}));
 
-    if let Some((_, cmd)) = PASSTHROUGH_COMMANDS.iter().find(|(name, _)| *name == command) {
+    if let Some((_, cmd)) = PASSTHROUGH_COMMANDS
+        .iter()
+        .find(|(name, _)| *name == command)
+    {
         return Some(json!({"cmd": cmd}));
     }
 
@@ -242,7 +252,10 @@ fn sugarbox_call_for(request: &Value) -> Option<Value> {
                 .get("memoryReference")
                 .and_then(Value::as_str)
                 .and_then(protocol::parse_address_reference)?;
-            let count = args.get("instructionCount").and_then(Value::as_u64).unwrap_or(16);
+            let count = args
+                .get("instructionCount")
+                .and_then(Value::as_u64)
+                .unwrap_or(16);
             json!({"cmd": "disassemble", "address": address, "count": count})
         },
         "evaluate" => {
@@ -293,7 +306,10 @@ fn sugarbox_registers_of(state: &Value) -> Vec<Value> {
 /// Shape SugarboxV2's own reply (`state`) into the DAP response `request`
 /// is waiting for.
 fn sugarbox_response_for(request: &Value, state: &Value, seq: i64) -> Value {
-    let command = request.get("command").and_then(Value::as_str).unwrap_or_default();
+    let command = request
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let body = match command {
         "stackTrace" => {
             let pc = state.get("PC").and_then(Value::as_u64).unwrap_or(0);
@@ -313,7 +329,13 @@ fn sugarbox_response_for(request: &Value, state: &Value, seq: i64) -> Value {
             let bytes: Vec<u8> = state
                 .get("bytes")
                 .and_then(Value::as_array)
-                .map(|values| values.iter().filter_map(Value::as_u64).map(|b| b as u8).collect())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_u64)
+                        .map(|b| b as u8)
+                        .collect()
+                })
                 .unwrap_or_default();
             json!({
                 "address": request
@@ -332,7 +354,10 @@ fn sugarbox_response_for(request: &Value, state: &Value, seq: i64) -> Value {
                 .unwrap_or_default()
                 .iter()
                 .map(|instruction| {
-                    let address = instruction.get("address").and_then(Value::as_u64).unwrap_or(0);
+                    let address = instruction
+                        .get("address")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0);
                     json!({
                         "address": format!("0x{address:04X}"),
                         "instruction": instruction.get("instruction").cloned().unwrap_or(json!(""))
@@ -341,7 +366,9 @@ fn sugarbox_response_for(request: &Value, state: &Value, seq: i64) -> Value {
                 .collect();
             json!({"instructions": instructions})
         },
-        "evaluate" => json!({"result": state.get("text").cloned().unwrap_or(json!("?")), "variablesReference": 0}),
+        "evaluate" => {
+            json!({"result": state.get("text").cloned().unwrap_or(json!("?")), "variablesReference": 0})
+        },
         _ if command.starts_with("cpclib/") => state.clone(),
         _ => json!({})
     };
@@ -432,9 +459,12 @@ impl DapPeer for SugarBoxPeer {
                         .collect()
                 })
                 .unwrap_or_default();
-            let breakpoints: Vec<Value> =
-                addresses.iter().map(|address| json!({"address": address})).collect();
-            let ack = self.round_trip(json!({"cmd": "setBreakpoints", "breakpoints": breakpoints}))?;
+            let breakpoints: Vec<Value> = addresses
+                .iter()
+                .map(|address| json!({"address": address}))
+                .collect();
+            let ack =
+                self.round_trip(json!({"cmd": "setBreakpoints", "breakpoints": breakpoints}))?;
             let seq = self.next_seq();
             self.push(sugarbox_response_for(&message, &ack, seq));
             return Ok(());
@@ -560,8 +590,9 @@ pub fn wait_until_listening(endpoint: &str, patience: Duration) -> Result<(), St
 
 fn spawn_sugarbox<E>(port: u16, observer: &E) -> Result<(std::process::Child, u16), String>
 where E: cpclib_common::event::EventObserver + 'static {
-    use crate::amspiritlite::port_to_serve_on;
     use cpclib_runner::runner::emulator::{Emulator, SugarBoxV2Version};
+
+    use crate::amspiritlite::port_to_serve_on;
 
     let emulator = Emulator::SugarBoxV2(SugarBoxV2Version::default());
     let configuration = emulator.configuration::<E>();
@@ -599,7 +630,9 @@ pub fn launch<E>(
     port: u16,
     observer: &E
 ) -> Result<(String, SugarBoxPeer), String>
-where E: cpclib_common::event::EventObserver + 'static {
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
     let (child, port) = spawn_sugarbox(port, observer)?;
 
     let path = std::env::temp_dir().join(format!("cpclib-dap-sugarbox-{}.sna", std::process::id()));
@@ -626,7 +659,9 @@ pub fn launch_with_disk<E>(
     port: u16,
     observer: &E
 ) -> Result<(String, SugarBoxPeer), String>
-where E: cpclib_common::event::EventObserver + 'static {
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
     let (child, port) = spawn_sugarbox(port, observer)?;
 
     let path = cpclib_common::camino::Utf8Path::from_path(disk)
@@ -664,11 +699,26 @@ mod tests {
 
     #[test]
     fn stepping_commands_translate_one_to_one() {
-        assert_eq!(sugarbox_call_for(&request("continue", json!({}))).unwrap()["cmd"], "continue");
-        assert_eq!(sugarbox_call_for(&request("next", json!({}))).unwrap()["cmd"], "step");
-        assert_eq!(sugarbox_call_for(&request("stepIn", json!({}))).unwrap()["cmd"], "stepIn");
-        assert_eq!(sugarbox_call_for(&request("stepOut", json!({}))).unwrap()["cmd"], "stepOut");
-        assert_eq!(sugarbox_call_for(&request("restart", json!({}))).unwrap()["cmd"], "reset");
+        assert_eq!(
+            sugarbox_call_for(&request("continue", json!({}))).unwrap()["cmd"],
+            "continue"
+        );
+        assert_eq!(
+            sugarbox_call_for(&request("next", json!({}))).unwrap()["cmd"],
+            "step"
+        );
+        assert_eq!(
+            sugarbox_call_for(&request("stepIn", json!({}))).unwrap()["cmd"],
+            "stepIn"
+        );
+        assert_eq!(
+            sugarbox_call_for(&request("stepOut", json!({}))).unwrap()["cmd"],
+            "stepOut"
+        );
+        assert_eq!(
+            sugarbox_call_for(&request("restart", json!({}))).unwrap()["cmd"],
+            "reset"
+        );
     }
 
     #[test]
@@ -685,7 +735,10 @@ mod tests {
 
     #[test]
     fn a_memory_answer_is_re_encoded_as_base64_for_the_editor() {
-        let read = request("readMemory", json!({"memoryReference": "0x4000", "count": 3}));
+        let read = request(
+            "readMemory",
+            json!({"memoryReference": "0x4000", "count": 3})
+        );
         let answer = sugarbox_response_for(&read, &json!({"bytes": [0x3E, 0x00, 0xC9]}), 9);
         assert_eq!(answer["body"]["data"], json!("PgDJ"));
     }
@@ -716,8 +769,11 @@ mod tests {
 
     #[test]
     fn set_variable_accepts_a_plain_decimal_value_too() {
-        let call = sugarbox_call_for(&request("setVariable", json!({"name": "a", "value": "255"})))
-            .unwrap();
+        let call = sugarbox_call_for(&request(
+            "setVariable",
+            json!({"name": "a", "value": "255"})
+        ))
+        .unwrap();
         assert_eq!(call["a"], 255);
     }
 
@@ -850,9 +906,15 @@ mod tests {
         // thread the moment it reads that second line) race each other for
         // which lands in `pending` first - both orders are legitimate, so
         // this only asserts both arrived, not in which order.
-        assert_eq!(messages.len(), 2, "expected the response and the async event: {messages:?}");
+        assert_eq!(
+            messages.len(),
+            2,
+            "expected the response and the async event: {messages:?}"
+        );
         assert!(
-            messages.iter().any(|m| m["body"]["regs"] == json!([63, 48])),
+            messages
+                .iter()
+                .any(|m| m["body"]["regs"] == json!([63, 48])),
             "missing the getCrtcState response: {messages:?}"
         );
         assert!(

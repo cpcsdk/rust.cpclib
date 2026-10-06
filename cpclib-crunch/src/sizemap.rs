@@ -56,11 +56,18 @@ pub struct Region {
 /// Labels outside the range are ignored. When a file has no global labels
 /// in range at all, every label is treated as global.
 pub fn build_regions(symbols: &[(String, u32)], start: u32, end: u32) -> Vec<Region> {
-    let in_range: Vec<&(String, u32)> = symbols.iter().filter(|(_, a)| *a >= start && *a < end).collect();
+    let in_range: Vec<&(String, u32)> = symbols
+        .iter()
+        .filter(|(_, a)| *a >= start && *a < end)
+        .collect();
     let has_globals = in_range.iter().any(|(n, _)| !is_local(n));
     let is_boundary = |n: &str| !has_globals || !is_local(n);
 
-    let mut boundaries: Vec<&(String, u32)> = in_range.iter().copied().filter(|(n, _)| is_boundary(n)).collect();
+    let mut boundaries: Vec<&(String, u32)> = in_range
+        .iter()
+        .copied()
+        .filter(|(n, _)| is_boundary(n))
+        .collect();
     boundaries.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
 
     let mut regions: Vec<Region> = Vec::new();
@@ -75,7 +82,7 @@ pub fn build_regions(symbols: &[(String, u32)], start: u32, end: u32) -> Vec<Reg
                     locals: 0,
                     aliases: Vec::new()
                 })
-            }
+            },
         }
     }
     for i in 0..regions.len() {
@@ -91,12 +98,23 @@ pub fn build_regions(symbols: &[(String, u32)], start: u32, end: u32) -> Vec<Reg
 }
 
 /// Crunched size with `range` cut out of `image` (`None` = nothing removed).
-fn crunched_size(cruncher: &str, image: &[u8], range: Option<std::ops::Range<usize>>) -> Result<i64, String> {
+fn crunched_size(
+    cruncher: &str,
+    image: &[u8],
+    range: Option<std::ops::Range<usize>>
+) -> Result<i64, String> {
     let data: Vec<u8> = match range {
-        Some(r) => image[..r.start].iter().chain(&image[r.end..]).copied().collect(),
+        Some(r) => {
+            image[..r.start]
+                .iter()
+                .chain(&image[r.end..])
+                .copied()
+                .collect()
+        },
         None => image.to_vec()
     };
-    compress_with_timeout(cruncher.to_string(), data, CRUNCHER_TIMEOUT).map(|c| c.stream.len() as i64)
+    compress_with_timeout(cruncher.to_string(), data, CRUNCHER_TIMEOUT)
+        .map(|c| c.stream.len() as i64)
 }
 
 /// `(baseline, per-region contribution)` - each region's contribution is
@@ -118,11 +136,19 @@ fn crunched_costs(
                 if lo >= hi {
                     return None;
                 }
-                crunched_size(&cruncher, &image, Some(lo..hi)).ok().map(|without| baseline - without)
+                crunched_size(&cruncher, &image, Some(lo..hi))
+                    .ok()
+                    .map(|without| baseline - without)
             })
         })
         .collect();
-    Ok((baseline, handles.into_iter().map(|h| h.join().unwrap_or(None)).collect()))
+    Ok((
+        baseline,
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or(None))
+            .collect()
+    ))
 }
 
 /// `main.asm:121:1 > MACRO DRAW:` -> (`main.asm`, Some(`MACRO DRAW`)); a plain
@@ -130,19 +156,31 @@ fn crunched_costs(
 /// one. (The assembler has the same split privately; a context name is a
 /// stable, documented shape - `path:LINE:COL > KIND NAME:`.)
 pub fn split_context(name: &str) -> (String, Option<String>) {
-    let Some(marker) = name.find(" > ") else {
+    let Some(marker) = name.find(" > ")
+    else {
         return (name.to_string(), None);
     };
     let mut head = &name[..marker];
     // Walk back over `:COL` then `:LINE` when both are numbers.
     for _ in 0..2 {
         match head.rsplit_once(':') {
-            Some((rest, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => head = rest,
+            Some((rest, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => {
+                head = rest
+            },
             _ => break
         }
     }
-    let expansion = name.rsplit(" > ").next().unwrap_or("").trim().trim_end_matches(':').trim();
-    (head.to_string(), (!expansion.is_empty()).then(|| expansion.to_string()))
+    let expansion = name
+        .rsplit(" > ")
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches(':')
+        .trim();
+    (
+        head.to_string(),
+        (!expansion.is_empty()).then(|| expansion.to_string())
+    )
 }
 
 /// Bytes attributed to one key (a file, a macro, a source line).
@@ -198,7 +236,10 @@ impl MacroIndex {
     pub fn scan(files: &[String]) -> Self {
         let mut index = std::collections::HashMap::new();
         for file in files {
-            let Ok(text) = fs_err::read_to_string(file) else { continue };
+            let Ok(text) = fs_err::read_to_string(file)
+            else {
+                continue;
+            };
             let defs = Self::definitions(&text);
             if !defs.is_empty() {
                 index.insert(file.clone(), defs);
@@ -214,7 +255,10 @@ impl MacroIndex {
             let line = i as u32 + 1;
             let code = raw.split(';').next().unwrap_or("");
             let mut words = code.split_whitespace().map(|w| w.trim_end_matches(':'));
-            let Some(first) = words.next() else { continue };
+            let Some(first) = words.next()
+            else {
+                continue;
+            };
             let first_lower = first.to_ascii_lowercase();
             if open.is_none() && first_lower == "macro" {
                 if let Some(name) = words.next() {
@@ -222,7 +266,12 @@ impl MacroIndex {
                     open = Some((line + 1, name.to_string()));
                 }
             }
-            else if open.is_none() && words.clone().next().is_some_and(|w| w.eq_ignore_ascii_case("macro")) {
+            else if open.is_none()
+                && words
+                    .clone()
+                    .next()
+                    .is_some_and(|w| w.eq_ignore_ascii_case("macro"))
+            {
                 // `NAME macro args`
                 open = Some((line + 1, first.to_string()));
             }
@@ -255,12 +304,18 @@ impl MacroIndex {
 /// are overwritten by the much smaller crunched output - counting both would
 /// make the sources look four times bigger than the file. The crunched output
 /// itself is charged to the directive that produced it (e.g. `LZSHRINKLER`).
-pub fn attribute(map: &RawSourceMap, regions: &[Region], macros: &MacroIndex, image_range: std::ops::Range<u32>) -> Attribution {
+pub fn attribute(
+    map: &RawSourceMap,
+    regions: &[Region],
+    macros: &MacroIndex,
+    image_range: std::ops::Range<u32>
+) -> Attribution {
     let mut out = Attribution {
         per_region: vec![Tally::default(); regions.len()],
         ..Default::default()
     };
-    let contexts: Vec<(String, Option<String>)> = map.files.iter().map(|f| split_context(f)).collect();
+    let contexts: Vec<(String, Option<String>)> =
+        map.files.iter().map(|f| split_context(f)).collect();
 
     // Who owns each address of the image.
     let mut owner = vec![u32::MAX; image_range.len()];
@@ -292,13 +347,21 @@ pub fn attribute(map: &RawSourceMap, regions: &[Region], macros: &MacroIndex, im
 
     for (row, &len) in map.rows.iter().zip(&owned).filter(|(_, l)| **l > 0) {
         let len = len as u64;
-        let Some((file, macro_name)) = contexts.get(row.file as usize) else { continue };
+        let Some((file, macro_name)) = contexts.get(row.file as usize)
+        else {
+            continue;
+        };
         out.by_file.entry(file.clone()).or_default().add(row, len);
-        let defined = macros.macro_at(file, row.line).map(|n| format!("MACRO {n}"));
+        let defined = macros
+            .macro_at(file, row.line)
+            .map(|n| format!("MACRO {n}"));
         if let Some(m) = macro_name.clone().or(defined) {
             out.by_macro.entry(m).or_default().add(row, len);
         }
-        out.by_line.entry((file.clone(), row.line)).or_default().add(row, len);
+        out.by_line
+            .entry((file.clone(), row.line))
+            .or_default()
+            .add(row, len);
         // Regions are sorted by address: the last one starting at or before
         // this row holds it.
         let idx = regions.partition_point(|r| r.address <= row.logical);
@@ -310,13 +373,36 @@ pub fn attribute(map: &RawSourceMap, regions: &[Region], macros: &MacroIndex, im
 }
 
 /// A key/tally ranking as a markdown table, biggest first.
-fn render_tally_table<K: std::fmt::Display>(title: &str, rows: Vec<(K, &Tally)>, top: usize, total: u64) -> String {
+fn render_tally_table<K: std::fmt::Display>(
+    title: &str,
+    rows: Vec<(K, &Tally)>,
+    top: usize,
+    total: u64
+) -> String {
     let mut rows = rows;
-    rows.sort_by(|a, b| b.1.bytes.cmp(&a.1.bytes).then_with(|| a.0.to_string().cmp(&b.0.to_string())));
-    let mut out = format!("| # | {title} | Bytes | % of image | Code | Data | Instances |\n|--:|:--|--:|--:|--:|--:|--:|\n");
+    rows.sort_by(|a, b| {
+        b.1.bytes
+            .cmp(&a.1.bytes)
+            .then_with(|| a.0.to_string().cmp(&b.0.to_string()))
+    });
+    let mut out = format!(
+        "| # | {title} | Bytes | % of image | Code | Data | Instances |\n|--:|:--|--:|--:|--:|--:|--:|\n"
+    );
     for (i, (key, t)) in rows.into_iter().take(top).enumerate() {
-        let pct = if total == 0 { 0.0 } else { t.bytes as f64 * 100.0 / total as f64 };
-        out.push_str(&format!("| {} | {key} | {} | {pct:.1} | {} | {} | {} |\n", i + 1, t.bytes, t.code, t.data, t.runs));
+        let pct = if total == 0 {
+            0.0
+        }
+        else {
+            t.bytes as f64 * 100.0 / total as f64
+        };
+        out.push_str(&format!(
+            "| {} | {key} | {} | {pct:.1} | {} | {} | {} |\n",
+            i + 1,
+            t.bytes,
+            t.code,
+            t.data,
+            t.runs
+        ));
     }
     out
 }
@@ -353,11 +439,16 @@ fn assemble_for_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<Assembl
     let source = fs_err::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
 
     let mut parse = ParserOptions::default();
-    parse.add_search_path_from_file(path.as_str()).map_err(|e| e.to_string())?;
+    parse
+        .add_search_path_from_file(path.as_str())
+        .map_err(|e| e.to_string())?;
     for dir in &options.include_dirs {
         parse.add_search_path(dir).map_err(|e| e.to_string())?;
     }
-    let builder = parse.clone().context_builder().set_current_filename(path.as_str());
+    let builder = parse
+        .clone()
+        .context_builder()
+        .set_current_filename(path.as_str());
     let listing = parse_z80_with_context_builder(&source, builder).map_err(|e| e.to_string())?;
 
     let mut assemble = AssemblingOptions::default();
@@ -379,7 +470,8 @@ fn assemble_for_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<Assembl
     // The listing pass - what fills the source map - runs as a post action
     // (under `dry_run` it writes nothing, `SAVE` included).
     let mut env = env;
-    env.handle_post_actions(&listing).map_err(|e| e.to_string())?;
+    env.handle_post_actions(&listing)
+        .map_err(|e| e.to_string())?;
 
     let start = env.start_address().ok_or("the source produced no bytes")? as u32;
     let symbols = env
@@ -411,26 +503,43 @@ fn section_crunched_len(section: &CrunchedSectionInfo, data: &[u8]) -> Option<i6
     if data.is_empty() {
         return Some(0);
     }
-    section.kind.compress(data).ok().map(|c| c.compressed_len() as i64)
+    section
+        .kind
+        .compress(data)
+        .ok()
+        .map(|c| c.compressed_len() as i64)
 }
 
 /// Runs `f` on every item, a few at a time.
-fn parallel_map<T: Sync, R: Send>(items: &[T], workers: usize, f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+fn parallel_map<T: Sync, R: Send>(
+    items: &[T],
+    workers: usize,
+    f: impl Fn(&T) -> R + Sync
+) -> Vec<R> {
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let results: std::sync::Mutex<Vec<Option<R>>> = std::sync::Mutex::new((0..items.len()).map(|_| None).collect());
+    let results: std::sync::Mutex<Vec<Option<R>>> =
+        std::sync::Mutex::new((0..items.len()).map(|_| None).collect());
     std::thread::scope(|scope| {
         for _ in 0..workers.max(1).min(items.len().max(1)) {
             scope.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(item) = items.get(i) else { break };
+                    let Some(item) = items.get(i)
+                    else {
+                        break;
+                    };
                     let r = f(item);
                     results.lock().unwrap()[i] = Some(r);
                 }
             });
         }
     });
-    results.into_inner().unwrap().into_iter().flatten().collect()
+    results
+        .into_inner()
+        .unwrap()
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 /// A crunched section's own leave-one-out cost for one region inside it.
@@ -466,8 +575,15 @@ pub struct CrunchedSectionReport {
 /// the biggest labelled regions removed: the difference is what the region
 /// really costs in the output. The map's decrunched-code rows say which
 /// source lines those bytes come from.
-fn measure_sections(sections: &[CrunchedSectionInfo], symbols: &[(String, u32)], map: Option<&RawSourceMap>, top: usize) -> Vec<CrunchedSectionReport> {
-    let workers = std::thread::available_parallelism().map_or(2, |n| n.get()).min(4);
+fn measure_sections(
+    sections: &[CrunchedSectionInfo],
+    symbols: &[(String, u32)],
+    map: Option<&RawSourceMap>,
+    top: usize
+) -> Vec<CrunchedSectionReport> {
+    let workers = std::thread::available_parallelism()
+        .map_or(2, |n| n.get())
+        .min(4);
     let contexts: Vec<(String, Option<String>)> = map
         .map(|m| m.files.iter().map(|f| split_context(f)).collect())
         .unwrap_or_default();
@@ -547,7 +663,13 @@ fn measure_sections(sections: &[CrunchedSectionInfo], symbols: &[(String, u32)],
         .collect()
 }
 
-fn render_table(regions: &[&Region], indices: &[usize], total: u32, costs: Option<&[Option<i64>]>, tallies: Option<&[Tally]>) -> String {
+fn render_table(
+    regions: &[&Region],
+    indices: &[usize],
+    total: u32,
+    costs: Option<&[Option<i64>]>,
+    tallies: Option<&[Tally]>
+) -> String {
     let mut header = String::from("| # | Label | Address | Bytes | % of image |");
     let mut rule = String::from("|--:|:--|--:|--:|--:|");
     if tallies.is_some() {
@@ -562,20 +684,36 @@ fn render_table(regions: &[&Region], indices: &[usize], total: u32, costs: Optio
     rule.push_str("--:|\n");
     let mut out = format!("{header}{rule}");
     for (i, r) in regions.iter().enumerate() {
-        let pct = if total == 0 { 0.0 } else { r.bytes as f64 * 100.0 / total as f64 };
+        let pct = if total == 0 {
+            0.0
+        }
+        else {
+            r.bytes as f64 * 100.0 / total as f64
+        };
         let name = if r.aliases.is_empty() {
             r.name.clone()
         }
         else {
             format!("{} (= {})", r.name, r.aliases.join(", "))
         };
-        out.push_str(&format!("| {} | {name} | {:#06x} | {} | {pct:.1} |", i + 1, r.address, r.bytes));
+        out.push_str(&format!(
+            "| {} | {name} | {:#06x} | {} | {pct:.1} |",
+            i + 1,
+            r.address,
+            r.bytes
+        ));
         if let Some(t) = tallies {
             let t = &t[indices[i]];
             out.push_str(&format!(" {} | {} |", t.code, t.data));
         }
         if let Some(c) = costs {
-            out.push_str(&format!(" {} |", c.get(i).copied().flatten().map_or("-".to_string(), |v| v.to_string())));
+            out.push_str(&format!(
+                " {} |",
+                c.get(i)
+                    .copied()
+                    .flatten()
+                    .map_or("-".to_string(), |v| v.to_string())
+            ));
         }
         out.push_str(&format!(" {} |\n", r.locals));
     }
@@ -649,7 +787,10 @@ pub fn size_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<SizeMapRepo
     }
     let assembled = assemble_for_map(path, options)?;
     let image_end = assembled.start + assembled.image.len() as u32;
-    let start = options.min_address.unwrap_or(assembled.start).max(assembled.start);
+    let start = options
+        .min_address
+        .unwrap_or(assembled.start)
+        .max(assembled.start);
     let end = options.max_address.unwrap_or(image_end).min(image_end);
     if start >= end {
         return Err("the requested address range is empty".to_string());
@@ -657,7 +798,14 @@ pub fn size_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<SizeMapRepo
 
     let mut regions = build_regions(&assembled.symbols, start, end);
     let costs = match &options.cruncher {
-        Some(c) => Some(crunched_costs(c, &assembled.image, assembled.start, &regions)?),
+        Some(c) => {
+            Some(crunched_costs(
+                c,
+                &assembled.image,
+                assembled.start,
+                &regions
+            )?)
+        },
         None => None
     };
 
@@ -672,15 +820,32 @@ pub fn size_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<SizeMapRepo
     }
     let top = options.top.unwrap_or(25);
     let shown: Vec<&Region> = order.iter().take(top).map(|&i| &regions[i]).collect();
-    let shown_costs: Option<Vec<Option<i64>>> = costs.as_ref().map(|(_, c)| order.iter().take(top).map(|&i| c[i]).collect());
+    let shown_costs: Option<Vec<Option<i64>>> = costs
+        .as_ref()
+        .map(|(_, c)| order.iter().take(top).map(|&i| c[i]).collect());
 
     let total = end - start;
-    let attribution = assembled
-        .map
-        .as_ref()
-        .map(|m| attribute(m, &regions, &MacroIndex::scan(&m.files.iter().map(|f| split_context(f).0).collect::<Vec<_>>()), start..end));
+    let attribution = assembled.map.as_ref().map(|m| {
+        attribute(
+            m,
+            &regions,
+            &MacroIndex::scan(
+                &m.files
+                    .iter()
+                    .map(|f| split_context(f).0)
+                    .collect::<Vec<_>>()
+            ),
+            start..end
+        )
+    });
     let shown_indices: Vec<usize> = order.iter().take(top).copied().collect();
-    let table = render_table(&shown, &shown_indices, total, shown_costs.as_deref(), attribution.as_ref().map(|a| a.per_region.as_slice()));
+    let table = render_table(
+        &shown,
+        &shown_indices,
+        total,
+        shown_costs.as_deref(),
+        attribution.as_ref().map(|a| a.per_region.as_slice())
+    );
     let regions_report: Vec<RegionReport> = order
         .iter()
         .map(|&i| {
@@ -698,14 +863,29 @@ pub fn size_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<SizeMapRepo
         })
         .collect();
     regions.clear();
-    let emitted: u64 = attribution.as_ref().map_or(0, |a| a.by_file.values().map(|t| t.bytes).sum());
+    let emitted: u64 = attribution
+        .as_ref()
+        .map_or(0, |a| a.by_file.values().map(|t| t.bytes).sum());
     let listing = attribution.as_ref().map(|a| {
         ListingDetail {
-            files_table: render_tally_table("Source file", a.by_file.iter().map(|(k, t)| (k.clone(), t)).collect(), 15, total as u64),
-            macros_table: render_tally_table("Macro / expansion", a.by_macro.iter().map(|(k, t)| (k.clone(), t)).collect(), 15, total as u64),
+            files_table: render_tally_table(
+                "Source file",
+                a.by_file.iter().map(|(k, t)| (k.clone(), t)).collect(),
+                15,
+                total as u64
+            ),
+            macros_table: render_tally_table(
+                "Macro / expansion",
+                a.by_macro.iter().map(|(k, t)| (k.clone(), t)).collect(),
+                15,
+                total as u64
+            ),
             lines_table: render_tally_table(
                 "Source line",
-                a.by_line.iter().map(|((f, l), t)| (format!("{f}:{l}"), t)).collect(),
+                a.by_line
+                    .iter()
+                    .map(|((f, l), t)| (format!("{f}:{l}"), t))
+                    .collect(),
                 20,
                 total as u64
             ),
@@ -717,7 +897,12 @@ pub fn size_map(path: &Utf8Path, options: &SizeMapOptions) -> Result<SizeMapRepo
     });
     Ok(SizeMapReport {
         listing,
-        crunched_sections: measure_sections(&assembled.sections, &assembled.symbols, assembled.map.as_ref(), top.min(16)),
+        crunched_sections: measure_sections(
+            &assembled.sections,
+            &assembled.symbols,
+            assembled.map.as_ref(),
+            top.min(16)
+        ),
         path: path.to_string(),
         start,
         end,
@@ -740,19 +925,57 @@ mod tests {
     #[test]
     fn regions_run_to_the_next_global_and_count_their_locals() {
         let regions = build_regions(
-            &syms(&[("main", 0x4000), ("main.loop", 0x4004), ("draw", 0x4010), ("draw.x", 0x4012), ("draw.y", 0x4014), ("data", 0x4030)]),
+            &syms(&[
+                ("main", 0x4000),
+                ("main.loop", 0x4004),
+                ("draw", 0x4010),
+                ("draw.x", 0x4012),
+                ("draw.y", 0x4014),
+                ("data", 0x4030)
+            ]),
             0x4000,
             0x4040
         );
         assert_eq!(regions.len(), 3);
-        assert_eq!((regions[0].name.as_str(), regions[0].bytes, regions[0].locals), ("main", 0x10, 1));
-        assert_eq!((regions[1].name.as_str(), regions[1].bytes, regions[1].locals), ("draw", 0x20, 2));
-        assert_eq!((regions[2].name.as_str(), regions[2].bytes, regions[2].locals), ("data", 0x10, 0));
+        assert_eq!(
+            (
+                regions[0].name.as_str(),
+                regions[0].bytes,
+                regions[0].locals
+            ),
+            ("main", 0x10, 1)
+        );
+        assert_eq!(
+            (
+                regions[1].name.as_str(),
+                regions[1].bytes,
+                regions[1].locals
+            ),
+            ("draw", 0x20, 2)
+        );
+        assert_eq!(
+            (
+                regions[2].name.as_str(),
+                regions[2].bytes,
+                regions[2].locals
+            ),
+            ("data", 0x10, 0)
+        );
     }
 
     #[test]
     fn labels_at_the_same_address_are_aliases_and_out_of_range_ones_are_ignored() {
-        let regions = build_regions(&syms(&[("a", 0x100), ("b", 0x100), ("c", 0x110), ("way_before", 0x10), ("beyond", 0x900)]), 0x100, 0x120);
+        let regions = build_regions(
+            &syms(&[
+                ("a", 0x100),
+                ("b", 0x100),
+                ("c", 0x110),
+                ("way_before", 0x10),
+                ("beyond", 0x900)
+            ]),
+            0x100,
+            0x120
+        );
         assert_eq!(regions.len(), 2);
         assert_eq!(regions[0].name, "a");
         assert_eq!(regions[0].aliases, vec!["b"]);
@@ -762,7 +985,10 @@ mod tests {
     #[test]
     fn a_file_with_only_dotted_labels_still_gets_a_map() {
         let regions = build_regions(&syms(&[("m.a", 0x200), ("m.b", 0x208)]), 0x200, 0x210);
-        assert_eq!(regions.iter().map(|r| r.bytes).collect::<Vec<_>>(), vec![8, 8]);
+        assert_eq!(
+            regions.iter().map(|r| r.bytes).collect::<Vec<_>>(),
+            vec![8, 8]
+        );
     }
 
     /// End to end on a real (tiny) assemble: constants must not appear, and
@@ -774,11 +1000,17 @@ mod tests {
         fs_err::write(&path, "SIZE equ 4\n org 0x4000\nstart:\n ld hl,0x1234\n ret\nfiller:\n defs 64,0xAA\ntable:\n db 1,2,3,4,5,6,7,8\n").unwrap();
         let out = size_map(
             &path,
-            &SizeMapOptions { cruncher: Some("zx0".to_string()), ..Default::default() }
+            &SizeMapOptions {
+                cruncher: Some("zx0".to_string()),
+                ..Default::default()
+            }
         )
         .expect("size_map should succeed");
         let names: Vec<&str> = out.regions.iter().map(|r| r.label.as_str()).collect();
-        assert!(!names.contains(&"SIZE"), "an equ constant is not a region: {names:?}");
+        assert!(
+            !names.contains(&"SIZE"),
+            "an equ constant is not a region: {names:?}"
+        );
         let filler = out.regions.iter().find(|r| r.label == "filler").unwrap();
         assert_eq!(filler.bytes, 64);
         assert_eq!(filler.address, 0x4004);
@@ -791,11 +1023,19 @@ mod tests {
         assert_eq!(split_context("main.asm"), ("main.asm".to_string(), None));
         assert_eq!(
             split_context("/p/engine_macros.asm:121:1 > MACRO ENGINE_DRAW_SHADOW:"),
-            ("/p/engine_macros.asm".to_string(), Some("MACRO ENGINE_DRAW_SHADOW".to_string()))
+            (
+                "/p/engine_macros.asm".to_string(),
+                Some("MACRO ENGINE_DRAW_SHADOW".to_string())
+            )
         );
         // A Windows drive letter must not be mistaken for line/column.
         assert_eq!(split_context("C:\\p\\a.asm").0, "C:\\p\\a.asm");
-        assert_eq!(split_context("a.asm:3:1 > MACRO OUTER: > b.asm:9:2 > MACRO INNER:").1.as_deref(), Some("MACRO INNER"));
+        assert_eq!(
+            split_context("a.asm:3:1 > MACRO OUTER: > b.asm:9:2 > MACRO INNER:")
+                .1
+                .as_deref(),
+            Some("MACRO INNER")
+        );
     }
 
     #[test]
@@ -804,21 +1044,38 @@ mod tests {
             files: vec!["a.asm".to_string(), "a.asm:5:1 > MACRO M:".to_string()],
             rows: vec![
                 SourceMapRow::flat(0, 1, 0x100, 2),
-                SourceMapRow { is_data: true, ..SourceMapRow::flat(0, 2, 0x102, 4) },
+                SourceMapRow {
+                    is_data: true,
+                    ..SourceMapRow::flat(0, 2, 0x102, 4)
+                },
                 SourceMapRow::flat(1, 1, 0x106, 1),
                 SourceMapRow::flat(1, 1, 0x107, 1),
-                SourceMapRow::flat(0, 3, 0x108, 0)
+                SourceMapRow::flat(0, 3, 0x108, 0),
             ]
         };
         let regions = build_regions(&syms(&[("first", 0x100), ("second", 0x106)]), 0x100, 0x110);
         let a = attribute(&map, &regions, &MacroIndex::default(), 0x100..0x110);
         assert_eq!((a.per_region[0].code, a.per_region[0].data), (2, 4));
         assert_eq!((a.per_region[1].code, a.per_region[1].data), (2, 0));
-        assert_eq!(a.by_file["a.asm"].bytes, 8, "expansions count towards their real file");
+        assert_eq!(
+            a.by_file["a.asm"].bytes, 8,
+            "expansions count towards their real file"
+        );
         let m = &a.by_macro["MACRO M"];
-        assert_eq!((m.bytes, m.runs), (2, 2), "a macro used twice is two instances");
-        assert_eq!(a.by_line[&("a.asm".to_string(), 1)].bytes, 4, "same line via macro and directly");
-        assert!(!a.by_line.contains_key(&("a.asm".to_string(), 3)), "an empty row emits nothing");
+        assert_eq!(
+            (m.bytes, m.runs),
+            (2, 2),
+            "a macro used twice is two instances"
+        );
+        assert_eq!(
+            a.by_line[&("a.asm".to_string(), 1)].bytes,
+            4,
+            "same line via macro and directly"
+        );
+        assert!(
+            !a.by_line.contains_key(&("a.asm".to_string(), 3)),
+            "an empty row emits nothing"
+        );
     }
 
     /// A crunched section's uncrunched inputs are rows too, but their bytes
@@ -831,11 +1088,14 @@ mod tests {
                 SourceMapRow::flat(0, 1, 0x100, 2),
                 // as seen inside a crunched section: runs at 0x4001 once
                 // decrunched, but sits at a scratch-buffer offset
-                SourceMapRow { physical: 0, ..SourceMapRow::flat(0, 2, 0x4001, 8) }
+                SourceMapRow {
+                    physical: 0,
+                    ..SourceMapRow::flat(0, 2, 0x4001, 8)
+                },
             ]
         };
-        let regions = build_regions(&syms(&[("x", 0x100)]), 0x100, 0x10a);
-        let a = attribute(&map, &regions, &MacroIndex::default(), 0x100..0x10a);
+        let regions = build_regions(&syms(&[("x", 0x100)]), 0x100, 0x10A);
+        let a = attribute(&map, &regions, &MacroIndex::default(), 0x100..0x10A);
         assert_eq!(a.by_file["a.asm"].bytes, 2);
         assert_eq!((a.unplaced_row_bytes, a.unowned_image_bytes), (8, 8));
     }
@@ -846,9 +1106,15 @@ mod tests {
             files: vec!["a.asm".to_string()],
             rows: vec![
                 // 16 raw bytes that were fed to a cruncher...
-                SourceMapRow { is_data: true, ..SourceMapRow::flat(0, 5, 0x100, 16) },
+                SourceMapRow {
+                    is_data: true,
+                    ..SourceMapRow::flat(0, 5, 0x100, 16)
+                },
                 // ...replaced by 4 crunched ones, charged to the directive.
-                SourceMapRow { is_data: true, ..SourceMapRow::flat(0, 3, 0x100, 4) }
+                SourceMapRow {
+                    is_data: true,
+                    ..SourceMapRow::flat(0, 3, 0x100, 4)
+                },
             ]
         };
         let regions = build_regions(&syms(&[("blob", 0x100)]), 0x100, 0x104);
@@ -878,8 +1144,20 @@ mod tests {
         let s = &sections[0];
         assert_eq!(s.address, 0x4000);
         assert_eq!(s.decrunched_bytes, 264);
-        let cost = |label: &str| s.regions.iter().find(|r| r.label == label).unwrap().crunched_cost.unwrap();
-        assert!(cost("noise") > cost("zeros") + 30, "noise {} vs zeros {}: {s:?}", cost("noise"), cost("zeros"));
+        let cost = |label: &str| {
+            s.regions
+                .iter()
+                .find(|r| r.label == label)
+                .unwrap()
+                .crunched_cost
+                .unwrap()
+        };
+        assert!(
+            cost("noise") > cost("zeros") + 30,
+            "noise {} vs zeros {}: {s:?}",
+            cost("noise"),
+            cost("zeros")
+        );
         assert!(s.regions_table.contains("noise"));
         assert!(s.lines_table.contains("lz.asm:4"), "{}", s.lines_table);
     }
@@ -897,6 +1175,9 @@ mod tests {
         let first = out.regions.iter().find(|r| r.label == "first").unwrap();
         assert_eq!(first.code_bytes, Some(7), "two CLEARs (3 bytes each) + ret");
         let macros = &out.listing.unwrap().macros_table;
-        assert!(macros.contains("MACRO CLEAR") && macros.contains("| 6 |"), "{macros}");
+        assert!(
+            macros.contains("MACRO CLEAR") && macros.contains("| 6 |"),
+            "{macros}"
+        );
     }
 }

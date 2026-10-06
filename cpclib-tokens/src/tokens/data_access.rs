@@ -419,11 +419,16 @@ macro_rules! data_access_impl_most_methods {
 
 #[allow(missing_docs)]
 impl DataAccessElem for DataAccess {
+    type Expr = Expr;
+
+    data_access_impl_most_methods!();
 
     fn kind(&self) -> OperandKind {
         match self {
             Self::IndexRegister16WithIndex(..) => OperandKind::Indexed,
-            Self::IndexRegister16(..) => OperandKind::IndexReg16(self.get_indexregister16().unwrap()),
+            Self::IndexRegister16(..) => {
+                OperandKind::IndexReg16(self.get_indexregister16().unwrap())
+            },
             Self::IndexRegister8(..) => OperandKind::IndexReg8,
             Self::Register16(reg, ..) => OperandKind::Reg16(*reg),
             Self::Register8(reg, ..) => OperandKind::Reg8(*reg),
@@ -438,9 +443,6 @@ impl DataAccessElem for DataAccess {
             Self::PortN(..) => OperandKind::PortN
         }
     }
-    type Expr = Expr;
-
-    data_access_impl_most_methods!();
 
     fn to_data_access_for_low_register(&self) -> Option<Self> {
         match self {

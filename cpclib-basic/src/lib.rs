@@ -330,15 +330,15 @@ impl BasicProgram {
                     && let Some(target_line) = value
                         .as_integer()
                         .and_then(|addr| address_to_line.get(&addr))
-                    {
-                        *token = BasicToken::Constant(
-                            BasicTokenNoPrefix::LineNumber,
-                            BasicValue::new_integer_by_bytes(
-                                (*target_line % 256) as u8,
-                                (*target_line / 256) as u8
-                            )
-                        );
-                    }
+                {
+                    *token = BasicToken::Constant(
+                        BasicTokenNoPrefix::LineNumber,
+                        BasicValue::new_integer_by_bytes(
+                            (*target_line % 256) as u8,
+                            (*target_line / 256) as u8
+                        )
+                    );
+                }
             }
         }
     }
@@ -512,9 +512,10 @@ fn patch_sigil_less_variable_kinds(
     for token in tokens {
         if let BasicToken::Variable(kind, name, _offset) = token
             && *kind == BasicTokenNoPrefix::VariableDefinition3
-                && let Some(idx) = letter_index(name) {
-                    *kind = default_kind[idx];
-                }
+            && let Some(idx) = letter_index(name)
+        {
+            *kind = default_kind[idx];
+        }
     }
 }
 
@@ -556,9 +557,10 @@ fn declared_letters(tail: &[BasicToken]) -> Vec<char> {
             break;
         }
         if let Some(c) = tok.char()
-            && (c.is_ascii_alphabetic() || c == '-') {
-                chars.push(c.to_ascii_uppercase());
-            }
+            && (c.is_ascii_alphabetic() || c == '-')
+        {
+            chars.push(c.to_ascii_uppercase());
+        }
     }
 
     let mut letters = Vec::new();
@@ -585,7 +587,9 @@ fn declared_letters(tail: &[BasicToken]) -> Vec<char> {
 /// `name`'s first letter as a 0-25 index, if it has one.
 fn letter_index(name: &str) -> Option<usize> {
     let first = name.chars().next()?.to_ascii_uppercase();
-    first.is_ascii_uppercase().then(|| first as usize - 'A' as usize)
+    first
+        .is_ascii_uppercase()
+        .then(|| first as usize - 'A' as usize)
 }
 
 #[allow(clippy::let_unit_value)]

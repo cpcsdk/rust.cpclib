@@ -109,7 +109,11 @@ struct Slot<'t> {
 /// two instructions are not directly adjacent and no window may span them.
 fn gap_is_only_separators(gap: &str) -> bool {
     gap.lines().all(|line| {
-        line.split(';').next().unwrap_or("").chars().all(|c| c.is_whitespace() || c == ':')
+        line.split(';')
+            .next()
+            .unwrap_or("")
+            .chars()
+            .all(|c| c.is_whitespace() || c == ':')
     })
 }
 
@@ -129,7 +133,9 @@ struct Candidate {
 
 pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
     if input.start_line == 0 || input.end_line == 0 {
-        return Err(ToolError::invalid_input("start_line/end_line are 1-based, not 0"));
+        return Err(ToolError::invalid_input(
+            "start_line/end_line are 1-based, not 0"
+        ));
     }
     if input.start_line > input.end_line {
         return Err(ToolError::invalid_input("start_line must be <= end_line"));
@@ -237,10 +243,11 @@ pub(crate) fn search_reorderings(input: SearchReorderingsInput) -> ToolResult {
     // numbers can be off by whatever a project's own link step adds.
     let baseline_bytes = assemble_from(&text, &input.path, &include_dirs, &defines)
         .map_err(|e| ToolError::new(crate::error::ToolErrorKind::Assembler, e))?;
-    let baseline_size = match compress_with_timeout(input.cruncher.clone(), baseline_bytes, CRUNCHER_TIMEOUT) {
-        Ok(compressed) => compressed.stream.len() as i64,
-        Err(e) => return Err(ToolError::new(crate::error::ToolErrorKind::InvalidInput, e))
-    };
+    let baseline_size =
+        match compress_with_timeout(input.cruncher.clone(), baseline_bytes, CRUNCHER_TIMEOUT) {
+            Ok(compressed) => compressed.stream.len() as i64,
+            Err(e) => return Err(ToolError::new(crate::error::ToolErrorKind::InvalidInput, e))
+        };
 
     let mut results: Vec<Value> = candidates
         .iter()
@@ -309,10 +316,11 @@ fn build_candidate(
         candidate_text.replace_range(slot.start..slot.end, replacement);
     }
 
-    let outcome = assemble_from(&candidate_text, source_path, include_dirs, defines).and_then(|bytes| {
-        compress_with_timeout(cruncher.to_string(), bytes, CRUNCHER_TIMEOUT)
-            .map(|c| c.stream.len() as u64)
-    });
+    let outcome =
+        assemble_from(&candidate_text, source_path, include_dirs, defines).and_then(|bytes| {
+            compress_with_timeout(cruncher.to_string(), bytes, CRUNCHER_TIMEOUT)
+                .map(|c| c.stream.len() as u64)
+        });
     let (crunched_size, error) = match outcome {
         Ok(size) => (Some(size), None),
         Err(e) => (None, Some(e))
@@ -334,7 +342,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = reorder_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Search a line range for crunch-friendly instruction reorderings: \
+    #[tool(
+        description = "Search a line range for crunch-friendly instruction reorderings: \
                            finds every legal permutation of small adjacent-instruction windows \
                            (2-4 instructions, register/flag-dependency-safe - never reorders \
                            across a real data dependency, and never across or including a \
@@ -350,7 +359,8 @@ impl McpServer {
                            in isolation) - they can differ slightly from a real project's final \
                            linked size when the chosen cruncher adds its own extra bytes at link \
                            time (e.g. ZX0-backward's overlap delta bytes); treat the ranking \
-                           between candidates as reliable, not the absolute numbers.")]
+                           between candidates as reliable, not the absolute numbers."
+    )]
     async fn search_reorderings(
         &self,
         Parameters(input): Parameters<SearchReorderingsInput>
@@ -381,7 +391,10 @@ mod tests {
         })
         .expect("three independent instructions should search cleanly");
 
-        assert!(result["baseline_crunched_size"].as_i64().unwrap() > 0, "{result:#}");
+        assert!(
+            result["baseline_crunched_size"].as_i64().unwrap() > 0,
+            "{result:#}"
+        );
         let found = result["legal_reorderings_found"].as_u64().unwrap();
         // 2-instruction windows at (2,3) and (3,4), each with 1 legal swap,
         // plus the 3-instruction window (2,3,4) with 5 legal permutations
@@ -472,12 +485,15 @@ mod tests {
         assert!(!results.is_empty(), "{result:#}");
         assert!(
             results.iter().any(|r| {
-                r["before"] == json!(["ld a,1", "ld b,2"]) && r["after"] == json!(["ld b,2", "ld a,1"])
+                r["before"] == json!(["ld a,1", "ld b,2"])
+                    && r["after"] == json!(["ld b,2", "ld a,1"])
             }),
             "the same-line pair must be found and swapped in place: {result:#}"
         );
         assert!(
-            results.iter().any(|r| r["before"] == json!(["ld b,2", "ld c,3"])),
+            results
+                .iter()
+                .any(|r| r["before"] == json!(["ld b,2", "ld c,3"])),
             "a window spanning a line break and a comment must be found: {result:#}"
         );
     }

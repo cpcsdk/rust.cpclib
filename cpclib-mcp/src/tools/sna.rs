@@ -40,7 +40,8 @@ pub struct SnaPathInput {
 /// Version, memory size, and the key Z80 registers of a `.sna` snapshot.
 /// Read-only.
 pub(crate) fn sna_inspect(input: SnaPathInput) -> ToolResult {
-    let snapshot = Snapshot::load(&input.path).map_err(|e| ToolError::new(ToolErrorKind::Snapshot, e))?;
+    let snapshot =
+        Snapshot::load(&input.path).map_err(|e| ToolError::new(ToolErrorKind::Snapshot, e))?;
     let mut registers = Map::new();
     for (name, flag) in KEY_REGISTERS {
         registers.insert(
@@ -70,7 +71,8 @@ pub struct SnaPatchMemoryInput {
 /// **MUTATING** (of `out_path`, never `path`): loads a snapshot, patches
 /// memory starting at `address`, and saves the result to `out_path`.
 pub(crate) fn sna_patch_memory(input: SnaPatchMemoryInput) -> ToolResult {
-    let mut snapshot = Snapshot::load(&input.path).map_err(|e| ToolError::new(ToolErrorKind::Snapshot, e))?;
+    let mut snapshot =
+        Snapshot::load(&input.path).map_err(|e| ToolError::new(ToolErrorKind::Snapshot, e))?;
     let data = base64::engine::general_purpose::STANDARD
         .decode(&input.data_base64)
         .map_err(|e| ToolError::invalid_input(format!("data_base64 is not valid base64: {e}")))?;
@@ -106,7 +108,8 @@ pub struct SnaCreateInput {
 /// **MUTATING** (of `out_path`): creates a fresh 6128 snapshot with the
 /// given files loaded into memory, and saves it to `out_path`.
 pub(crate) fn sna_create(input: SnaCreateInput) -> ToolResult {
-    let mut snapshot = Snapshot::new_6128().map_err(|e| ToolError::new(ToolErrorKind::Snapshot, e))?;
+    let mut snapshot =
+        Snapshot::new_6128().map_err(|e| ToolError::new(ToolErrorKind::Snapshot, e))?;
     for file in &input.files {
         let data = fs_err::read(&file.path)
             .map_err(|e| ToolError::io(format!("cannot read {}: {e}", file.path)))?;
@@ -132,8 +135,10 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = sna_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Inspect a .sna snapshot's version, memory size, and key Z80 \
-                           registers. Read-only.")]
+    #[tool(
+        description = "Inspect a .sna snapshot's version, memory size, and key Z80 \
+                           registers. Read-only."
+    )]
     async fn sna_inspect(
         &self,
         Parameters(input): Parameters<SnaPathInput>
@@ -141,8 +146,10 @@ impl McpServer {
         ok_or_tool_error(sna_inspect(input))
     }
 
-    #[tool(description = "MUTATING (of out_path, never the input path): patches a snapshot's \
-                           memory and saves the result to out_path.")]
+    #[tool(
+        description = "MUTATING (of out_path, never the input path): patches a snapshot's \
+                           memory and saves the result to out_path."
+    )]
     async fn sna_patch_memory(
         &self,
         Parameters(input): Parameters<SnaPatchMemoryInput>
@@ -150,8 +157,10 @@ impl McpServer {
         ok_or_tool_error(sna_patch_memory(input))
     }
 
-    #[tool(description = "MUTATING (of out_path): creates a fresh 6128 snapshot with the given \
-                           files loaded into memory.")]
+    #[tool(
+        description = "MUTATING (of out_path): creates a fresh 6128 snapshot with the given \
+                           files loaded into memory."
+    )]
     async fn sna_create(
         &self,
         Parameters(input): Parameters<SnaCreateInput>

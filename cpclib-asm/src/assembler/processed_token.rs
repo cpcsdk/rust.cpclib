@@ -9,9 +9,9 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::smol_str::SmolStr;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosFileType;
 use cpclib_tokens::symbols::{SourceLocation, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
@@ -20,12 +20,11 @@ use cpclib_tokens::{
 };
 use ouroboros::*;
 
-use super::AssemblerWarning;
-use super::{ActiveExpansion, ActiveFrame, IncludeFrame, include_chain_note};
 use super::control::ControlOutputStore;
 use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
+use super::{ActiveExpansion, ActiveFrame, AssemblerWarning, IncludeFrame, include_chain_note};
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Compressor;
 use crate::parser::context::ExpansionColumnMap;
@@ -1084,25 +1083,26 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             // Tokenize with the same parsing parameters and context when
             // possible. Shared by every "cache miss" branch below.
             let parse_expansion = |source: Option<&SourceLocation>,
-                                    is_macro: bool,
-                                    code: Box<str>,
-                                    columns: Option<ExpansionColumnMap>|
+                                   is_macro: bool,
+                                   code: Box<str>,
+                                   columns: Option<ExpansionColumnMap>|
              -> Result<LocatedListing, Box<AssemblerError>> {
                 match self.token.possible_span() {
                     Some(span) => {
                         use crate::ParserContextBuilder;
-                        let mut ctx_builder = ParserContextBuilder::default() // nothing is specified
-                            //                    from(span.state.clone())
-                            .set_state(span.state.state)
-                            .set_options(span.state.options.clone())
-                            .set_context_name(format!(
-                                "{}:{}:{} > {} {}:",
-                                source.map(|s| s.fname()).unwrap_or_else(|| "???"),
-                                source.map(|s| s.line()).unwrap_or(0),
-                                source.map(|s| s.column()).unwrap_or(0),
-                                if is_macro { "MACRO" } else { "STRUCT" },
-                                name,
-                            ));
+                        let mut ctx_builder =
+                            ParserContextBuilder::default() // nothing is specified
+                                //                    from(span.state.clone())
+                                .set_state(span.state.state)
+                                .set_options(span.state.options.clone())
+                                .set_context_name(format!(
+                                    "{}:{}:{} > {} {}:",
+                                    source.map(|s| s.fname()).unwrap_or_else(|| "???"),
+                                    source.map(|s| s.line()).unwrap_or(0),
+                                    source.map(|s| s.column()).unwrap_or(0),
+                                    if is_macro { "MACRO" } else { "STRUCT" },
+                                    name,
+                                ));
                         if let Some(columns) = columns {
                             ctx_builder = ctx_builder.set_expansion_columns(columns);
                         }
@@ -1149,8 +1149,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                                     expanded_specials,
                                     capacity
                                 )?;
-                                let listing =
-                                    parse_expansion(source, true, code, Some(columns))?;
+                                let listing = parse_expansion(source, true, code, Some(columns))?;
                                 let listing = std::sync::Arc::new(listing);
                                 env.macro_expansion_cache
                                     .write()
@@ -1264,9 +1263,7 @@ where
         // Always work with Arc<RwLock<&mut Env>>
         let mut really_does_the_job = |possible_span: Option<&Z80Span>| {
             let deferred = self.token.defer_listing_output();
-            if !deferred
-                && let Some(outer_token) = self.token.as_located_token()
-            {
+            if !deferred && let Some(outer_token) = self.token.as_located_token() {
                 env.handle_output_trigger(outer_token);
             }
 
@@ -1601,12 +1598,13 @@ where
                         let call_site = self.token.possible_span().cloned();
                         let pushed_expansion = call_site.is_some();
                         if let Some(call_site) = &call_site {
-                            env.active_frames.push(ActiveFrame::Expansion(ActiveExpansion {
-                                listing: state.listing_arc(),
-                                name: name.into(),
-                                location: location.clone(),
-                                call_site: call_site.clone()
-                            }));
+                            env.active_frames
+                                .push(ActiveFrame::Expansion(ActiveExpansion {
+                                    listing: state.listing_arc(),
+                                    name: name.into(),
+                                    location: location.clone(),
+                                    call_site: call_site.clone()
+                                }));
                         }
 
                         // save the number of prints to patch the ones added by the macro
@@ -1754,8 +1752,7 @@ where
                                 result?;
                             }
 
-                            let this_size =
-                                env.logical_output_address().wrapping_sub(start_output);
+                            let this_size = env.logical_output_address().wrapping_sub(start_output);
                             max_size = max_size.max(this_size);
                         }
 
@@ -1807,7 +1804,7 @@ where
                                 AssemblerError::AlreadyRenderedError(
                                     self.token.warning_message().to_owned()
                                 )
-                            }
+                            },
                         };
                         env.add_warning(warning);
                         token.visited(env)
@@ -1833,9 +1830,7 @@ where
                 env.update_dollar();
             }
 
-            if deferred
-                && let Some(outer_token) = self.token.as_located_token()
-            {
+            if deferred && let Some(outer_token) = self.token.as_located_token() {
                 env.handle_output_trigger(outer_token);
             }
             Ok(())

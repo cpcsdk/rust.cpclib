@@ -13,7 +13,7 @@ use crate::ga::{Ink, InkComponent, InkComponentQuantity, Pen};
 use crate::image::Mode;
 
 /// The palette maps one color for each Pen
-pub struct Palette< C: AmstradColor > {
+pub struct Palette<C: AmstradColor> {
     /// Values for the palette. Some items may be absent
     values: HashMap<Pen, C>
 }
@@ -53,11 +53,9 @@ impl Default for Palette<Ink> {
     /// flagging that provenance rather than presenting it as re-confirmed.
     fn default() -> Self {
         let mut pal = Self::new();
-        for (p, i) in [
-            1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 20, 22, 1
-        ]
-        .into_iter()
-        .enumerate()
+        for (p, i) in [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 20, 22, 1]
+            .into_iter()
+            .enumerate()
         {
             pal.set(Pen::from(p as u8), Ink::from(i));
         }
@@ -85,7 +83,6 @@ impl From<Palette<Ink>> for Palette<AsicColor> {
         Self { values: map }
     }
 }
-
 
 // /
 // impl<T> From<Vec<T>> for Palette
@@ -202,7 +199,6 @@ where P: Into<Pen>
     }
 }
 
-
 impl Palette<Ink> {
     /// Returns an array of gate array values
     /// Crash when pen is not set up
@@ -235,8 +231,6 @@ impl Palette<Ink> {
         self.get_pen_for_color(expected.into())
     }
 
-
-
     pub fn add_novel_inks_except_in_border(&mut self, inks: &[Ink]) -> (usize, usize) {
         self.add_novel_colors_except_in_border(inks)
     }
@@ -248,7 +242,6 @@ impl Palette<Ink> {
     pub fn contains_ink(&self, expected: Ink) -> bool {
         self.contains_color(expected)
     }
-
 
     /// Decrease all the values of a given component
     pub fn decrease_component(&mut self, c: InkComponent) {
@@ -361,7 +354,6 @@ impl<C: AmstradColor> Palette<C> {
         self.nb_different_colors()
     }
 
-
     /// Verifies if the palette contains the required pen
     pub fn contains_pen(&self, pen: Pen) -> bool {
         self.values.contains_key(&pen)
@@ -386,7 +378,6 @@ impl<C: AmstradColor> Palette<C> {
         }
         None
     }
-
 
     /// Add the colors if not present in empty slots of the palette as soon as it is possible. Returns the number of colors added and the number of colors impossible to add because of the lack of space.
     pub fn add_novel_colors_except_in_border(&mut self, colors: &[C]) -> (usize, usize) {
@@ -527,7 +518,6 @@ impl<C: AmstradColor> Palette<C> {
         p
     }
 
-
     /// This palette, as something that knows which machine it is for.
     pub fn into_any(self) -> AnyPalette {
         C::into_any_palette(self)
@@ -536,7 +526,6 @@ impl<C: AmstradColor> Palette<C> {
     pub fn nb_pens_used(&self) -> usize {
         self.values.len()
     }
-
 
     pub fn to_ansi_string(&self) -> String {
         self.values
@@ -549,11 +538,10 @@ impl<C: AmstradColor> Palette<C> {
             .join("\n")
     }
 
-      pub fn is_plus(&self) -> bool {
+    pub fn is_plus(&self) -> bool {
         C::is_plus()
     }
 }
-
 
 impl From<&Palette<Ink>> for Vec<u8> {
     fn from(val: &Palette<Ink>) -> Self {
@@ -657,8 +645,6 @@ impl<C: AmstradColor> LockablePalette<C> {
     }
 }
 
-
-
 /// A palette whose machine is only known at runtime.
 ///
 /// The conversion pipeline is monomorphised - `Palette<Ink>` for the Gate
@@ -684,9 +670,7 @@ impl AnyLockablePalette {
 
     pub fn as_palette_mut(&mut self) -> Option<AnyPaletteRefMut<'_>> {
         match self {
-            AnyLockablePalette::GateArray(p) => {
-                p.as_palette_mut().map(AnyPaletteRefMut::GateArray)
-            },
+            AnyLockablePalette::GateArray(p) => p.as_palette_mut().map(AnyPaletteRefMut::GateArray),
             AnyLockablePalette::Asic(p) => p.as_palette_mut().map(AnyPaletteRefMut::Asic)
         }
     }

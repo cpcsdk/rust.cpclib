@@ -243,16 +243,19 @@ impl ListingOutput {
         source_line_raw: Option<&str>,
         source_line_expanded: Option<&str>
     ) -> String {
-        format_line_with_template_for(&self.format, LineTemplateFields {
-            bytes_per_line: self.bytes_per_line(),
-            file_index: self.current_file_index,
-            logical_address,
-            physical_address_repr,
-            bytes,
-            line_number,
-            source_line_raw,
-            source_line_expanded
-        })
+        format_line_with_template_for(
+            &self.format,
+            LineTemplateFields {
+                bytes_per_line: self.bytes_per_line(),
+                file_index: self.current_file_index,
+                logical_address,
+                physical_address_repr,
+                bytes,
+                line_number,
+                source_line_raw,
+                source_line_expanded
+            }
+        )
     }
 
     fn hex_byte(&self, b: u8) -> String {
@@ -1379,9 +1382,12 @@ impl ListingOutputTrigger {
                 height,
                 content: _
             } => Some((*width * *height) as _),
-            ExprResult::Range { start, end, inclusive, step } => {
-                Some(ExprResult::range_len(*start, *end, *inclusive, *step) as _)
-            }
+            ExprResult::Range {
+                start,
+                end,
+                inclusive,
+                step
+            } => Some(ExprResult::range_len(*start, *end, *inclusive, *step) as _)
         }
     }
 

@@ -44,7 +44,7 @@ fn consume_integer_argument(iter: &mut Vec<(u16, &BasicToken)>) -> Result<u8, Ca
                     line,
                     "Expected integer argument".to_string()
                 ))
-            }
+            },
         }
     }
     else {
@@ -114,9 +114,7 @@ fn consume_ink_arguments(
 }
 
 /// Consume LOCATE arguments: column and row
-fn consume_locate_arguments(
-    iter: &mut Vec<(u16, &BasicToken)>
-) -> Result<(u8, u8), CatArtError> {
+fn consume_locate_arguments(iter: &mut Vec<(u16, &BasicToken)>) -> Result<(u8, u8), CatArtError> {
     let col = consume_integer_argument(iter)?;
     consume_comma(iter)?;
     let row = consume_integer_argument(iter)?;

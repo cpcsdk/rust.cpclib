@@ -24,7 +24,13 @@ fn simple_opcode_cache() -> &'static HashMap<&'static str, Token> {
     static CACHE: OnceLock<HashMap<&'static str, Token>> = OnceLock::new();
     CACHE.get_or_init(|| {
         let mut map = HashMap::new();
-        for tab in [&TABINSTR, &TABINSTRCB, &TABINSTRED, &TABINSTRDD, &TABINSTRFD] {
+        for tab in [
+            &TABINSTR,
+            &TABINSTRCB,
+            &TABINSTRED,
+            &TABINSTRDD,
+            &TABINSTRFD
+        ] {
             for &representation in tab.iter() {
                 if !representation.is_empty()
                     && !representation.contains("nn")

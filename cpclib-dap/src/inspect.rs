@@ -518,7 +518,10 @@ fn looks_like_an_address_operand(text: &str, value: u32) -> bool {
             .unwrap_or("")
             .trim()
             .to_ascii_uppercase();
-        return matches!(destination.as_str(), "HL" | "DE" | "BC" | "IX" | "IY" | "SP" | "AF");
+        return matches!(
+            destination.as_str(),
+            "HL" | "DE" | "BC" | "IX" | "IY" | "SP" | "AF"
+        );
     }
     false
 }
@@ -613,7 +616,7 @@ pub fn validate_crtc(regs: &[u8]) -> Vec<CrtcWarning> {
     }
     let r0 = u32::from(regs[0]);
     let r2 = u32::from(regs[2]);
-    let r3_low = u32::from(regs[3]) & 0x0f;
+    let r3_low = u32::from(regs[3]) & 0x0F;
 
     // CRTC type 2 loses horizontal sync unless the sync position plus the
     // HSYNC width stays *inside* the line total - the safe relationship is
@@ -731,7 +734,12 @@ pub fn crtc_screen_start_address(r12: u8, r13: u8) -> usize {
 /// `R9 = 0` (one raster line per row) is unusual but real.
 pub fn crtc_screen_defaults(regs: &[u8; 18]) -> (usize, usize) {
     let width = (regs[1] as usize) * 2;
-    let width = if width == 0 { DEFAULT_SCREEN_WIDTH } else { width };
+    let width = if width == 0 {
+        DEFAULT_SCREEN_WIDTH
+    }
+    else {
+        width
+    };
     let lines_per_char_row = regs[9] as usize + 1;
     (width, lines_per_char_row)
 }
@@ -795,7 +803,10 @@ pub fn parse_screen_view_overrides(arguments: &[&str]) -> ScreenViewOverrides {
         height: number(arguments, 2).map(|a| a as usize),
         mode: number(arguments, 3).map(|a| a as u8),
         row_height: number(arguments, 4).map(|a| a as usize),
-        palette: arguments.get(5).map(|a| parse_palette_override(a)).unwrap_or_default(),
+        palette: arguments
+            .get(5)
+            .map(|a| parse_palette_override(a))
+            .unwrap_or_default(),
         encoding: number(arguments, 6).map(|a| a as u8)
     }
 }
@@ -810,7 +821,10 @@ pub fn parse_screen_view_overrides(arguments: &[&str]) -> ScreenViewOverrides {
 /// address math pinned to the live CRTC while only a cosmetic value moved
 /// missed the entire feature. Unset or an explicit `0` both mean "use the
 /// live CRTC value".
-pub fn resolve_char_row_height(row_height_override: Option<usize>, live_lines_per_char_row: usize) -> usize {
+pub fn resolve_char_row_height(
+    row_height_override: Option<usize>,
+    live_lines_per_char_row: usize
+) -> usize {
     match row_height_override {
         Some(n) if n > 0 => n,
         _ => live_lines_per_char_row
@@ -994,8 +1008,15 @@ pub fn render_screen_view(
         // at all for this encoding, only the panel's own client-side
         // layout.
         ScreenEncoding::Cpc => {
-            ColorMatrix::from_linear_memory(memory, address, bytes_width, pixel_height, mode, palette)
-        }
+            ColorMatrix::from_linear_memory(
+                memory,
+                address,
+                bytes_width,
+                pixel_height,
+                mode,
+                palette
+            )
+        },
     };
 
     // The CPC's own pixel aspect ratio, reported live as missing from the
@@ -1117,7 +1138,7 @@ pub fn screen_view_event_and_receipt(
                 },
                 None => Vec::new()
             }
-        }
+        },
     }
 }
 
@@ -1444,7 +1465,13 @@ mod tests {
         let memory = &full_memory[..0x10000.min(full_memory.len())];
         let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
             cpclib_image::image::ColorMatrix::from_screen_at(
-                memory, address, 80, 400, 8, mode.into(), &palette
+                memory,
+                address,
+                80,
+                400,
+                8,
+                mode.into(),
+                &palette
             );
 
         let lit_pixels_in = |y_range: std::ops::Range<u32>| {
@@ -1458,7 +1485,10 @@ mod tests {
         };
         let original = lit_pixels_in(0..190);
         let wrapped_repeat = lit_pixels_in(210..400);
-        assert!(original > 2000, "only {original} lit pixels in the original text");
+        assert!(
+            original > 2000,
+            "only {original} lit pixels in the original text"
+        );
         assert!(
             wrapped_repeat > 2000,
             "only {wrapped_repeat} lit pixels past the wrap - reading blank/wrong memory?"
@@ -1485,14 +1515,36 @@ mod tests {
         // read at the full 16-bit address boundary, not within any 16K
         // page).
         let memory = vec![0u8; 0x10000];
-        let body = render_screen_view(0xC110, 80, 200, 1, &palette, &memory, 8, &[], ScreenEncoding::Screen).unwrap();
+        let body = render_screen_view(
+            0xC110,
+            80,
+            200,
+            1,
+            &palette,
+            &memory,
+            8,
+            &[],
+            ScreenEncoding::Screen
+        )
+        .unwrap();
         assert_eq!(body["height"], 200);
 
         // A user enlarging the interactive panel's own height control past
         // the standard screen - exactly how the wrap-around bugs in this
         // feature's own history were actually found - must not be silently
         // clamped back down to 200.
-        let body = render_screen_view(0xC000, 80, 400, 1, &palette, &memory, 8, &[], ScreenEncoding::Screen).unwrap();
+        let body = render_screen_view(
+            0xC000,
+            80,
+            400,
+            1,
+            &palette,
+            &memory,
+            8,
+            &[],
+            ScreenEncoding::Screen
+        )
+        .unwrap();
         assert_eq!(body["height"], 400);
     }
 
@@ -1519,7 +1571,14 @@ mod tests {
         ];
         for (mode, bytes_width, expected_png_width, expected_png_height) in cases {
             let body = render_screen_view(
-                0xC000, bytes_width, 10, mode, &palette, &memory, 8, &[],
+                0xC000,
+                bytes_width,
+                10,
+                mode,
+                &palette,
+                &memory,
+                8,
+                &[],
                 ScreenEncoding::Screen
             )
             .unwrap();
@@ -1586,9 +1645,21 @@ mod tests {
     /// way, and this is the one thing that actually has to change for that.
     #[test]
     fn resolve_char_row_height_overrides_the_address_math_itself() {
-        assert_eq!(resolve_char_row_height(None, 8), 8, "unset: live CRTC value");
-        assert_eq!(resolve_char_row_height(Some(0), 8), 8, "explicit 0: also the live CRTC value");
-        assert_eq!(resolve_char_row_height(Some(16), 8), 16, "explicit 16: overrides it");
+        assert_eq!(
+            resolve_char_row_height(None, 8),
+            8,
+            "unset: live CRTC value"
+        );
+        assert_eq!(
+            resolve_char_row_height(Some(0), 8),
+            8,
+            "explicit 0: also the live CRTC value"
+        );
+        assert_eq!(
+            resolve_char_row_height(Some(16), 8),
+            16,
+            "explicit 16: overrides it"
+        );
     }
 
     /// End-to-end rendering check against a real snapshot and a real
@@ -1621,7 +1692,13 @@ mod tests {
         let memory = &full_memory[..0x10000.min(full_memory.len())];
         let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
             cpclib_image::image::ColorMatrix::from_screen_at(
-                memory, address, 80, 200, 8, mode.into(), &palette
+                memory,
+                address,
+                80,
+                200,
+                8,
+                mode.into(),
+                &palette
             );
 
         // Pen 0 is the background; text is lit in other pens. A correctly
@@ -1667,7 +1744,18 @@ mod tests {
         palette.set(1u8, Ink::WHITE);
         let memory = vec![0u8; 0x10000];
 
-        let body = render_screen_view(0xC000, 2, 2, 1, &palette, &memory, 8, &[], ScreenEncoding::Screen).unwrap();
+        let body = render_screen_view(
+            0xC000,
+            2,
+            2,
+            1,
+            &palette,
+            &memory,
+            8,
+            &[],
+            ScreenEncoding::Screen
+        )
+        .unwrap();
         let colours: Vec<&str> = body["palette"]
             .as_array()
             .unwrap()
@@ -1700,8 +1788,18 @@ mod tests {
         let memory = vec![0u8; 0x10000];
 
         let overrides = [None, Some(Ink::WHITE)];
-        let body =
-            render_screen_view(0xC000, 2, 2, 1, &palette, &memory, 8, &overrides, ScreenEncoding::Screen).unwrap();
+        let body = render_screen_view(
+            0xC000,
+            2,
+            2,
+            1,
+            &palette,
+            &memory,
+            8,
+            &overrides,
+            ScreenEncoding::Screen
+        )
+        .unwrap();
         let colours: Vec<&str> = body["palette"]
             .as_array()
             .unwrap()
@@ -1726,7 +1824,15 @@ mod tests {
         memory[0x0000] = 0xFF; // only reachable by wrapping past 0xFFFF
 
         let body = render_screen_view(
-            0xFFFF, 1, 2, 2, &palette, &memory, 8, &[], ScreenEncoding::Cpc
+            0xFFFF,
+            1,
+            2,
+            2,
+            &palette,
+            &memory,
+            8,
+            &[],
+            ScreenEncoding::Cpc
         )
         .unwrap();
         assert_eq!(body["encoding"], 1);
@@ -1761,7 +1867,7 @@ mod tests {
         let mut regs = [0u8; 18];
         regs[0] = 63;
         regs[2] = 60;
-        regs[3] = 0x8c;
+        regs[3] = 0x8C;
         let warnings = validate_crtc(&regs);
         let sync = warnings
             .iter()
@@ -1781,9 +1887,7 @@ mod tests {
         regs[3] = 0x00;
         let warnings = validate_crtc(&regs);
         assert!(
-            !warnings
-                .iter()
-                .any(|w| w.message.contains("64 NOPs")),
+            !warnings.iter().any(|w| w.message.contains("64 NOPs")),
             "{warnings:?}"
         );
     }
@@ -1812,7 +1916,8 @@ mod tests {
         let mut sna = Snapshot::default();
         sna.set_value(SnapshotFlag::CRTC_REG(Some(0)), 63).unwrap();
         sna.set_value(SnapshotFlag::CRTC_REG(Some(2)), 60).unwrap();
-        sna.set_value(SnapshotFlag::CRTC_REG(Some(3)), 0x8c).unwrap();
+        sna.set_value(SnapshotFlag::CRTC_REG(Some(3)), 0x8C)
+            .unwrap();
 
         let crtc = chip_variables(CRTC_REFERENCE, &sna).unwrap();
         let warning = crtc
@@ -1820,14 +1925,20 @@ mod tests {
             .find(|v| v["name"].as_str().unwrap_or_default().contains("R2"))
             .unwrap_or_else(|| panic!("no warning row: {crtc:?}"));
         assert!(
-            warning["value"].as_str().unwrap().contains("horizontal sync"),
+            warning["value"]
+                .as_str()
+                .unwrap()
+                .contains("horizontal sync"),
             "{warning:?}"
         );
         // Still first, ahead of the registers it is about - the reason to
         // look is the first thing read, not the last.
         assert!(
             crtc.iter().position(|v| v == warning).unwrap()
-                < crtc.iter().position(|v| v["name"] == json!("selected")).unwrap(),
+                < crtc
+                    .iter()
+                    .position(|v| v["name"] == json!("selected"))
+                    .unwrap(),
             "{crtc:?}"
         );
     }
@@ -1839,7 +1950,7 @@ mod tests {
         // R2 + (R3 & 0x0f) = 50 + 12 = 62, strictly less than R0 (63): the
         // safe relationship holds, so nothing is raised.
         regs[2] = 50;
-        regs[3] = 0x8c;
+        regs[3] = 0x8C;
         assert!(validate_crtc(&regs).is_empty());
     }
 
@@ -1977,16 +2088,18 @@ mod tests {
     /// two unrelated files exactly the way the reported bug did.
     #[test]
     fn a_disassembly_listing_follows_the_exact_bank_not_just_the_page() {
-        let row = |file: u16, line: u32, physical: u32, len: u16| SourceMapRow {
-            file,
-            line,
-            logical: 0x42A8,
-            physical,
-            page: 1,
-            column: 1,
-            column_end: 1,
-            len,
-            is_data: false
+        let row = |file: u16, line: u32, physical: u32, len: u16| {
+            SourceMapRow {
+                file,
+                line,
+                logical: 0x42A8,
+                physical,
+                page: 1,
+                column: 1,
+                column_end: 1,
+                len,
+                is_data: false
+            }
         };
         let map = SourceMap::from_raw(&RawSourceMap {
             files: vec!["spectral_sprites.asm".into(), "animate.asm".into()],

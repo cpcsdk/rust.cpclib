@@ -316,15 +316,15 @@ pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String>
             successors::Policy::TIMING,
             jump::is_conditional(last.mnemonic_arg1()),
             || {
-            if mnemonic == Some(Mnemonic::Djnz) {
-                // `DJNZ`'s sole operand is its target, never a flag test; the
-                // table already knows it is unconditional-in-form but two-way
-                // in fact, so the flag it gets here is irrelevant.
-                return djnz_target(last).map(|label| (true, resolve_successor(label, block.end)));
-            }
-                jump_condition_and_target(last).map(|(conditional, label)| {
-                    (conditional, resolve_successor(label, block.end))
-                })
+                if mnemonic == Some(Mnemonic::Djnz) {
+                    // `DJNZ`'s sole operand is its target, never a flag test; the
+                    // table already knows it is unconditional-in-form but two-way
+                    // in fact, so the flag it gets here is irrelevant.
+                    return djnz_target(last)
+                        .map(|label| (true, resolve_successor(label, block.end)));
+                }
+                jump_condition_and_target(last)
+                    .map(|(conditional, label)| (conditional, resolve_successor(label, block.end)))
             }
         );
 

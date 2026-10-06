@@ -23,7 +23,9 @@ fn a_buffer_of_the_right_size_decodes() {
 #[test]
 fn a_truncated_buffer_is_refused_with_a_reason() {
     let bytes = [0u8; OcpPalette::BYTE_SIZE - 1];
-    let err = OcpPalette::from_buffer(&bytes).err().expect("truncated buffer must be refused");
+    let err = OcpPalette::from_buffer(&bytes)
+        .err()
+        .expect("truncated buffer must be refused");
     assert!(
         err.contains(&(OcpPalette::BYTE_SIZE - 1).to_string()),
         "error {err:?} should mention the actual length"
@@ -35,7 +37,9 @@ fn a_truncated_buffer_is_refused_with_a_reason() {
 #[test]
 fn an_oversized_buffer_is_refused_with_a_reason() {
     let bytes = [0u8; OcpPalette::BYTE_SIZE + 1];
-    let err = OcpPalette::from_buffer(&bytes).err().expect("oversized buffer must be refused");
+    let err = OcpPalette::from_buffer(&bytes)
+        .err()
+        .expect("oversized buffer must be refused");
     assert!(
         err.contains(&(OcpPalette::BYTE_SIZE + 1).to_string()),
         "error {err:?} should mention the actual length"

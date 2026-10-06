@@ -56,12 +56,13 @@ impl BasicAnalyzer {
             .filter_map(|i| document.line(i))
             .find_map(|l| leading_number(&l));
         if let Some(next_num) = next_num
-            && candidate >= next_num {
-                candidate = prev_num + (next_num - prev_num) / 2;
-                if candidate <= prev_num {
-                    return None; // no room between the two lines
-                }
+            && candidate >= next_num
+        {
+            candidate = prev_num + (next_num - prev_num) / 2;
+            if candidate <= prev_num {
+                return None; // no room between the two lines
             }
+        }
 
         Some(vec![TextEdit {
             range: Range {

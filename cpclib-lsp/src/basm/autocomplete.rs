@@ -1147,8 +1147,14 @@ impl AssemblyAnalyzer {
                         .unwrap_or_else(|| raw.to_string());
                     syms.push((display, "label".to_string()));
                 },
-                super::token::Definition::Equ { name, value_display }
-                | super::token::Definition::Assign { name, value_display } => {
+                super::token::Definition::Equ {
+                    name,
+                    value_display
+                }
+                | super::token::Definition::Assign {
+                    name,
+                    value_display
+                } => {
                     syms.push((name.to_string(), value_display));
                 },
                 super::token::Definition::MacroDefinition { name } => {
@@ -1165,7 +1171,9 @@ impl AssemblyAnalyzer {
                 // argument, but offered alongside every other symbol kind
                 // here rather than only there, consistent with how EQU
                 // constants and macros are already offered everywhere too.
-                super::token::Definition::Section { name, start, stop, .. } => {
+                super::token::Definition::Section {
+                    name, start, stop, ..
+                } => {
                     syms.push((name, format!("section {start}..{stop}")));
                 }
             }
@@ -1292,7 +1300,8 @@ impl AssemblyAnalyzer {
             // already relies on for this exact purpose.
             let version = if super::includes::is_inner_uri(&filename) {
                 0
-            } else {
+            }
+            else {
                 super::definition::resolve_include_path(&filename, &document.uri)
                     .map(|path| crate::server::backend::disk_file_version(&path))
                     .unwrap_or(0)
@@ -2208,8 +2217,7 @@ mod include_tests {
         let text = "    ifndef GUARD\nGUARDED_LABEL:\n    ret\nGUARDED_CONST set 1\n    endif\n";
         let doc = Document::new(uri, text.to_string(), 1);
 
-        let syms =
-            AssemblyAnalyzer::new().collect_symbols(&doc, ParseFreshness::ExactVersionOnly);
+        let syms = AssemblyAnalyzer::new().collect_symbols(&doc, ParseFreshness::ExactVersionOnly);
         let names: Vec<&str> = syms.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"GUARDED_LABEL"), "{names:?}");
         assert!(names.contains(&"GUARDED_CONST"), "{names:?}");

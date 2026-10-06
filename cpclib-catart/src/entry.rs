@@ -1250,9 +1250,8 @@ impl UnifiedCatalog {
         if let CatalogType::Cat = order {
             entries.sort_by_cached_key(|a| {
                 let a = a.fname();
-                
-                a
-                    .filename()
+
+                a.filename()
                     .iter()
                     .chain(a.extension().iter())
                     .cloned()
@@ -1910,7 +1909,6 @@ impl SerialCatalogBuilder {
 
         let ordered_idx = grid
             .entries_display_order()
-            
             .map(|entry| entry.f1)
             .collect::<Vec<u8>>();
         for (entry, new_number) in cat.entries.iter_mut().zip(ordered_idx) {

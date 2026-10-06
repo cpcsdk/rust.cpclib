@@ -52,7 +52,11 @@ mod tests {
     fn a_long_run_of_one_byte_terminates() {
         for len in [256usize, 1000, 5000] {
             let out = compress(&vec![0u8; len]).expect("must not fail or hang");
-            assert!(out.stream.len() < len, "{len} zeros should shrink, got {}", out.stream.len());
+            assert!(
+                out.stream.len() < len,
+                "{len} zeros should shrink, got {}",
+                out.stream.len()
+            );
         }
     }
 

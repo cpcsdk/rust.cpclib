@@ -54,8 +54,8 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{ListingElement, Mnemonic};
 
-pub use crate::cost::InstructionCost;
 use crate::cfg::{Cfg, Terminator, build_cfg, compute_postdominators, expect_block, mnemonic_of};
+pub use crate::cost::InstructionCost;
 use crate::cost::{CostModel, instruction_cost};
 
 /// One point where padding is needed, in one of two shapes.
@@ -227,8 +227,10 @@ fn balance<T: ListingElement>(
 
         let taken_cost =
             cost_taken + arm_cost(cfg, &resolved, postdom, tokens, labels, cost, taken, merge)?;
-        let not_taken_cost =
-            cost_not_taken + arm_cost(cfg, &resolved, postdom, tokens, labels, cost, not_taken, merge)?;
+        let not_taken_cost = cost_not_taken
+            + arm_cost(
+                cfg, &resolved, postdom, tokens, labels, cost, not_taken, merge
+            )?;
 
         if taken_cost != not_taken_cost {
             let padding_taken_arm = taken_cost < not_taken_cost;

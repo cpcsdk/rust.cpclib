@@ -270,14 +270,15 @@ pub fn format_hover(
 
     // Try to assemble and show the actual bytes produced
     if let Ok(bytes) = cpclib_asm::assemble(instr)
-        && !bytes.is_empty() {
-            let hex: String = bytes
-                .iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<_>>()
-                .join(" ");
-            md.push_str(&format!(" → `{}`", hex));
-        }
+        && !bytes.is_empty()
+    {
+        let hex: String = bytes
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        md.push_str(&format!(" → `{}`", hex));
+    }
     md.push_str("\n\n");
 
     for entry in entries {

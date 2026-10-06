@@ -66,16 +66,15 @@ pub(crate) struct Policy {
 }
 
 impl Policy {
-    /// The timing view: calls are straight-line, returns reach the exit.
-    pub(crate) const TIMING: Self = Self {
-        call: CallPolicy::StraightLine,
-        ret: ReturnPolicy::Exit
-    };
-
     /// The dataflow view: calls are followed, returns pop the call stack.
     pub(crate) const DATAFLOW: Self = Self {
         call: CallPolicy::Follow,
         ret: ReturnPolicy::PopCallStack
+    };
+    /// The timing view: calls are straight-line, returns reach the exit.
+    pub(crate) const TIMING: Self = Self {
+        call: CallPolicy::StraightLine,
+        ret: ReturnPolicy::Exit
     };
 }
 
@@ -114,7 +113,11 @@ pub(crate) enum Edges<X> {
 /// `cfg` used to carry `JUMP_MNEMONICS.contains(&m) || m == Ret || m == Djnz`,
 /// which had already drifted (it missed `JQ`, `RETI` and `RETN`) and would
 /// drift again the next time the table learned an instruction.
-pub(crate) fn transfers_control(mnemonic: Option<Mnemonic>, policy: Policy, conditional: bool) -> bool {
+pub(crate) fn transfers_control(
+    mnemonic: Option<Mnemonic>,
+    policy: Policy,
+    conditional: bool
+) -> bool {
     // `resolve` answering `None` turns a real transfer into `Unknown`, which
     // is still "not a fallthrough" - and no label lookup is paid for.
     !matches!(
@@ -217,12 +220,16 @@ mod tests {
     #[test]
     fn a_call_is_straight_line_for_timing_and_followed_for_dataflow() {
         assert_eq!(
-            edges_of(Some(Mnemonic::Call), Policy::TIMING, false, || Some((false, 7usize))),
+            edges_of(Some(Mnemonic::Call), Policy::TIMING, false, || {
+                Some((false, 7usize))
+            }),
             Edges::Fallthrough,
             "timing prices the call instruction, not the callee's graph"
         );
         assert_eq!(
-            edges_of(Some(Mnemonic::Call), Policy::DATAFLOW, false, || Some((false, 7usize))),
+            edges_of(Some(Mnemonic::Call), Policy::DATAFLOW, false, || {
+                Some((false, 7usize))
+            }),
             Edges::Call {
                 target: 7,
                 conditional: false
@@ -236,11 +243,15 @@ mod tests {
     #[test]
     fn rst_is_unknown_when_calls_are_followed() {
         assert_eq!(
-            edges_of(Some(Mnemonic::Rst), Policy::DATAFLOW, false, || Some((false, 7usize))),
+            edges_of(Some(Mnemonic::Rst), Policy::DATAFLOW, false, || {
+                Some((false, 7usize))
+            }),
             Edges::Unknown
         );
         assert_eq!(
-            edges_of(Some(Mnemonic::Rst), Policy::TIMING, false, || Some((false, 7usize))),
+            edges_of(Some(Mnemonic::Rst), Policy::TIMING, false, || {
+                Some((false, 7usize))
+            }),
             Edges::Fallthrough
         );
     }
@@ -250,7 +261,9 @@ mod tests {
     #[test]
     fn djnz_is_always_two_way() {
         assert_eq!(
-            edges_of(Some(Mnemonic::Djnz), Policy::TIMING, false, || Some((false, 3usize))),
+            edges_of(Some(Mnemonic::Djnz), Policy::TIMING, false, || {
+                Some((false, 3usize))
+            }),
             Edges::Branch(3)
         );
     }
@@ -261,7 +274,9 @@ mod tests {
     fn an_unresolvable_transfer_is_unknown_not_fallthrough() {
         for mnemonic in [Mnemonic::Jp, Mnemonic::Jr, Mnemonic::Djnz] {
             assert_eq!(
-                edges_of(Some(mnemonic), Policy::TIMING, false, || None::<(bool, usize)>),
+                edges_of(Some(mnemonic), Policy::TIMING, false, || {
+                    None::<(bool, usize)>
+                }),
                 Edges::Unknown,
                 "{mnemonic:?}"
             );
@@ -273,15 +288,21 @@ mod tests {
     #[test]
     fn a_conditional_return_is_conditional_without_having_a_target() {
         assert_eq!(
-            edges_of(Some(Mnemonic::Ret), Policy::TIMING, true, || None::<(bool, usize)>),
+            edges_of(Some(Mnemonic::Ret), Policy::TIMING, true, || {
+                None::<(bool, usize)>
+            }),
             Edges::Return { conditional: true }
         );
         assert_eq!(
-            edges_of(Some(Mnemonic::Ret), Policy::TIMING, false, || None::<(bool, usize)>),
+            edges_of(Some(Mnemonic::Ret), Policy::TIMING, false, || {
+                None::<(bool, usize)>
+            }),
             Edges::Return { conditional: false }
         );
         assert_eq!(
-            edges_of(Some(Mnemonic::Reti), Policy::TIMING, true, || None::<(bool, usize)>),
+            edges_of(Some(Mnemonic::Reti), Policy::TIMING, true, || {
+                None::<(bool, usize)>
+            }),
             Edges::Return { conditional: false },
             "reti has no conditional form"
         );

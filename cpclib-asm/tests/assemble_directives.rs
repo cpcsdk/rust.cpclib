@@ -1,4 +1,3 @@
-
 #[test]
 fn assemble_with_directives() {
     // Test assembler directives: org, equ, db, dw and label reference

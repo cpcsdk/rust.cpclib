@@ -71,10 +71,10 @@ fn a_push_pop_pair_is_rewritten_into_two_loads() {
     );
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].rule_name.as_deref(), Some("regpair-transfer"));
-    assert_eq!(found[0].replacement, vec![
-        "ld d, h".to_string(),
-        "ld e, l".to_string()
-    ]);
+    assert_eq!(
+        found[0].replacement,
+        vec!["ld d, h".to_string(), "ld e, l".to_string()]
+    );
 }
 
 /// The size goal exists to add rules like `jp2jr`; without an assembled
@@ -88,7 +88,9 @@ fn jp_to_jr_stays_silent_until_real_addresses_are_available() {
         OptimizationGoal::Size
     );
     assert!(
-        !found.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+        !found
+            .iter()
+            .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
         "jp2jr must not fire without address information: {found:?}"
     );
 }

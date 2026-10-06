@@ -19,7 +19,10 @@
 /// `None` when `line` isn't one of the two markers at all.
 fn marker(line: &str) -> Option<bool> {
     let rest = line.trim().strip_prefix(';')?.trim();
-    let rest = rest.strip_prefix("fmt").or_else(|| rest.strip_prefix("FMT"))?.trim_start();
+    let rest = rest
+        .strip_prefix("fmt")
+        .or_else(|| rest.strip_prefix("FMT"))?
+        .trim_start();
     let rest = rest.strip_prefix(':')?.trim();
     match rest.to_ascii_lowercase().as_str() {
         "off" => Some(false),

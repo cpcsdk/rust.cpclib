@@ -195,10 +195,7 @@ fn macro_args_single() {
     let (_ctx_, span) = ctx_and_span(code);
     let arg = dbg!(parse_macro_arg.parse(span.into())).unwrap();
 
-    assert_eq!(
-        arg.to_macro_param(),
-        MacroParam::RawArgument("1".into())
-    )
+    assert_eq!(arg.to_macro_param(), MacroParam::RawArgument("1".into()))
 }
 
 #[test]

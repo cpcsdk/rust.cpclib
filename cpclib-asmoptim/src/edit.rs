@@ -57,7 +57,8 @@ where T: ListingElement + MayHaveSpan {
 
     let ls = line_start(source, token_start);
     let le = line_end(source, token_end);
-    let alone = source[ls..token_start].trim().is_empty() && source[token_end..le].trim().is_empty();
+    let alone =
+        source[ls..token_start].trim().is_empty() && source[token_end..le].trim().is_empty();
 
     let is_deletion = m.replacement.is_empty();
 
@@ -152,7 +153,9 @@ fn absorb_separator<T>(
     token_end: usize,
     le: usize
 ) -> (usize, usize)
-where T: ListingElement {
+where
+    T: ListingElement
+{
     let after = &source[token_end..le];
     let after_trimmed = after.trim_start_matches([' ', '\t']);
     if after_trimmed.starts_with(':') {

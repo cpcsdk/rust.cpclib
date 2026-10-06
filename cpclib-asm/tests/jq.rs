@@ -1,4 +1,3 @@
-
 /// A near, forward JQ target must assemble exactly like the equivalent JR.
 #[test]
 fn jq_in_range_matches_jr() {

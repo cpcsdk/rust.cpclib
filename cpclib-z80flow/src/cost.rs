@@ -16,8 +16,8 @@
 //! involved instead of the written form.
 
 use cpclib_tokens::{
-    DataAccess, DataAccessElem, Expr, ListingElement, Mnemonic, OperandKind, Register8,
-    Register16, Token
+    DataAccess, DataAccessElem, Expr, ListingElement, Mnemonic, OperandKind, Register8, Register16,
+    Token
 };
 
 /// A cost source the algorithm queries once per token - kept fully
@@ -47,7 +47,6 @@ pub enum InstructionCost {
 ///   unknowable. It has no default for exactly that reason: a default
 ///   returning `Unknown` would be a lie, and it silently made every fake
 ///   instruction cost nothing at all for as long as it existed.
-///
 pub trait CostModel<T> {
     /// The cost of a token the caller supplied.
     fn cost(&self, token: &T) -> InstructionCost;
@@ -161,8 +160,12 @@ where
 {
     use cpclib_tokens::DataAccessElem;
 
-    let arg1 = token.mnemonic_arg1().map(|a| a.to_data_access().into_owned());
-    let arg2 = token.mnemonic_arg2().map(|a| a.to_data_access().into_owned());
+    let arg1 = token
+        .mnemonic_arg1()
+        .map(|a| a.to_data_access().into_owned());
+    let arg2 = token
+        .mnemonic_arg2()
+        .map(|a| a.to_data_access().into_owned());
 
     let conditional = arg1.as_ref().is_some_and(DataAccess::is_flag_test);
     if conditional {
@@ -179,7 +182,6 @@ where
         InstructionCost::Unknown
     }
 }
-
 
 /// How many NOPs one real Z80 opcode takes on a CPC.
 ///
@@ -211,451 +213,413 @@ pub fn opcode_duration<D: DataAccessElem>(
     let arg1 = arg1.map(DataAccessElem::kind);
     let arg2 = arg2.map(DataAccessElem::kind);
     let duration = match mnemonic {
-    &Mnemonic::Add => {
-        match arg1 {
-            None | Some(OperandKind::Reg8(_)) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 1,
-                    Some(OperandKind::Indexed) => 5,
-                    _ => 2
-                }
-            },
-            Some(OperandKind::Reg16(_)) => 3,
-            Some(OperandKind::IndexReg16(_)) => 4,
-            _ => return None
-        }
-    },
-
-    &Mnemonic::Adc => {
-        match arg1 {
-            Some(OperandKind::Reg8(_)) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 1,
-                    Some(OperandKind::Indexed) => 5,
-                    _ => 2
-                }
-            },
-            Some(OperandKind::Reg16(Register16::Hl)) => 4,
-            _ => return None
-        }
-    },
-
-    // `arg1` is the optional explicit `A,` prefix and never
-    // affects the encoded size; `arg2` is the real operand.
-    &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => {
-        match arg2.as_ref().or(arg1.as_ref()) {
-            Some(OperandKind::Reg8(_)) => 1,
-            Some(OperandKind::IndexReg8) => 2,
-            Some(OperandKind::Expression) => 2,
-            Some(OperandKind::MemReg16(_)) => 2,
-            Some(OperandKind::Indexed) => 5,
-            _ => return None
-        }
-    },
-
-    Mnemonic::Call => {
-        match (arg1, arg2) {
-            (Some(OperandKind::FlagTest), Some(OperandKind::Expression)) => 3,
-            (None, Some(OperandKind::Expression)) => 5,
-            _ => return None
-        }
-    },
-
-    // `arg1` is the optional explicit `A,` prefix (`CP A,r`
-    // vs bare `CP r` - see `parse_cp` in cpclib-asm's
-    // parser) and never affects the encoded size; `arg2` is
-    // the compared value that does. `parse_cp` always
-    // populates `arg2`, but fall back to `arg1` defensively
-    // rather than panicking if some other construction path
-    // ever produces the pre-fix shape (compared value in
-    // `arg1`, `arg2` empty).
-    &Mnemonic::Cp => {
-        match arg2.as_ref().or(arg1.as_ref()) {
-            Some(OperandKind::Reg8(_)) => 1,
-            Some(OperandKind::IndexReg8) => 2,
-            Some(OperandKind::Expression) => 2,
-            Some(OperandKind::MemReg16(Register16::Hl)) => 2,
-            Some(OperandKind::Indexed) => 5,
-            _ => return None
-        }
-    },
-
-    // XXX Not stable timing
-    &Mnemonic::Djnz => 3, // or 4
-
-    &Mnemonic::ExAf => 1,
-
-    &Mnemonic::Inc | &Mnemonic::Dec => {
-        match arg1 {
-            Some(OperandKind::Reg8(_)) => 1,
-            Some(OperandKind::Reg16(_)) => 2,
-            Some(OperandKind::IndexReg16(_)) => 3,
-            Some(OperandKind::MemReg16(Register16::Hl)) => 3,
-            Some(OperandKind::Indexed) => 6,
-            _ => return None
-        }
-    },
-
-    &Mnemonic::Jp => {
-        match arg1 {
-            None => {
-                match arg2 {
-                    Some(OperandKind::Expression) => 3,
-                    Some(OperandKind::MemReg16(Register16::Hl)) => 1,
-                    Some(OperandKind::MemIndexReg16) => 2,
-                    _ => {
-                        return None
+        &Mnemonic::Add => {
+            match arg1 {
+                None | Some(OperandKind::Reg8(_)) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 1,
+                        Some(OperandKind::Indexed) => 5,
+                        _ => 2
                     }
-                }
-            },
+                },
+                Some(OperandKind::Reg16(_)) => 3,
+                Some(OperandKind::IndexReg16(_)) => 4,
+                _ => return None
+            }
+        },
 
-            Some(OperandKind::FlagTest) => {
-                match arg2 {
-                    Some(OperandKind::Expression) => 3,
-                    _ => {
-                        return None
+        &Mnemonic::Adc => {
+            match arg1 {
+                Some(OperandKind::Reg8(_)) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 1,
+                        Some(OperandKind::Indexed) => 5,
+                        _ => 2
                     }
-                }
-            },
+                },
+                Some(OperandKind::Reg16(Register16::Hl)) => 4,
+                _ => return None
+            }
+        },
 
-            _ => return None
-        }
-    },
+        // `arg1` is the optional explicit `A,` prefix and never
+        // affects the encoded size; `arg2` is the real operand.
+        &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => {
+            match arg2.as_ref().or(arg1.as_ref()) {
+                Some(OperandKind::Reg8(_)) => 1,
+                Some(OperandKind::IndexReg8) => 2,
+                Some(OperandKind::Expression) => 2,
+                Some(OperandKind::MemReg16(_)) => 2,
+                Some(OperandKind::Indexed) => 5,
+                _ => return None
+            }
+        },
 
-    // Always give the fastest
-    &Mnemonic::Jr => {
-        match arg1 {
-            None => {
-                match arg2 {
-                    Some(OperandKind::Expression) => 3,
-                    _ => {
-                        return None
+        Mnemonic::Call => {
+            match (arg1, arg2) {
+                (Some(OperandKind::FlagTest), Some(OperandKind::Expression)) => 3,
+                (None, Some(OperandKind::Expression)) => 5,
+                _ => return None
+            }
+        },
+
+        // `arg1` is the optional explicit `A,` prefix (`CP A,r`
+        // vs bare `CP r` - see `parse_cp` in cpclib-asm's
+        // parser) and never affects the encoded size; `arg2` is
+        // the compared value that does. `parse_cp` always
+        // populates `arg2`, but fall back to `arg1` defensively
+        // rather than panicking if some other construction path
+        // ever produces the pre-fix shape (compared value in
+        // `arg1`, `arg2` empty).
+        &Mnemonic::Cp => {
+            match arg2.as_ref().or(arg1.as_ref()) {
+                Some(OperandKind::Reg8(_)) => 1,
+                Some(OperandKind::IndexReg8) => 2,
+                Some(OperandKind::Expression) => 2,
+                Some(OperandKind::MemReg16(Register16::Hl)) => 2,
+                Some(OperandKind::Indexed) => 5,
+                _ => return None
+            }
+        },
+
+        // XXX Not stable timing
+        &Mnemonic::Djnz => 3, // or 4
+
+        &Mnemonic::ExAf => 1,
+
+        &Mnemonic::Inc | &Mnemonic::Dec => {
+            match arg1 {
+                Some(OperandKind::Reg8(_)) => 1,
+                Some(OperandKind::Reg16(_)) => 2,
+                Some(OperandKind::IndexReg16(_)) => 3,
+                Some(OperandKind::MemReg16(Register16::Hl)) => 3,
+                Some(OperandKind::Indexed) => 6,
+                _ => return None
+            }
+        },
+
+        &Mnemonic::Jp => {
+            match arg1 {
+                None => {
+                    match arg2 {
+                        Some(OperandKind::Expression) => 3,
+                        Some(OperandKind::MemReg16(Register16::Hl)) => 1,
+                        Some(OperandKind::MemIndexReg16) => 2,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            Some(OperandKind::FlagTest) => {
-                match arg2 {
-                    Some(OperandKind::Expression) => 2, // or 3
-                    _ => {
-                        return None
+                Some(OperandKind::FlagTest) => {
+                    match arg2 {
+                        Some(OperandKind::Expression) => 3,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            _ => return None
-        }
-    },
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Ld => {
-        match arg1 {
-            // Dest in memory pointed by register
-            Some(OperandKind::MemReg16(_)) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 2,
-                    Some(OperandKind::Expression) => 3, // XXX Valid only for HL
-                    _ => {
-                        return None
+        // Always give the fastest
+        &Mnemonic::Jr => {
+            match arg1 {
+                None => {
+                    match arg2 {
+                        Some(OperandKind::Expression) => 3,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            // Dest in indexed memory pointed by IX/IY + displacement
-            Some(OperandKind::Indexed) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 5,
-                    Some(OperandKind::Expression) => 5,
-                    _ => {
-                        return None
+                Some(OperandKind::FlagTest) => {
+                    match arg2 {
+                        Some(OperandKind::Expression) => 2, // or 3
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            // Dest in 8bits reg
-            Some(OperandKind::Reg8(_dst)) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 1,
-                    Some(OperandKind::MemReg16(Register16::Hl)) => 2,
-                    Some(OperandKind::MemReg16(Register16::Bc)) => 2,
-                    Some(OperandKind::MemReg16(Register16::De)) => 2,
-                    Some(OperandKind::SpecialI) => 3,
-                    Some(OperandKind::SpecialR) => 3,
-                    Some(OperandKind::Expression) => 2,
-                    Some(OperandKind::Memory) => 4,
-                    Some(OperandKind::Indexed) => 5,
-                    _ => {
-                        return None
+                _ => return None
+            }
+        },
+
+        &Mnemonic::Ld => {
+            match arg1 {
+                // Dest in memory pointed by register
+                Some(OperandKind::MemReg16(_)) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 2,
+                        Some(OperandKind::Expression) => 3, // XXX Valid only for HL
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            // Dest in 16bits reg
-            Some(OperandKind::Reg16(dst)) => {
-                match arg2 {
-                    Some(OperandKind::Expression) => 3,
-                    Some(OperandKind::Reg16(Register16::Hl))
-                        if dst == Register16::Sp =>
-                    {
-                        2
-                    },
-                    Some(OperandKind::IndexReg16(_))
-                        if dst == Register16::Sp =>
-                    {
-                        3
-                    },
-                    Some(OperandKind::Memory) if dst == Register16::Hl => 5,
-                    Some(OperandKind::Memory) => 6,
-                    _ => {
-                        return None
+                // Dest in indexed memory pointed by IX/IY + displacement
+                Some(OperandKind::Indexed) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 5,
+                        Some(OperandKind::Expression) => 5,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            Some(OperandKind::IndexReg16(_)) => {
-                match arg2 {
-                    Some(OperandKind::Expression) => 4,
-                    Some(OperandKind::Memory) => 6,
-                    _ => {
-                        return None
+                // Dest in 8bits reg
+                Some(OperandKind::Reg8(_dst)) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 1,
+                        Some(OperandKind::MemReg16(Register16::Hl)) => 2,
+                        Some(OperandKind::MemReg16(Register16::Bc)) => 2,
+                        Some(OperandKind::MemReg16(Register16::De)) => 2,
+                        Some(OperandKind::SpecialI) => 3,
+                        Some(OperandKind::SpecialR) => 3,
+                        Some(OperandKind::Expression) => 2,
+                        Some(OperandKind::Memory) => 4,
+                        Some(OperandKind::Indexed) => 5,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            Some(OperandKind::Memory) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(Register8::A)) => 4,
-                    Some(OperandKind::Reg16(Register16::Hl)) => 5,
-                    Some(OperandKind::Reg16(_)) => 6,
-                    Some(OperandKind::IndexReg16(_)) => 6,
-                    _ => {
-                        return None
+                // Dest in 16bits reg
+                Some(OperandKind::Reg16(dst)) => {
+                    match arg2 {
+                        Some(OperandKind::Expression) => 3,
+                        Some(OperandKind::Reg16(Register16::Hl)) if dst == Register16::Sp => 2,
+                        Some(OperandKind::IndexReg16(_)) if dst == Register16::Sp => 3,
+                        Some(OperandKind::Memory) if dst == Register16::Hl => 5,
+                        Some(OperandKind::Memory) => 6,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            // IndexRegister8 destination (IXH/IXL/IYH/IYL)
-            Some(OperandKind::IndexReg8) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 2,      // DD + opcode
-                    Some(OperandKind::IndexReg8) => 2, // DD + opcode
-                    Some(OperandKind::Expression) => 3,     // DD + opcode + imm
-                    _ => {
-                        return None
+                Some(OperandKind::IndexReg16(_)) => {
+                    match arg2 {
+                        Some(OperandKind::Expression) => 4,
+                        Some(OperandKind::Memory) => 6,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            Some(OperandKind::SpecialI)
-            | Some(OperandKind::SpecialR) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(Register8::A)) => 3,
-                    _ => {
-                        return None
+                Some(OperandKind::Memory) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(Register8::A)) => 4,
+                        Some(OperandKind::Reg16(Register16::Hl)) => 5,
+                        Some(OperandKind::Reg16(_)) => 6,
+                        Some(OperandKind::IndexReg16(_)) => 6,
+                        _ => return None
                     }
-                }
-            },
+                },
 
-            _ => return None
-        }
-    },
+                // IndexRegister8 destination (IXH/IXL/IYH/IYL)
+                Some(OperandKind::IndexReg8) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 2,    // DD + opcode
+                        Some(OperandKind::IndexReg8) => 2,  // DD + opcode
+                        Some(OperandKind::Expression) => 3, // DD + opcode + imm
+                        _ => return None
+                    }
+                },
 
-    &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
+                Some(OperandKind::SpecialI) | Some(OperandKind::SpecialR) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(Register8::A)) => 3,
+                        _ => return None
+                    }
+                },
 
-    &Mnemonic::Exx
-    | &Mnemonic::Di
-    | &Mnemonic::Ei
-    | &Mnemonic::ExHlDe
-    | &Mnemonic::Cpl
-    | &Mnemonic::Ccf
-    | &Mnemonic::Scf
-    | &Mnemonic::Rlca
-    | &Mnemonic::Rrca
-    | &Mnemonic::Rla
-    | &Mnemonic::Rra
-    | &Mnemonic::Halt
-    | &Mnemonic::Nop => {
-        // `NOP n` (basm's repeated-nop form) needs real
-        // expression evaluation, which this crate has no
-        // access to - `cpclib-asm` handles that case before
-        // delegating here. A bare `nop` is 1.
-        1
-    },
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Daa => 1,
-    &Mnemonic::Neg | &Mnemonic::Im => 2,
-    &Mnemonic::Rld | &Mnemonic::Rrd => 5,
-    &Mnemonic::Cpi | &Mnemonic::Cpd => 4,
-    &Mnemonic::Cpir | &Mnemonic::Cpdr => 4,
-    &Mnemonic::Ldir | &Mnemonic::Lddr => 5,
+        &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
-    &Mnemonic::ExMemSp => {
-        match arg1 {
-            Some(OperandKind::Reg16(Register16::Hl)) => 6,
-            Some(OperandKind::IndexReg16(_)) => 7,
-            _ => return None
-        }
-    },
+        &Mnemonic::Exx
+        | &Mnemonic::Di
+        | &Mnemonic::Ei
+        | &Mnemonic::ExHlDe
+        | &Mnemonic::Cpl
+        | &Mnemonic::Ccf
+        | &Mnemonic::Scf
+        | &Mnemonic::Rlca
+        | &Mnemonic::Rrca
+        | &Mnemonic::Rla
+        | &Mnemonic::Rra
+        | &Mnemonic::Halt
+        | &Mnemonic::Nop => {
+            // `NOP n` (basm's repeated-nop form) needs real
+            // expression evaluation, which this crate has no
+            // access to - `cpclib-asm` handles that case before
+            // delegating here. A bare `nop` is 1.
+            1
+        },
 
-    &Mnemonic::Nop2 => 2,
+        &Mnemonic::Daa => 1,
+        &Mnemonic::Neg | &Mnemonic::Im => 2,
+        &Mnemonic::Rld | &Mnemonic::Rrd => 5,
+        &Mnemonic::Cpi | &Mnemonic::Cpd => 4,
+        &Mnemonic::Cpir | &Mnemonic::Cpdr => 4,
+        &Mnemonic::Ldir | &Mnemonic::Lddr => 5,
 
-    &Mnemonic::In => {
-        match (arg1, arg2) {
-            (
-                Some(OperandKind::Reg8(Register8::A)),
-                Some(OperandKind::PortN)
-            ) => 3,
-            (Some(OperandKind::Reg8(_)), Some(OperandKind::PortC)) => 4,
-            (Some(OperandKind::Expression), Some(OperandKind::PortC)) => 4,
-            _ => return None
-        }
-    },
+        &Mnemonic::ExMemSp => {
+            match arg1 {
+                Some(OperandKind::Reg16(Register16::Hl)) => 6,
+                Some(OperandKind::IndexReg16(_)) => 7,
+                _ => return None
+            }
+        },
 
-    Mnemonic::Ini | Mnemonic::Ind => 5,
-    Mnemonic::Inir | Mnemonic::Indr => 5,
+        &Mnemonic::Nop2 => 2,
 
-    &Mnemonic::Out => {
-        match arg1 {
-            Some(OperandKind::PortC) => 4, // XXX Not sure for out (c), 0
-            Some(OperandKind::Expression) => 3,
-            Some(OperandKind::PortN) => 3,
-            _ => return None
-        }
-    },
+        &Mnemonic::In => {
+            match (arg1, arg2) {
+                (Some(OperandKind::Reg8(Register8::A)), Some(OperandKind::PortN)) => 3,
+                (Some(OperandKind::Reg8(_)), Some(OperandKind::PortC)) => 4,
+                (Some(OperandKind::Expression), Some(OperandKind::PortC)) => 4,
+                _ => return None
+            }
+        },
 
-    Mnemonic::Outi | Mnemonic::Outd => 5,
-    Mnemonic::Otir | Mnemonic::Otdr => 5,
+        Mnemonic::Ini | Mnemonic::Ind => 5,
+        Mnemonic::Inir | Mnemonic::Indr => 5,
 
-    &Mnemonic::Pop => {
-        match arg1 {
-            Some(OperandKind::Reg16(_)) => 3,
-            Some(OperandKind::IndexReg16(_)) => 4,
-            _ => return None
-        }
-    },
+        &Mnemonic::Out => {
+            match arg1 {
+                Some(OperandKind::PortC) => 4, // XXX Not sure for out (c), 0
+                Some(OperandKind::Expression) => 3,
+                Some(OperandKind::PortN) => 3,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Push => {
-        match arg1 {
-            Some(OperandKind::Reg16(_)) => 4,
-            Some(OperandKind::IndexReg16(_)) => 5,
-            _ => return None
-        }
-    },
+        Mnemonic::Outi | Mnemonic::Outd => 5,
+        Mnemonic::Otir | Mnemonic::Otdr => 5,
 
-    &Mnemonic::Bit => {
-        match arg2 {
-            Some(OperandKind::Reg8(_)) => 2,
-            Some(OperandKind::MemReg16(_)) => 3,
-            Some(OperandKind::Indexed) => 6,
-            _ => return None
-        }
-    },
+        &Mnemonic::Pop => {
+            match arg1 {
+                Some(OperandKind::Reg16(_)) => 3,
+                Some(OperandKind::IndexReg16(_)) => 4,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Res | &Mnemonic::Set => {
-        match arg2 {
-            Some(OperandKind::Reg8(_)) => 2,
-            Some(OperandKind::MemReg16(_)) => 4, // XXX only HL
-            Some(OperandKind::Indexed) => 7,
-            _ => return None
-        }
-    },
+        &Mnemonic::Push => {
+            match arg1 {
+                Some(OperandKind::Reg16(_)) => 4,
+                Some(OperandKind::IndexReg16(_)) => 5,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Ret => {
-        match arg1 {
-            None => 3,
-            Some(OperandKind::FlagTest) => 2,
-            _ => return None
-        }
-    },
+        &Mnemonic::Bit => {
+            match arg2 {
+                Some(OperandKind::Reg8(_)) => 2,
+                Some(OperandKind::MemReg16(_)) => 3,
+                Some(OperandKind::Indexed) => 6,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Reti | &Mnemonic::Retn => 4,
+        &Mnemonic::Res | &Mnemonic::Set => {
+            match arg2 {
+                Some(OperandKind::Reg8(_)) => 2,
+                Some(OperandKind::MemReg16(_)) => 4, // XXX only HL
+                Some(OperandKind::Indexed) => 7,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Rst => {
-        match arg1 {
-            Some(OperandKind::Expression) => 4,
-            _ => return None
-        }
-    },
+        &Mnemonic::Ret => {
+            match arg1 {
+                None => 3,
+                Some(OperandKind::FlagTest) => 2,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Sbc => {
-        match arg1 {
-            Some(OperandKind::Reg8(_)) => {
-                match arg2 {
-                    Some(OperandKind::Reg8(_)) => 1,
-                    Some(OperandKind::Indexed) => 5,
-                    _ => 2
-                }
-            },
-            Some(OperandKind::Reg16(Register16::Hl)) => 4,
-            _ => return None
-        }
-    },
+        &Mnemonic::Reti | &Mnemonic::Retn => 4,
 
-    // `arg1` is the optional explicit `A,` prefix for the
-    // normal 8-bit form (never affects encoding) - `arg2`
-    // is the real operand. The fake 16-bit form (`SUB
-    // DE,rr`/`SUB HL,rr`) isn't handled by this table at
-    // all (pre-existing gap, unchanged by this fix - it
-    // would already panic here via the `_` arm).
-    &Mnemonic::Sub => {
-        match arg2.as_ref().or(arg1.as_ref()) {
-            Some(OperandKind::Reg8(_)) => 1,
-            Some(OperandKind::IndexReg8) => 2,
-            Some(OperandKind::Expression) => 2,
-            Some(OperandKind::MemReg16(Register16::Hl)) => 2,
-            Some(OperandKind::Indexed) => 5,
-            _ => return None
-        }
-    },
+        &Mnemonic::Rst => {
+            match arg1 {
+                Some(OperandKind::Expression) => 4,
+                _ => return None
+            }
+        },
 
-    &Mnemonic::Rlc
-    | &Mnemonic::Rrc
-    | &Mnemonic::Rl
-    | &Mnemonic::Rr
-    | &Mnemonic::Sla
-    | &Mnemonic::Sra
-    | &Mnemonic::Sl1
-    | &Mnemonic::Srl => {
-        match arg1 {
-            Some(OperandKind::Reg8(_)) => 2,
-            Some(OperandKind::MemReg16(_)) => 4,
-            Some(OperandKind::Indexed) => 7,
-            _ => return None
-        }
-    },
+        &Mnemonic::Sbc => {
+            match arg1 {
+                Some(OperandKind::Reg8(_)) => {
+                    match arg2 {
+                        Some(OperandKind::Reg8(_)) => 1,
+                        Some(OperandKind::Indexed) => 5,
+                        _ => 2
+                    }
+                },
+                Some(OperandKind::Reg16(Register16::Hl)) => 4,
+                _ => return None
+            }
+        },
 
-    // SRL8 rr: LD low,high : LD high,0
-    // A fake instruction in its own right: costs the two real `LD`s it
-    // becomes. Recurses into this same function rather than reaching back up
-    // to `estimated_duration`, which is what used to sit here and is now the
-    // caller.
-    // A fake instruction in its own right: it becomes `ld low, high` then
-    // `ld high, 0`. Priced by recursing with concrete operands - a different
-    // instantiation of this same generic function, so the rules stay in one
-    // place.
-    &Mnemonic::Srl8 => {
-        let (low, high) = match arg1 {
-            Some(OperandKind::Reg16(reg)) => {
-                (
-                    DataAccess::Register8(reg.low()?),
-                    DataAccess::Register8(reg.high()?)
-                )
-            },
-            Some(OperandKind::IndexReg16(reg)) => {
-                (
-                    DataAccess::IndexRegister8(reg.low()),
-                    DataAccess::IndexRegister8(reg.high())
-                )
-            },
-            _ => return None
-        };
-        let zero = DataAccess::Expression(Expr::Value(0));
-        opcode_duration(&Mnemonic::Ld, Some(&low), Some(&high))?
-            + opcode_duration(&Mnemonic::Ld, Some(&high), Some(&zero))?
-    },
+        // `arg1` is the optional explicit `A,` prefix for the
+        // normal 8-bit form (never affects encoding) - `arg2`
+        // is the real operand. The fake 16-bit form (`SUB
+        // DE,rr`/`SUB HL,rr`) isn't handled by this table at
+        // all (pre-existing gap, unchanged by this fix - it
+        // would already panic here via the `_` arm).
+        &Mnemonic::Sub => {
+            match arg2.as_ref().or(arg1.as_ref()) {
+                Some(OperandKind::Reg8(_)) => 1,
+                Some(OperandKind::IndexReg8) => 2,
+                Some(OperandKind::Expression) => 2,
+                Some(OperandKind::MemReg16(Register16::Hl)) => 2,
+                Some(OperandKind::Indexed) => 5,
+                _ => return None
+            }
+        },
 
-    _ => {
-        return None
-    }
-};
+        &Mnemonic::Rlc
+        | &Mnemonic::Rrc
+        | &Mnemonic::Rl
+        | &Mnemonic::Rr
+        | &Mnemonic::Sla
+        | &Mnemonic::Sra
+        | &Mnemonic::Sl1
+        | &Mnemonic::Srl => {
+            match arg1 {
+                Some(OperandKind::Reg8(_)) => 2,
+                Some(OperandKind::MemReg16(_)) => 4,
+                Some(OperandKind::Indexed) => 7,
+                _ => return None
+            }
+        },
+
+        // SRL8 rr: LD low,high : LD high,0
+        // A fake instruction in its own right: costs the two real `LD`s it
+        // becomes. Recurses into this same function rather than reaching back up
+        // to `estimated_duration`, which is what used to sit here and is now the
+        // caller.
+        // A fake instruction in its own right: it becomes `ld low, high` then
+        // `ld high, 0`. Priced by recursing with concrete operands - a different
+        // instantiation of this same generic function, so the rules stay in one
+        // place.
+        &Mnemonic::Srl8 => {
+            let (low, high) = match arg1 {
+                Some(OperandKind::Reg16(reg)) => {
+                    (
+                        DataAccess::Register8(reg.low()?),
+                        DataAccess::Register8(reg.high()?)
+                    )
+                },
+                Some(OperandKind::IndexReg16(reg)) => {
+                    (
+                        DataAccess::IndexRegister8(reg.low()),
+                        DataAccess::IndexRegister8(reg.high())
+                    )
+                },
+                _ => return None
+            };
+            let zero = DataAccess::Expression(Expr::Value(0));
+            opcode_duration(&Mnemonic::Ld, Some(&low), Some(&high))?
+                + opcode_duration(&Mnemonic::Ld, Some(&high), Some(&zero))?
+        },
+
+        _ => return None
+    };
     Some(duration)
 }

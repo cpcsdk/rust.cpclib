@@ -4,11 +4,10 @@
 //! parser, and that crate must not depend on the assembler - see this crate's
 //! `Cargo.toml`.
 
-use cpclib_z80flow::cost_range::{CostRange, InstructionCost, cost_range};
-use cpclib_tokens::{DataAccessElem, ListingElement, Mnemonic};
-
 use cpclib_asm::parser::obtained::LocatedToken;
 use cpclib_asm::parser::parse_z80_str;
+use cpclib_tokens::{DataAccessElem, ListingElement, Mnemonic};
+use cpclib_z80flow::cost_range::{CostRange, InstructionCost, cost_range};
 
 /// A tiny, test-only cost source - deliberately distinct values from
 /// `branch_balance`'s own test cost function, to keep every hand
@@ -48,7 +47,6 @@ fn test_cost(token: &LocatedToken) -> InstructionCost {
         _ => InstructionCost::Unknown
     }
 }
-
 
 fn range(code: &str) -> Result<CostRange, String> {
     let listing = parse_z80_str(code).unwrap();
@@ -304,8 +302,7 @@ ret
 fn the_same_routine_called_twice_is_priced_consistently() {
     let once = range("    call helper\n    ret\nhelper\n    ld a,b\n    ret\n").unwrap();
     let twice =
-        range("    call helper\n    call helper\n    ret\nhelper\n    ld a,b\n    ret\n")
-            .unwrap();
+        range("    call helper\n    call helper\n    ret\nhelper\n    ld a,b\n    ret\n").unwrap();
     assert_eq!(
         twice.min - once.min,
         9,

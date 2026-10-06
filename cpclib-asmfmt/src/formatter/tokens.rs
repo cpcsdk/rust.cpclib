@@ -37,8 +37,7 @@ impl<'src> Formatter<'src> {
             let line_0 = line_1.saturating_sub(1);
             self.emit_interstitial(line_0);
             let next_is_label_on_same_line = tokens.get(index + 1).is_some_and(|next| {
-                next.is_label()
-                    && next.span().relative_line_and_column().0 == line_1
+                next.is_label() && next.span().relative_line_and_column().0 == line_1
             });
             self.format_token(token, depth, line_0, next_is_label_on_same_line);
         }
@@ -67,7 +66,12 @@ impl<'src> Formatter<'src> {
         let after = after.trim_start();
         let after = after.strip_prefix(':').unwrap_or(after).trim_start();
         let (rest, comment) = Self::split_comment(after);
-        if rest.trim().is_empty() { comment.map(str::to_string) } else { None }
+        if rest.trim().is_empty() {
+            comment.map(str::to_string)
+        }
+        else {
+            None
+        }
     }
 
     fn format_token(
@@ -84,7 +88,11 @@ impl<'src> Formatter<'src> {
         // means an earlier token in the same disabled range already handled
         // it - the loop below then does nothing, so a range is never emitted
         // twice no matter how many tokens sit inside it.
-        if let Some(&(_, end)) = self.disabled_ranges.iter().find(|&&(start, end)| line_0 >= start && line_0 <= end) {
+        if let Some(&(_, end)) = self
+            .disabled_ranges
+            .iter()
+            .find(|&&(start, end)| line_0 >= start && line_0 <= end)
+        {
             self.emit_verbatim_through(end);
             return;
         }
@@ -214,7 +222,8 @@ impl<'src> Formatter<'src> {
         line_0: usize,
         next_is_label_on_same_line: bool
     ) {
-        let Some((label_start, label_name)) = self.source_label_position(token) else {
+        let Some((label_start, label_name)) = self.source_label_position(token)
+        else {
             return;
         };
 
@@ -596,7 +605,9 @@ impl<'src> Formatter<'src> {
         let formatted_body = (!trimmed_body.trim().is_empty())
             .then(|| cpclib_asm::parser::parse_z80_str(&trimmed_body).ok())
             .flatten()
-            .map(|body_listing| super::format_listing(&body_listing, &trimmed_body, depth + 1, &self.opt));
+            .map(|body_listing| {
+                super::format_listing(&body_listing, &trimmed_body, depth + 1, &self.opt)
+            });
 
         match formatted_body {
             Some(formatted) => self.output.push_str(&formatted),
@@ -605,7 +616,7 @@ impl<'src> Formatter<'src> {
                     self.output.push_str(line);
                     self.output.push('\n');
                 }
-            }
+            },
         }
         self.current_line += line_count;
 

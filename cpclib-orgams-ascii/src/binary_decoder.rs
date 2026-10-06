@@ -651,20 +651,24 @@ impl Item {
                 }
                 .into()
             },
-            Item::Label(label) => label
-                .get(labels)
-                .ok_or_else(|| {
-                    format!("label reference {label:?} is out of range for the label table")
-                })?
-                .to_string()
-                .into(),
-            Item::LocalLabel(label) => format!(
-                ".{}",
-                label.get(labels).ok_or_else(|| format!(
-                    "label reference {label:?} is out of range for the label table"
-                ))?
-            )
-            .into(),
+            Item::Label(label) => {
+                label
+                    .get(labels)
+                    .ok_or_else(|| {
+                        format!("label reference {label:?} is out of range for the label table")
+                    })?
+                    .to_string()
+                    .into()
+            },
+            Item::LocalLabel(label) => {
+                format!(
+                    ".{}",
+                    label.get(labels).ok_or_else(|| {
+                        format!("label reference {label:?} is out of range for the label table")
+                    })?
+                )
+                .into()
+            },
             Item::MacroDef(m) => m.display(labels)?.into(),
             Item::Statement(s) => s.display(labels)?
         })
@@ -1137,20 +1141,23 @@ impl ExpressionMember {
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
             ExpressionMember::Value(v) => v.display().into(),
             ExpressionMember::Operator(op) => op.as_str().into(),
-            ExpressionMember::LabelRef(l) => l
-                .get(table)
-                .ok_or_else(|| {
-                    format!("label reference {l:?} is out of range for the label table")
-                })?
-                .to_string()
-                .into(),
-            ExpressionMember::LocalLabelRef(l) => format!(
-                ".{}",
-                l.get(table).ok_or_else(|| format!(
-                    "label reference {l:?} is out of range for the label table"
-                ))?
-            )
-            .into(),
+            ExpressionMember::LabelRef(l) => {
+                l.get(table)
+                    .ok_or_else(|| {
+                        format!("label reference {l:?} is out of range for the label table")
+                    })?
+                    .to_string()
+                    .into()
+            },
+            ExpressionMember::LocalLabelRef(l) => {
+                format!(
+                    ".{}",
+                    l.get(table).ok_or_else(|| {
+                        format!("label reference {l:?} is out of range for the label table")
+                    })?
+                )
+                .into()
+            },
             ExpressionMember::Space => " ".into(),
             ExpressionMember::Dollar => "$".into(),
             ExpressionMember::DoubleDollar => "$$".into(),
@@ -1304,11 +1311,9 @@ impl MacroDef {
                 .params
                 .iter()
                 .map(|p| {
-                    p.get(table)
-                        .map(|s| s.to_string())
-                        .ok_or_else(|| format!(
-                            "label reference {p:?} is out of range for the label table"
-                        ))
+                    p.get(table).map(|s| s.to_string()).ok_or_else(|| {
+                        format!("label reference {p:?} is out of range for the label table")
+                    })
                 })
                 .collect::<Result<Vec<_>, String>>()?
                 .join(",");

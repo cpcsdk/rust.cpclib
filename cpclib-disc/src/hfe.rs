@@ -126,11 +126,13 @@ impl Disc for Hfe {
             // Try FM encoding if MFM fails; if that also fails, this track
             // is genuinely unformatted/missing - a legitimate outcome for a
             // corrupted or partially-blank image, not an error.
-            None => access.all_track_sectors(
-                s.into(),
-                (track as i32).into(),
-                TrackEncoding::IsoibmFm
-            )?
+            None => {
+                access.all_track_sectors(
+                    s.into(),
+                    (track as i32).into(),
+                    TrackEncoding::IsoibmFm
+                )?
+            },
         };
 
         (0..sca.nb_sectors())

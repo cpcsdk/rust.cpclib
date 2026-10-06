@@ -2,13 +2,11 @@
 //! `cost_range.rs` in this directory for why these tests live outside the
 //! crate they exercise.
 
-use cpclib_tokens::{ListingElement, Mnemonic};
-use cpclib_z80flow::analysis_op::AnalysisOp;
-use cpclib_z80flow::stream::AnalysisStream;
-use cpclib_z80flow::stream::build_without_addresses;
 use cpclib_asm::flatten::flatten_for_analysis;
 use cpclib_asm::parser::{LocatedToken, parse_z80_str};
-
+use cpclib_tokens::{ListingElement, Mnemonic};
+use cpclib_z80flow::analysis_op::AnalysisOp;
+use cpclib_z80flow::stream::{AnalysisStream, build_without_addresses};
 
 fn stream_of(source: &str) -> (cpclib_asm::parser::LocatedListing, Vec<String>) {
     let listing = parse_z80_str(source).expect("source must parse");
@@ -52,9 +50,7 @@ fn a_fake_instruction_expands_into_its_real_steps() {
     let total = stream.ops().len();
     for (i, op) in stream.ops().iter().enumerate() {
         match op {
-            AnalysisOp::Expanded {
-                step, total: t, ..
-            } => {
+            AnalysisOp::Expanded { step, total: t, .. } => {
                 assert_eq!(*step, i);
                 assert_eq!(*t, total);
             },
@@ -137,8 +133,7 @@ fn jq_is_opaque_without_addresses_but_concrete_with_them() {
 /// ordinary source.
 #[test]
 fn ordinary_source_is_one_op_per_token() {
-    let listing =
-        parse_z80_str("start:\n    ld a, 0\n    cp 0\n    ld b, b\n    ret\n").unwrap();
+    let listing = parse_z80_str("start:\n    ld a, 0\n    cp 0\n    ld b, b\n    ret\n").unwrap();
     let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
     let stream = build_without_addresses(&tokens);
     assert_eq!(stream.ops().len(), tokens.len());

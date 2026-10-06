@@ -165,7 +165,9 @@ impl AssemblyAnalyzer {
             .map(|listing| super::token::global_label_scopes(listing.iter()));
 
         let definitions = match (&parsed, &scopes) {
-            (Some(listing), Some(scopes)) => super::token::label_definitions_in(listing.iter(), scopes),
+            (Some(listing), Some(scopes)) => {
+                super::token::label_definitions_in(listing.iter(), scopes)
+            },
             _ => Vec::new()
         }
         .into_iter()
@@ -269,13 +271,20 @@ impl AssemblyAnalyzer {
     /// this for its current document's includes, re-checked on essentially
     /// every keystroke.
     pub fn is_label_index_fresh(&self, uri: &Url, version: i32) -> bool {
-        self.label_index.get(uri).is_some_and(|entry| entry.0 == version)
+        self.label_index
+            .get(uri)
+            .is_some_and(|entry| entry.0 == version)
     }
 
     /// Diff `old_words` (this file's previously-indexed occurrence keys, or
     /// empty if this is the first time) against `new_facts`, adding/removing
     /// `uri` from `global_name_index`'s per-word entry sets accordingly.
-    fn reindex_global_names(&self, uri: &Url, old_words: &HashSet<String>, new_facts: &FileLabelFacts) {
+    fn reindex_global_names(
+        &self,
+        uri: &Url,
+        old_words: &HashSet<String>,
+        new_facts: &FileLabelFacts
+    ) {
         for word in old_words {
             if !new_facts.occurrences.contains_key(word) {
                 if let Entry::Occupied(mut occ) = self.global_name_index.entry(word.clone()) {
@@ -403,9 +412,8 @@ mod tests {
         // two unrelated locals sharing a name under different globals must
         // never collide in one bucket.
         let analyzer = AssemblyAnalyzer::new();
-        let facts = analyzer.ensure_label_facts(&doc(
-            "one:\n.local\n    ret\ntwo:\n.local\n    ret\n"
-        ));
+        let facts =
+            analyzer.ensure_label_facts(&doc("one:\n.local\n    ret\ntwo:\n.local\n    ret\n"));
         let keys: Vec<_> = facts.occurrences.keys().cloned().collect();
         assert!(facts.occurrences.contains_key("one.local"), "{keys:?}");
         assert!(facts.occurrences.contains_key("two.local"), "{keys:?}");
@@ -433,12 +441,20 @@ mod tests {
     #[test]
     fn editing_the_document_updates_the_global_name_index_without_closing_it() {
         let analyzer = AssemblyAnalyzer::new();
-        let v1 = Document::new(Url::parse("file:///main.asm").unwrap(), "used_word:\n    ret\n".to_string(), 1);
+        let v1 = Document::new(
+            Url::parse("file:///main.asm").unwrap(),
+            "used_word:\n    ret\n".to_string(),
+            1
+        );
         analyzer.ensure_label_facts(&v1);
         assert_eq!(analyzer.known_files_mentioning("used_word").len(), 1);
 
         // Same URI, new version, the word is gone - a real edit, not a close.
-        let v2 = Document::new(Url::parse("file:///main.asm").unwrap(), "renamed:\n    ret\n".to_string(), 2);
+        let v2 = Document::new(
+            Url::parse("file:///main.asm").unwrap(),
+            "renamed:\n    ret\n".to_string(),
+            2
+        );
         analyzer.ensure_label_facts(&v2);
         assert_eq!(analyzer.known_files_mentioning("used_word").len(), 0);
         assert_eq!(analyzer.known_files_mentioning("renamed").len(), 1);
@@ -447,8 +463,16 @@ mod tests {
     #[test]
     fn two_different_files_mentioning_the_same_word_both_appear_in_the_reverse_index() {
         let analyzer = AssemblyAnalyzer::new();
-        let a = Document::new(Url::parse("file:///a.asm").unwrap(), "    call shared\n".to_string(), 1);
-        let b = Document::new(Url::parse("file:///b.asm").unwrap(), "shared:\n    ret\n".to_string(), 1);
+        let a = Document::new(
+            Url::parse("file:///a.asm").unwrap(),
+            "    call shared\n".to_string(),
+            1
+        );
+        let b = Document::new(
+            Url::parse("file:///b.asm").unwrap(),
+            "shared:\n    ret\n".to_string(),
+            1
+        );
         analyzer.ensure_label_facts(&a);
         analyzer.ensure_label_facts(&b);
         let mut files = analyzer.known_files_mentioning("shared");

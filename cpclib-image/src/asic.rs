@@ -13,24 +13,25 @@
 //! 0-3, with bits 4-7 unused. This is the layout `.kit` palette files use (see
 //! [`crate::kit`]).
 
-use std::{fmt::{Debug, Formatter, Result}, hash::Hash};
+use std::fmt::{Debug, Formatter, Result};
+use std::hash::Hash;
 
 use image as im;
 
-use crate::{color::AmstradColor, ink::{Ink, InkComponentQuantity}};
+use crate::color::AmstradColor;
+use crate::ink::{Ink, InkComponentQuantity};
 
 /// One 4-bit colour component, 0 (off) to 15 (full).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AsicColorComponent(u8);
 
 impl AsicColorComponent {
-    pub  const MAX: u8 = 0xf;
+    pub const MAX: u8 = 0xF;
+
     pub fn value(self) -> u8 {
         self.0
     }
 }
-
-
 
 impl From<u8> for AsicColorComponent {
     /// This is from a real rgb componenet
@@ -79,7 +80,9 @@ impl PartialOrd for AsicColor {
 
 impl Ord for AsicColor {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        AmstradColor::color(self).0.cmp(&AmstradColor::color(other).0)
+        AmstradColor::color(self)
+            .0
+            .cmp(&AmstradColor::color(other).0)
     }
 }
 
@@ -168,11 +171,7 @@ impl From<im::Rgb<u8>> for AsicColor {
         fn quantise(component: u8) -> u8 {
             component >> 4
         }
-        AsicColor::new(
-            quantise(color[0]),
-            quantise(color[1]),
-            quantise(color[2])
-        )
+        AsicColor::new(quantise(color[0]), quantise(color[1]), quantise(color[2]))
     }
 }
 
@@ -267,7 +266,10 @@ impl std::str::FromStr for AsicColor {
             return Ok(AsicColor::new(components[0], components[1], components[2]));
         }
 
-        let digits = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")).unwrap_or(raw);
+        let digits = raw
+            .strip_prefix("0x")
+            .or_else(|| raw.strip_prefix("0X"))
+            .unwrap_or(raw);
         let value = u16::from_str_radix(digits, 16)
             .map_err(|_| format!("{raw:?} is not a hexadecimal colour (expected e.g. 4A5)"))?;
         if value > 0xFFF {

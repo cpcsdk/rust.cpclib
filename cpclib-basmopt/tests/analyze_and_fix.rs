@@ -251,7 +251,11 @@ fn include_dirs_resolves_an_include_so_address_aware_rules_can_fire() {
     let dir = camino_tempfile::tempdir().unwrap();
     let included_dir = dir.path().join("shared");
     fs_err::create_dir(&included_dir).unwrap();
-    write(&dir, "shared/macros.asm", "macro nop_twice\n    nop\n    nop\nendmacro\n");
+    write(
+        &dir,
+        "shared/macros.asm",
+        "macro nop_twice\n    nop\n    nop\nendmacro\n"
+    );
 
     let path = write(
         &dir,
@@ -431,7 +435,11 @@ fn a_fix_on_a_shared_line_leaves_the_other_instructions_alone() {
 #[test]
 fn a_deletion_on_a_shared_line_takes_its_separator() {
     let dir = camino_tempfile::tempdir().unwrap();
-    let path = write(&dir, "test.asm", "start:\n    nop : ld b, b : inc hl\n    ret\n");
+    let path = write(
+        &dir,
+        "test.asm",
+        "start:\n    nop : ld b, b : inc hl\n    ret\n"
+    );
 
     let (text, suggestions) = analyze(&path, &Options::default());
     assert!(!suggestions.is_empty(), "expected ld b,b to be flagged");
@@ -439,7 +447,10 @@ fn a_deletion_on_a_shared_line_takes_its_separator() {
 
     assert!(fixed.contains("nop"), "{fixed}");
     assert!(fixed.contains("inc hl"), "{fixed}");
-    assert!(!fixed.contains("ld b, b"), "the ld should be gone:\n{fixed}");
+    assert!(
+        !fixed.contains("ld b, b"),
+        "the ld should be gone:\n{fixed}"
+    );
     cpclib_asm::parser::parse_z80_str(&fixed)
         .unwrap_or_else(|e| panic!("fixed source no longer parses: {e}\n{fixed}"));
 }
@@ -506,13 +517,25 @@ fn a_second_pass_catches_an_opportunity_the_first_pass_exposed() {
     assert_eq!(outcome.passes_run, 2, "{outcome:?}");
     assert_eq!(outcome.total_applied, 2, "{outcome:?}");
     assert_eq!(outcome.remaining_skipped, 0, "{outcome:?}");
-    assert!(!outcome.final_source.contains("nop"), "{}", outcome.final_source);
+    assert!(
+        !outcome.final_source.contains("nop"),
+        "{}",
+        outcome.final_source
+    );
     assert!(
         !outcome.final_source.contains("ld a, 1"),
         "the second pass should have collapsed this: {}",
         outcome.final_source
     );
-    assert!(outcome.final_source.contains("ld a, 2"), "{}", outcome.final_source);
-    cpclib_asm::parser::parse_z80_str(&outcome.final_source)
-        .unwrap_or_else(|e| panic!("final source no longer parses: {e}\n{}", outcome.final_source));
+    assert!(
+        outcome.final_source.contains("ld a, 2"),
+        "{}",
+        outcome.final_source
+    );
+    cpclib_asm::parser::parse_z80_str(&outcome.final_source).unwrap_or_else(|e| {
+        panic!(
+            "final source no longer parses: {e}\n{}",
+            outcome.final_source
+        )
+    });
 }

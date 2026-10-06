@@ -1376,8 +1376,14 @@ fn migrated_overflow_warning_keeps_its_own_category_distinct_from_precision_loss
         .iter()
         .map(|w| w.warning_category())
         .collect();
-    assert!(categories.contains(&cpclib_asm::WarningCategory::Overflow), "{categories:?}");
-    assert!(categories.contains(&cpclib_asm::WarningCategory::PrecisionLoss), "{categories:?}");
+    assert!(
+        categories.contains(&cpclib_asm::WarningCategory::Overflow),
+        "{categories:?}"
+    );
+    assert!(
+        categories.contains(&cpclib_asm::WarningCategory::PrecisionLoss),
+        "{categories:?}"
+    );
 
     let args_parser = build_args_parser();
     let disabled_args = args_parser.get_matches_from([

@@ -682,7 +682,9 @@ mod test_super {
         let options = EnvOptions::default();
         match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
             Ok(_) => {},
-            Err((_tok, _env, e)) => panic!("short-circuiting should have avoided the undefined symbol: {e}")
+            Err((_tok, _env, e)) => {
+                panic!("short-circuiting should have avoided the undefined symbol: {e}")
+            },
         }
     }
 
@@ -707,8 +709,11 @@ mod test_super {
         assert!(env.warnings().is_empty(), "{:?}", env.warnings());
 
         let mut out = Vec::new();
-        env.generate_symbols_output(&mut out, crate::assembler::symbols_output::SymbolOutputFormat::Basm)
-            .unwrap();
+        env.generate_symbols_output(
+            &mut out,
+            crate::assembler::symbols_output::SymbolOutputFormat::Basm
+        )
+        .unwrap();
 
         assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
         match &env.warnings()[0] {

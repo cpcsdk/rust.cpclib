@@ -456,7 +456,10 @@ fn disassembled_instructions_carry_their_source_line() {
 #[test]
 fn disassembly_carries_the_comment_on_its_own_line_and_the_block_above_it() {
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("cpclib-dap-comment-test-{}.asm", std::process::id()));
+    let path = dir.join(format!(
+        "cpclib-dap-comment-test-{}.asm",
+        std::process::id()
+    ));
     std::fs::write(
         &path,
         "org 0x4000\n\
@@ -792,7 +795,10 @@ fn a_watch_can_ask_for_an_array_of_words() {
         "request_seq": read["seq"].as_i64().unwrap(),
         "success": true, "body": {"data": "NBJ4VgEA//8="}
     }));
-    assert_eq!(out[0]["body"]["result"], json!("4 element(s) from 0x9000 (table)"));
+    assert_eq!(
+        out[0]["body"]["result"],
+        json!("4 element(s) from 0x9000 (table)")
+    );
     let reference = out[0]["body"]["variablesReference"].as_i64().unwrap();
     assert!(reference > 0, "expandable, not a scalar: {out:?}");
 
@@ -836,7 +842,11 @@ fn a_bare_width_suffix_is_not_mistaken_for_a_count() {
         }))
         .unwrap();
     let read = session.peer().last("readMemory").unwrap().clone();
-    assert_eq!(read["arguments"]["count"], json!(2), "still a plain word read");
+    assert_eq!(
+        read["arguments"]["count"],
+        json!(2),
+        "still a plain word read"
+    );
 }
 
 /// An expression that is not one of our labels is refused *here*, with a

@@ -349,7 +349,10 @@ mod tests {
                 "the token is injected into the page, not the URL"
             ),
             ("loadSnapshot", "the program under test has to be loaded"),
-            ("/session/events", "the downstream half of the debug-message channel"),
+            (
+                "/session/events",
+                "the downstream half of the debug-message channel"
+            ),
             ("/session/upstream", "the upstream half"),
             (
                 "cpclib/setWatches",

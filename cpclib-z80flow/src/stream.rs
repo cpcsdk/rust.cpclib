@@ -176,8 +176,12 @@ where
             Some(resolved) => {
                 Classified::Expansion(vec![Token::OpCode(
                     resolved,
-                    token.mnemonic_arg1().map(|a| a.to_data_access().into_owned()),
-                    token.mnemonic_arg2().map(|a| a.to_data_access().into_owned()),
+                    token
+                        .mnemonic_arg1()
+                        .map(|a| a.to_data_access().into_owned()),
+                    token
+                        .mnemonic_arg2()
+                        .map(|a| a.to_data_access().into_owned()),
                     None
                 )])
             },

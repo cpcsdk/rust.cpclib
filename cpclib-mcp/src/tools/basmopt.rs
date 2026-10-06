@@ -23,7 +23,7 @@ fn parse_goal(goal: Option<&str>) -> Result<OptimizationGoal, ToolError> {
             Err(ToolError::invalid_input(format!(
                 "unknown goal '{other}' - expected one of: neutral, size, speed"
             )))
-        }
+        },
     }
 }
 
@@ -270,13 +270,15 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = basmopt_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Peephole-optimization suggestions for a basm source file, with the \
+    #[tool(
+        description = "Peephole-optimization suggestions for a basm source file, with the \
                            matched rule and why each is believed safe. Read-only. By default \
                            only looks at path's own top-level lines - pass include_project: \
                            true to also analyze every file it INCLUDEs (transitively), each \
                            against the real whole-project address space, which most projects \
                            need: a thin top-level file that mostly INCLUDEs everything else has \
-                           almost nothing to find otherwise.")]
+                           almost nothing to find otherwise."
+    )]
     async fn suggest_optimizations(
         &self,
         Parameters(input): Parameters<SuggestInput>
@@ -284,8 +286,10 @@ impl McpServer {
         ok_or_tool_error(suggest_optimizations(input))
     }
 
-    #[tool(description = "MUTATING: rewrites the file in place with every bulk-safe peephole \
-                           suggestion applied. Requires in_place: true.")]
+    #[tool(
+        description = "MUTATING: rewrites the file in place with every bulk-safe peephole \
+                           suggestion applied. Requires in_place: true."
+    )]
     async fn apply_optimizations(
         &self,
         Parameters(input): Parameters<ApplyInput>
@@ -293,14 +297,16 @@ impl McpServer {
         ok_or_tool_error(apply_optimizations(input))
     }
 
-    #[tool(description = "MUTATING: rewrites every .asm file under project_dir in place with \
+    #[tool(
+        description = "MUTATING: rewrites every .asm file under project_dir in place with \
                            its own bulk-safe, non-address-aware peephole suggestions applied \
                            (respects .gitignore). Requires in_place: true. Never applies an \
                            address-aware rule (e.g. jp2jr) regardless of goal - rewriting one \
                            file can shift another's real addresses via a shared INCLUDE, which \
                            could invalidate an address-aware match found earlier in the same \
                            run; total_address_aware_skipped reports how many were left for \
-                           apply_optimizations on the individual file instead.")]
+                           apply_optimizations on the individual file instead."
+    )]
     async fn apply_optimizations_project(
         &self,
         Parameters(input): Parameters<ApplyProjectInput>
@@ -330,7 +336,11 @@ mod tests {
     fn without_include_project_an_include_only_entry_finds_nothing() {
         let dir = camino_tempfile::tempdir().unwrap();
         fs_err::write(dir.path().join("code.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
-        fs_err::write(dir.path().join("entry.asm"), "\torg 0x4000\n\tinclude \"code.asm\"\n").unwrap();
+        fs_err::write(
+            dir.path().join("entry.asm"),
+            "\torg 0x4000\n\tinclude \"code.asm\"\n"
+        )
+        .unwrap();
         let path = dir.path().join("entry.asm").to_string();
 
         let out = suggest_optimizations(base(&path)).unwrap();
@@ -343,15 +353,25 @@ mod tests {
     fn include_project_finds_suggestions_in_an_included_file() {
         let dir = camino_tempfile::tempdir().unwrap();
         fs_err::write(dir.path().join("code.asm"), "\tld a,0\n\tld a,0\n\tret\n").unwrap();
-        fs_err::write(dir.path().join("entry.asm"), "\torg 0x4000\n\tinclude \"code.asm\"\n").unwrap();
+        fs_err::write(
+            dir.path().join("entry.asm"),
+            "\torg 0x4000\n\tinclude \"code.asm\"\n"
+        )
+        .unwrap();
         let path = dir.path().join("entry.asm").to_string();
 
-        let out = suggest_optimizations(SuggestInput { include_project: Some(true), ..base(&path) }).unwrap();
+        let out = suggest_optimizations(SuggestInput {
+            include_project: Some(true),
+            ..base(&path)
+        })
+        .unwrap();
         assert_eq!(out["files_analyzed"], 2, "{out}");
         assert!(out["suggestion_count"].as_u64().unwrap() > 0, "{out}");
         let files = out["files"].as_array().unwrap();
         assert!(
-            files.iter().any(|f| f["path"].as_str().unwrap().ends_with("code.asm")),
+            files
+                .iter()
+                .any(|f| f["path"].as_str().unwrap().ends_with("code.asm")),
             "the included file must be listed: {out}"
         );
     }
@@ -382,12 +402,22 @@ mod tests {
         fs_err::write(dir.path().join("b.asm"), "\tld b,1\n\tld b,1\n\tret\n").unwrap();
         let project_dir = dir.path().to_string();
 
-        let out = apply_optimizations_project(ApplyProjectInput { in_place: true, ..project_base(&project_dir) }).unwrap();
+        let out = apply_optimizations_project(ApplyProjectInput {
+            in_place: true,
+            ..project_base(&project_dir)
+        })
+        .unwrap();
         assert_eq!(out["files_touched"], 2, "{out}");
         assert_eq!(out["files_with_errors"], 0, "{out}");
         assert!(out["total_applied"].as_u64().unwrap() >= 2, "{out}");
 
-        assert_eq!(fs_err::read_to_string(dir.path().join("a.asm")).unwrap(), "\tld a, 0\n\tret\n");
-        assert_eq!(fs_err::read_to_string(dir.path().join("b.asm")).unwrap(), "\tld b, 1\n\tret\n");
+        assert_eq!(
+            fs_err::read_to_string(dir.path().join("a.asm")).unwrap(),
+            "\tld a, 0\n\tret\n"
+        );
+        assert_eq!(
+            fs_err::read_to_string(dir.path().join("b.asm")).unwrap(),
+            "\tld b, 1\n\tret\n"
+        );
     }
 }

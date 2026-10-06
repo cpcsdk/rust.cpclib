@@ -7,10 +7,11 @@
 //! [`AnyPalette`](crate::palette::AnyPalette) rather than through a colour-level
 //! enum - one runtime seam, at the container.
 
+use image as im;
+
 use crate::asic::AsicColor;
 use crate::ga::INKS_RGB_VALUES;
 use crate::ink::Ink;
-use image as im;
 
 pub trait AmstradColor:
     Default
@@ -94,7 +95,6 @@ impl AmstradColor for Ink {
         Ink::BRIGHTWHITE
     }
 
-
     /// Get the RGB color value of the ink
     fn color(&self) -> im::Rgb<u8> {
         INKS_RGB_VALUES[self.firmware_number() as usize]
@@ -103,7 +103,6 @@ impl AmstradColor for Ink {
     fn is_plus() -> bool {
         false
     }
-
 }
 
 /// The ASIC's answers are the Gate Array's, converted - the mask conventions
@@ -136,9 +135,9 @@ impl AmstradColor for AsicColor {
 
     fn color(&self) -> im::Rgb<u8> {
         im::Rgb([
-            self.get_red().value()<<4,
-            self.get_green().value()<<4,
-            self.get_blue().value()<<4,
+            self.get_red().value() << 4,
+            self.get_green().value() << 4,
+            self.get_blue().value() << 4
         ])
     }
 
@@ -147,11 +146,10 @@ impl AmstradColor for AsicColor {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AnyColor {
     GateArray(Ink),
-    Asic(AsicColor),
+    Asic(AsicColor)
 }
 
 impl From<Ink> for AnyColor {
@@ -172,7 +170,7 @@ impl TryFrom<AnyColor> for Ink {
     fn try_from(value: AnyColor) -> Result<Self, Self::Error> {
         match value {
             AnyColor::GateArray(ink) => Ok(ink),
-            AnyColor::Asic(_) => Err("Cannot convert AsicColor to Ink".to_owned()),
+            AnyColor::Asic(_) => Err("Cannot convert AsicColor to Ink".to_owned())
         }
     }
 }
@@ -183,7 +181,7 @@ impl TryFrom<AnyColor> for AsicColor {
     fn try_from(value: AnyColor) -> Result<Self, Self::Error> {
         match value {
             AnyColor::GateArray(ink) => Err(format!("Cannot convert Ink ({ink:?}) to AsicColor")),
-            AnyColor::Asic(asic) => Ok(asic),
+            AnyColor::Asic(asic) => Ok(asic)
         }
     }
 }

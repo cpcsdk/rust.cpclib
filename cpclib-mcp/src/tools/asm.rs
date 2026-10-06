@@ -107,8 +107,10 @@ impl McpServer {
     /// structured diagnostics - parse errors (with best-effort recovery so
     /// more than the first one is reported) and assembler warnings.
     /// Read-only.
-    #[tool(description = "Assemble a basm/Z80 source and return structured diagnostics (errors \
-                           and warnings). Read-only.")]
+    #[tool(
+        description = "Assemble a basm/Z80 source and return structured diagnostics (errors \
+                           and warnings). Read-only."
+    )]
     async fn assemble_check(
         &self,
         Parameters(input): Parameters<AssembleCheckInput>
@@ -118,8 +120,10 @@ impl McpServer {
 
     /// Control-flow-aware min/max NOP-count (Z80 timing) for a line range,
     /// via the same engine as the LSP's status-bar cycle counter. Read-only.
-    #[tool(description = "Report a control-flow-aware min/max NOP-count (Z80 instruction timing) \
-                           for a 1-based inclusive line range of a basm source. Read-only.")]
+    #[tool(
+        description = "Report a control-flow-aware min/max NOP-count (Z80 instruction timing) \
+                           for a 1-based inclusive line range of a basm source. Read-only."
+    )]
     async fn count_cycles(
         &self,
         Parameters(input): Parameters<CountCyclesInput>
@@ -135,10 +139,13 @@ mod tests {
     #[test]
     fn assemble_check_reports_a_clean_file_as_ok() {
         let analyzer = AssemblyAnalyzer::new();
-        let result = assemble_check(&analyzer, AssembleCheckInput {
-            path: None,
-            code: Some("org 0x4000\n ld a, 1\n ret\n".to_string())
-        })
+        let result = assemble_check(
+            &analyzer,
+            AssembleCheckInput {
+                path: None,
+                code: Some("org 0x4000\n ld a, 1\n ret\n".to_string())
+            }
+        )
         .expect("assemble_check itself should not fail on valid input");
         assert_eq!(result["ok"], true, "{result:#}");
         assert_eq!(result["diagnostic_count"], 0, "{result:#}");
@@ -147,10 +154,13 @@ mod tests {
     #[test]
     fn assemble_check_reports_a_syntax_error() {
         let analyzer = AssemblyAnalyzer::new();
-        let result = assemble_check(&analyzer, AssembleCheckInput {
-            path: None,
-            code: Some("org 0x4000\n@#$ garbage @#$\n ret\n".to_string())
-        })
+        let result = assemble_check(
+            &analyzer,
+            AssembleCheckInput {
+                path: None,
+                code: Some("org 0x4000\n@#$ garbage @#$\n ret\n".to_string())
+            }
+        )
         .expect("assemble_check itself should not fail even on invalid asm source");
         assert_eq!(result["ok"], false, "{result:#}");
         let count = result["diagnostic_count"].as_u64().unwrap();
@@ -162,10 +172,13 @@ mod tests {
     #[test]
     fn assemble_check_requires_path_or_code() {
         let analyzer = AssemblyAnalyzer::new();
-        let err = assemble_check(&analyzer, AssembleCheckInput {
-            path: None,
-            code: None
-        })
+        let err = assemble_check(
+            &analyzer,
+            AssembleCheckInput {
+                path: None,
+                code: None
+            }
+        )
         .expect_err("neither path nor code given should be an error");
         assert_eq!(err.kind, "invalid_input");
     }
@@ -174,12 +187,15 @@ mod tests {
     fn count_cycles_reports_a_known_sequence() {
         let analyzer = AssemblyAnalyzer::new();
         let code = "org 0x4000\n ld a, 1\n nop\n nop\n ret\n";
-        let result = count_cycles(&analyzer, CountCyclesInput {
-            path: None,
-            code: Some(code.to_string()),
-            start_line: 2,
-            end_line: 4
-        })
+        let result = count_cycles(
+            &analyzer,
+            CountCyclesInput {
+                path: None,
+                code: Some(code.to_string()),
+                start_line: 2,
+                end_line: 4
+            }
+        )
         .expect("count_cycles should succeed on a known-good sequence");
         assert_eq!(result["instruction_count"], 3, "{result:#}");
         let min_nops = result["min_nops"].as_u64().unwrap();
@@ -189,12 +205,15 @@ mod tests {
     #[test]
     fn count_cycles_rejects_zero_based_lines() {
         let analyzer = AssemblyAnalyzer::new();
-        let err = count_cycles(&analyzer, CountCyclesInput {
-            path: None,
-            code: Some("nop\n".to_string()),
-            start_line: 0,
-            end_line: 1
-        })
+        let err = count_cycles(
+            &analyzer,
+            CountCyclesInput {
+                path: None,
+                code: Some("nop\n".to_string()),
+                start_line: 0,
+                end_line: 1
+            }
+        )
         .expect_err("start_line: 0 should be rejected as invalid input");
         assert_eq!(err.kind, "invalid_input");
     }

@@ -14,10 +14,20 @@ use cpclib_crunch::sizemap::{SizeMapOptions, size_map};
 /// hex - not just plain decimal, so a value copied out of a `.lst`/source
 /// file (almost always hex there) can be pasted straight in.
 fn parse_address(s: &str) -> Result<u32, String> {
-    let digits = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).or_else(|| s.strip_prefix('&')).or_else(|| s.strip_prefix('#'));
+    let digits = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .or_else(|| s.strip_prefix('&'))
+        .or_else(|| s.strip_prefix('#'));
     match digits {
-        Some(hex) => u32::from_str_radix(hex, 16).map_err(|e| format!("'{s}' is not a valid hex address: {e}")),
-        None => s.parse().map_err(|e| format!("'{s}' is not a valid address: {e}"))
+        Some(hex) => {
+            u32::from_str_radix(hex, 16)
+                .map_err(|e| format!("'{s}' is not a valid hex address: {e}"))
+        },
+        None => {
+            s.parse()
+                .map_err(|e| format!("'{s}' is not a valid address: {e}"))
+        },
     }
 }
 
@@ -110,7 +120,12 @@ fn main() {
     };
 
     if cli.json {
-        writeln!(out, "{}", serde_json::to_string_pretty(&report).expect("SizeMapReport always serializes")).ok();
+        writeln!(
+            out,
+            "{}",
+            serde_json::to_string_pretty(&report).expect("SizeMapReport always serializes")
+        )
+        .ok();
         return;
     }
 
@@ -122,7 +137,12 @@ fn main() {
         report.start,
         report.end,
         report.cruncher.as_deref().map_or(String::new(), |c| {
-            format!(", {} bytes crunched with {c}", report.crunched_image.map_or("?".to_string(), |v| v.to_string()))
+            format!(
+                ", {} bytes crunched with {c}",
+                report
+                    .crunched_image
+                    .map_or("?".to_string(), |v| v.to_string())
+            )
         })
     )
     .ok();
@@ -153,7 +173,9 @@ fn main() {
             section.address,
             section.decrunched_bytes,
             section.crunched_bytes,
-            section.remeasured_crunched_bytes.map_or("?".to_string(), |v| v.to_string())
+            section
+                .remeasured_crunched_bytes
+                .map_or("?".to_string(), |v| v.to_string())
         )
         .ok();
         writeln!(out, "{}", section.regions_table).ok();

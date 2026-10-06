@@ -4,10 +4,9 @@
 
 #[test]
 fn manual_offset_resolves_relative_to_the_label() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n foo: ld a,13\n answer+1: ld a,13\n db peek(answer)\n"
-    )
-    .unwrap();
+    let bin =
+        cpclib_asm::assemble("org 0x4000\n foo: ld a,13\n answer+1: ld a,13\n db peek(answer)\n")
+            .unwrap();
     assert_eq!(bin, vec![0x3E, 13, 0x3E, 13, 13]);
 }
 
@@ -38,33 +37,25 @@ fn smart_offset_matches_manual_offset_on_an_identical_instruction() {
 
 #[test]
 fn smart_offset_ld_a_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: ld a, 13\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: ld a, 13\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_jp_cc_nnnn() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: jp nz, 0x1234\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: jp nz, 0x1234\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_ld_ix_nnnn() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: ld ix, 0x1234\n assert a == s + 2\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: ld ix, 0x1234\n assert a == s + 2\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_ld_mem_nnnn_a() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: ld (0x1234), a\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: ld (0x1234), a\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
@@ -82,17 +73,13 @@ fn smart_offset_djnz() {
 
 #[test]
 fn smart_offset_in_a_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: in a, (0x12)\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: in a, (0x12)\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_out_n_a() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: out (0x12), a\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: out (0x12), a\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
@@ -101,65 +88,49 @@ fn smart_offset_ld_indexed_with_immediate_is_not_mistaken_for_the_ddcb_exception
     // `LD (IX+3),n` - the value byte (not the delta) is the tail, offset 3
     // (prefix, 0x36, delta, value) - must not be confused with the DDCB
     // bit-op exception below, which fixes the offset at 2 regardless.
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: ld (ix+3), 0x42\n assert a == s + 3\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: ld (ix+3), 0x42\n assert a == s + 3\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_ddcb_exception_rlc() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: rlc (ix+2)\n assert a == s + 2\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: rlc (ix+2)\n assert a == s + 2\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_ddcb_exception_bit() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: bit 3, (iy+1)\n assert a == s + 2\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: bit 3, (iy+1)\n assert a == s + 2\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_and_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: and 0x12\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: and 0x12\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_add_a_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: add a, 0x12\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: add a, 0x12\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_adc_a_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: adc a, 0x12\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: adc a, 0x12\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_sbc_a_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: sbc a, 0x12\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: sbc a, 0x12\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
 #[test]
 fn smart_offset_sub_n() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s: a+*: sub 0x12\n assert a == s + 1\n"
-    );
+    let bin = cpclib_asm::assemble("org 0x4000\n s: a+*: sub 0x12\n assert a == s + 1\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 

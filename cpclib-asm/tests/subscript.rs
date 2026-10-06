@@ -35,7 +35,7 @@ fn chained_subscripts_on_a_nested_list() {
 #[test]
 fn range_literal_can_be_indexed_directly_o1_no_materialization_needed() {
     let bin = cpclib_asm::assemble("org 0x4000\n db (0..1000000)[500000] & 0xff\n").unwrap();
-    assert_eq!(bin, vec![(500000i32 & 0xff) as u8]);
+    assert_eq!(bin, vec![(500000i32 & 0xFF) as u8]);
 }
 
 #[test]
@@ -46,9 +46,8 @@ fn string_single_index_returns_a_char() {
 
 #[test]
 fn string_range_slice_returns_a_substring() {
-    let bin = cpclib_asm::assemble(
-        "org 0x4000\n s = \"hello world\"\n assert s[0..5] == \"hello\"\n"
-    );
+    let bin =
+        cpclib_asm::assemble("org 0x4000\n s = \"hello world\"\n assert s[0..5] == \"hello\"\n");
     assert!(bin.is_ok(), "{bin:?}");
 }
 
@@ -76,8 +75,7 @@ fn two_indices_on_a_list_is_an_error() {
 
 #[test]
 fn list_of_indices_gathers_elements() {
-    let bin =
-        cpclib_asm::assemble("org 0x4000\n l = [10,20,30,40,50]\n db l[[0,2,4]]\n").unwrap();
+    let bin = cpclib_asm::assemble("org 0x4000\n l = [10,20,30,40,50]\n db l[[0,2,4]]\n").unwrap();
     assert_eq!(bin, vec![10, 30, 50]);
 }
 

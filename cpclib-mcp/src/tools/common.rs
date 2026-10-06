@@ -38,7 +38,7 @@ pub(crate) fn uri_for_path(path: &str) -> Result<Url, ToolError> {
 fn version_from_content(text: &str) -> i32 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut hasher);
-    (hasher.finish() & 0x7fff_ffff) as i32
+    (hasher.finish() & 0x7FFF_FFFF) as i32
 }
 
 /// Build a [`Document`] from an MCP tool's `path`/`code` input pair:

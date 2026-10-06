@@ -154,5 +154,11 @@ pub fn format_range(
     if end_0 < last_line_0 {
         extra_disabled.push((end_0 + 1, last_line_0));
     }
-    Ok(format_listing_with_extra_disabled(&listing, asm, 1, opt, &extra_disabled))
+    Ok(format_listing_with_extra_disabled(
+        &listing,
+        asm,
+        1,
+        opt,
+        &extra_disabled
+    ))
 }

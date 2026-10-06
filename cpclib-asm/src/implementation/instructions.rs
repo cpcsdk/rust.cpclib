@@ -45,8 +45,14 @@ impl AssemblerCompressionResult {
 
     pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         let to_be_set = [
-            ("BASM_LATEST_CRUNCH_INPUT_DATA_SIZE", self.input_len() as i32),
-            ("BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE", self.compressed_len() as i32),
+            (
+                "BASM_LATEST_CRUNCH_INPUT_DATA_SIZE",
+                self.input_len() as i32
+            ),
+            (
+                "BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE",
+                self.compressed_len() as i32
+            ),
             (
                 "BASM_LATEST_CRUNCH_DELTA_SIZE",
                 self.compressed_delta().map(|v| v as i32).unwrap_or(-1)
@@ -59,7 +65,8 @@ impl AssemblerCompressionResult {
         // so the row of the crunched section itself ended up at `0xffffffff`
         // (the `-1` delta) in the listing and the source map.
         for (name, value) in to_be_set {
-            env.symbols_mut().assign_symbol_to_value(name, ExprResult::from(value))?;
+            env.symbols_mut()
+                .assign_symbol_to_value(name, ExprResult::from(value))?;
         }
 
         Ok(())

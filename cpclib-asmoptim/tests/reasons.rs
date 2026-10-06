@@ -33,7 +33,10 @@ regsNotUsedAfter(0,?reg)
 #[test]
 fn a_dead_register_names_the_instruction_that_overwrote_it() {
     // Token 0 is the label, 1 the `ld b, c`, 2 the `ld b, 9` that kills B.
-    let found = matches("start\n    ld b, c\n    ld b, 9\n    ld a, b\n    ret\n", UNUSED_LD);
+    let found = matches(
+        "start\n    ld b, c\n    ld b, 9\n    ld a, b\n    ret\n",
+        UNUSED_LD
+    );
     assert_eq!(found.len(), 1, "{found:?}");
 
     let reasons = &found[0].reasons;
@@ -104,11 +107,15 @@ regsNotUsedAfter(2,?reg)
     // Worded in source terms - a pattern line number is meaningless to a
     // reader looking at their own file.
     assert!(
-        texts.iter().any(|t| t.contains("in between") && t.contains("writes")),
+        texts
+            .iter()
+            .any(|t| t.contains("in between") && t.contains("writes")),
         "the region and what was checked must both be named: {texts:?}"
     );
     assert!(
-        texts.iter().any(|t| t.contains("in between") && t.contains("reads")),
+        texts
+            .iter()
+            .any(|t| t.contains("in between") && t.contains("reads")),
         "{texts:?}"
     );
     assert!(

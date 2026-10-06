@@ -38,11 +38,11 @@ pub fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
 pub mod test {
     use std::ops::Deref;
 
+    use cpclib_common::winnow::Parser;
     use cpclib_common::winnow::ascii::line_ending;
     use cpclib_common::winnow::combinator::{repeat, terminated};
     use cpclib_common::winnow::error::{ErrMode, ParseError};
     use cpclib_common::winnow::stream::AsBStr;
-    use cpclib_common::winnow::Parser;
     use cpclib_tokens::{
         BinaryOperation, DataAccess, Expr, ExprFormat, FormattedExpr, IndexRegister8,
         IndexRegister16, LabelPrefix, ListingElement, MacroParam, Mnemonic, Register8,

@@ -12,7 +12,7 @@
 )]
 #![deny(clippy::pedantic)]
 
-use std::{io::{Read, Write}};
+use std::io::{Read, Write};
 
 pub use clap::{CommandFactory, Parser, Subcommand};
 use cpclib_basic::BasicProgram;
@@ -66,7 +66,7 @@ pub enum Commands {
 /// Returns `Err` if the input file cannot be read, its content cannot be
 /// parsed as a Locomotive BASIC program (encode) or Amsdos-header/tokenised
 /// BASIC binary (decode), or the output file cannot be written.
-pub fn handle_locomotive_arguments(cli: Cli, o: &dyn EventObserver) -> Result<(), String>{
+pub fn handle_locomotive_arguments(cli: Cli, o: &dyn EventObserver) -> Result<(), String> {
     match cli.command {
         Commands::Encode {
             input,
@@ -98,10 +98,8 @@ fn encode_command(
     };
 
     // Parse the BASIC program
-    let basic_tokens = BasicProgram::parse(basic_content).map_err(|msg| {
-        format!("Unable to parse BASIC: {msg}")
-        
-    })?;
+    let basic_tokens = BasicProgram::parse(basic_content)
+        .map_err(|msg| format!("Unable to parse BASIC: {msg}"))?;
 
     // Get the bytes of the BASIC program
     let basic_bytes = basic_tokens.as_bytes();
@@ -122,16 +120,15 @@ fn encode_command(
         // `TryFrom<&str>` (`user:name.extension` syntax, defaulting to
         // user 0) instead.
         let basename = output.file_name().unwrap_or_else(|| output.as_str());
-        let amsdos_name = AmsdosFileName::try_from(basename).map_err(|e| 
-
-                format!("Invalid Amsdos filename {basename:?}: {e}")
-        
-        )?;
+        let amsdos_name = AmsdosFileName::try_from(basename)
+            .map_err(|e| format!("Invalid Amsdos filename {basename:?}: {e}"))?;
         let header = AmsdosHeader::compute_basic_header(&amsdos_name, &basic_bytes);
-        f.write_all(header.as_bytes().as_ref()).map_err(|e| format!("Error writing header to output file: {e}"))?;
+        f.write_all(header.as_bytes().as_ref())
+            .map_err(|e| format!("Error writing header to output file: {e}"))?;
     }
 
-    f.write_all(&basic_bytes).map_err(|e| format!("Error writing to output file: {e}"))?;
+    f.write_all(&basic_bytes)
+        .map_err(|e| format!("Error writing to output file: {e}"))?;
 
     Ok(())
 }
@@ -140,23 +137,24 @@ fn decode_command(
     input: &Utf8PathBuf,
     output: Option<&Utf8PathBuf>,
     o: &dyn EventObserver
-) -> Result<(), String>{
+) -> Result<(), String> {
     // Read the BASIC binary file (with potential Amsdos header)
     let file = FileAndSupport::build(input)?;
     let content = file.content();
 
     // Decode the BASIC program
-    let tokens = BasicProgram::decode(content.as_ref()).map_err(|msg| 
-        format!("Error in the BASIC file: {msg}") 
-    )?;
+    let tokens = BasicProgram::decode(content.as_ref())
+        .map_err(|msg| format!("Error in the BASIC file: {msg}"))?;
 
     // Convert to ASCII representation
     let repr = tokens.to_string();
 
     // Write to output file or stdout
     if let Some(output_path) = output {
-        let mut f = File::create(output_path).map_err(|e| format!("Error creating output file: {e}"))?;
-        f.write_all(repr.as_bytes()).map_err(|e| format!("Error writing to output file: {e}"))?;
+        let mut f =
+            File::create(output_path).map_err(|e| format!("Error creating output file: {e}"))?;
+        f.write_all(repr.as_bytes())
+            .map_err(|e| format!("Error writing to output file: {e}"))?;
     }
     else {
         o.emit_stdout(&format!("{repr}\n"));
@@ -204,8 +202,14 @@ mod tests {
         encode_command(&input, &output, true).expect("must not panic or error");
 
         let written = std::fs::read(&output).unwrap();
-        assert!(written.len() >= 128, "expected at least a full Amsdos header");
-        assert_eq!(&written[0], &0u8, "user byte must be 0, not derived from path bytes");
+        assert!(
+            written.len() >= 128,
+            "expected at least a full Amsdos header"
+        );
+        assert_eq!(
+            &written[0], &0u8,
+            "user byte must be 0, not derived from path bytes"
+        );
         assert_eq!(
             &written[1..9],
             b"CATART  ",

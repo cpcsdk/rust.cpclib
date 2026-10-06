@@ -55,7 +55,7 @@ fn list_position_predicate_returns_minus_one_when_nothing_matches() {
         "org 0x4000\n l = [5,6,7,8]\n p = list_position_predicate(l, (x) => x > 100)\n db p\n"
     )
     .unwrap();
-    assert_eq!(bin, vec![0xff]);
+    assert_eq!(bin, vec![0xFF]);
 }
 
 #[test]
@@ -71,7 +71,10 @@ fn lambda_cannot_capture_an_outer_functions_parameter() {
         "FUNCTION outer x\nRETURN list_map([1,2,3], (y) => y + x)[0]\nENDFUNCTION\norg \
          0x4000\ndb outer(5)\n"
     );
-    assert!(res.is_err(), "lambda unexpectedly saw an enclosing function's parameter: {res:?}");
+    assert!(
+        res.is_err(),
+        "lambda unexpectedly saw an enclosing function's parameter: {res:?}"
+    );
 }
 
 #[test]
@@ -106,7 +109,10 @@ fn lambda_requires_parens_around_a_single_parameter() {
     // avoid ambiguity with a bare identifier starting some other
     // expression.
     let res = cpclib_asm::assemble("org 0x4000\n l = [1,2,3]\n l2 = list_map(l, x => x * 2)\n");
-    assert!(res.is_err(), "bare (unparenthesized) lambda param unexpectedly parsed: {res:?}");
+    assert!(
+        res.is_err(),
+        "bare (unparenthesized) lambda param unexpectedly parsed: {res:?}"
+    );
 }
 
 #[test]

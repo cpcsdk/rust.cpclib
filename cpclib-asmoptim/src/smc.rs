@@ -47,7 +47,8 @@ where
     for (index, token) in tokens.iter().enumerate() {
         if token.is_label() {
             let name = token.label_symbol();
-            if let Some(target) = (index + 1..tokens.len()).find(|i| tokens[*i].mnemonic().is_some())
+            if let Some(target) =
+                (index + 1..tokens.len()).find(|i| tokens[*i].mnemonic().is_some())
             {
                 labelled.insert(name, target);
             }
@@ -79,9 +80,7 @@ where
 
         if let Some(value) = defined_value
             && mentions_current_address(value)
-            && let Some(previous) = tokens[..index]
-                .iter()
-                .rposition(|t| t.mnemonic().is_some())
+            && let Some(previous) = tokens[..index].iter().rposition(|t| t.mnemonic().is_some())
         {
             protected.insert(previous);
         }

@@ -494,11 +494,7 @@ pub fn assemble(
 /// The point of the file is to be read *instead of* assembling: a debug
 /// session that has this does not need to build the same program a second time
 /// to learn where its lines went.
-fn save_source_map(
-    dest: &str,
-    env: &Env,
-    matches: &ArgMatches
-) -> Result<(), BasmError> {
+fn save_source_map(dest: &str, env: &Env, matches: &ArgMatches) -> Result<(), BasmError> {
     use cpclib_asm::assembler::listing_output::SourceMapFile;
 
     let Some(map) = env.source_map()
@@ -546,15 +542,15 @@ fn save_source_map(
     let file = SourceMapFile::new(map, symbols, definitions)
         .with_address_symbols(address_symbols)
         .with_program(
-        env.assembled_breakpoints(),
-        // This snapshot was built by the assembler itself, never loaded
-        // from an external file, so the RLE-corruption path memory_dump()
-        // can fail on is unreachable here.
-        &env.sna()
-            .memory_dump()
-            .expect("assembler-built snapshot memory is always well-formed"),
-        entry_point
-    );
+            env.assembled_breakpoints(),
+            // This snapshot was built by the assembler itself, never loaded
+            // from an external file, so the RLE-corruption path memory_dump()
+            // can fail on is unreachable here.
+            &env.sna()
+                .memory_dump()
+                .expect("assembler-built snapshot memory is always well-formed"),
+            entry_point
+        );
 
     let text = serde_json::to_string(&file).map_err(|e| {
         BasmError::ListingGeneration {
@@ -844,8 +840,7 @@ pub fn process(
 
     //  o.emit_stderr(format!("TODO: include parse warnings");
     // warnings.extend_from_slice(env.warnings());
-    let warnings: Vec<Box<AssemblerError>> =
-        env.warnings().iter().cloned().map(Box::new).collect();
+    let warnings: Vec<Box<AssemblerError>> = env.warnings().iter().cloned().map(Box::new).collect();
 
     if matches.get_flag("WERROR") && !warnings.is_empty() {
         const KEPT: usize = 10;

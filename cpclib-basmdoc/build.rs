@@ -2,8 +2,8 @@ use std::env;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use cpclib_asm::parser::instructions::INSTRUCTIONS;
 use cpclib_asm::parser::dispatch::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
+use cpclib_asm::parser::instructions::INSTRUCTIONS;
 use fs_err::File;
 
 /// Generate syntax highlighting keyword strings for the template

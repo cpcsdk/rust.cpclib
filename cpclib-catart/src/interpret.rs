@@ -1,4 +1,3 @@
-
 //! The aim of this file is to ease debuggin of the conversion from Basic commands to Char commands
 //! by simulating an Amstrad CPC screen and interpreting the char commands to produce a visual output.
 //! This is mainly useful for tests.
@@ -79,15 +78,14 @@ impl Cursor {
 
 use std::fmt::{self, Display};
 
+use cpclib_image::color::AmstradColor;
+
 use crate::basic_chars::ACK;
 use crate::basic_command::{BasicCommand, BasicCommandList, PrintArgument};
 use crate::char_command::CharCommand;
- use cpclib_image::color::AmstradColor;
 
- 
 /// Locale/Language for character font
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Locale {
     /// English (UK) font
     #[default]
@@ -101,7 +99,6 @@ pub enum Locale {
     /// Danish font (placeholder using English)
     Danish
 }
-
 
 impl Locale {
     /// Get the font data for this locale
@@ -613,7 +610,7 @@ impl BasicMemoryScreen {
         );
 
         let delta = bloc_y * 80 + bloc_x;
-        
+
         (self.r12r13() * 2 + delta) & 0x7FF
     }
 
@@ -935,9 +932,10 @@ impl Interpreter {
                 let idx_y = (y - top) as usize;
                 let idx_x = (x - left) as usize;
                 if next_y <= bottom
-                    && let Some(src) = self.screen.cell(x, next_y) {
-                        next_row_cells[idx_y][idx_x] = src.clone();
-                    }
+                    && let Some(src) = self.screen.cell(x, next_y)
+                {
+                    next_row_cells[idx_y][idx_x] = src.clone();
+                }
             }
         }
         for y in top..=bottom {
@@ -989,9 +987,10 @@ impl Interpreter {
                 let idx_y = (y - top) as usize;
                 let idx_x = (x - left) as usize;
                 if prev_y >= top
-                    && let Some(src) = self.screen.cell(x, prev_y) {
-                        prev_row_cells[idx_y][idx_x] = src.clone();
-                    }
+                    && let Some(src) = self.screen.cell(x, prev_y)
+                {
+                    prev_row_cells[idx_y][idx_x] = src.clone();
+                }
             }
         }
         for y in (top..=bottom).rev() {

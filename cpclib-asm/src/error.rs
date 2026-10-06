@@ -535,7 +535,7 @@ impl AssemblerError {
                     error: Box::new(other),
                     notes: vec![note]
                 })
-            }
+            },
         }
     }
 
@@ -565,9 +565,11 @@ impl AssemblerError {
     pub fn warning_category(&self) -> WarningCategory {
         match self {
             AssemblerError::OverrideMemory(..) => WarningCategory::OverrideMemory,
-            AssemblerError::ExpressionWarning(w) => match w.kind {
-                cpclib_tokens::ExprWarningKind::PrecisionLoss => WarningCategory::PrecisionLoss,
-                cpclib_tokens::ExprWarningKind::Overflow => WarningCategory::Overflow
+            AssemblerError::ExpressionWarning(w) => {
+                match w.kind {
+                    cpclib_tokens::ExprWarningKind::PrecisionLoss => WarningCategory::PrecisionLoss,
+                    cpclib_tokens::ExprWarningKind::Overflow => WarningCategory::Overflow
+                }
             },
             AssemblerError::RelocatedError { error, .. }
             | AssemblerError::RelocatedWarning { warning: error, .. } => error.warning_category(),
@@ -1489,7 +1491,12 @@ mod locatable_filename_tests {
     /// An ordinary file name is already what it should be.
     #[test]
     fn a_plain_file_name_is_untouched() {
-        for name in ["events.asm", "/home/me/src/events.asm", "no file", "<INLINE>"] {
+        for name in [
+            "events.asm",
+            "/home/me/src/events.asm",
+            "no file",
+            "<INLINE>"
+        ] {
             assert_eq!(locatable_filename(name), name);
         }
     }

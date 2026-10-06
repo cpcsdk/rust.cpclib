@@ -31,9 +31,9 @@ use cpclib_tokens::{
     IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
     Mnemonic, Register8, Register16, SaveType, SmcOffset, StableTickerAction, TestKind,
     TestKindElement, ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation,
-    data_access_impl_most_methods,
-    data_access_is_any_indexregister8, data_access_is_any_indexregister16,
-    data_access_is_any_register8, data_access_is_any_register16, listing_element_impl_most_methods
+    data_access_impl_most_methods, data_access_is_any_indexregister8,
+    data_access_is_any_indexregister16, data_access_is_any_register8,
+    data_access_is_any_register16, listing_element_impl_most_methods
 };
 use ouroboros::self_referencing;
 
@@ -594,7 +594,7 @@ impl ExprEvaluationExt for LocatedExpr {
                     .into_iter()
                     .filter(|s| !params.iter().any(|p| p.as_str() == s.as_ref()))
                     .collect_vec()
-            },
+            }
         }
     }
 
@@ -1377,7 +1377,7 @@ impl LocatedToken {
             either::Either::Left(inner) => inner.to_token_owned(),
             either::Either::Right((inner, msg)) => {
                 Token::WarningWrapper(Box::new(inner.to_token_owned()), msg.as_ref().into())
-            }
+            },
         }
     }
 }
@@ -1770,7 +1770,10 @@ impl LocatedTokenInner {
                     pairs
                         .iter()
                         .map(|(count, fill)| {
-                            (count.to_expr_owned(), fill.as_ref().map(|e| e.to_expr_owned()))
+                            (
+                                count.to_expr_owned(),
+                                fill.as_ref().map(|e| e.to_expr_owned())
+                            )
                         })
                         .collect_vec()
                 )
@@ -1888,7 +1891,11 @@ impl LocatedTokenInner {
             },
 
             Self::Range(label, start, stop) => {
-                Token::Range(label.as_str().into(), start.to_expr_owned(), stop.to_expr_owned())
+                Token::Range(
+                    label.as_str().into(),
+                    start.to_expr_owned(),
+                    stop.to_expr_owned()
+                )
             },
             Self::Section(label) => Token::Section(label.as_str().into()),
             Self::SnaSet(flag, value) => Token::SnaSet(*flag, value.clone()),
@@ -1899,10 +1906,18 @@ impl LocatedTokenInner {
             // arbitrary tokens back to text, at which point the `todo!()`
             // below turned an ordinary basm statement into a panic.
             Self::MultiPush(regs) => {
-                Token::MultiPush(regs.iter().map(|r| r.to_data_access().into_owned()).collect())
+                Token::MultiPush(
+                    regs.iter()
+                        .map(|r| r.to_data_access().into_owned())
+                        .collect()
+                )
             },
             Self::MultiPop(regs) => {
-                Token::MultiPop(regs.iter().map(|r| r.to_data_access().into_owned()).collect())
+                Token::MultiPop(
+                    regs.iter()
+                        .map(|r| r.to_data_access().into_owned())
+                        .collect()
+                )
             },
 
             _ => todo!("Need to implement conversion  for {:?}", self)
@@ -2554,7 +2569,7 @@ impl LocatedToken {
                         | LocatedTokenInner::Equ { .. }
                         | LocatedTokenInner::Protect(..)
                 )
-            },
+            }
         }
     }
 }

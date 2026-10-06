@@ -166,7 +166,8 @@ pub(super) fn dry_run_env(
     // slow open is directly diagnosable from a `cpclib-lsp.toml`-enabled
     // log instead of only being inferable from a gap between other lines.
     let start = std::time::Instant::now();
-    let result = match cpclib_asm::assembler::visit_tokens_all_passes_with_options(listing, options) {
+    let result = match cpclib_asm::assembler::visit_tokens_all_passes_with_options(listing, options)
+    {
         Ok((_tokens, env)) => (env, true, None),
         // The partial `Env` is still returned: hover and `EQU` resolution use
         // it happily, and a half-built symbol table is better than none for
@@ -288,7 +289,10 @@ impl AssemblyAnalyzer {
         document: &Document,
         listing: &LocatedListing
     ) -> (Env, bool, Option<Arc<cpclib_asm::AssemblerError>>) {
-        let key = (document.version, super::workspace_fingerprint_of(&document.uri));
+        let key = (
+            document.version,
+            super::workspace_fingerprint_of(&document.uri)
+        );
         if let Some(entry) = self.env_cache.get(&document.uri)
             && entry.0 == key
         {
@@ -913,13 +917,7 @@ mod dry_run_env_cache_tests {
         let listing = analyzer.parse_document(&d).ok().unwrap();
 
         let (env1, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
-        assert_eq!(
-            env1.symbols()
-                .int_value("val")
-                .ok()
-                .flatten(),
-            Some(1)
-        );
+        assert_eq!(env1.symbols().int_value("val").ok().flatten(), Some(1));
 
         // Edit the *included* file only - `d`'s own version is untouched -
         // and bump its mtime forward like the sibling
@@ -943,10 +941,7 @@ mod dry_run_env_cache_tests {
 
         let (env2, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
         assert_eq!(
-            env2.symbols()
-                .int_value("val")
-                .ok()
-                .flatten(),
+            env2.symbols().int_value("val").ok().flatten(),
             Some(2),
             "stale cache: the included file's edit was not picked up"
         );

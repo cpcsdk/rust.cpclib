@@ -32,30 +32,31 @@ impl AssemblyAnalyzer {
                 .collect::<Vec<_>>()
                 .join("\n");
             if let Ok(new_basic) = cpclib_basic::renum::renum_text(&basic_text, 10, 10)
-                && new_basic != basic_text {
-                    let new_text = if new_basic.ends_with('\n') {
-                        new_basic
-                    }
-                    else {
-                        format!("{new_basic}\n")
-                    };
-                    let edit_range = Range {
-                        start: Position {
-                            line: block.basic_range.start as u32,
-                            character: 0
-                        },
-                        end: Position {
-                            line: block.basic_range.end as u32,
-                            character: 0
-                        }
-                    };
-                    actions.push(CodeAction {
-                        title: "Renumber BASIC lines in LOCOMOTIVE block (10, 20, 30…)".to_string(),
-                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                        edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
-                        ..Default::default()
-                    });
+                && new_basic != basic_text
+            {
+                let new_text = if new_basic.ends_with('\n') {
+                    new_basic
                 }
+                else {
+                    format!("{new_basic}\n")
+                };
+                let edit_range = Range {
+                    start: Position {
+                        line: block.basic_range.start as u32,
+                        character: 0
+                    },
+                    end: Position {
+                        line: block.basic_range.end as u32,
+                        character: 0
+                    }
+                };
+                actions.push(CodeAction {
+                    title: "Renumber BASIC lines in LOCOMOTIVE block (10, 20, 30…)".to_string(),
+                    kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                    edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
+                    ..Default::default()
+                });
+            }
         }
 
         // Offer removal of an unused REPEAT loop counter, or an unused
@@ -95,28 +96,41 @@ impl AssemblyAnalyzer {
         };
 
         // Wrap in MACRO / ENDM
-        actions.push(self.wrap_action(document, &all_lines, start_line, end_line, WrapActionSpec {
-            header: "MACRO MY_MACRO",
-            footer: "ENDM",
-            placeholder: "MY_MACRO",
-            title: "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
-            kind: CodeActionKind::REFACTOR_EXTRACT
-        }));
+        actions.push(self.wrap_action(
+            document,
+            &all_lines,
+            start_line,
+            end_line,
+            WrapActionSpec {
+                header: "MACRO MY_MACRO",
+                footer: "ENDM",
+                placeholder: "MY_MACRO",
+                title: "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
+                kind: CodeActionKind::REFACTOR_EXTRACT
+            }
+        ));
 
         // Wrap in REPEAT / REND
-        actions.push(self.wrap_action(document, &all_lines, start_line, end_line, WrapActionSpec {
-            header: "REPEAT 10",
-            footer: "REND",
-            placeholder: "10",
-            title: "Wrap selection in REPEAT…REND (replace 10 with count)",
-            kind: CodeActionKind::REFACTOR_EXTRACT
-        }));
+        actions.push(self.wrap_action(
+            document,
+            &all_lines,
+            start_line,
+            end_line,
+            WrapActionSpec {
+                header: "REPEAT 10",
+                footer: "REND",
+                placeholder: "10",
+                title: "Wrap selection in REPEAT…REND (replace 10 with count)",
+                kind: CodeActionKind::REFACTOR_EXTRACT
+            }
+        ));
 
         // Join selected lines into one (instructions separated by " : ")
         if end_line > start_line
-            && let Some(a) = self.join_lines_action(document, &all_lines, start_line, end_line) {
-                actions.push(a);
-            }
+            && let Some(a) = self.join_lines_action(document, &all_lines, start_line, end_line)
+        {
+            actions.push(a);
+        }
 
         // Split each line at " : " into individual lines
         if let Some(a) = self.split_lines_action(document, &all_lines, start_line, end_line) {

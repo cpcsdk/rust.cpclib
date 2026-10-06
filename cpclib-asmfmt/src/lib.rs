@@ -71,7 +71,10 @@ mod tests {
             };
             let source = "answer+1: ld a, 13\nsmart+*: ld a, 42\n";
             let out = format(source, &options).expect("parse failed");
-            assert!(out.contains("answer+1:"), "literal offset was lost: {out:?}");
+            assert!(
+                out.contains("answer+1:"),
+                "literal offset was lost: {out:?}"
+            );
             assert!(out.contains("smart+*:"), "smart offset was lost: {out:?}");
             let uppercase = out.to_ascii_uppercase();
             assert!(uppercase.contains("LD A, 13"), "instruction lost: {out:?}");
@@ -421,14 +424,24 @@ mod tests {
         let body_indent = |line: &str| line.len() - line.trim_start().len();
         let a_line = lines.iter().find(|l| l.contains("a = 1")).unwrap();
         let b_line = lines.iter().find(|l| l.contains("EQU 2")).unwrap();
-        let return_line = lines.iter().find(|l| l.to_uppercase().contains("RETURN")).unwrap();
-        assert!(body_indent(a_line) > 0, "assignment flattened to column 0 inside FUNCTION: {a_line:?}");
+        let return_line = lines
+            .iter()
+            .find(|l| l.to_uppercase().contains("RETURN"))
+            .unwrap();
+        assert!(
+            body_indent(a_line) > 0,
+            "assignment flattened to column 0 inside FUNCTION: {a_line:?}"
+        );
         assert_eq!(
             body_indent(a_line),
             body_indent(return_line),
             "assignment and RETURN should sit at the same depth inside the body: {a_line:?} vs {return_line:?}"
         );
-        assert_eq!(body_indent(b_line), body_indent(return_line), "EQU should match its sibling statements' depth: {b_line:?}");
+        assert_eq!(
+            body_indent(b_line),
+            body_indent(return_line),
+            "EQU should match its sibling statements' depth: {b_line:?}"
+        );
     }
 
     /// IF/REPEAT/WHILE/... never scope a symbol at all (confirmed live: a
@@ -440,10 +453,19 @@ mod tests {
     /// these keep the column-0 convention regardless of nesting.
     #[test]
     fn test_assign_inside_a_bare_if_or_repeat_stays_at_column_zero() {
-        for src in ["if true\n    c = 1\nendif\n", "repeat 3, i, 0\n    c = i\nendrepeat\n"] {
+        for src in [
+            "if true\n    c = 1\nendif\n",
+            "repeat 3, i, 0\n    c = i\nendrepeat\n"
+        ] {
             let out = fmt(src);
-            let line = out.lines().find(|l| l.trim_start().starts_with('c')).unwrap();
-            assert!(!line.starts_with(' '), "assignment indented outside any FUNCTION: {line:?} (from {src:?})");
+            let line = out
+                .lines()
+                .find(|l| l.trim_start().starts_with('c'))
+                .unwrap();
+            assert!(
+                !line.starts_with(' '),
+                "assignment indented outside any FUNCTION: {line:?} (from {src:?})"
+            );
         }
     }
 
@@ -454,11 +476,15 @@ mod tests {
     /// wrapper isn't the FUNCTION keyword itself.
     #[test]
     fn test_assign_inside_an_if_nested_in_a_function_still_tracks_depth() {
-        let out = fmt("function foo x\n    if x\n        a = 1\n    endif\n    return a\nendfunction\n");
+        let out =
+            fmt("function foo x\n    if x\n        a = 1\n    endif\n    return a\nendfunction\n");
         let lines: Vec<&str> = out.lines().collect();
         let body_indent = |line: &str| line.len() - line.trim_start().len();
         let a_line = lines.iter().find(|l| l.contains("a = 1")).unwrap();
-        assert!(body_indent(*a_line) > 0, "assignment flattened to column 0 inside IF-inside-FUNCTION: {a_line:?}");
+        assert!(
+            body_indent(*a_line) > 0,
+            "assignment flattened to column 0 inside IF-inside-FUNCTION: {a_line:?}"
+        );
     }
 
     #[test]
@@ -854,7 +880,10 @@ label_definition_postfix_with_column = "NoColumn"
         let instr_line = out.lines().find(|l| l.contains("LD A,0")).unwrap();
         assert!(instr_line.contains("; hello"), "{instr_line:?}");
         let label_line = out.lines().find(|l| l.trim() == "myloop:").unwrap();
-        assert!(!label_line.contains(';'), "comment leaked onto the label line: {label_line:?}");
+        assert!(
+            !label_line.contains(';'),
+            "comment leaked onto the label line: {label_line:?}"
+        );
     }
 
     // ── MACRO bodies are formatted for real, not copied verbatim ───────────
@@ -869,7 +898,10 @@ label_definition_postfix_with_column = "NoColumn"
     #[test]
     fn test_macro_body_is_actually_formatted() {
         let out = fmt("macro FOO x\n\tld   a,b\n\tld hl,0x1234\nendm");
-        assert!(out.contains("        LD A,B"), "macro body not formatted: {out:?}");
+        assert!(
+            out.contains("        LD A,B"),
+            "macro body not formatted: {out:?}"
+        );
         assert!(out.contains("        LD HL,0x1234"), "{out:?}");
     }
 
@@ -886,7 +918,10 @@ label_definition_postfix_with_column = "NoColumn"
         // parsing successfully as this crate's own coverage improves.
         let src = "macro FOO x\n\tld a, {x} := broken\nendm";
         let out = fmt(src);
-        assert!(out.contains("\tld a, {x} := broken"), "verbatim fallback lost/changed content: {out:?}");
+        assert!(
+            out.contains("\tld a, {x} := broken"),
+            "verbatim fallback lost/changed content: {out:?}"
+        );
     }
 
     /// Regression: reformatting a macro body used to silently drop a genuine
@@ -900,8 +935,14 @@ label_definition_postfix_with_column = "NoColumn"
     fn test_blank_line_before_endm_survives_two_formatting_passes() {
         let once = fmt("macro FOO x\n\tld a,0\n\nendm");
         let twice = format(&once, &AsmFormatOptions::default()).unwrap();
-        assert_eq!(once, twice, "blank line before ENDM did not survive a second pass: {once:?} -> {twice:?}");
-        assert!(once.contains("\n\n"), "the blank line should still be there at all: {once:?}");
+        assert_eq!(
+            once, twice,
+            "blank line before ENDM did not survive a second pass: {once:?} -> {twice:?}"
+        );
+        assert!(
+            once.contains("\n\n"),
+            "the blank line should still be there at all: {once:?}"
+        );
     }
 
     // ── `; fmt: off` / `; fmt: on` ──────────────────────────────────────────
@@ -915,9 +956,18 @@ label_definition_postfix_with_column = "NoColumn"
     fn test_fmt_off_on_preserves_the_region_verbatim() {
         let src = "org 0x4000\nld a,0\n; fmt: off\nFONT_CREATE_CHAR( dot,\n\t\"..\" ,\n      \"##\" )\n; fmt: on\nld   b,1\n";
         let out = fmt(src);
-        assert!(out.contains("FONT_CREATE_CHAR( dot,\n\t\"..\" ,\n      \"##\" )"), "region not preserved verbatim: {out:?}");
-        assert!(out.contains("LD A,0"), "code before the region should still be formatted: {out:?}");
-        assert!(out.contains("LD B,1"), "code after the region should still be formatted: {out:?}");
+        assert!(
+            out.contains("FONT_CREATE_CHAR( dot,\n\t\"..\" ,\n      \"##\" )"),
+            "region not preserved verbatim: {out:?}"
+        );
+        assert!(
+            out.contains("LD A,0"),
+            "code before the region should still be formatted: {out:?}"
+        );
+        assert!(
+            out.contains("LD B,1"),
+            "code after the region should still be formatted: {out:?}"
+        );
     }
 
     /// An unclosed `; fmt: off` disables formatting for the rest of the file
@@ -926,7 +976,10 @@ label_definition_postfix_with_column = "NoColumn"
     fn test_unclosed_fmt_off_disables_to_end_of_file() {
         let out = fmt("org 0x4000\nld a,0\n; fmt: off\nld   b,1");
         assert!(out.contains("LD A,0"));
-        assert!(out.contains("ld   b,1"), "unclosed fmt:off must still suppress everything after it: {out:?}");
+        assert!(
+            out.contains("ld   b,1"),
+            "unclosed fmt:off must still suppress everything after it: {out:?}"
+        );
     }
 
     /// Round-trip sanity: formatting must be idempotent - running it twice
@@ -953,7 +1006,10 @@ label_definition_postfix_with_column = "NoColumn"
 
     #[test]
     fn test_comma_spacing_both() {
-        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::Both, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            space_around_comma: SpaceAroundColumn::Both,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\nld a,b\ndb 1,2 ,3\n", &opt).unwrap();
         assert!(out.contains("LD A , B"), "got: {out:?}");
         assert!(out.contains("DB 1 , 2 , 3"), "got: {out:?}");
@@ -961,7 +1017,10 @@ label_definition_postfix_with_column = "NoColumn"
 
     #[test]
     fn test_comma_spacing_none_strips_existing_whitespace() {
-        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::None, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            space_around_comma: SpaceAroundColumn::None,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\nld a, b\ndb 1, 2 , 3\n", &opt).unwrap();
         assert!(out.contains("LD A,B"), "got: {out:?}");
         assert!(out.contains("DB 1,2,3"), "got: {out:?}");
@@ -969,15 +1028,27 @@ label_definition_postfix_with_column = "NoColumn"
 
     #[test]
     fn test_comma_spacing_leaves_commas_inside_string_literals_alone() {
-        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::Both, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            space_around_comma: SpaceAroundColumn::Both,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\ndb \"a,b\", 5\n", &opt).unwrap();
-        assert!(out.contains("\"a,b\""), "comma inside the string literal must not move: {out:?}");
-        assert!(out.contains("\"a,b\" , 5"), "the real operand-separator comma must still be spaced: {out:?}");
+        assert!(
+            out.contains("\"a,b\""),
+            "comma inside the string literal must not move: {out:?}"
+        );
+        assert!(
+            out.contains("\"a,b\" , 5"),
+            "the real operand-separator comma must still be spaced: {out:?}"
+        );
     }
 
     #[test]
     fn test_comma_spacing_normalizes_commas_inside_parentheses_too() {
-        let opt = AsmFormatOptions { space_around_comma: SpaceAroundColumn::After, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            space_around_comma: SpaceAroundColumn::After,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\ncall list_new(2,-1)\n", &opt).unwrap();
         assert!(out.contains("list_new(2, -1)"), "got: {out:?}");
     }
@@ -985,21 +1056,30 @@ label_definition_postfix_with_column = "NoColumn"
     #[test]
     fn test_comma_spacing_untouched_by_default() {
         let out = fmt("org 0x4000\ndb 1,  2 ,3\n");
-        assert!(out.contains("DB 1,  2 ,3"), "default must not touch comma spacing: {out:?}");
+        assert!(
+            out.contains("DB 1,  2 ,3"),
+            "default must not touch comma spacing: {out:?}"
+        );
     }
 
     // ── quote style ──────────────────────────────────────────────────────
 
     #[test]
     fn test_quote_style_double_to_single() {
-        let opt = AsmFormatOptions { quote_style: QuoteStyle::Single, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            quote_style: QuoteStyle::Single,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\ndb \"hello\", \"world\"\n", &opt).unwrap();
         assert!(out.contains("'hello', 'world'"), "got: {out:?}");
     }
 
     #[test]
     fn test_quote_style_single_to_double() {
-        let opt = AsmFormatOptions { quote_style: QuoteStyle::Double, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            quote_style: QuoteStyle::Double,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\ndb 'hello', 'ok'\n", &opt).unwrap();
         assert!(out.contains("\"hello\", \"ok\""), "got: {out:?}");
     }
@@ -1008,9 +1088,15 @@ label_definition_postfix_with_column = "NoColumn"
     fn test_quote_style_skips_a_literal_that_would_need_an_escape() {
         // Converting `"it's a test"` to single quotes would need an escape
         // this format has no syntax for - the literal must be left as-is.
-        let opt = AsmFormatOptions { quote_style: QuoteStyle::Single, ..AsmFormatOptions::default() };
+        let opt = AsmFormatOptions {
+            quote_style: QuoteStyle::Single,
+            ..AsmFormatOptions::default()
+        };
         let out = format("org 0x4000\ndb \"it's a test\"\n", &opt).unwrap();
-        assert!(out.contains("\"it's a test\""), "ambiguous literal must not be converted: {out:?}");
+        assert!(
+            out.contains("\"it's a test\""),
+            "ambiguous literal must not be converted: {out:?}"
+        );
     }
 
     #[test]

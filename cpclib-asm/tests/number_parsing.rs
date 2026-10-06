@@ -49,19 +49,40 @@ fn a_plain_integer_still_parses() {
 /// still parse to the right value.
 #[test]
 fn every_integer_base_still_parses() {
-    assert_eq!(parse_number("0x1A").to_expr().into_owned(), Expr::Value(0x1A));
-    assert_eq!(parse_number("#1A").to_expr().into_owned(), Expr::Value(0x1A));
-    assert_eq!(parse_number("1Ah").to_expr().into_owned(), Expr::Value(0x1A));
-    assert_eq!(parse_number("0b0101").to_expr().into_owned(), Expr::Value(0b0101));
-    assert_eq!(parse_number("0101b").to_expr().into_owned(), Expr::Value(0b0101));
-    assert_eq!(parse_number("0o17").to_expr().into_owned(), Expr::Value(0o17));
+    assert_eq!(
+        parse_number("0x1A").to_expr().into_owned(),
+        Expr::Value(0x1A)
+    );
+    assert_eq!(
+        parse_number("#1A").to_expr().into_owned(),
+        Expr::Value(0x1A)
+    );
+    assert_eq!(
+        parse_number("1Ah").to_expr().into_owned(),
+        Expr::Value(0x1A)
+    );
+    assert_eq!(
+        parse_number("0b0101").to_expr().into_owned(),
+        Expr::Value(0b0101)
+    );
+    assert_eq!(
+        parse_number("0101b").to_expr().into_owned(),
+        Expr::Value(0b0101)
+    );
+    assert_eq!(
+        parse_number("0o17").to_expr().into_owned(),
+        Expr::Value(0o17)
+    );
 }
 
 /// A float with a scientific-notation exponent still parses.
 #[test]
 fn a_float_with_exponent_still_parses() {
     let expr = parse_number("1.5e2");
-    assert_eq!(expr.to_expr().into_owned(), Expr::Float(OrderedFloat(150.0)));
+    assert_eq!(
+        expr.to_expr().into_owned(),
+        Expr::Float(OrderedFloat(150.0))
+    );
 }
 
 /// `12.5x`: a float parse that then fails its own trailing-character guard
@@ -116,6 +137,9 @@ fn a_number_immediately_followed_by_a_letter_is_not_swallowed_as_a_number() {
     ctx.context_name = Some("TEST".into());
     let span = Z80Span::new_extra("12ABC", &*ctx);
     let res = parser::number(&mut span.into());
-    assert!(res.is_err(), "12ABC must not parse as a bare number: {res:?}");
+    assert!(
+        res.is_err(),
+        "12ABC must not parse as a bare number: {res:?}"
+    );
     let _ = code; // documents the broader context this guard exists for
 }

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
@@ -6,8 +7,6 @@ use cpclib_sna::{
     AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint,
     RemuBreakPointAccessMode, RemuBreakPointType, WabpAnyBreakpoint, WinapeBreakPoint
 };
-
-use std::sync::Arc;
 
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
@@ -169,7 +168,10 @@ impl PrintCommand {
 /// points into alive, the same hazard `PrintCommand`/`FailedAssertCommand`
 /// have and fix the same way.
 #[derive(Debug, Clone)]
-pub struct PauseCommand(Option<Z80Span>, #[allow(dead_code)] Vec<Arc<LocatedListing>>);
+pub struct PauseCommand(
+    Option<Z80Span>,
+    #[allow(dead_code)] Vec<Arc<LocatedListing>>
+);
 
 impl From<Option<Z80Span>> for PauseCommand {
     fn from(s: Option<Z80Span>) -> Self {
@@ -743,7 +745,10 @@ mod tests {
         for c in commands {
             match c {
                 PrintOrPauseCommand::Print(p) => {
-                    assert!(!p._keep_alive.is_empty(), "a PRINT inside a macro must keep it alive")
+                    assert!(
+                        !p._keep_alive.is_empty(),
+                        "a PRINT inside a macro must keep it alive"
+                    )
                 },
                 PrintOrPauseCommand::Pause(p) => {
                     assert!(!p.1.is_empty(), "a PAUSE inside a macro must keep it alive")

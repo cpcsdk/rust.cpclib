@@ -33,6 +33,7 @@ use super::common::{
     parse_word
 };
 use super::context;
+pub use super::dispatch::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
 use super::error::Z80ParserErrorKind;
 use super::expression::{
     expr, expr_list, ignore_ascii_case_allowed_label, located_expr, located_range,
@@ -42,7 +43,6 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
-pub use super::dispatch::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
 use super::source::Z80Span;
 use crate::hashed_choice;
 use crate::preamble::*;
@@ -210,14 +210,12 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     loop {
         parse_block_error(
             cut_err(
-                my_many0_nocollect(
-                    alt((
-                        my_space1.value(()),
-                        line_ending.value(()),
-                        ':'.value(()),
-                        parse_comment.value(())
-                    ))
-                )
+                my_many0_nocollect(alt((
+                    my_space1.value(()),
+                    line_ending.value(()),
+                    ':'.value(()),
+                    parse_comment.value(())
+                )))
                 .context(StrContext::Label("SWITCH: whitespace error"))
             ),
             switch_start,
@@ -331,14 +329,12 @@ pub fn parse_union(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
     loop {
         parse_block_error(
             cut_err(
-                my_many0_nocollect(
-                    alt((
-                        my_space1.value(()),
-                        line_ending.value(()),
-                        ':'.value(()),
-                        parse_comment.value(())
-                    ))
-                )
+                my_many0_nocollect(alt((
+                    my_space1.value(()),
+                    line_ending.value(()),
+                    ':'.value(()),
+                    parse_comment.value(())
+                )))
                 .context(StrContext::Label("UNION: whitespace error"))
             ),
             union_start,
@@ -369,14 +365,12 @@ pub fn parse_union(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
                     // part of finishing the member - skipping only spaces
                     // here would miss that `:` and wrongly report "expected
                     // NEXTU or ENDU".
-                    my_many0_nocollect(
-                        alt((
-                            my_space1.value(()),
-                            line_ending.value(()),
-                            ':'.value(()),
-                            parse_comment.value(())
-                        ))
-                    ),
+                    my_many0_nocollect(alt((
+                        my_space1.value(()),
+                        line_ending.value(()),
+                        ':'.value(()),
+                        parse_comment.value(())
+                    ))),
                     alt((
                         parse_directive_word(b"NEXTU").value(false),
                         parse_directive_word(b"ENDU").value(true)
@@ -1663,22 +1657,18 @@ fn parse_enum_fields(
     cut_err(repeat(
         0..,
         delimited(
-            my_many0_nocollect(
-                alt((
-                    my_space1.value(()),
-                    parse_comment.value(()),
-                    line_ending.value(()),
-                    ':'.value(())
-                ))
-            ),
+            my_many0_nocollect(alt((
+                my_space1.value(()),
+                parse_comment.value(()),
+                line_ending.value(()),
+                ':'.value(())
+            ))),
             parse_enum_field(allow_directives),
-            my_many0_nocollect(
-                alt((
-                    my_space1.value(()),
-                    parse_comment.value(()),
-                    line_ending.value(())
-                ))
-            )
+            my_many0_nocollect(alt((
+                my_space1.value(()),
+                parse_comment.value(()),
+                line_ending.value(())
+            )))
         )
         .verify_map(|x| x)
     ))
@@ -1716,14 +1706,12 @@ pub fn parse_enum(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
     // End keyword: skip any trailing whitespace/comments/newlines/colons first.
     // The ':' is needed for inline (one-line) form where statements are joined with ':'.
     let _ = cut_err(preceded(
-        my_many0_nocollect(
-            alt((
-                my_space1.value(()),
-                parse_comment.value(()),
-                line_ending.value(()),
-                ':'.value(())
-            ))
-        ),
+        my_many0_nocollect(alt((
+            my_space1.value(()),
+            parse_comment.value(()),
+            line_ending.value(()),
+            ':'.value(())
+        ))),
         alt((
             parse_directive_word(b"ENDENUM"),
             parse_directive_word(b"MEND"),
@@ -1787,14 +1775,12 @@ pub fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, 
         repeat(
             1..,
             delimited(
-                my_many0_nocollect(
-                    alt((
-                        my_space1.value(()),
-                        parse_comment.value(()),
-                        line_ending.value(()),
-                        ':'.value(())
-                    ))
-                ),
+                my_many0_nocollect(alt((
+                    my_space1.value(()),
+                    parse_comment.value(()),
+                    line_ending.value(()),
+                    ':'.value(())
+                ))),
                 (
                     terminated(
                         parse_label(false),
@@ -1808,14 +1794,12 @@ pub fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, 
                             .context(StrContext::Label("STRUCT: Invalid operation"))
                     )
                 ),
-                my_many0_nocollect(
-                    alt((
-                        my_space1.value(()),
-                        parse_comment.value(()),
-                        line_ending.value(()),
-                        ':'.value(())
-                    ))
-                )
+                my_many0_nocollect(alt((
+                    my_space1.value(()),
+                    parse_comment.value(()),
+                    line_ending.value(()),
+                    ':'.value(())
+                )))
             )
         )
         .context(StrContext::Label("STRUCT: error in inner content"))
@@ -2669,9 +2653,11 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             conditions.push((condition, code));
 
             let r#else = opt(preceded(
-                my_many0_nocollect(
-                    alt((my_space1.value(()), line_ending.value(()), ':'.value(())))
-                ),
+                my_many0_nocollect(alt((
+                    my_space1.value(()),
+                    line_ending.value(()),
+                    ':'.value(())
+                ))),
                 (Caseless(b"ELSE"), my_space0)
             ))
             .parse_next(input)?;

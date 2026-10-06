@@ -60,15 +60,11 @@ impl SymbolOutputFormat {
             },
             SymbolOutputFormat::Winape => {
                 match v {
-                    Value::Address(a) => {
-                        (format!("{} #{:X}", k.value(), a.address()), vec![])
-                    },
+                    Value::Address(a) => (format!("{} #{:X}", k.value(), a.address()), vec![]),
                     Value::Expr(ExprResult::Value(i)) => {
                         (format!("{} #{:X}", k.value(), i), vec![])
                     },
-                    Value::Expr(ExprResult::Bool(b)) => {
-                        (format!("{} {}", k.value(), *b), vec![])
-                    },
+                    Value::Expr(ExprResult::Bool(b)) => (format!("{} {}", k.value(), *b), vec![]),
                     Value::Expr(e @ ExprResult::Float(_f)) => {
                         let (i, warnings) = e.int().unwrap(); // Float always succeeds
                         (format!("{} #{:X}", k.value(), i), warnings)

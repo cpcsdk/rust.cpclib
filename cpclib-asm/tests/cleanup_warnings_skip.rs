@@ -11,8 +11,7 @@
 //! drops or merges away warnings it shouldn't: many separate macro calls,
 //! each producing its own precision-loss warning, must all still surface.
 
-use cpclib_asm::assemble_with_options;
-use cpclib_asm::EnvOptions;
+use cpclib_asm::{EnvOptions, assemble_with_options};
 
 /// The same macro, called many times (so `cleanup_warnings` runs many times
 /// with nothing new in between most calls), each call individually

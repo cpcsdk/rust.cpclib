@@ -612,7 +612,9 @@ pub(super) fn label_definitions_in<'a, T>(
     listing: impl IntoIterator<Item = &'a T> + 'a,
     scopes: &[(String, std::ops::Range<u32>)]
 ) -> Vec<(String, Range)>
-where T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a {
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
     let mut defs = Vec::new();
     for token in flatten_listing(listing) {
         let Some(Definition::Label { name: raw }) = classify_definition(token)

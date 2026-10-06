@@ -5,7 +5,6 @@
 //! 32 bytes, two per colour, in pen order. See [`crate::asic`] for the layout
 //! of one entry.
 
-
 use cpclib_common::camino::Utf8Path;
 
 use crate::asic::AsicColor;
@@ -49,10 +48,10 @@ impl Kit {
         let content = cpclib_files::load_content(path)?;
         let bytes: [u8; Self::BYTE_SIZE] = content.as_slice().try_into().map_err(|_| {
             format!(
-                    "{} is {} bytes; a .kit palette is exactly {}",
-                    path,
-                    content.len(),
-                    Self::BYTE_SIZE
+                "{} is {} bytes; a .kit palette is exactly {}",
+                path,
+                content.len(),
+                Self::BYTE_SIZE
             )
         })?;
         Ok(Self::from_bytes(bytes))

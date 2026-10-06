@@ -143,7 +143,8 @@ impl AssemblyAnalyzer {
                                 arg
                                 && let Some(slot) = resolved.get_mut(i)
                             {
-                                *slot = expr.resolve(&mut env).ok().and_then(|v| v.int_value().ok());
+                                *slot =
+                                    expr.resolve(&mut env).ok().and_then(|v| v.int_value().ok());
                             }
                         }
                     }

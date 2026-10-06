@@ -82,7 +82,10 @@ fn every_instruction_in_a_wide_real_sample_is_described() {
         checked += 1;
     }
 
-    assert!(checked > 30, "expected a wide sample, only checked {checked}");
+    assert!(
+        checked > 30,
+        "expected a wide sample, only checked {checked}"
+    );
     assert!(
         opaque.is_empty(),
         "these real instructions have no table row: {opaque:#?}"

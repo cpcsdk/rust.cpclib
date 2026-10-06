@@ -273,13 +273,13 @@ impl BndBuildApp {
 
     pub fn load<P: AsRef<Utf8Path>>(&mut self, path: P) {
         let path = path.as_ref();
-        
+
         #[cfg(feature = "rayon")]
         let result = cpclib_bndbuild::BndBuilder::from_path(path, false);
-        
+
         #[cfg(not(feature = "rayon"))]
         let result = cpclib_bndbuild::BndBuilder::from_path(path);
-        
+
         match result {
             Ok((ref path, builder)) => {
                 self.filename = Some(path.into());

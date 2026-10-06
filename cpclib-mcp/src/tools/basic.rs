@@ -50,8 +50,10 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = basic_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Tokenize Locomotive BASIC source text into its on-disk byte form, \
-                           base64-encoded. Read-only.")]
+    #[tool(
+        description = "Tokenize Locomotive BASIC source text into its on-disk byte form, \
+                           base64-encoded. Read-only."
+    )]
     async fn basic_tokenize(
         &self,
         Parameters(input): Parameters<BasicTokenizeInput>
@@ -59,8 +61,10 @@ impl McpServer {
         ok_or_tool_error(basic_tokenize(input))
     }
 
-    #[tool(description = "Decode tokenized Locomotive BASIC bytes (base64-encoded) back into \
-                           source text. Read-only.")]
+    #[tool(
+        description = "Decode tokenized Locomotive BASIC bytes (base64-encoded) back into \
+                           source text. Read-only."
+    )]
     async fn basic_detokenize(
         &self,
         Parameters(input): Parameters<BasicDetokenizeInput>

@@ -38,7 +38,12 @@ struct CopyStats {
     skipped_dirs: Vec<String>
 }
 
-fn copy_tree(from: &Path, to: &Path, include_vcs: bool, stats: &mut CopyStats) -> std::io::Result<()> {
+fn copy_tree(
+    from: &Path,
+    to: &Path,
+    include_vcs: bool,
+    stats: &mut CopyStats
+) -> std::io::Result<()> {
     fs_err::create_dir_all(to)?;
     for entry in fs_err::read_dir(from)? {
         let entry = entry?;
@@ -111,12 +116,18 @@ impl Sandbox {
             given.to_path_buf()
         }
         else {
-            std::env::current_dir().map_err(|e| ToolError::io(e.to_string()))?.join(given)
+            std::env::current_dir()
+                .map_err(|e| ToolError::io(e.to_string()))?
+                .join(given)
         };
         // The file may not exist yet (an output): resolve its directory.
         let resolved = fs_err::canonicalize(&absolute).or_else(|_| {
-            let name = absolute.file_name().ok_or_else(|| std::io::Error::other("no file name"))?;
-            let dir = absolute.parent().ok_or_else(|| std::io::Error::other("no directory"))?;
+            let name = absolute
+                .file_name()
+                .ok_or_else(|| std::io::Error::other("no file name"))?;
+            let dir = absolute
+                .parent()
+                .ok_or_else(|| std::io::Error::other("no directory"))?;
             fs_err::canonicalize(dir).map(|d| d.join(name))
         });
         let relative = resolved
@@ -144,42 +155,76 @@ impl Drop for Sandbox {
 /// The directory a build file lives in (or the directory itself).
 pub(crate) fn project_dir_of(bnd_path: &str) -> PathBuf {
     let path = Path::new(bnd_path);
-    let dir = if path.is_dir() { path } else { path.parent().unwrap_or(Path::new(".")) };
-    if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir.to_path_buf() }
+    let dir = if path.is_dir() {
+        path
+    }
+    else {
+        path.parent().unwrap_or(Path::new("."))
+    };
+    if dir.as_os_str().is_empty() {
+        PathBuf::from(".")
+    }
+    else {
+        dir.to_path_buf()
+    }
 }
 
 pub(crate) fn clone_project(input: CloneProjectInput) -> ToolResult {
     let source = PathBuf::from(&input.source);
     if !source.is_dir() {
-        return Err(ToolError::invalid_input(format!("{} is not a directory", input.source)));
+        return Err(ToolError::invalid_input(format!(
+            "{} is not a directory",
+            input.source
+        )));
     }
     let source = fs_err::canonicalize(&source).map_err(|e| ToolError::io(e.to_string()))?;
 
     let destination = match &input.destination {
         Some(d) => PathBuf::from(d),
         None => {
-            let name = source.file_name().map_or("project".into(), |n| n.to_string_lossy().into_owned());
+            let name = source
+                .file_name()
+                .map_or("project".into(), |n| n.to_string_lossy().into_owned());
             let stamp = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis());
             std::env::temp_dir().join(format!("cpclib-sandbox-{name}-{stamp}"))
         }
     };
-    if destination.exists() && fs_err::read_dir(&destination).map_err(|e| ToolError::io(e.to_string()))?.next().is_some() {
+    if destination.exists()
+        && fs_err::read_dir(&destination)
+            .map_err(|e| ToolError::io(e.to_string()))?
+            .next()
+            .is_some()
+    {
         return Err(ToolError::invalid_input(format!(
             "{} already exists and is not empty - refusing to write into it",
             destination.display()
         )));
     }
     // Copying a directory into itself would recurse forever.
-    let dest_abs = if destination.is_absolute() { destination.clone() } else { std::env::current_dir().map_err(|e| ToolError::io(e.to_string()))?.join(&destination) };
+    let dest_abs = if destination.is_absolute() {
+        destination.clone()
+    }
+    else {
+        std::env::current_dir()
+            .map_err(|e| ToolError::io(e.to_string()))?
+            .join(&destination)
+    };
     if dest_abs.starts_with(&source) {
-        return Err(ToolError::invalid_input("the destination must not be inside the source"));
+        return Err(ToolError::invalid_input(
+            "the destination must not be inside the source"
+        ));
     }
 
     let mut stats = CopyStats::default();
-    copy_tree(&source, &destination, input.include_vcs.unwrap_or(false), &mut stats)
-        .map_err(|e| ToolError::io(format!("copy failed: {e}")))?;
+    copy_tree(
+        &source,
+        &destination,
+        input.include_vcs.unwrap_or(false),
+        &mut stats
+    )
+    .map_err(|e| ToolError::io(format!("copy failed: {e}")))?;
 
     Ok(json!({
         "source": source.display().to_string(),
@@ -197,14 +242,16 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = sandbox_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Copies a project directory into a fresh scratch directory (default: \
+    #[tool(
+        description = "Copies a project directory into a fresh scratch directory (default: \
                            under the system temp dir) so it can be built and edited freely - \
                            the source is only read, never modified. Preserves file modification \
                            times so the build system does not regenerate everything (some \
                            projects have hour-long generation steps), skips .git/target/\
                            node_modules unless include_vcs. Refuses a non-empty destination or \
                            one inside the source. Use this before measure_variants or any edit \
-                           on a project you must not change (current_projects, a release repo).")]
+                           on a project you must not change (current_projects, a release repo)."
+    )]
     async fn clone_project(
         &self,
         Parameters(input): Parameters<CloneProjectInput>
@@ -236,7 +283,12 @@ mod tests {
         fs_err::write(src.join(".git/HEAD"), "ref").unwrap();
         fs_err::write(src.join("target/x.o"), "obj").unwrap();
         let old = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
-        fs_err::OpenOptions::new().write(true).open(src.join("src/a.asm")).unwrap().set_modified(old).unwrap();
+        fs_err::OpenOptions::new()
+            .write(true)
+            .open(src.join("src/a.asm"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
 
         let dest = dir.path().join("copy");
         let out = clone_project(input(src.as_std_path(), Some(dest.as_std_path()))).unwrap();
@@ -244,9 +296,16 @@ mod tests {
         assert_eq!(out["files"], 1);
         assert!(dest.join("src/a.asm").exists());
         assert!(!dest.join(".git").exists() && !dest.join("target").exists());
-        let copied = fs_err::metadata(dest.join("src/a.asm")).unwrap().modified().unwrap();
+        let copied = fs_err::metadata(dest.join("src/a.asm"))
+            .unwrap()
+            .modified()
+            .unwrap();
         assert_eq!(copied, old, "mtime must be preserved");
-        assert_eq!(fs_err::read_to_string(src.join("src/a.asm")).unwrap(), " nop\n", "source untouched");
+        assert_eq!(
+            fs_err::read_to_string(src.join("src/a.asm")).unwrap(),
+            " nop\n",
+            "source untouched"
+        );
     }
 
     #[test]
@@ -262,7 +321,11 @@ mod tests {
         let err = clone_project(input(src.as_std_path(), Some(taken.as_std_path()))).unwrap_err();
         assert_eq!(err.kind, "invalid_input");
         assert!(taken.join("keep").exists());
-        let err = clone_project(input(src.as_std_path(), Some(src.join("inner").as_std_path()))).unwrap_err();
+        let err = clone_project(input(
+            src.as_std_path(),
+            Some(src.join("inner").as_std_path())
+        ))
+        .unwrap_err();
         assert_eq!(err.kind, "invalid_input");
     }
 
@@ -284,10 +347,16 @@ mod tests {
             assert_eq!(fs_err::read_to_string(&mapped).unwrap(), "nop");
             // a file that does not exist yet (an output) still maps
             assert!(sandbox.map(project.join("out.bin").as_str()).is_ok());
-            assert_eq!(sandbox.map(outside.as_str()).unwrap_err().kind, "invalid_input");
+            assert_eq!(
+                sandbox.map(outside.as_str()).unwrap_err().kind,
+                "invalid_input"
+            );
             // editing the copy leaves the original alone
             fs_err::write(&mapped, "changed").unwrap();
-            assert_eq!(fs_err::read_to_string(project.join("src/a.asm")).unwrap(), "nop");
+            assert_eq!(
+                fs_err::read_to_string(project.join("src/a.asm")).unwrap(),
+                "nop"
+            );
         }
         assert!(!root.exists(), "the copy is removed on drop");
     }

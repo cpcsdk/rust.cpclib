@@ -18,7 +18,10 @@ use crate::implementation::tokens::TokenExt;
 /// calls the real `list_get`/`list_sublist_by_range`/`matrix_get`
 /// functions instead, for their more detailed bounds-checked error
 /// messages.
-pub(crate) fn eval_subscript(target: &ExprResult, indices: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+pub(crate) fn eval_subscript(
+    target: &ExprResult,
+    indices: &[ExprResult]
+) -> Result<ExprResult, Box<AssemblerError>> {
     match indices {
         [ExprResult::Range { .. }] => list_sublist_by_range(target, &indices[0]),
         [ExprResult::List(idx_list)] => {
@@ -32,13 +35,15 @@ pub(crate) fn eval_subscript(target: &ExprResult, indices: &[ExprResult]) -> Res
             Ok(ExprResult::List(out.into()))
         },
         [index] => {
-            let i = index.int_value().map_err(AssemblerError::ExpressionTypeError)?;
+            let i = index
+                .int_value()
+                .map_err(AssemblerError::ExpressionTypeError)?;
             let i = usize::try_from(i).map_err(|_| {
-                Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
-                    AssemblerError::AssemblingError {
+                Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Subscript index {i} must not be negative")
-                    }
-                ))))
+                    })
+                )))
             })?;
             list_get(target, i)
         },
@@ -51,32 +56,32 @@ pub(crate) fn eval_subscript(target: &ExprResult, indices: &[ExprResult]) -> Res
             let y = y.int_value().map_err(AssemblerError::ExpressionTypeError)?;
             let (x, y) = (
                 usize::try_from(x).map_err(|_| {
-                    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
-                        AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                        Box::new(AssemblerError::AssemblingError {
                             msg: format!("Subscript column {x} must not be negative")
-                        }
-                    ))))
+                        })
+                    )))
                 })?,
                 usize::try_from(y).map_err(|_| {
-                    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
-                        AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                        Box::new(AssemblerError::AssemblingError {
                             msg: format!("Subscript row {y} must not be negative")
-                        }
-                    ))))
+                        })
+                    )))
                 })?
             );
             matrix_get(target, y, x)
         },
         _ => {
-            Err(Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
-                AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!(
                         "Wrong number of subscript indices ({}) - expected 1 or 2",
                         indices.len()
                     )
-                }
-            )))))
-        }
+                }))
+            )))
+        },
     }
 }
 
@@ -540,7 +545,7 @@ impl ExprEvaluationExt for Expr {
                     .into_iter()
                     .filter(|s| !params.iter().any(|p| p.as_str() == s.as_ref()))
                     .collect()
-            }
+            },
         }
     }
 

@@ -93,7 +93,8 @@ fn an_indexed_store_is_also_protected() {
 #[test]
 fn a_store_to_an_absolute_address_is_also_protected() {
     assert!(
-        matches("buffer\n    defb 0\nstart:\n    ld (buffer), a\n    ld a, 0\n    ret\n").is_empty(),
+        matches("buffer\n    defb 0\nstart:\n    ld (buffer), a\n    ld a, 0\n    ret\n")
+            .is_empty(),
         "writing to a named address is still a memory write"
     );
 }

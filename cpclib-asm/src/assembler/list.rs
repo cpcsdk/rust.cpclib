@@ -5,7 +5,8 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::{ExprFormat, ExprResult};
 use substring::Substring;
 
-use crate::{Env, error::{AssemblerError, ExpressionError}};
+use crate::Env;
+use crate::error::{AssemblerError, ExpressionError};
 
 pub fn fix_string<S: Borrow<str>>(s: S) -> SmolStr {
     s.borrow().replace("\\n", "\n").into()
@@ -63,9 +64,11 @@ pub fn list_set(
     }
 }
 
-
-
-pub fn list_position_value(_env: &mut Env, list: &ExprResult, value: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn list_position_value(
+    _env: &mut Env,
+    list: &ExprResult,
+    value: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => {
             for (i, item) in l.iter().enumerate() {
@@ -81,7 +84,7 @@ pub fn list_position_value(_env: &mut Env, list: &ExprResult, value: &ExprResult
             for (i, c) in s.chars().enumerate() {
                 if c == value as u8 as char {
                     return Ok(ExprResult::Value(i as _));
-                }       
+                }
             }
             Ok(ExprResult::Value(-1))
         },
@@ -96,7 +99,11 @@ pub fn list_position_value(_env: &mut Env, list: &ExprResult, value: &ExprResult
     }
 }
 
-pub fn list_position_predicate(env: &mut Env, list: &ExprResult, predicate: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn list_position_predicate(
+    env: &mut Env,
+    list: &ExprResult,
+    predicate: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
     let predicate = match predicate {
         ExprResult::String(f) => f,
         _ => {
@@ -120,7 +127,10 @@ pub fn list_position_predicate(env: &mut Env, list: &ExprResult, predicate: &Exp
 
         ExprResult::String(s) => {
             for (i, c) in s.chars().enumerate() {
-                if env.eval_any_function(predicate, &[&ExprResult::Char(c as _)])?.bool()? {
+                if env
+                    .eval_any_function(predicate, &[&ExprResult::Char(c as _)])?
+                    .bool()?
+                {
                     return Ok(ExprResult::Value(i as _));
                 }
             }
@@ -159,14 +169,21 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
 
         // O(1), no materialization - the whole point of `Range` being a
         // genuine runtime type (see its own doc comment).
-        ExprResult::Range { start, end, inclusive, step } => {
+        ExprResult::Range {
+            start,
+            end,
+            inclusive,
+            step
+        } => {
             let len = ExprResult::range_len(*start, *end, *inclusive, *step);
             if index >= len {
                 return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(len, index)
                 )));
             }
-            Ok(ExprResult::Value(ExprResult::range_nth_value(*start, *step, index)))
+            Ok(ExprResult::Value(ExprResult::range_nth_value(
+                *start, *step, index
+            )))
         },
 
         _ => {
@@ -178,7 +195,6 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
         },
     }
 }
-
 
 pub fn list_split_by_value(
     list: &ExprResult,
@@ -192,7 +208,8 @@ pub fn list_split_by_value(
                 if item == value {
                     result.push(ExprResult::List(current.into()));
                     current = Vec::new();
-                } else {
+                }
+                else {
                     current.push(item.clone());
                 }
             }
@@ -211,15 +228,9 @@ pub fn list_split_by_value(
     }
 }
 
-
-pub fn string_get(
-    list: &ExprResult,
-    index: usize
-) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn string_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
-        ExprResult::String(_s) => {
-            list_get(list, index)
-        },
+        ExprResult::String(_s) => list_get(list, index),
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -245,7 +256,6 @@ pub fn string_upper_case(list: &ExprResult) -> Result<ExprResult, Box<AssemblerE
         },
     }
 }
-
 
 pub fn string_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
@@ -319,7 +329,12 @@ pub fn list_sublist_by_range(
     list: &ExprResult,
     selector: &ExprResult
 ) -> Result<ExprResult, Box<AssemblerError>> {
-    let ExprResult::Range { start, end, inclusive, step } = selector
+    let ExprResult::Range {
+        start,
+        end,
+        inclusive,
+        step
+    } = selector
     else {
         return Err(Box::new(AssemblerError::ExpressionError(
             ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -331,7 +346,9 @@ pub fn list_sublist_by_range(
     let index_at = |n: usize| -> Result<usize, Box<AssemblerError>> {
         let index = ExprResult::range_nth_value(*start, *step, n);
         usize::try_from(index).map_err(|_| {
-            Box::new(AssemblerError::ExpressionError(ExpressionError::InvalidSize(0, index as usize)))
+            Box::new(AssemblerError::ExpressionError(
+                ExpressionError::InvalidSize(0, index as usize)
+            ))
         })
     };
     match list {
@@ -354,10 +371,9 @@ pub fn list_sublist_by_range(
             for n in 0..selector_len {
                 let index = index_at(n)?;
                 let c = chars.get(index).ok_or_else(|| {
-                    Box::new(AssemblerError::ExpressionError(ExpressionError::InvalidSize(
-                        chars.len(),
-                        index
-                    )))
+                    Box::new(AssemblerError::ExpressionError(
+                        ExpressionError::InvalidSize(chars.len(), index)
+                    ))
                 })?;
                 result.push(*c);
             }
@@ -369,7 +385,7 @@ pub fn list_sublist_by_range(
                     msg: format!("{list} is not a list or a string")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -380,7 +396,12 @@ pub fn list_sublist_by_range(
 /// stepped `Range` stays lazy through `ITERATE`/`DB` emission/`list_len`/
 /// `list_get` in a way a broadcast-computed `List` cannot).
 pub fn range_step_by(range: &ExprResult, step: i32) -> Result<ExprResult, Box<AssemblerError>> {
-    let ExprResult::Range { start, end, inclusive, .. } = range
+    let ExprResult::Range {
+        start,
+        end,
+        inclusive,
+        ..
+    } = range
     else {
         return Err(Box::new(AssemblerError::ExpressionError(
             ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -409,9 +430,12 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
         ExprResult::String(s) => Ok(s.len().into()),
         ExprResult::Char(_) => Ok(1.into()),
         // O(1), no materialization.
-        ExprResult::Range { start, end, inclusive, step } => {
-            Ok(ExprResult::range_len(*start, *end, *inclusive, *step).into())
-        },
+        ExprResult::Range {
+            start,
+            end,
+            inclusive,
+            step
+        } => Ok(ExprResult::range_len(*start, *end, *inclusive, *step).into()),
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -534,7 +558,6 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>
     }
 }
 
-
 pub fn list_filter(
     env: &mut Env,
     list: &ExprResult,
@@ -552,7 +575,7 @@ pub fn list_filter(
     };
 
     match list {
-        ExprResult::List(l)=> {
+        ExprResult::List(l) => {
             let mut result = Vec::with_capacity(l.len());
             for item in l.iter() {
                 let keep = env.eval_any_function(predicate, &[item])?;
@@ -565,13 +588,14 @@ pub fn list_filter(
         ExprResult::String(s) => {
             let mut result = String::with_capacity(s.len());
             for c in s.chars() {
-                let keep = env.eval_any_function(predicate, &[ExprResult::Char(c as _ )])?;
+                let keep = env.eval_any_function(predicate, &[ExprResult::Char(c as _)])?;
                 if keep.bool()? {
-                    result.push(c);}
+                    result.push(c);
                 }
-                Ok(ExprResult::String(result.into()))
-            },       
-             _ => {
+            }
+            Ok(ExprResult::String(result.into()))
+        },
+        _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list or a string")
@@ -580,7 +604,6 @@ pub fn list_filter(
         },
     }
 }
-
 
 pub fn string_filter(
     env: &mut Env,
@@ -595,10 +618,9 @@ pub fn string_filter(
                     msg: format!("{list} is not a string")
                 }))
             )))
-        }
+        },
     }
 }
-
 
 pub fn list_map(
     env: &mut Env,
@@ -617,7 +639,7 @@ pub fn list_map(
     };
 
     match list {
-        ExprResult::List(l)=> {
+        ExprResult::List(l) => {
             let mut result = Vec::with_capacity(l.len());
             for item in l.iter() {
                 let mapped = env.eval_any_function(mapper, &[item])?;
@@ -628,7 +650,7 @@ pub fn list_map(
         ExprResult::String(s) => {
             let mut result = String::with_capacity(s.len());
             for c in s.chars() {
-                let mapped = env.eval_any_function(mapper, &[ExprResult::Char(c as _ )])?;
+                let mapped = env.eval_any_function(mapper, &[ExprResult::Char(c as _)])?;
                 let mapped_char = mapped.char()?;
                 result.push(mapped_char as char);
             }
@@ -643,7 +665,6 @@ pub fn list_map(
         },
     }
 }
-
 
 pub fn list_fold(
     env: &mut Env,
@@ -663,7 +684,7 @@ pub fn list_fold(
     };
 
     match list {
-        ExprResult::List(l)=> {
+        ExprResult::List(l) => {
             let mut acc = initial.clone();
             for item in l.iter() {
                 acc = env.eval_any_function(folder, &[&acc, item])?;
@@ -680,7 +701,6 @@ pub fn list_fold(
     }
 }
 
-
 pub fn string_map(
     env: &mut Env,
     list: &ExprResult,
@@ -694,7 +714,7 @@ pub fn string_map(
                     msg: format!("{list} is not a string")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -1010,7 +1030,8 @@ mod string_format_tests {
 
     #[test]
     fn double_braces_are_literal_braces() {
-        let (result, _warnings) = string_format(&[s("{{literal}} {0}"), ExprResult::Value(1)]).unwrap();
+        let (result, _warnings) =
+            string_format(&[s("{{literal}} {0}"), ExprResult::Value(1)]).unwrap();
         assert_eq!(result, s("{literal} 1"));
     }
 
@@ -1052,7 +1073,8 @@ mod string_format_tests {
 
     #[test]
     fn a_format_spec_renders_unpadded_hex_and_bin() {
-        let (result, _warnings) = string_format(&[s("{0:hex} {0:bin}"), ExprResult::Value(5)]).unwrap();
+        let (result, _warnings) =
+            string_format(&[s("{0:hex} {0:bin}"), ExprResult::Value(5)]).unwrap();
         assert_eq!(result, s("0x5 0b101"));
     }
 
@@ -1064,7 +1086,8 @@ mod string_format_tests {
 
     #[test]
     fn a_format_spec_can_be_reused_with_different_specs_on_the_same_argument() {
-        let (result, _warnings) = string_format(&[s("{0:int} = {0:hex2}"), ExprResult::Value(10)]).unwrap();
+        let (result, _warnings) =
+            string_format(&[s("{0:int} = {0:hex2}"), ExprResult::Value(10)]).unwrap();
         assert_eq!(result, s("10 = 0x0a"));
     }
 

@@ -2322,7 +2322,7 @@ impl Native1984Robot {
                 return Err(format!(
                     "native 1984 only has drives A and B, not drive {drive}"
                 ));
-            },
+            }
         };
         self.respawn_with(&[flag])
     }

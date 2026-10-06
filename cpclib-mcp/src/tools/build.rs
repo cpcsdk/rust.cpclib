@@ -7,7 +7,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_bndbuild::BndBuilderError;
 use cpclib_bndbuild::app::WatchState;
 use cpclib_bndbuild::builder::BndBuilder;
-use cpclib_bndbuild::event::{BndBuilderEvent, BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc};
+use cpclib_bndbuild::event::{
+    BndBuilderEvent, BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc
+};
 use cpclib_common::event::EventObserver;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::{tool, tool_router};
@@ -108,7 +110,7 @@ pub(crate) fn run_build(input: RunBuildInput) -> ToolResult {
                         "no target given and the build file declares no default target"
                     )
                 })?
-        }
+        },
     };
 
     let observer = LogObserver::default();
@@ -140,7 +142,7 @@ pub(crate) fn run_build(input: RunBuildInput) -> ToolResult {
                     "log": log
                 })
             ))
-        }
+        },
     }
 }
 
@@ -184,7 +186,13 @@ pub(crate) fn outdated_targets(input: OutdatedInput) -> ToolResult {
     let (resolved_path, builder) = open_builder(&input.bnd_path)?;
     let targets_to_check: Vec<Utf8PathBuf> = match &input.target {
         Some(t) => vec![Utf8PathBuf::from(t)],
-        None => builder.targets().into_iter().map(|p| p.to_path_buf()).collect()
+        None => {
+            builder
+                .targets()
+                .into_iter()
+                .map(|p| p.to_path_buf())
+                .collect()
+        },
     };
 
     let mut results = Vec::new();
@@ -205,10 +213,12 @@ fn parse_sym_file(text: &str) -> std::collections::HashMap<String, u32> {
     let mut symbols = std::collections::HashMap::new();
     for line in text.lines() {
         let line = line.trim();
-        let Some((name, rest)) = line.split_once(" equ ") else {
+        let Some((name, rest)) = line.split_once(" equ ")
+        else {
             continue;
         };
-        let Some(hex) = rest.trim().strip_prefix('#') else {
+        let Some(hex) = rest.trim().strip_prefix('#')
+        else {
             continue;
         };
         if let Ok(value) = u32::from_str_radix(hex.trim(), 16) {
@@ -285,7 +295,10 @@ fn filtered_log(log: &[String], verbose: bool) -> Vec<String> {
     if verbose {
         return log.to_vec();
     }
-    log.iter().filter(|line| !is_basm_warning_noise(line)).cloned().collect()
+    log.iter()
+        .filter(|line| !is_basm_warning_noise(line))
+        .cloned()
+        .collect()
 }
 
 /// Builds `target` (or the default one) with output captured rather than
@@ -305,7 +318,7 @@ pub(crate) fn run_target_quiet(bnd_path: &str, target: Option<&str>) -> Result<u
                         "no target given and the build file declares no default target"
                     )
                 })?
-        }
+        },
     };
     builder.add_observer(BndBuilderObserverRc::new(LogObserver::default()));
     let start = std::time::Instant::now();
@@ -336,7 +349,7 @@ pub(crate) fn report_build(input: ReportBuildInput) -> ToolResult {
                         "no target given and the build file declares no default target"
                     )
                 })?
-        }
+        },
     };
 
     let verbose = input.verbose.unwrap_or(false);
@@ -361,8 +374,12 @@ pub(crate) fn report_build(input: ReportBuildInput) -> ToolResult {
         ));
     }
 
-    let sym_text = fs_err::read_to_string(&input.sym_path)
-        .map_err(|e| ToolError::io(format!("build succeeded but cannot read {}: {e}", input.sym_path)))?;
+    let sym_text = fs_err::read_to_string(&input.sym_path).map_err(|e| {
+        ToolError::io(format!(
+            "build succeeded but cannot read {}: {e}",
+            input.sym_path
+        ))
+    })?;
     let symbols = parse_sym_file(&sym_text);
     let sections = crunched_sections_from_sym(&symbols);
     let total_linked_size = match (symbols.get("first"), symbols.get("last")) {
@@ -424,7 +441,11 @@ fn assignment_value_range(line: &str, variable_name: &str) -> Option<(usize, usi
     let indent = line.len() - line.trim_start().len();
     let after_name = line[indent..].strip_prefix(variable_name)?;
     let name_end = indent + variable_name.len();
-    if after_name.chars().next().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+    if after_name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphanumeric() || c == '_')
+    {
         return None; // a longer identifier that merely starts with the name
     }
     let operator_start = name_end + (after_name.len() - after_name.trim_start().len());
@@ -443,7 +464,9 @@ fn assignment_value_range(line: &str, variable_name: &str) -> Option<(usize, usi
         return None;
     };
     let value_start = operator_start + operator_len;
-    let value_end = line[value_start..].find(';').map_or(line.len(), |i| value_start + i);
+    let value_end = line[value_start..]
+        .find(';')
+        .map_or(line.len(), |i| value_start + i);
     Some((value_start, value_end))
 }
 
@@ -462,7 +485,11 @@ fn current_assignment_value(source: &str, variable_name: &str) -> Option<String>
     Some(line[start..end].trim().to_string())
 }
 
-fn rewrite_variable_assignment(source: &str, variable_name: &str, new_value: &str) -> Option<String> {
+fn rewrite_variable_assignment(
+    source: &str,
+    variable_name: &str,
+    new_value: &str
+) -> Option<String> {
     let mut lines: Vec<&str> = source.lines().collect();
     let target = find_active_assignment(&lines, variable_name)?;
 
@@ -506,8 +533,14 @@ pub(crate) fn one_line_error(message: &str) -> String {
             plain.push(c);
         }
     }
-    let collapsed = plain.split_whitespace().collect::<Vec<_>>().join(" ").replace('|', "/");
-    let tail = collapsed.rfind("error:").map_or(collapsed.as_str(), |i| &collapsed[i..]);
+    let collapsed = plain
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('|', "/");
+    let tail = collapsed
+        .rfind("error:")
+        .map_or(collapsed.as_str(), |i| &collapsed[i..]);
     tail.chars().take(100).collect()
 }
 
@@ -539,7 +572,9 @@ fn render_comparison_table(rows: &[LinkRow], with_budget: bool) -> String {
         else {
             r.cruncher.clone()
         };
-        let secs = r.duration_ms.map_or("-".to_string(), |ms| format!("{:.1}", ms as f64 / 1000.0));
+        let secs = r
+            .duration_ms
+            .map_or("-".to_string(), |ms| format!("{:.1}", ms as f64 / 1000.0));
         match r.linked {
             Some(linked) => {
                 rank += 1;
@@ -560,7 +595,10 @@ fn render_comparison_table(rows: &[LinkRow], with_budget: bool) -> String {
                 out.push_str(&format!(" {secs} |\n"));
             },
             None => {
-                let reason = r.error.as_deref().map_or("no linked size".to_string(), one_line_error);
+                let reason = r
+                    .error
+                    .as_deref()
+                    .map_or("no linked size".to_string(), one_line_error);
                 let cols = 6 + usize::from(with_budget);
                 out.push_str(&format!(
                     "| - | {name} | FAILED: {} |{} {secs} |\n",
@@ -676,7 +714,6 @@ pub(crate) fn compare_link_sizes(mut input: CompareLinkSizesInput) -> ToolResult
 }
 
 fn compare_link_sizes_in_place(input: CompareLinkSizesInput) -> ToolResult {
-
     let original = fs_err::read_to_string(&input.cruncher_source_path)
         .map_err(|e| ToolError::io(format!("cannot read {}: {e}", input.cruncher_source_path)))?;
     // Restored on every exit path, including an early `?` below - see
@@ -689,7 +726,8 @@ fn compare_link_sizes_in_place(input: CompareLinkSizesInput) -> ToolResult {
     let current = current_assignment_value(&original, &input.variable_name);
     let mut rows: Vec<LinkRow> = Vec::with_capacity(input.crunchers.len());
     for candidate in &input.crunchers {
-        let Some(rewritten) = rewrite_variable_assignment(&original, &input.variable_name, candidate)
+        let Some(rewritten) =
+            rewrite_variable_assignment(&original, &input.variable_name, candidate)
         else {
             return Err(ToolError::invalid_input(format!(
                 "no active (non-commented) `{} = ...` line found in {} - refusing to guess which \
@@ -701,8 +739,9 @@ fn compare_link_sizes_in_place(input: CompareLinkSizesInput) -> ToolResult {
             Some(extra) => format!("{}\n{rewritten}", extra.join("\n")),
             None => rewritten
         };
-        fs_err::write(&input.cruncher_source_path, &rewritten)
-            .map_err(|e| ToolError::io(format!("cannot write {}: {e}", input.cruncher_source_path)))?;
+        fs_err::write(&input.cruncher_source_path, &rewritten).map_err(|e| {
+            ToolError::io(format!("cannot write {}: {e}", input.cruncher_source_path))
+        })?;
 
         let is_current = current.as_deref() == Some(candidate.as_str());
         let outcome = report_build(ReportBuildInput {
@@ -720,7 +759,9 @@ fn compare_link_sizes_in_place(input: CompareLinkSizesInput) -> ToolResult {
                     is_current,
                     linked: report["total_linked_size"].as_i64(),
                     payload: report["sections"].as_array().map(|secs| {
-                        secs.iter().filter_map(|s| s["crunched_size"].as_i64()).sum()
+                        secs.iter()
+                            .filter_map(|s| s["crunched_size"].as_i64())
+                            .sum()
                     }),
                     free_bytes: report["free_bytes"].as_i64(),
                     duration_ms: report["duration_ms"].as_u64(),
@@ -737,7 +778,7 @@ fn compare_link_sizes_in_place(input: CompareLinkSizesInput) -> ToolResult {
                     duration_ms: None,
                     error: Some(e.message.clone())
                 }
-            }
+            },
         });
     }
 
@@ -780,8 +821,10 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = build_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "MUTATING: runs a bndbuild target (and its dependencies). Returns a \
-                           captured build log.")]
+    #[tool(
+        description = "MUTATING: runs a bndbuild target (and its dependencies). Returns a \
+                           captured build log."
+    )]
     async fn run_build(
         &self,
         Parameters(input): Parameters<RunBuildInput>
@@ -789,8 +832,10 @@ impl McpServer {
         ok_or_tool_error(run_build(input))
     }
 
-    #[tool(description = "List every target a bndbuild file declares, with its direct \
-                           dependencies. Read-only.")]
+    #[tool(
+        description = "List every target a bndbuild file declares, with its direct \
+                           dependencies. Read-only."
+    )]
     async fn list_build_targets(
         &self,
         Parameters(input): Parameters<BndPathInput>
@@ -798,8 +843,10 @@ impl McpServer {
         ok_or_tool_error(list_build_targets(input))
     }
 
-    #[tool(description = "Check whether bndbuild target(s) are outdated relative to their \
-                           dependencies, without building anything. Read-only.")]
+    #[tool(
+        description = "Check whether bndbuild target(s) are outdated relative to their \
+                           dependencies, without building anything. Read-only."
+    )]
     async fn outdated_targets(
         &self,
         Parameters(input): Parameters<OutdatedInput>
@@ -807,7 +854,8 @@ impl McpServer {
         ok_or_tool_error(outdated_targets(input))
     }
 
-    #[tool(description = "MUTATING: runs a bndbuild target like run_build, then reads back the \
+    #[tool(
+        description = "MUTATING: runs a bndbuild target like run_build, then reads back the \
                            .sym file it produced for structured per-section crunch sizes \
                            (uncrunched/crunched/delta) and the total linked size (last-first), \
                            instead of grepping build-log text. Requires the project to write a \
@@ -817,7 +865,8 @@ impl McpServer {
                            everything else kept) - pass `verbose: true` for the raw log. \
                            `free_bytes` (when `target_size` is given) is target_size minus \
                            `overhead_bytes` (default 0 - e.g. pass 128 for an AMSDOS header) \
-                           minus the linked size.")]
+                           minus the linked size."
+    )]
     async fn report_build(
         &self,
         Parameters(input): Parameters<ReportBuildInput>
@@ -825,7 +874,8 @@ impl McpServer {
         ok_or_tool_error(report_build(input))
     }
 
-    #[tool(description = "Works on a scratch COPY of the project by default (the real files are \
+    #[tool(
+        description = "Works on a scratch COPY of the project by default (the real files are \
                            never touched; `in_place: true` opts out): answers 'which cruncher gives the smallest real linked \
                            output', not just the smallest payload - compare_crunchers compares \
                            raw bytes in isolation and ignores each format's own decruncher stub \
@@ -840,7 +890,8 @@ impl McpServer {
                            exactly one such variable to pick a cruncher at assemble time - fails \
                            clearly (does not guess) when the variable's line cannot be found; \
                            does not support projects selecting different crunchers for different \
-                           sections independently (e.g. birthtro).")]
+                           sections independently (e.g. birthtro)."
+    )]
     async fn compare_link_sizes(
         &self,
         Parameters(input): Parameters<CompareLinkSizesInput>
@@ -911,7 +962,13 @@ last equ #2900
             "done: main.o".to_string(),
         ];
         let filtered = filtered_log(&log, false);
-        assert_eq!(filtered, vec!["[1/3] building main.o".to_string(), "done: main.o".to_string()]);
+        assert_eq!(
+            filtered,
+            vec![
+                "[1/3] building main.o".to_string(),
+                "done: main.o".to_string()
+            ]
+        );
     }
 
     /// ...but must never drop a real error or a project's own `PRINT`
@@ -968,9 +1025,12 @@ last equ #2900
 
     #[test]
     fn rewrite_variable_assignment_only_touches_the_one_active_line() {
-        let rewritten =
-            rewrite_variable_assignment(REAL_LINK_SKY_EXCERPT, "SELECTED_CRUNCHER", "CRUNCHER_UPKR")
-                .expect("the real skyline convention must be recognized");
+        let rewritten = rewrite_variable_assignment(
+            REAL_LINK_SKY_EXCERPT,
+            "SELECTED_CRUNCHER",
+            "CRUNCHER_UPKR"
+        )
+        .expect("the real skyline convention must be recognized");
         let lines: Vec<&str> = rewritten.lines().collect();
         // Every commented-out line is untouched, including the one whose
         // value also happens to be CRUNCHER_UPKR (proving this matches by
@@ -1029,7 +1089,10 @@ last equ #2900
             fs_err::write(&path, "corrupted by a failed candidate build\n").unwrap();
         }
 
-        assert_eq!(fs_err::read_to_string(&path).unwrap(), REAL_LINK_SKY_EXCERPT);
+        assert_eq!(
+            fs_err::read_to_string(&path).unwrap(),
+            REAL_LINK_SKY_EXCERPT
+        );
     }
 
     fn row(name: &str, linked: Option<i64>, payload: Option<i64>, current: bool) -> LinkRow {
@@ -1040,7 +1103,9 @@ last equ #2900
             payload,
             free_bytes: linked.map(|l| 1920 - l),
             duration_ms: Some(1500),
-            error: linked.is_none().then(|| "wrapper\n\u{1b}[31merror:\u{1b}[0m boom | pipe\nmore".to_string())
+            error: linked
+                .is_none()
+                .then(|| "wrapper\n\u{1b}[31merror:\u{1b}[0m boom | pipe\nmore".to_string())
         }
     }
 
@@ -1057,11 +1122,29 @@ last equ #2900
         let table = render_comparison_table(&rows, true);
         let lines: Vec<&str> = table.lines().collect();
         assert!(lines[0].contains("Free"), "{table}");
-        assert!(lines[2].contains("| 1 | CRUNCHER_ZX0_BACKWARD (current) | 1870 | best | 1781 | 89 | 50 |"), "{table}");
-        assert!(lines[3].contains("| 2 | CRUNCHER_UPKR | 1901 | +31 | 1709 | 192 | 19 |"), "{table}");
-        assert!(lines[4].contains("FAILED: error: boom / pipe more"), "{table}");
-        assert_eq!(lines[2].matches('|').count(), lines[0].matches('|').count(), "{table}");
-        assert_eq!(lines[4].matches('|').count(), lines[0].matches('|').count(), "{table}");
+        assert!(
+            lines[2]
+                .contains("| 1 | CRUNCHER_ZX0_BACKWARD (current) | 1870 | best | 1781 | 89 | 50 |"),
+            "{table}"
+        );
+        assert!(
+            lines[3].contains("| 2 | CRUNCHER_UPKR | 1901 | +31 | 1709 | 192 | 19 |"),
+            "{table}"
+        );
+        assert!(
+            lines[4].contains("FAILED: error: boom / pipe more"),
+            "{table}"
+        );
+        assert_eq!(
+            lines[2].matches('|').count(),
+            lines[0].matches('|').count(),
+            "{table}"
+        );
+        assert_eq!(
+            lines[4].matches('|').count(),
+            lines[0].matches('|').count(),
+            "{table}"
+        );
     }
 
     #[test]
@@ -1069,7 +1152,11 @@ last equ #2900
         let table = render_comparison_table(&[row("A", Some(10), Some(8), false)], false);
         assert!(!table.contains("Free"), "{table}");
         let lines: Vec<&str> = table.lines().collect();
-        assert_eq!(lines[0].matches('|').count(), lines[2].matches('|').count(), "{table}");
+        assert_eq!(
+            lines[0].matches('|').count(),
+            lines[2].matches('|').count(),
+            "{table}"
+        );
     }
 
     #[test]
@@ -1094,7 +1181,10 @@ last equ #2900
             rewrite_variable_assignment(src, "SELECTED_DATA_ENCODING", "DATA_ENCODING1").unwrap(),
             "SELECTED_DATA_ENCODING_OLD equ 9\nSELECTED_DATA_ENCODING EQU DATA_ENCODING1 ; the good one"
         );
-        assert_eq!(current_assignment_value("X set 5\n", "X").as_deref(), Some("5"));
+        assert_eq!(
+            current_assignment_value("X set 5\n", "X").as_deref(),
+            Some("5")
+        );
         assert_eq!(current_assignment_value("X == 5\n", "X"), None);
         assert_eq!(current_assignment_value("Xequ 5\n", "X"), None);
     }

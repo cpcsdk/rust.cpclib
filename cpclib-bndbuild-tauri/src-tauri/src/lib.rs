@@ -572,7 +572,7 @@ impl BndbuildState {
 
         #[cfg(feature = "rayon")]
         let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname, false);
-        
+
         #[cfg(not(feature = "rayon"))]
         let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname);
 

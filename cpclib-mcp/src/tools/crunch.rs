@@ -98,16 +98,21 @@ pub(crate) fn compare_crunchers(input: CompareCrunchersInput) -> ToolResult {
     // the *sum* of every format's time into roughly the *slowest single
     // format's* time. Confirmed live this made a real difference: an
     // 11-format sweep over a real 16KB asset took 34.6s sequentially.
-    let handles: Vec<(String, std::thread::JoinHandle<Result<cpclib_crunchers::CompressionResult, String>>)> =
-        format_names
-            .iter()
-            .map(|name| {
-                let name = name.clone();
-                let data = bytes.clone();
-                let handle_name = name.clone();
-                (handle_name, std::thread::spawn(move || compress_with_timeout(name, data, CRUNCHER_TIMEOUT)))
-            })
-            .collect();
+    let handles: Vec<(
+        String,
+        std::thread::JoinHandle<Result<cpclib_crunchers::CompressionResult, String>>
+    )> = format_names
+        .iter()
+        .map(|name| {
+            let name = name.clone();
+            let data = bytes.clone();
+            let handle_name = name.clone();
+            (
+                handle_name,
+                std::thread::spawn(move || compress_with_timeout(name, data, CRUNCHER_TIMEOUT))
+            )
+        })
+        .collect();
 
     let mut results: Vec<Value> = Vec::with_capacity(handles.len());
     for (name, handle) in handles {
@@ -146,7 +151,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = crunch_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Compress one byte block (from a file, or basm source assembled first) \
+    #[tool(
+        description = "Compress one byte block (from a file, or basm source assembled first) \
                            with every supported cruncher format and report the resulting size \
                            for each, sorted smallest-first. Read-only, in-process, no rebuild. \
                            All formats run concurrently on their own threads, so total wall time \
@@ -157,7 +163,8 @@ impl McpServer {
                            multiple crunch sites are selected independently. A per-format 90s timeout \
                            applies to every format, to give legitimately slow (but finishing) \
                            crunchers like `upkr` room on larger real assets without waiting \
-                           forever on a genuine hang.")]
+                           forever on a genuine hang."
+    )]
     async fn compare_crunchers(
         &self,
         Parameters(input): Parameters<CompareCrunchersInput>
@@ -211,11 +218,16 @@ mod tests {
         assert_eq!(results.len(), ALL_FORMATS.len(), "{results:#?}");
         for r in results {
             assert_eq!(r["ok"], true, "{r:#}");
-            let size = r["size"].as_u64().expect("size should be present on success");
+            let size = r["size"]
+                .as_u64()
+                .expect("size should be present on success");
             assert!(size > 0, "{r:#}");
         }
         // Sorted smallest-first.
-        let sizes: Vec<u64> = results.iter().map(|r| r["size"].as_u64().unwrap()).collect();
+        let sizes: Vec<u64> = results
+            .iter()
+            .map(|r| r["size"].as_u64().unwrap())
+            .collect();
         let mut sorted = sizes.clone();
         sorted.sort_unstable();
         assert_eq!(sizes, sorted, "{results:#?}");

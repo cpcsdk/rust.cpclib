@@ -81,14 +81,20 @@ fn parse_basm_command(command: &str) -> Option<BasmInvocation> {
     let mut args = words.into_iter().skip(1);
     while let Some(arg) = args.next() {
         // Options taking a value, as `-X value`, `-Xvalue` or `--long=value`.
-        let take = |short: &str, long: &str, arg: &str, args: &mut dyn Iterator<Item = String>| -> Option<String> {
+        let take = |short: &str,
+                    long: &str,
+                    arg: &str,
+                    args: &mut dyn Iterator<Item = String>|
+         -> Option<String> {
             if arg == short || arg == long {
                 return args.next();
             }
             if let Some(v) = arg.strip_prefix(&format!("{long}=")) {
                 return Some(v.to_string());
             }
-            arg.strip_prefix(short).filter(|v| !v.is_empty() && !short.starts_with("--")).map(str::to_string)
+            arg.strip_prefix(short)
+                .filter(|v| !v.is_empty() && !short.starts_with("--"))
+                .map(str::to_string)
         };
         if let Some(v) = take("-I", "--include", &arg, &mut args) {
             inv.include_dirs.push(v);
@@ -99,7 +105,11 @@ fn parse_basm_command(command: &str) -> Option<BasmInvocation> {
         else if let Some(v) = take("-o", "--output", &arg, &mut args) {
             inv.outputs.push(v);
         }
-        else if arg == "--sym" || arg == "--lst" || arg == "--listing" || arg == "--symbols_output" {
+        else if arg == "--sym"
+            || arg == "--lst"
+            || arg == "--listing"
+            || arg == "--symbols_output"
+        {
             if let Some(v) = args.next() {
                 inv.outputs.push(v);
             }
@@ -113,7 +123,11 @@ fn parse_basm_command(command: &str) -> Option<BasmInvocation> {
 
 /// Resolves `input` the way `basm` would: relative to the working
 /// directory first, then each include directory.
-fn resolve_input(base: &Utf8Path, input: &str, include_dirs: &[Utf8PathBuf]) -> Option<Utf8PathBuf> {
+fn resolve_input(
+    base: &Utf8Path,
+    input: &str,
+    include_dirs: &[Utf8PathBuf]
+) -> Option<Utf8PathBuf> {
     std::iter::once(base.to_path_buf())
         .chain(include_dirs.iter().cloned())
         .map(|dir| dir.join(input))
@@ -136,9 +150,11 @@ pub(crate) fn project_context(input: ProjectContextInput) -> ToolResult {
         .map(Utf8Path::to_path_buf)
         .unwrap_or_else(|| Utf8PathBuf::from("."));
     let base = if base.is_relative() {
-        Utf8PathBuf::from_path_buf(std::env::current_dir().map_err(|e| ToolError::io(e.to_string()))?)
-            .map_err(|_| ToolError::io("non-UTF-8 working directory"))?
-            .join(&base)
+        Utf8PathBuf::from_path_buf(
+            std::env::current_dir().map_err(|e| ToolError::io(e.to_string()))?
+        )
+        .map_err(|_| ToolError::io("non-UTF-8 working directory"))?
+        .join(&base)
     }
     else {
         base
@@ -162,7 +178,9 @@ pub(crate) fn project_context(input: ProjectContextInput) -> ToolResult {
                     let resolved_inputs: Vec<Value> = inv
                         .inputs
                         .iter()
-                        .map(|i| json!(resolve_input(&base, i, &include_dirs).map(|p| p.to_string())))
+                        .map(|i| {
+                            json!(resolve_input(&base, i, &include_dirs).map(|p| p.to_string()))
+                        })
                         .collect();
                     basm_calls.push(json!({
                         "command": command,
@@ -198,13 +216,15 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = project_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Read-only: for each rule of a build file, the `basm` command lines it \
+    #[tool(
+        description = "Read-only: for each rule of a build file, the `basm` command lines it \
                            runs, decomposed into inputs (with the real file each resolves to), \
                            include directories (absolute) and -D defines (e.g. \
                            LINKED_VERSION=1) - exactly what to pass as `include_dirs` / \
                            `defines` to suggest_optimizations / search_reorderings so a \
                            conditional or multi-file project is analysed the way the build \
-                           assembles it.")]
+                           assembles it."
+    )]
     async fn project_context(
         &self,
         Parameters(input): Parameters<ProjectContextInput>
@@ -243,7 +263,10 @@ mod tests {
 
     #[test]
     fn other_commands_are_not_basm() {
-        assert_eq!(parse_basm_command("dsk SKY.DSK format --format data42"), None);
+        assert_eq!(
+            parse_basm_command("dsk SKY.DSK format --format data42"),
+            None
+        );
         assert_eq!(parse_basm_command("-rm *.sym"), None);
         assert!(parse_basm_command("/usr/bin/basm x.asm").is_some());
     }
@@ -258,6 +281,9 @@ mod tests {
             resolve_input(&base, "main.asm", &[base.join("src")]),
             Some(base.join("src/main.asm"))
         );
-        assert_eq!(resolve_input(&base, "absent.asm", &[base.join("src")]), None);
+        assert_eq!(
+            resolve_input(&base, "absent.asm", &[base.join("src")]),
+            None
+        );
     }
 }

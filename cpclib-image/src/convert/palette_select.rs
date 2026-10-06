@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use image::RgbImage;
 
-use super::lab::{lab_distance, neutral_biased_score, rgb8_to_lab, LabF32, SnapToHardware};
+use super::lab::{LabF32, SnapToHardware, lab_distance, neutral_biased_score, rgb8_to_lab};
 use crate::color::AmstradColor;
 
 /// `--palette-algorithm`: which strategy [`auto_select_palette`] uses to

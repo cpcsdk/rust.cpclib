@@ -752,7 +752,11 @@ fn a_located_defs_line_is_priced_rather_than_panicking() {
         ("  defs 64 - duration(djnz $) - 1", 60)
     ] {
         let listing = parse_z80_str(source).expect(source);
-        assert_eq!(listing.estimated_duration().ok(), Some(expected), "{source}");
+        assert_eq!(
+            listing.estimated_duration().ok(),
+            Some(expected),
+            "{source}"
+        );
     }
 }
 

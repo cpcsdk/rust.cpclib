@@ -19,10 +19,10 @@ use serde_json::{Value, json};
 
 use crate::McpServer;
 use crate::error::{ToolError, ToolResult};
-use crate::tools::sandbox::{Sandbox, project_dir_of};
 use crate::tools::build::{
     ReportBuildInput, RestoreFileOnDrop, one_line_error, report_build, run_target_quiet
 };
+use crate::tools::sandbox::{Sandbox, project_dir_of};
 
 #[derive(Debug, Clone, serde::Deserialize, schemars::JsonSchema)]
 pub struct TextEdit {
@@ -103,7 +103,12 @@ fn apply_edits(
         match current.matches(edit.find.as_str()).count() {
             1 => {},
             0 => return Err(format!("`{}` not found in {}", edit.find, edit.path)),
-            n => return Err(format!("`{}` found {n} times in {} (must be unique)", edit.find, edit.path))
+            n => {
+                return Err(format!(
+                    "`{}` found {n} times in {} (must be unique)",
+                    edit.find, edit.path
+                ));
+            },
         }
         let replaced = current.replacen(&edit.find, &edit.replace, 1);
         out.insert(edit.path.clone(), replaced);
@@ -117,7 +122,14 @@ fn apply_edits(
 fn render_variants_table(rows: &[VariantRow]) -> String {
     let baseline = rows.iter().find(|r| r.is_baseline).and_then(|r| r.metric);
     let best = rows.iter().filter_map(|r| r.metric).min();
-    let signed = |d: i64| if d > 0 { format!("+{d}") } else { d.to_string() };
+    let signed = |d: i64| {
+        if d > 0 {
+            format!("+{d}")
+        }
+        else {
+            d.to_string()
+        }
+    };
     let mut out = String::from(
         "| # | Variant | Size | vs baseline | vs best | Build (s) |\n|--:|:--|--:|--:|--:|--:|\n"
     );
@@ -129,7 +141,9 @@ fn render_variants_table(rows: &[VariantRow]) -> String {
         else {
             r.name.clone()
         };
-        let secs = r.duration_ms.map_or("-".to_string(), |ms| format!("{:.1}", ms as f64 / 1000.0));
+        let secs = r
+            .duration_ms
+            .map_or("-".to_string(), |ms| format!("{:.1}", ms as f64 / 1000.0));
         match r.metric {
             Some(m) => {
                 rank += 1;
@@ -138,11 +152,21 @@ fn render_variants_table(rows: &[VariantRow]) -> String {
                     (Some(b), false) => signed(m - b),
                     (None, false) => "-".to_string()
                 };
-                let vs_best = if Some(m) == best { "best".to_string() } else { signed(m - best.unwrap_or(m)) };
-                out.push_str(&format!("| {rank} | {name} | {m} | {vs_base} | {vs_best} | {secs} |\n"));
+                let vs_best = if Some(m) == best {
+                    "best".to_string()
+                }
+                else {
+                    signed(m - best.unwrap_or(m))
+                };
+                out.push_str(&format!(
+                    "| {rank} | {name} | {m} | {vs_base} | {vs_best} | {secs} |\n"
+                ));
             },
             None => {
-                let reason = r.error.as_deref().map_or("no result".to_string(), one_line_error);
+                let reason = r
+                    .error
+                    .as_deref()
+                    .map_or("no result".to_string(), one_line_error);
                 out.push_str(&format!("| - | {name} | FAILED: {reason} | | | {secs} |\n"));
             }
         }
@@ -180,7 +204,9 @@ fn measure_once(input: &MeasureVariantsInput) -> Result<(i64, u128), ToolError> 
 pub(crate) fn measure_variants(mut input: MeasureVariantsInput) -> ToolResult {
     // Validate before copying anything.
     if input.output_file.is_some() == input.sym_path.is_some() {
-        return Err(ToolError::invalid_input("give exactly one of `output_file` / `sym_path`"));
+        return Err(ToolError::invalid_input(
+            "give exactly one of `output_file` / `sym_path`"
+        ));
     }
     if input.variants.is_empty() {
         return Err(ToolError::invalid_input("`variants` must not be empty"));
@@ -197,8 +223,16 @@ pub(crate) fn measure_variants(mut input: MeasureVariantsInput) -> ToolResult {
     let sandbox = Sandbox::create(&origin, input.keep_sandbox.unwrap_or(false))?;
     let mapped_bnd_path = sandbox.map(&input.bnd_path)?;
     let original_bnd_path = std::mem::replace(&mut input.bnd_path, mapped_bnd_path);
-    input.output_file = input.output_file.as_deref().map(|p| sandbox.map(p)).transpose()?;
-    input.sym_path = input.sym_path.as_deref().map(|p| sandbox.map(p)).transpose()?;
+    input.output_file = input
+        .output_file
+        .as_deref()
+        .map(|p| sandbox.map(p))
+        .transpose()?;
+    input.sym_path = input
+        .sym_path
+        .as_deref()
+        .map(|p| sandbox.map(p))
+        .transpose()?;
     for edit in input.variants.iter_mut().flat_map(|v| v.edits.iter_mut()) {
         edit.path = sandbox.map(&edit.path)?;
     }
@@ -214,7 +248,9 @@ pub(crate) fn measure_variants(mut input: MeasureVariantsInput) -> ToolResult {
 
 fn measure_variants_in_place(input: MeasureVariantsInput) -> ToolResult {
     if input.output_file.is_some() == input.sym_path.is_some() {
-        return Err(ToolError::invalid_input("give exactly one of `output_file` / `sym_path`"));
+        return Err(ToolError::invalid_input(
+            "give exactly one of `output_file` / `sym_path`"
+        ));
     }
     if input.variants.is_empty() {
         return Err(ToolError::invalid_input("`variants` must not be empty"));
@@ -232,15 +268,18 @@ fn measure_variants_in_place(input: MeasureVariantsInput) -> ToolResult {
     }
     let _guards: Vec<RestoreFileOnDrop> = originals
         .iter()
-        .map(|(path, text)| RestoreFileOnDrop {
-            path: path.as_str(),
-            original: text.clone()
+        .map(|(path, text)| {
+            RestoreFileOnDrop {
+                path: path.as_str(),
+                original: text.clone()
+            }
         })
         .collect();
 
     let write_all = |contents: &HashMap<String, String>| -> Result<(), ToolError> {
         for (path, text) in contents {
-            fs_err::write(path, text).map_err(|e| ToolError::io(format!("cannot write {path}: {e}")))?;
+            fs_err::write(path, text)
+                .map_err(|e| ToolError::io(format!("cannot write {path}: {e}")))?;
         }
         Ok(())
     };
@@ -279,7 +318,7 @@ fn measure_variants_in_place(input: MeasureVariantsInput) -> ToolResult {
                             duration_ms: None,
                             error: Some(e.message)
                         }
-                    }
+                    },
                 }
             }
         };
@@ -320,7 +359,8 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = variants_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Works on a scratch COPY of the project by default (the real files are \
+    #[tool(
+        description = "Works on a scratch COPY of the project by default (the real files are \
                            never touched; `in_place: true` opts out): rebuilds the project once per variant (a named \
                            set of exact-text edits across any files) and measures a real size \
                            - the size of an output file such as the final .RAN/.BIN \
@@ -332,7 +372,8 @@ impl McpServer {
                            predict quantised crunchers like Shrinkler. Each `find` must occur \
                            exactly once in its file, otherwise that variant fails (nothing is \
                            guessed). For a single cruncher-selection variable prefer \
-                           compare_link_sizes.")]
+                           compare_link_sizes."
+    )]
     async fn measure_variants(
         &self,
         Parameters(input): Parameters<MeasureVariantsInput>
@@ -347,7 +388,10 @@ mod tests {
 
     fn originals() -> HashMap<String, String> {
         HashMap::from([
-            ("a.asm".to_string(), "ld hl,1\nld hl,1\nxor 255\n".to_string()),
+            (
+                "a.asm".to_string(),
+                "ld hl,1\nld hl,1\nxor 255\n".to_string()
+            ),
             ("b.asm".to_string(), "nop\n".to_string())
         ])
     }
@@ -362,16 +406,25 @@ mod tests {
 
     #[test]
     fn edits_across_files_apply_together() {
-        let out = apply_edits(&originals(), &[edit("a.asm", "xor 255", "cpl"), edit("b.asm", "nop", "halt")])
-            .unwrap();
+        let out = apply_edits(
+            &originals(),
+            &[
+                edit("a.asm", "xor 255", "cpl"),
+                edit("b.asm", "nop", "halt")
+            ]
+        )
+        .unwrap();
         assert_eq!(out["a.asm"], "ld hl,1\nld hl,1\ncpl\n");
         assert_eq!(out["b.asm"], "halt\n");
     }
 
     #[test]
     fn two_edits_to_one_file_compose() {
-        let out = apply_edits(&originals(), &[edit("a.asm", "xor 255", "cpl"), edit("a.asm", "cpl", "neg")])
-            .unwrap();
+        let out = apply_edits(
+            &originals(),
+            &[edit("a.asm", "xor 255", "cpl"), edit("a.asm", "cpl", "neg")]
+        )
+        .unwrap();
         assert_eq!(out["a.asm"], "ld hl,1\nld hl,1\nneg\n");
     }
 
@@ -387,34 +440,71 @@ mod tests {
 
     #[test]
     fn the_metric_source_must_be_exactly_one() {
-        let base = |output_file: Option<&str>, sym_path: Option<&str>| MeasureVariantsInput {
-            bnd_path: "b".to_string(),
-            target: None,
-            output_file: output_file.map(String::from),
-            sym_path: sym_path.map(String::from),
-            variants: vec![Variant {
-                name: "v".to_string(),
-                edits: vec![]
-            }],
-            include_baseline: None,
-            ..Default::default()
+        let base = |output_file: Option<&str>, sym_path: Option<&str>| {
+            MeasureVariantsInput {
+                bnd_path: "b".to_string(),
+                target: None,
+                output_file: output_file.map(String::from),
+                sym_path: sym_path.map(String::from),
+                variants: vec![Variant {
+                    name: "v".to_string(),
+                    edits: vec![]
+                }],
+                include_baseline: None,
+                ..Default::default()
+            }
         };
-        assert_eq!(measure_variants(base(None, None)).unwrap_err().kind, "invalid_input");
-        assert_eq!(measure_variants(base(Some("o"), Some("s"))).unwrap_err().kind, "invalid_input");
+        assert_eq!(
+            measure_variants(base(None, None)).unwrap_err().kind,
+            "invalid_input"
+        );
+        assert_eq!(
+            measure_variants(base(Some("o"), Some("s")))
+                .unwrap_err()
+                .kind,
+            "invalid_input"
+        );
     }
 
     #[test]
     fn the_table_compares_against_the_baseline_and_the_best() {
         let rows = vec![
-            VariantRow { name: "cpl".into(), is_baseline: false, metric: Some(3964), duration_ms: Some(1200), error: None },
-            VariantRow { name: "baseline".into(), is_baseline: true, metric: Some(3968), duration_ms: Some(1100), error: None },
-            VariantRow { name: "worse".into(), is_baseline: false, metric: Some(3976), duration_ms: Some(1300), error: None },
-            VariantRow { name: "broken".into(), is_baseline: false, metric: None, duration_ms: None, error: Some("boom | x".into()) },
+            VariantRow {
+                name: "cpl".into(),
+                is_baseline: false,
+                metric: Some(3964),
+                duration_ms: Some(1200),
+                error: None
+            },
+            VariantRow {
+                name: "baseline".into(),
+                is_baseline: true,
+                metric: Some(3968),
+                duration_ms: Some(1100),
+                error: None
+            },
+            VariantRow {
+                name: "worse".into(),
+                is_baseline: false,
+                metric: Some(3976),
+                duration_ms: Some(1300),
+                error: None
+            },
+            VariantRow {
+                name: "broken".into(),
+                is_baseline: false,
+                metric: None,
+                duration_ms: None,
+                error: Some("boom | x".into())
+            },
         ];
         let table = render_variants_table(&rows);
         let lines: Vec<&str> = table.lines().collect();
         assert_eq!(lines[2], "| 1 | cpl | 3964 | -4 | best | 1.2 |", "{table}");
-        assert_eq!(lines[3], "| 2 | baseline (baseline) | 3968 | - | +4 | 1.1 |", "{table}");
+        assert_eq!(
+            lines[3], "| 2 | baseline (baseline) | 3968 | - | +4 | 1.1 |",
+            "{table}"
+        );
         assert_eq!(lines[4], "| 3 | worse | 3976 | +8 | +12 | 1.3 |", "{table}");
         assert!(lines[5].contains("FAILED: boom / x"), "{table}");
     }

@@ -94,9 +94,7 @@ pub fn tokenize_macro_body<'l, 'p>(
             }
             if bytes.get(after_star) == Some(&b'[') {
                 let index_start = after_star + 1;
-                if let Some(rel_index_end) =
-                    find_matching_closing_bracket(&bytes[index_start..])
-                {
+                if let Some(rel_index_end) = find_matching_closing_bracket(&bytes[index_start..]) {
                     let index_end = index_start + rel_index_end;
                     if bytes.get(index_end + 1) == Some(&b'}') {
                         segments.push(MacroSegment::SelectedArgs {
@@ -122,12 +120,7 @@ pub fn tokenize_macro_body<'l, 'p>(
             // and parses as no number, so such a `{...}` already fell through
             // to a literal.
             let (key, default) = match raw.find(":=") {
-                Some(at) => {
-                    (
-                        &raw[..at],
-                        Some((after_open + at + 2, close))
-                    )
-                },
+                Some(at) => (&raw[..at], Some((after_open + at + 2, close))),
                 None => (raw, None)
             };
             let followed_by_bracket = bytes.get(close + 1) == Some(&b'[');
@@ -170,7 +163,7 @@ pub fn tokenize_macro_body<'l, 'p>(
                                 index: idx,
                                 followed_by_bracket
                             }
-                        }
+                        },
                     });
                     cursor = close + 1;
                     continue;
@@ -204,7 +197,10 @@ pub fn tokenize_macro_body<'l, 'p>(
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MacroSegment {
-    Lit { start: usize, end: usize },
+    Lit {
+        start: usize,
+        end: usize
+    },
     /// `followed_by_bracket` - the macro body's own next byte after this
     /// placeholder's closing `}` is a literal `[` (e.g. `{l}[{idx}]`),
     /// computed once here from the body text alone, independent of any
@@ -219,7 +215,10 @@ pub enum MacroSegment {
     /// wrapping (this flag alone is not sufficient - it also needs to know
     /// whether the call's argument is a list, a call-time property this
     /// body-only tokenizer has no access to).
-    Arg { index: usize, followed_by_bracket: bool },
+    Arg {
+        index: usize,
+        followed_by_bracket: bool
+    },
     /// `{N:=text}` - argument `index`, or `text` when this call did not
     /// supply one.
     ///
@@ -262,7 +261,9 @@ pub enum MacroSegment {
     /// a scalar - so unlike `Arg`/`ArgOr`, wrapping the substitution in
     /// `[...]` when this is set is unconditional, no further "is the
     /// argument actually a list" check needed at expansion time.
-    AllArgs { followed_by_bracket: bool },
+    AllArgs {
+        followed_by_bracket: bool
+    },
     /// `{*[indexes]}` - a *subset* of the call's arguments, selected by
     /// `indexes` (a range or a list of indices), expanded and joined with
     /// `,` in the order given. `start`/`end` bound the raw index-expression
@@ -308,7 +309,9 @@ mod tokenize_macro_body_tests {
         let tokenized = tokenize_macro_body(body, &["a", "b"], true);
         let segments = args(&tokenized);
         assert_eq!(segments.len(), 2, "{segments:?}");
-        let MacroSegment::ArgOr { index, start, end, .. } = segments[1]
+        let MacroSegment::ArgOr {
+            index, start, end, ..
+        } = segments[1]
         else {
             panic!("expected an ArgOr, got {:?}", segments[1]);
         };
@@ -334,7 +337,9 @@ mod tokenize_macro_body_tests {
     fn a_named_reference_can_carry_a_default_too() {
         let body = "dw {b:=7}";
         let tokenized = tokenize_macro_body(body, &["a", "b"], false);
-        let MacroSegment::ArgOr { index, start, end, .. } = args(&tokenized)[1]
+        let MacroSegment::ArgOr {
+            index, start, end, ..
+        } = args(&tokenized)[1]
         else {
             panic!("expected an ArgOr")
         };

@@ -46,8 +46,12 @@ pub fn private_stdout() -> Option<std::fs::File> {
 pub fn private_stdout() -> Option<std::fs::File> {
     use std::os::windows::io::FromRawHandle;
 
-    use windows_sys::Win32::Foundation::{DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle};
+    use windows_sys::Win32::Foundation::{
+        DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, INVALID_HANDLE_VALUE
+    };
+    use windows_sys::Win32::System::Console::{
+        GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle
+    };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
     unsafe extern "C" {
@@ -67,7 +71,17 @@ pub fn private_stdout() -> Option<std::fs::File> {
 
         let mut private: HANDLE = std::ptr::null_mut();
         let process = GetCurrentProcess();
-        if DuplicateHandle(process, stdout, process, &mut private, 0, 0, DUPLICATE_SAME_ACCESS) == 0 || unusable(private) {
+        if DuplicateHandle(
+            process,
+            stdout,
+            process,
+            &mut private,
+            0,
+            0,
+            DUPLICATE_SAME_ACCESS
+        ) == 0
+            || unusable(private)
+        {
             return None;
         }
 

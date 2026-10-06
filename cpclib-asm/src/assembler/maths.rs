@@ -192,12 +192,16 @@ pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerEr
 }
 
 pub fn high(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    let arg = arg.int_value().map_err(AssemblerError::ExpressionTypeError)?;
+    let arg = arg
+        .int_value()
+        .map_err(AssemblerError::ExpressionTypeError)?;
     Ok((arg >> 8 & 0xFF).into())
 }
 
 pub fn low(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    let arg = arg.int_value().map_err(AssemblerError::ExpressionTypeError)?;
+    let arg = arg
+        .int_value()
+        .map_err(AssemblerError::ExpressionTypeError)?;
     Ok((arg & 0xFF).into())
 }
 

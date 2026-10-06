@@ -198,8 +198,10 @@ impl MemoryChunk {
         while let Some(byte) = read_byte() {
             match byte {
                 0xE5 => {
-                    let amount = read_byte()
-                        .ok_or_else(|| "truncated RLE-compressed memory chunk (missing amount byte after 0xE5)".to_string())?;
+                    let amount = read_byte().ok_or_else(|| {
+                        "truncated RLE-compressed memory chunk (missing amount byte after 0xE5)"
+                            .to_string()
+                    })?;
                     if amount == 0 {
                         content.push(0xE5)
                     }

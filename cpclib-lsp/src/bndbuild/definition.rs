@@ -620,7 +620,9 @@ pub(crate) fn build_include_graph(roots: &[PathBuf]) -> HashMap<PathBuf, Vec<Pat
                 })
                 .collect();
             if !edges.is_empty() {
-                let from = path.fs_err_canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                let from = path
+                    .fs_err_canonicalize()
+                    .unwrap_or_else(|_| path.to_path_buf());
                 graph.insert(from, edges);
             }
         }
@@ -686,7 +688,8 @@ impl BuildFileAnalyzer {
         *self
             .include_graph_cache
             .write()
-            .unwrap_or_else(|e| e.into_inner()) = Some((roots.to_vec(), fingerprint, graph.clone()));
+            .unwrap_or_else(|e| e.into_inner()) =
+            Some((roots.to_vec(), fingerprint, graph.clone()));
         graph
     }
 }
@@ -743,7 +746,9 @@ pub(crate) fn files_transitively_included_by(
     graph: &HashMap<PathBuf, Vec<PathBuf>>,
     from: &Path
 ) -> Vec<PathBuf> {
-    let from = from.fs_err_canonicalize().unwrap_or_else(|_| from.to_path_buf());
+    let from = from
+        .fs_err_canonicalize()
+        .unwrap_or_else(|_| from.to_path_buf());
 
     let mut visited: HashSet<PathBuf> = HashSet::new();
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
@@ -892,11 +897,7 @@ mod build_include_graph_cache_tests {
     #[test]
     fn repeated_calls_with_nothing_changed_reuse_the_cached_graph() {
         let tmp = camino_tempfile::tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("common.build"),
-            "{% set X = 1 %}\n"
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("common.build"), "{% set X = 1 %}\n").unwrap();
         let roots = vec![tmp.path().to_path_buf().into()];
 
         let analyzer = BuildFileAnalyzer::new();

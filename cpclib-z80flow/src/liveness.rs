@@ -27,11 +27,10 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ListingElement, Mnemonic};
 
-use crate::flow::{jump, successors};
-
 use crate::analysis_op::{AnalysisOp, OpClass};
 use crate::dependency::Dependency;
 use crate::effects::effects_of;
+use crate::flow::{jump, successors};
 use crate::regflag::Reg;
 use crate::stream::AnalysisStream;
 
@@ -306,7 +305,8 @@ where
                     .and_then(|name| resolve_label(ops, labels, name, position))
                     .map(|target| (true, target));
             }
-            let (conditional, target) = jump::condition_and_target(arg1.as_deref(), arg2.as_deref())?;
+            let (conditional, target) =
+                jump::condition_and_target(arg1.as_deref(), arg2.as_deref())?;
             let name = jump::label_of(target)?;
             Some((conditional, resolve_label(ops, labels, name, position)?))
         }
@@ -330,7 +330,10 @@ where
             ])
         },
 
-        successors::Edges::Call { target, conditional } => {
+        successors::Edges::Call {
+            target,
+            conditional
+        } => {
             let mut stack = call_stack.clone()?;
             stack.push(fallthrough);
             let mut next = vec![(target, Some(stack))];

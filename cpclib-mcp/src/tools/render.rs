@@ -82,7 +82,7 @@ fn parse_encoding(encoding: Option<&str>) -> Result<ScreenEncoding, ToolError> {
             Err(ToolError::invalid_input(format!(
                 "unknown encoding '{other}' - expected 'screen' or 'cpc'"
             )))
-        }
+        },
     }
 }
 
@@ -90,7 +90,7 @@ fn parse_encoding(encoding: Option<&str>) -> Result<ScreenEncoding, ToolError> {
 /// Read-only.
 pub(crate) fn render_screen(input: RenderScreenInput) -> ToolResult {
     let address = match (input.address, input.crtc_r12, input.crtc_r13) {
-        (Some(a), _, _) => a,
+        (Some(a), ..) => a,
         (None, Some(r12), Some(r13)) => crtc_screen_start_address(r12, r13),
         _ => {
             return Err(ToolError::invalid_input(
@@ -143,8 +143,10 @@ fn ok_or_tool_error(result: ToolResult) -> Result<Json<Value>, Json<Value>> {
 
 #[tool_router(router = render_router, vis = "pub(crate)")]
 impl McpServer {
-    #[tool(description = "Render raw CPC screen memory (a dump, .scr, or .sna) to a PNG. \
-                           Read-only.")]
+    #[tool(
+        description = "Render raw CPC screen memory (a dump, .scr, or .sna) to a PNG. \
+                           Read-only."
+    )]
     async fn render_screen(
         &self,
         Parameters(input): Parameters<RenderScreenInput>

@@ -14,12 +14,14 @@ mod tests {
         let fixed = sna1.fix_version(SnapshotVersion::V3).unwrap();
         assert_eq!(3, fixed.nb_chunks());
         assert_eq!(
-            sna1.memory_dump().unwrap()
+            sna1.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>(),
             fixed
-                .memory_dump().unwrap()
+                .memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>()
@@ -34,12 +36,14 @@ mod tests {
         assert_eq!(64, fixed.memory_size_header()); // only one chunk was provided
         assert!(fixed.memory_block().is_64k());
         assert_eq!(
-            sna1.memory_dump().unwrap()
+            sna1.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>(),
             fixed
-                .memory_dump().unwrap()
+                .memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>()
@@ -52,12 +56,14 @@ mod tests {
         assert_eq!(64, v2.memory_size_header()); // only one chunk was provided
         assert!(v2.memory_block().is_64k());
         assert_eq!(
-            v2.memory_dump().unwrap()
+            v2.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>(),
             fixed
-                .memory_dump().unwrap()
+                .memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>()
@@ -71,14 +77,19 @@ mod tests {
 
         let sna2 = Snapshot::load(tmp_fname).unwrap();
         assert_eq!(2, sna2.version_header());
-        assert_eq!(sna1.memory_dump().unwrap().len(), sna2.memory_dump().unwrap().len());
+        assert_eq!(
+            sna1.memory_dump().unwrap().len(),
+            sna2.memory_dump().unwrap().len()
+        );
 
         assert_eq!(
-            sna1.memory_dump().unwrap()
+            sna1.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>(),
-            sna2.memory_dump().unwrap()
+            sna2.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>()
@@ -92,14 +103,19 @@ mod tests {
 
         let sna2 = Snapshot::load(tmp_fname).unwrap();
         assert_eq!(2, sna2.version_header());
-        assert_eq!(sna1.memory_dump().unwrap().len(), sna2.memory_dump().unwrap().len());
+        assert_eq!(
+            sna1.memory_dump().unwrap().len(),
+            sna2.memory_dump().unwrap().len()
+        );
 
         assert_eq!(
-            sna1.memory_dump().unwrap()
+            sna1.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>(),
-            sna2.memory_dump().unwrap()
+            sna2.memory_dump()
+                .unwrap()
                 .iter()
                 .map(|v| { (*v) as usize })
                 .sum::<usize>()

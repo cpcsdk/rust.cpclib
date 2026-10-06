@@ -2,6 +2,20 @@ use super::Formatter;
 use crate::options::{QuoteStyle, SpaceAroundColumn};
 
 impl<'src> Formatter<'src> {
+    // Standard Z80 mnemonics (undocumented/pseudo opcodes aside) - a fixed,
+    // decades-stable instruction set, so a hand-maintained list carries none of
+    // the "will drift out of sync" risk a fast-moving language's keyword list
+    // would. Checked case-insensitively against the bare word only (no operands),
+    // since that's all `word_could_start_a_label` ever hands it.
+    const RESERVED_MNEMONICS: &'static [&'static str] = &[
+        "ADC", "ADD", "AND", "BIT", "CALL", "CCF", "CP", "CPD", "CPDR", "CPI", "CPIR", "CPL",
+        "DAA", "DEC", "DI", "DJNZ", "EI", "EX", "EXX", "HALT", "IM", "IN", "INC", "IND", "INDR",
+        "INI", "INIR", "JP", "JR", "LD", "LDD", "LDDR", "LDI", "LDIR", "NEG", "NOP", "OR", "OTDR",
+        "OTIR", "OUT", "OUTD", "OUTI", "POP", "PUSH", "RES", "RET", "RETI", "RETN", "RL", "RLA",
+        "RLC", "RLCA", "RLD", "RR", "RRA", "RRC", "RRCA", "RRD", "RST", "SBC", "SCF", "SET", "SLA",
+        "SRA", "SRL", "SUB", "XOR"
+    ];
+
     // Split "content ; comment" → (content.trim_end(), Option<"; comment">)
     pub(super) fn split_comment(line: &str) -> (&str, Option<&str>) {
         match line.find(';') {
@@ -76,7 +90,8 @@ impl<'src> Formatter<'src> {
                             let prev_ws = i == 0 || bytes[i - 1].is_ascii_whitespace();
                             let next_ws =
                                 i + 1 >= bytes.len() || bytes[i + 1].is_ascii_whitespace();
-                            let could_be_label = !prev_ws && Self::word_could_start_a_label(bytes, start, i);
+                            let could_be_label =
+                                !prev_ws && Self::word_could_start_a_label(bytes, start, i);
                             if (prev_ws || !could_be_label) && next_ws {
                                 let seg = content[start..i].trim();
                                 if !seg.is_empty() {
@@ -132,20 +147,6 @@ impl<'src> Formatter<'src> {
         // against the reserved set.
         !Self::is_reserved_mnemonic(&bytes[j..colon_pos])
     }
-
-    // Standard Z80 mnemonics (undocumented/pseudo opcodes aside) - a fixed,
-    // decades-stable instruction set, so a hand-maintained list carries none of
-    // the "will drift out of sync" risk a fast-moving language's keyword list
-    // would. Checked case-insensitively against the bare word only (no operands),
-    // since that's all `word_could_start_a_label` ever hands it.
-    const RESERVED_MNEMONICS: &'static [&'static str] = &[
-        "ADC", "ADD", "AND", "BIT", "CALL", "CCF", "CP", "CPD", "CPDR", "CPI", "CPIR", "CPL",
-        "DAA", "DEC", "DI", "DJNZ", "EI", "EX", "EXX", "HALT", "IM", "IN", "INC", "IND", "INDR",
-        "INI", "INIR", "JP", "JR", "LD", "LDD", "LDDR", "LDI", "LDIR", "NEG", "NOP", "OR", "OTDR",
-        "OTIR", "OUT", "OUTD", "OUTI", "POP", "PUSH", "RES", "RET", "RETI", "RETN", "RL", "RLA",
-        "RLC", "RLCA", "RLD", "RR", "RRA", "RRC", "RRCA", "RRD", "RST", "SBC", "SCF", "SET",
-        "SLA", "SRA", "SRL", "SUB", "XOR"
-    ];
 
     fn is_reserved_mnemonic(word: &[u8]) -> bool {
         Self::RESERVED_MNEMONICS

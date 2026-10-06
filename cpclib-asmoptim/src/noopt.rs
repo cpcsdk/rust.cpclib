@@ -27,7 +27,10 @@ enum Marker {
 /// too) - a comment that merely *mentions* "noopt" in prose must never be
 /// mistaken for the pragma.
 fn marker_of(comment_text: &str) -> Option<Marker> {
-    let trimmed = comment_text.trim_start_matches(';').trim().to_ascii_lowercase();
+    let trimmed = comment_text
+        .trim_start_matches(';')
+        .trim()
+        .to_ascii_lowercase();
     if trimmed == "noopt" {
         return Some(Marker::Single);
     }
@@ -59,8 +62,7 @@ where
                 // The nearest preceding real instruction - covers both a
                 // trailing same-line comment and one on its own line right
                 // after the instruction it marks.
-                if let Some(target) = tokens[..index].iter().rposition(|t| t.mnemonic().is_some())
-                {
+                if let Some(target) = tokens[..index].iter().rposition(|t| t.mnemonic().is_some()) {
                     protected.insert(target);
                 }
             },
@@ -126,9 +128,18 @@ mod tests {
         // end marker's comment, 4 the ret.
         assert!(protected.contains(&1), "{protected:?}");
         assert!(protected.contains(&2), "{protected:?}");
-        assert!(!protected.contains(&0), "the marker itself is not protected: {protected:?}");
-        assert!(!protected.contains(&3), "the marker itself is not protected: {protected:?}");
-        assert!(!protected.contains(&4), "code after the block is not protected: {protected:?}");
+        assert!(
+            !protected.contains(&0),
+            "the marker itself is not protected: {protected:?}"
+        );
+        assert!(
+            !protected.contains(&3),
+            "the marker itself is not protected: {protected:?}"
+        );
+        assert!(
+            !protected.contains(&4),
+            "code after the block is not protected: {protected:?}"
+        );
     }
 
     #[test]

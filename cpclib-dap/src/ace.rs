@@ -205,7 +205,9 @@ fn watch_run_state(watched: &Watched) {
                     );
                     let _ = watched.out.send(said);
                     seq += 1;
-                    let _ = watched.out.send(protocol::event("terminated", json!({}), seq));
+                    let _ = watched
+                        .out
+                        .send(protocol::event("terminated", json!({}), seq));
                     return;
                 }
                 continue;
@@ -425,11 +427,20 @@ fn ace_registers_of(state: &Value) -> Vec<Value> {
 /// accepted here since either can be `state`, depending on which call site
 /// produced it.
 fn ace_response_for(request: &Value, state: &Value, seq: i64) -> Value {
-    let registers_state = state.get("z80").and_then(|z| z.get("registers")).unwrap_or(state);
-    let command = request.get("command").and_then(Value::as_str).unwrap_or_default();
+    let registers_state = state
+        .get("z80")
+        .and_then(|z| z.get("registers"))
+        .unwrap_or(state);
+    let command = request
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let body = match command {
         "stackTrace" => {
-            let pc = registers_state.get("PC").and_then(Value::as_u64).unwrap_or(0);
+            let pc = registers_state
+                .get("PC")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
             json!({
                 "stackFrames": [{
                     "id": 1,
@@ -446,7 +457,13 @@ fn ace_response_for(request: &Value, state: &Value, seq: i64) -> Value {
             let bytes: Vec<u8> = state
                 .get("bytes")
                 .and_then(Value::as_array)
-                .map(|values| values.iter().filter_map(Value::as_u64).map(|b| b as u8).collect())
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_u64)
+                        .map(|b| b as u8)
+                        .collect()
+                })
                 .unwrap_or_default();
             json!({
                 "address": request
@@ -556,9 +573,12 @@ impl DapPeer for AcePeer {
                         .collect()
                 })
                 .unwrap_or_default();
-            let breakpoints: Vec<Value> =
-                addresses.iter().map(|address| json!({"address": address})).collect();
-            let ack = self.round_trip(json!({"cmd": "setBreakpoints", "breakpoints": breakpoints}))?;
+            let breakpoints: Vec<Value> = addresses
+                .iter()
+                .map(|address| json!({"address": address}))
+                .collect();
+            let ack =
+                self.round_trip(json!({"cmd": "setBreakpoints", "breakpoints": breakpoints}))?;
             let seq = self.next_seq();
             self.push(ace_response_for(&message, &ack, seq));
             return Ok(());
@@ -696,9 +716,12 @@ fn spawn_ace<E>(
     media_path: Option<&cpclib_common::camino::Utf8Path>,
     observer: &E
 ) -> Result<(std::process::Child, u16), String>
-where E: cpclib_common::event::EventObserver + 'static {
-    use crate::amspiritlite::{port_to_serve_on, strip_snap_leaked_env_vars};
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
     use cpclib_runner::runner::emulator::{AceVersion, Emulator};
+
+    use crate::amspiritlite::{port_to_serve_on, strip_snap_leaked_env_vars};
 
     let emulator = Emulator::Ace(AceVersion::default());
     let configuration = emulator.configuration::<E>();
@@ -762,7 +785,8 @@ where E: cpclib_common::event::EventObserver + 'static {
     let endpoint = format!("127.0.0.1:{port}");
     wait_until_listening(&endpoint, Duration::from_secs(30))?;
 
-    let peer = AcePeer::connect(port).map_err(|e| format!("cannot reach ACE at {endpoint}: {e}"))?;
+    let peer =
+        AcePeer::connect(port).map_err(|e| format!("cannot reach ACE at {endpoint}: {e}"))?;
     Ok((endpoint, peer.owning(child)))
 }
 
@@ -773,7 +797,9 @@ pub fn launch_with_disk<E>(
     port: u16,
     observer: &E
 ) -> Result<(String, AcePeer), String>
-where E: cpclib_common::event::EventObserver + 'static {
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
     let path = cpclib_common::camino::Utf8Path::from_path(disk)
         .ok_or_else(|| format!("{} is not valid UTF-8", disk.display()))?;
 
@@ -782,7 +808,8 @@ where E: cpclib_common::event::EventObserver + 'static {
     let endpoint = format!("127.0.0.1:{port}");
     wait_until_listening(&endpoint, Duration::from_secs(30))?;
 
-    let peer = AcePeer::connect(port).map_err(|e| format!("cannot reach ACE at {endpoint}: {e}"))?;
+    let peer =
+        AcePeer::connect(port).map_err(|e| format!("cannot reach ACE at {endpoint}: {e}"))?;
     Ok((endpoint, peer.owning(child)))
 }
 
@@ -807,13 +834,28 @@ mod tests {
 
     #[test]
     fn stepping_commands_translate_with_next_mapped_to_stepover() {
-        assert_eq!(ace_call_for(&request("continue", json!({}))).unwrap()["cmd"], "continue");
+        assert_eq!(
+            ace_call_for(&request("continue", json!({}))).unwrap()["cmd"],
+            "continue"
+        );
         // The one place this differs from Sugarbox: ACE's `step` is NOT
         // step-over.
-        assert_eq!(ace_call_for(&request("next", json!({}))).unwrap()["cmd"], "stepOver");
-        assert_eq!(ace_call_for(&request("stepIn", json!({}))).unwrap()["cmd"], "stepIn");
-        assert_eq!(ace_call_for(&request("stepOut", json!({}))).unwrap()["cmd"], "stepOut");
-        assert_eq!(ace_call_for(&request("restart", json!({}))).unwrap()["cmd"], "reset");
+        assert_eq!(
+            ace_call_for(&request("next", json!({}))).unwrap()["cmd"],
+            "stepOver"
+        );
+        assert_eq!(
+            ace_call_for(&request("stepIn", json!({}))).unwrap()["cmd"],
+            "stepIn"
+        );
+        assert_eq!(
+            ace_call_for(&request("stepOut", json!({}))).unwrap()["cmd"],
+            "stepOut"
+        );
+        assert_eq!(
+            ace_call_for(&request("restart", json!({}))).unwrap()["cmd"],
+            "reset"
+        );
     }
 
     #[test]
@@ -845,7 +887,10 @@ mod tests {
 
     #[test]
     fn a_memory_answer_is_re_encoded_as_base64_for_the_editor() {
-        let read = request("readMemory", json!({"memoryReference": "0x4000", "count": 3}));
+        let read = request(
+            "readMemory",
+            json!({"memoryReference": "0x4000", "count": 3})
+        );
         let answer = ace_response_for(&read, &json!({"bytes": [0x3E, 0x00, 0xC9]}), 9);
         assert_eq!(answer["body"]["data"], json!("PgDJ"));
     }
@@ -861,8 +906,11 @@ mod tests {
 
     #[test]
     fn set_variable_builds_a_named_register_write() {
-        let call = ace_call_for(&request("setVariable", json!({"name": "HL", "value": "0x1234"})))
-            .unwrap();
+        let call = ace_call_for(&request(
+            "setVariable",
+            json!({"name": "HL", "value": "0x1234"})
+        ))
+        .unwrap();
         assert_eq!(call["cmd"], "setRegisters");
         assert_eq!(call["hl"], 0x1234);
     }
@@ -937,7 +985,10 @@ mod tests {
         for (name, paths) in HARDWARE_STATE_PANES {
             let req = request(name, json!({}));
             let answer = ace_response_for(&req, &status, 1);
-            let expected = paths.iter().find_map(|path| get_path(&status, path)).unwrap();
+            let expected = paths
+                .iter()
+                .find_map(|path| get_path(&status, path))
+                .unwrap();
             assert_eq!(&answer["body"], expected, "{name}");
         }
     }
@@ -1057,15 +1108,15 @@ mod tests {
                 let mut reader = std::io::BufReader::new(stream);
                 let mut line = String::new();
                 reader.read_line(&mut line).unwrap();
-                writeln!(
-                    writer,
-                    r#"{{"z80":{{"states":{{"cycleCount":{count}}}}}}}"#
-                )
-                .unwrap();
+                writeln!(writer, r#"{{"z80":{{"states":{{"cycleCount":{count}}}}}}}"#).unwrap();
             }
         });
 
-        let watched = Watched { port, out, expecting_stop: expecting_stop.clone() };
+        let watched = Watched {
+            port,
+            out,
+            expecting_stop: expecting_stop.clone()
+        };
         // Not `expecting_stop` yet - the first two polls (baseline + first
         // real stall check) must not announce anything.
         let poller = std::thread::spawn(move || {
@@ -1075,10 +1126,13 @@ mod tests {
             // same stall-detection logic without a slow, unbounded test.
             let mut last_cycle_count: Option<u64> = None;
             for _ in 0..5 {
-                let status = ace_round_trip(watched.port, json!({"cmd": "getStatus"}), Duration::from_secs(2))
-                    .unwrap();
-                let cycle_count =
-                    status["z80"]["states"]["cycleCount"].as_u64().unwrap();
+                let status = ace_round_trip(
+                    watched.port,
+                    json!({"cmd": "getStatus"}),
+                    Duration::from_secs(2)
+                )
+                .unwrap();
+                let cycle_count = status["z80"]["states"]["cycleCount"].as_u64().unwrap();
                 let stalled = last_cycle_count == Some(cycle_count);
                 last_cycle_count = Some(cycle_count);
                 if stalled && watched.expecting_stop.swap(false, Ordering::Relaxed) {
@@ -1098,7 +1152,11 @@ mod tests {
         poller.join().unwrap();
 
         let events: Vec<Value> = pending.try_iter().collect();
-        assert_eq!(events.len(), 1, "expected exactly one stopped event: {events:?}");
+        assert_eq!(
+            events.len(),
+            1,
+            "expected exactly one stopped event: {events:?}"
+        );
     }
 
     /// End-to-end against the real binary: install-if-missing, launch for
@@ -1128,10 +1186,10 @@ mod tests {
         // real binary. Whatever ACE boots into by default is enough for
         // that - registers/memory/breakpoints are exercised generically,
         // not against a specific known program.
-        let (child, port) =
-            spawn_ace(18764, None, &DiscardObserver).expect("failed to spawn ACE");
+        let (child, port) = spawn_ace(18764, None, &DiscardObserver).expect("failed to spawn ACE");
         let endpoint = format!("127.0.0.1:{port}");
-        wait_until_listening(&endpoint, Duration::from_secs(30)).expect("ACE never started listening");
+        wait_until_listening(&endpoint, Duration::from_secs(30))
+            .expect("ACE never started listening");
         let mut peer = AcePeer::connect(port)
             .map_err(|e| format!("cannot reach ACE at {endpoint}: {e}"))
             .unwrap()
@@ -1157,9 +1215,15 @@ mod tests {
         peer.send(json!({"seq": 2, "type": "request", "command": "attach", "arguments": {}}))
             .unwrap();
         let attached = drain_until(&mut peer, 2, Duration::from_secs(5));
-        assert_eq!(attached.len(), 2, "expected a response and an entry stop: {attached:?}");
+        assert_eq!(
+            attached.len(),
+            2,
+            "expected a response and an entry stop: {attached:?}"
+        );
         assert!(
-            attached.iter().any(|m| m["event"] == "stopped" && m["body"]["reason"] == "entry"),
+            attached
+                .iter()
+                .any(|m| m["event"] == "stopped" && m["body"]["reason"] == "entry"),
             "missing the entry stop: {attached:?}"
         );
 
@@ -1192,13 +1256,18 @@ mod tests {
         .unwrap();
         let read = drain_until(&mut peer, 1, Duration::from_secs(5));
         assert_eq!(read.len(), 1, "no answer to readMemory: {read:?}");
-        assert!(read[0]["body"]["data"].is_string(), "readMemory returned no data: {read:?}");
+        assert!(
+            read[0]["body"]["data"].is_string(),
+            "readMemory returned no data: {read:?}"
+        );
 
         // Hardware-state panes: each answers with the matching non-empty
         // sub-object of a real getStatus reply.
         for (i, (pane, _)) in HARDWARE_STATE_PANES.iter().enumerate() {
-            peer.send(json!({"seq": 10 + i as i64, "type": "request", "command": pane, "arguments": {}}))
-                .unwrap();
+            peer.send(
+                json!({"seq": 10 + i as i64, "type": "request", "command": pane, "arguments": {}})
+            )
+            .unwrap();
             let answer = drain_until(&mut peer, 1, Duration::from_secs(5));
             assert_eq!(answer.len(), 1, "no answer to {pane}: {answer:?}");
             assert!(
@@ -1227,13 +1296,19 @@ mod tests {
         }))
         .unwrap();
         let set_bp = drain_until(&mut peer, 1, Duration::from_secs(5));
-        assert_eq!(set_bp.len(), 1, "no answer to setInstructionBreakpoints: {set_bp:?}");
+        assert_eq!(
+            set_bp.len(),
+            1,
+            "no answer to setInstructionBreakpoints: {set_bp:?}"
+        );
 
         peer.send(json!({"seq": 8, "type": "request", "command": "continue", "arguments": {}}))
             .unwrap();
         let continued = drain_until(&mut peer, 2, Duration::from_secs(10));
         assert!(
-            continued.iter().any(|m| m["event"] == "stopped" && m["body"]["reason"] == "breakpoint"),
+            continued
+                .iter()
+                .any(|m| m["event"] == "stopped" && m["body"]["reason"] == "breakpoint"),
             "missing the breakpoint stop after continue: {continued:?}"
         );
 

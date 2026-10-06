@@ -335,7 +335,11 @@ mod timing_tests {
     #[test]
     fn the_dead_output_deletion_rules_are_still_fully_supported() {
         let all = parse_vendored(BASE);
-        for rule in all.rules.iter().filter(|r| r.is_pure_dead_output_deletion()) {
+        for rule in all
+            .rules
+            .iter()
+            .filter(|r| r.is_pure_dead_output_deletion())
+        {
             assert!(
                 crate::constraints::all_supported(&rule.constraints),
                 "{:?} should be fully evaluable: {rule:?}",

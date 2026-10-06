@@ -530,12 +530,9 @@ pub fn parse_line_component_standard(
 
     // early exit if at the end of the line or if there is a comment
     if r#let.is_none() && input.eof_offset() == 0
-        || peek(opt(alt((
-            line_ending.value(()),
-            ';'.value(())
-        ))))
-        .parse_next(input)?
-        .is_some()
+        || peek(opt(alt((line_ending.value(()), ';'.value(())))))
+            .parse_next(input)?
+            .is_some()
     {
         return Ok((build_possible_label(), None));
     }
@@ -1050,8 +1047,17 @@ pub fn parse_z80_line_complete(
 /// ...) that must *not* get this treatment - `db 1: db 2` is two
 /// perfectly ordinary statements on one line, not an early stop.
 const MID_BLOCK_MARKER: &[&[u8]] = &[
-    b"NEXTU", b"CASE", b"DEFAULT", b"BREAK", b"ELSE", b"ELSEIF", b"ELSEIFDEF", b"ELSEIFEXIST",
-    b"ELSEIFNDEF", b"ELSEIFNOT", b"ELSEIFUSED"
+    b"NEXTU",
+    b"CASE",
+    b"DEFAULT",
+    b"BREAK",
+    b"ELSE",
+    b"ELSEIF",
+    b"ELSEIFDEF",
+    b"ELSEIFEXIST",
+    b"ELSEIFNDEF",
+    b"ELSEIFNOT",
+    b"ELSEIFUSED"
 ];
 
 // Fail if we do not read a forbidden keyword

@@ -146,9 +146,7 @@ impl SessionManager {
             state
                 .sessions
                 .iter()
-                .filter(|(_, entry)| {
-                    entry.last_used.lock().unwrap().elapsed() >= self.idle_timeout
-                })
+                .filter(|(_, entry)| entry.last_used.lock().unwrap().elapsed() >= self.idle_timeout)
                 .map(|(id, _)| id.clone())
                 .collect()
         };
@@ -242,13 +240,16 @@ impl SessionManager {
             // "the actor thread is gone", the right answer for a caller
             // that somehow already knew this id before `start()` returned.
             let (placeholder_tx, _) = std::sync::mpsc::channel();
-            state.sessions.insert(id.clone(), SessionEntry {
-                tx: placeholder_tx,
-                last_used: Arc::new(Mutex::new(Instant::now())),
-                emulator: emulator_label.clone(),
-                started_at: Instant::now(),
-                headless
-            });
+            state.sessions.insert(
+                id.clone(),
+                SessionEntry {
+                    tx: placeholder_tx,
+                    last_used: Arc::new(Mutex::new(Instant::now())),
+                    emulator: emulator_label.clone(),
+                    started_at: Instant::now(),
+                    headless
+                }
+            );
         }
 
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<Command>();
@@ -317,7 +318,9 @@ impl SessionManager {
 
         if let Err(e) = spawned {
             self.release_reservation(&id, headless);
-            return Err(ToolError::io(format!("cannot spawn the session's actor thread: {e}")));
+            return Err(ToolError::io(format!(
+                "cannot spawn the session's actor thread: {e}"
+            )));
         }
 
         let ready = ready_rx.await;
@@ -366,7 +369,12 @@ impl SessionManager {
             .map_err(|e| Self::robot_err(id, e))
     }
 
-    pub async fn read_memory(&self, id: &str, address: u16, count: u16) -> Result<Vec<u8>, ToolError> {
+    pub async fn read_memory(
+        &self,
+        id: &str,
+        address: u16,
+        count: u16
+    ) -> Result<Vec<u8>, ToolError> {
         self.dispatch(id, |reply| {
             Command::ReadMemory {
                 address,
@@ -378,7 +386,12 @@ impl SessionManager {
         .map_err(|e| Self::robot_err(id, e))
     }
 
-    pub async fn write_memory(&self, id: &str, address: u16, data: Vec<u8>) -> Result<(), ToolError> {
+    pub async fn write_memory(
+        &self,
+        id: &str,
+        address: u16,
+        data: Vec<u8>
+    ) -> Result<(), ToolError> {
         self.dispatch(id, |reply| {
             Command::WriteMemory {
                 address,
@@ -397,15 +410,9 @@ impl SessionManager {
     }
 
     pub async fn load_disc(&self, id: &str, drive: u8, path: Utf8PathBuf) -> Result<(), ToolError> {
-        self.dispatch(id, |reply| {
-            Command::LoadDisc {
-                drive,
-                path,
-                reply
-            }
-        })
-        .await?
-        .map_err(|e| Self::robot_err(id, e))
+        self.dispatch(id, |reply| Command::LoadDisc { drive, path, reply })
+            .await?
+            .map_err(|e| Self::robot_err(id, e))
     }
 
     pub async fn save_disc(&self, id: &str, drive: u8) -> Result<Vec<u8>, ToolError> {
@@ -444,7 +451,14 @@ impl SessionManager {
     }
 
     pub async fn close_all(&self) {
-        let ids: Vec<String> = self.state.lock().unwrap().sessions.keys().cloned().collect();
+        let ids: Vec<String> = self
+            .state
+            .lock()
+            .unwrap()
+            .sessions
+            .keys()
+            .cloned()
+            .collect();
         for id in ids {
             let _ = self.close(&id).await;
         }
@@ -526,7 +540,10 @@ mod tests {
             sessions,
             headless_active: false
         };
-        assert!(check_exclusivity(&state, false).is_ok(), "a second normal session is still fine");
+        assert!(
+            check_exclusivity(&state, false).is_ok(),
+            "a second normal session is still fine"
+        );
         let err = check_exclusivity(&state, true).expect_err("headless must refuse to start here");
         assert!(err.message.contains("headless"), "{}", err.message);
     }
@@ -541,9 +558,17 @@ mod tests {
         };
         let normal_err = check_exclusivity(&state, false)
             .expect_err("a normal session must be refused while headless is active");
-        assert!(normal_err.message.contains("headless"), "{}", normal_err.message);
+        assert!(
+            normal_err.message.contains("headless"),
+            "{}",
+            normal_err.message
+        );
         let headless_err = check_exclusivity(&state, true)
             .expect_err("a second headless session must also be refused");
-        assert!(headless_err.message.contains("headless"), "{}", headless_err.message);
+        assert!(
+            headless_err.message.contains("headless"),
+            "{}",
+            headless_err.message
+        );
     }
 }
