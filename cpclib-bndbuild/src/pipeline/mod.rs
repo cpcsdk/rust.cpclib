@@ -201,6 +201,23 @@ pub fn convert_song_to_akg<E: BndBuilderObserver + 'static>(
     output_path: &Utf8Path,
     observer: &Arc<E>
 ) -> Result<(), String> {
+    convert_song_to_arkos_binary(
+        crate::runners::tracker::SongConverter::new_song_to_akg_default(),
+        song_path,
+        output_path,
+        observer
+    )
+}
+
+/// [`convert_song_to_akg`] for any of the converters that write a player's
+/// binary format with the same flags: `SongToAkg`, `SongToAkm` and `SongToAky`
+/// (the latter in its binary mode, unlike [`convert_song_to_aky_source`]).
+pub fn convert_song_to_arkos_binary<E: BndBuilderObserver + 'static>(
+    converter: crate::runners::tracker::SongConverter,
+    song_path: &Utf8Path,
+    output_path: &Utf8Path,
+    observer: &Arc<E>
+) -> Result<(), String> {
     let args = shlex::try_join([
         "-bin",
         "-adr",
@@ -209,13 +226,10 @@ pub fn convert_song_to_akg<E: BndBuilderObserver + 'static>(
         song_path.as_str(),
         output_path.as_str()
     ])
-    .map_err(|e| format!("Could not build SongToAkg arguments: {e}"))?;
+    .map_err(|e| format!("Could not build the song converter's arguments: {e}"))?;
 
-    let task: Task = InnerTask::with_songconverter(
-        crate::runners::tracker::SongConverter::new_song_to_akg_default(),
-        StandardTaskArguments::new(args)
-    )
-    .into();
+    let task: Task =
+        InnerTask::with_songconverter(converter, StandardTaskArguments::new(args)).into();
     task.execute(observer)
 }
 
@@ -243,6 +257,21 @@ pub fn convert_song_to_aky_source<E: BndBuilderObserver + 'static>(
     )
     .into();
     task.execute(observer)
+}
+
+/// The tracker `song_path` was written with, when its extension says so: a
+/// YM, being a plain register dump, tells nothing about it.
+pub fn song_tracker(song_path: &Utf8Path) -> Option<&'static str> {
+    let extension = song_path.extension()?.to_ascii_lowercase();
+    match extension.as_str() {
+        "aks" => Some("Arkos Tracker"),
+        "sks" => Some("STarKos"),
+        "128" => Some("Soundtrakker 128"),
+        "vt2" => Some("Vortex Tracker II"),
+        "wyz" => Some("WYZ Tracker"),
+        "chp" => Some("CHIPNSFX"),
+        _ => None
+    }
 }
 
 /// Whether `song_path` is a CHIPNSFX song (`.chp`) - played by a completely

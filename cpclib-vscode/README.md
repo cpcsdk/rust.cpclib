@@ -224,6 +224,9 @@ or the "specific player" commands):
 | Player | Plays | Notes |
 |--------|-------|-------|
 | `akg` | Arkos Tracker songs | Arkos Tracker 3's AKG player |
+| `akm` | Arkos Tracker songs | Arkos Tracker 3's AKM player - smaller songs, slower |
+| `akys` | Arkos Tracker songs | Arkos Tracker 3's AKY player, stabilized - constant CPU time |
+| `akyu` | Arkos Tracker songs | Arkos Tracker 3's AKY player, unstabilized - the fastest |
 | `chipnsfx` | `.chp` songs | CHIPNSFX's own player |
 | `fap` | **any song** | [Fast AY Player](https://github.com/grim1z/FastAyPlayer) - constant, very low CPU use |
 | `ayt` | **any song** | [AYT](https://github.com/Logon-System/AYT-Format) - the player is built at run time for the song |
@@ -237,7 +240,7 @@ compare how the same song sounds, weighs and costs with each player.
 Whatever the player, the generated program looks the same: a mode 2 screen with
 the song's title, author/composer and comment (the fields of Arkos Tracker's
 song properties, the text header of a `.chp` file, or the strings of a YM5/YM6
-file), then a `Player:` line telling which player is playing it. The text is
+file), then a `Tracker:` line (the tracker the song was written with, when its format tells) and a `Player:` line telling which player is playing it. The text is
 drawn without any firmware call (the players kill the system), with the font
 read from the CPC's ROM.
 

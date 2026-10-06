@@ -477,7 +477,7 @@ pub struct MusicConfig {
     /// The player songs are played with: `auto` (the default - what each song
     /// needs: AKG for an Arkos Tracker one, or its SID player if it uses that
     /// feature, CHIPNSFX's for a `.chp`, FAP for a `.ym`), or one of `akg`,
-    /// `chipnsfx`, `fap`, `ayt`, `miny` - the last three being YM-based
+    /// `akm`, `akys`, `akyu`, `chipnsfx`, `fap`, `ayt`, `miny` - the last three being YM-based
     /// players, which play any song: whatever is not a YM already is first
     /// converted to one. See `cpclib_bndbuild::pipeline::music_run::MusicPlayer`.
     pub player: String
@@ -795,7 +795,7 @@ run_emulator = "ace"
 sid_wait_line_count = 72
 # The player songs are played with. "auto" picks what each song needs (AKG
 # for an Arkos Tracker one, CHIPNSFX's for a .chp, FAP for a .ym); "akg",
-# "chipnsfx", "fap", "ayt" or "miny" force one. fap/ayt/miny are YM-based and
+# "akm", "akys", "akyu", "chipnsfx", "fap", "ayt" or "miny" force one. fap/ayt/miny are YM-based and
 # play any song: what is not a YM already is converted to one first.
 player = "auto"
 "#;

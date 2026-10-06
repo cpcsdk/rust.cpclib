@@ -6,7 +6,7 @@
 //!
 //! Two completely different players, chosen automatically per song
 //! ([`super::song_uses_sid`]):
-//! - **AKG** (`music_akg_harness.asm`, assembled with basm) for everything
+//! - **Arkos Tracker players** - AKG by default, AKM/AKYS/AKYU on request (`music_arkos_harness.asm`, assembled with basm) for everything
 //!   AT3 can export normally - the design (harness shape, `SongToAkg` flags)
 //!   is a direct Rust port of the working Python pipeline in
 //!   <https://github.com/cpcsdk/amstrad_cpc_players_comparison>
@@ -50,10 +50,10 @@ use crate::event::BndBuilderObserver;
 /// players ([`MusicPlayer::Fap`] & co).
 pub const DEFAULT_SONG_EXTENSIONS: &[&str] = &["aks", "sks", "128", "vt2", "wyz", "chp", "ym"];
 
-/// The AKG player-harness source, embedded at compile time - see
-/// `music_akg_harness.asm` next to this file for the full commented source
+/// The Arkos Tracker player-harness source (AKG, AKM, AKY), embedded at compile
+/// time - see `music_arkos_harness.asm` next to this file for the full commented source
 /// and the `{{PLACEHOLDER}}`s it expects substituted before assembling.
-const AKG_HARNESS_SOURCE: &str = include_str!("music_akg_harness.asm");
+const ARKOS_HARNESS_SOURCE: &str = include_str!("music_arkos_harness.asm");
 
 /// The CHIPNSFX player-harness source, embedded at compile time - see
 /// `music_chp_harness.asm` next to this file.
@@ -200,10 +200,14 @@ fn info_lines(meta: &super::SongMetadata, fallback_title: &str) -> Vec<String> {
 /// The `{{INFO_TEXT}}` replacement: one zero-terminated `db` string per row,
 /// ended by a `255` marker (so an empty row, a lone `0`, stays distinguishable).
 ///
-/// `player` names the player the harness embeds, printed as the last row.
+/// `player` names the player the harness embeds, printed as the last row,
+/// after the tracker the song was written with when that is known.
 fn info_text_db(song_path: &Utf8Path, name_hint: &str, player: &str) -> String {
     let mut lines = info_lines(&super::song_metadata(song_path), name_hint);
     lines.push(String::new());
+    if let Some(tracker) = super::song_tracker(song_path) {
+        lines.push(format!("Tracker: {tracker}"));
+    }
     lines.push(format!("Player: {player}"));
     let mut out = String::new();
     for line in lines {
@@ -230,7 +234,7 @@ fn info_text_db(song_path: &Utf8Path, name_hint: &str, player: &str) -> String {
 /// `hello.bin` case), so the AMSDOS header is instead built in Rust, from
 /// `bin_name`, with `binary_file_from_buffer`. Both addresses are `0x500`:
 /// the harness's `jp Start` at its very first byte (see
-/// `music_akg_harness.asm`) means the load address doubles as the entry
+/// `music_arkos_harness.asm`) means the load address doubles as the entry
 /// point, without needing this code to know `Start`'s real address.
 struct Build {
     _dir: camino_tempfile::Utf8TempDir,
@@ -260,6 +264,15 @@ pub enum MusicPlayer {
     Auto,
     /// Arkos Tracker 3's AKG player - Arkos Tracker songs only.
     Akg,
+    /// Arkos Tracker 3's AKM player (smaller songs, slower) - Arkos Tracker
+    /// songs only.
+    Akm,
+    /// Arkos Tracker 3's AKY player, stabilized (constant CPU time) - Arkos
+    /// Tracker songs only.
+    Akys,
+    /// Arkos Tracker 3's AKY player, unstabilized (the fastest) - Arkos Tracker
+    /// songs only.
+    Akyu,
     /// CHIPNSFX's player - `.chp` songs only.
     Chip,
     /// FAP, the Fast AY Player.
@@ -272,9 +285,12 @@ pub enum MusicPlayer {
 
 impl MusicPlayer {
     /// Every choice, in the order a menu should list them.
-    pub const ALL: [MusicPlayer; 6] = [
+    pub const ALL: [MusicPlayer; 9] = [
         Self::Auto,
         Self::Akg,
+        Self::Akm,
+        Self::Akys,
+        Self::Akyu,
         Self::Chip,
         Self::Fap,
         Self::Ayt,
@@ -286,6 +302,9 @@ impl MusicPlayer {
         match self {
             Self::Auto => "auto",
             Self::Akg => "akg",
+            Self::Akm => "akm",
+            Self::Akys => "akys",
+            Self::Akyu => "akyu",
             Self::Chip => "chipnsfx",
             Self::Fap => "fap",
             Self::Ayt => "ayt",
@@ -333,13 +352,95 @@ impl Default for MusicOptions {
 /// - see [`super::song_uses_sid`] for the SID one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PlayerKind {
-    Akg,
+    /// One of Arkos Tracker's binary-format players.
+    Arkos(ArkosPlayer),
     Sid,
     /// CHIPNSFX's own player, for `.chp` songs.
     Chp,
     Fap,
     Ayt,
     Miny
+}
+
+/// Arkos Tracker 3's binary-format players, which share one harness
+/// (`music_arkos_harness.asm`) and one pipeline: only these few facts differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArkosPlayer {
+    Akg,
+    Akm,
+    /// AKY, stabilized.
+    Akys,
+    /// AKY, unstabilized.
+    Akyu
+}
+
+impl ArkosPlayer {
+    /// Printed on the `Player:` row of the song-info screen.
+    fn display_name(self) -> &'static str {
+        match self {
+            Self::Akg => "Arkos Tracker 3 AKG",
+            Self::Akm => "Arkos Tracker 3 AKM",
+            Self::Akys => "Arkos Tracker 3 AKY (stabilized)",
+            Self::Akyu => "Arkos Tracker 3 AKY (unstabilized)"
+        }
+    }
+
+    /// The AT3 tool that writes the song in this player's format.
+    fn converter(self) -> crate::runners::tracker::SongConverter {
+        use crate::runners::tracker::SongConverter;
+        match self {
+            Self::Akg => SongConverter::new_song_to_akg_default(),
+            Self::Akm => SongConverter::new_song_to_akm_default(),
+            Self::Akys | Self::Akyu => SongConverter::new_song_to_aky_default()
+        }
+    }
+
+    /// The player routine, in the AT3 install.
+    fn source_path(self) -> Utf8PathBuf {
+        let at3 = At3Version::default();
+        match self {
+            Self::Akg => at3.akg_path::<()>(),
+            Self::Akm => at3.akm_path::<()>(),
+            Self::Akys => at3.aky_stable_path::<()>(),
+            Self::Akyu => at3.aky_path::<()>()
+        }
+    }
+
+    /// `{{PLAYER_DEFINES}}`: the switches the player reads.
+    fn defines(self) -> &'static str {
+        match self {
+            Self::Akg => "PLY_AKG_REMOVE_HOOKS\nPLY_AKG_HARDWARE_CPC = 1",
+            Self::Akm => "PLY_AKM_REMOVE_HOOKS\nPLY_AKM_HARDWARE_CPC = 1",
+            Self::Akys => "",
+            Self::Akyu => "PLY_AKY_REMOVE_HOOKS = 1\nPLY_AKY_HARDWARE_CPC = 1"
+        }
+    }
+
+    /// `{{PLAYER_INIT_PRE}}`: the init routine's inputs besides HL (the subsong).
+    fn init_pre(self) -> &'static str {
+        match self {
+            Self::Akys => "",
+            _ => "xor a"
+        }
+    }
+
+    fn init(self) -> &'static str {
+        match self {
+            Self::Akg => "PLY_AKG_Init",
+            Self::Akm => "PLY_AKM_Init",
+            Self::Akys => "PLY_AKYst_Init",
+            Self::Akyu => "PLY_AKY_Init"
+        }
+    }
+
+    fn play(self) -> &'static str {
+        match self {
+            Self::Akg => "PLY_AKG_Play",
+            Self::Akm => "PLY_AKM_Play",
+            Self::Akys => "PLY_AKYst_Play",
+            Self::Akyu => "PLY_AKY_Play"
+        }
+    }
 }
 
 fn player_kind(song_path: &Utf8Path, requested: MusicPlayer) -> Result<PlayerKind, String> {
@@ -356,15 +457,21 @@ fn player_kind(song_path: &Utf8Path, requested: MusicPlayer) -> Result<PlayerKin
                 Ok(PlayerKind::Sid)
             }
             else {
-                Ok(PlayerKind::Akg)
+                Ok(PlayerKind::Arkos(ArkosPlayer::Akg))
             }
         },
-        MusicPlayer::Akg if is_arkos => Ok(PlayerKind::Akg),
-        MusicPlayer::Akg => {
+        MusicPlayer::Akg | MusicPlayer::Akm | MusicPlayer::Akys | MusicPlayer::Akyu
+            if !is_arkos =>
+        {
             Err(format!(
-                "The AKG player needs an Arkos Tracker song, not {song_path}"
+                "The {} player needs an Arkos Tracker song, not {song_path}",
+                requested.name()
             ))
         },
+        MusicPlayer::Akg => Ok(PlayerKind::Arkos(ArkosPlayer::Akg)),
+        MusicPlayer::Akm => Ok(PlayerKind::Arkos(ArkosPlayer::Akm)),
+        MusicPlayer::Akys => Ok(PlayerKind::Arkos(ArkosPlayer::Akys)),
+        MusicPlayer::Akyu => Ok(PlayerKind::Arkos(ArkosPlayer::Akyu)),
         MusicPlayer::Chip if super::song_is_chp(song_path) => Ok(PlayerKind::Chp),
         MusicPlayer::Chip => {
             Err(format!(
@@ -456,14 +563,15 @@ fn assemble_basm_player<E: BndBuilderObserver + 'static>(
     })
 }
 
-/// Converts `song_path` and assembles the AKG harness around it, naming the
-/// resulting AMSDOS binary from `name_hint` (sanitized the same way
-/// `basic_run` names its `.BAS` file). `extra_asm_args` lets the two public
-/// entry points below differ only in whether they also ask for a snapshot -
-/// everything else (conversion, path substitution, harness source) is
-/// identical, matching how the Python reference's
-/// `__build_replay_program__` builds both in one assemble call.
-fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
+/// Converts `song_path` to `player`'s format and assembles the Arkos harness
+/// around it, naming the resulting AMSDOS binary from `name_hint` (sanitized
+/// the same way `basic_run` names its `.BAS` file). `extra_asm_args` lets the
+/// two public entry points below differ only in whether they also ask for a
+/// snapshot - everything else (conversion, path substitution, harness source)
+/// is identical, matching how the Python reference's `__build_replay_program__`
+/// builds both in one assemble call.
+fn convert_and_assemble_arkos<E: BndBuilderObserver + 'static>(
+    player: ArkosPlayer,
     song_path: &Utf8Path,
     name_hint: &str,
     extra_asm_args: &[String],
@@ -472,22 +580,29 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
     let dir = camino_tempfile::tempdir()
         .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
 
-    let akg_path = dir.path().join("song.akg");
-    super::convert_song_to_akg(song_path, &akg_path, observer)
-        .map_err(|e| format!("Could not convert {song_path} to AKG: {e}"))?;
+    let music_path = dir.path().join("song.bin");
+    super::convert_song_to_arkos_binary(player.converter(), song_path, &music_path, observer)
+        .map_err(|e| {
+            format!(
+                "Could not convert {song_path} for {}: {e}",
+                player.display_name()
+            )
+        })?;
 
     // AT3's own naming convention for `--exportPlayerConfig`'s companion
     // file: `output_path` with its extension stripped, `_playerconfig.asm`
     // appended - see `super::convert_song_to_akg`'s doc comment.
-    let player_config_path =
-        Utf8PathBuf::from(format!("{}_playerconfig.asm", akg_path.with_extension("")));
+    let player_config_path = Utf8PathBuf::from(format!(
+        "{}_playerconfig.asm",
+        music_path.with_extension("")
+    ));
 
     assemble_basm_player(
         dir,
         &BasmPlayer {
-            template: AKG_HARNESS_SOURCE,
-            player_name: "Arkos Tracker 3 AKG",
-            music_path: &akg_path,
+            template: ARKOS_HARNESS_SOURCE,
+            player_name: player.display_name(),
+            music_path: &music_path,
             extra_substitutions: &[
                 (
                     "{{PLAYER_CONFIG_FNAME}}",
@@ -495,8 +610,12 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
                 ),
                 (
                     "{{PLAYER_SOURCE_FNAME}}",
-                    basm_escaped_path(&At3Version::default().akg_path::<()>())
-                )
+                    basm_escaped_path(&player.source_path())
+                ),
+                ("{{PLAYER_DEFINES}}", player.defines().to_string()),
+                ("{{PLAYER_INIT_PRE}}", player.init_pre().to_string()),
+                ("{{PLAYER_INIT}}", player.init().to_string()),
+                ("{{PLAYER_PLAY}}", player.play().to_string())
             ]
         },
         song_path,
@@ -507,7 +626,7 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
 }
 
 /// Converts the CHIPNSFX song `song_path` (`.chp`) and assembles the CHP
-/// harness around it - same shape as [`convert_and_assemble_akg`], whose
+/// harness around it - same shape as [`convert_and_assemble_arkos`], whose
 /// `Build` it returns (headerless binary, wrapped in an AMSDOS header by the
 /// caller).
 fn convert_and_assemble_chp<E: BndBuilderObserver + 'static>(
@@ -567,7 +686,7 @@ fn fap_player_paths() -> Result<(Utf8PathBuf, Utf8PathBuf), String> {
 
 /// Converts `song_path` to a YM, packs it for `kind` (FAP, AYT or MinYMiser)
 /// and assembles that player's harness around it - same shape as
-/// [`convert_and_assemble_akg`], whose `Build` it returns.
+/// [`convert_and_assemble_arkos`], whose `Build` it returns.
 fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
     kind: PlayerKind,
     song_path: &Utf8Path,
@@ -606,7 +725,7 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
                 "MinYMiser"
             )
         },
-        PlayerKind::Akg | PlayerKind::Sid | PlayerKind::Chp => {
+        PlayerKind::Arkos(_) | PlayerKind::Sid | PlayerKind::Chp => {
             return Err("not a YM-based player".to_string());
         }
     };
@@ -649,7 +768,7 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
             substitutions.push(("{{YMP_FNAME}}", basm_escaped_path(&ymp)));
             substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer_size("Total cache size")?));
         },
-        PlayerKind::Akg | PlayerKind::Sid | PlayerKind::Chp => unreachable!()
+        PlayerKind::Arkos(_) | PlayerKind::Sid | PlayerKind::Chp => unreachable!()
     }
 
     assemble_basm_player(
@@ -678,9 +797,10 @@ fn convert_and_assemble_basm_kind<E: BndBuilderObserver + 'static>(
 ) -> Result<Build, String> {
     match kind {
         PlayerKind::Chp => convert_and_assemble_chp(song_path, name_hint, extra_asm_args, observer),
-        PlayerKind::Akg | PlayerKind::Sid => {
-            convert_and_assemble_akg(song_path, name_hint, extra_asm_args, observer)
+        PlayerKind::Arkos(player) => {
+            convert_and_assemble_arkos(player, song_path, name_hint, extra_asm_args, observer)
         },
+        PlayerKind::Sid => Err("The SID player is not assembled with basm".to_string()),
         PlayerKind::Fap | PlayerKind::Ayt | PlayerKind::Miny => {
             convert_and_assemble_ym_player(kind, song_path, name_hint, extra_asm_args, observer)
         },
@@ -785,7 +905,7 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
     let sna_path = dir.path().join("song.sna");
 
     let result = match kind {
-        PlayerKind::Akg
+        PlayerKind::Arkos(_)
         | PlayerKind::Chp
         | PlayerKind::Fap
         | PlayerKind::Ayt
@@ -867,7 +987,7 @@ pub fn build_music_dsk<E: BndBuilderObserver + 'static>(
     }
 
     match player_kind(song_path, options.player)? {
-        kind @ (PlayerKind::Akg
+        kind @ (PlayerKind::Arkos(_)
         | PlayerKind::Chp
         | PlayerKind::Fap
         | PlayerKind::Ayt
@@ -944,6 +1064,15 @@ mod tests {
             Ok(PlayerKind::Chp)
         ));
         assert!(DEFAULT_SONG_EXTENSIONS.contains(&"chp"));
+    }
+
+    #[test]
+    fn info_text_names_the_tracker_when_it_is_known() {
+        let aks = info_text_db(Utf8Path::new("/nowhere/x.AKS"), "tune", "FAP");
+        assert!(aks.contains("db \"Tracker: Arkos Tracker\",0"), "{aks}");
+        assert!(aks.find("Tracker:") < aks.find("Player:"));
+        let ym = info_text_db(Utf8Path::new("/nowhere/x.ym"), "tune", "FAP");
+        assert!(!ym.contains("Tracker:"), "{ym}");
     }
 
     #[test]
@@ -1078,6 +1207,54 @@ mod tests {
                     .unwrap_or_else(|e| panic!("{player:?} on {song}: {e}"));
                 assert!(dsk.is_file(), "{player:?} on {song}");
             }
+        }
+    }
+
+    #[test]
+    fn arkos_players_only_play_arkos_songs() {
+        let aks = Utf8Path::new("/nowhere/tune.aks");
+        assert_eq!(
+            player_kind(aks, MusicPlayer::Akys),
+            Ok(PlayerKind::Arkos(ArkosPlayer::Akys))
+        );
+        for player in [
+            MusicPlayer::Akg,
+            MusicPlayer::Akm,
+            MusicPlayer::Akys,
+            MusicPlayer::Akyu
+        ] {
+            let err = player_kind(Utf8Path::new("/nowhere/tune.ym"), player).unwrap_err();
+            assert!(err.contains(player.name()), "{err}");
+        }
+    }
+
+    /// Every Arkos Tracker player on a real song, through the real tools
+    /// (downloaded on demand) - hence `#[ignore]`d.
+    #[test]
+    #[ignore]
+    fn real_arkos_players_build_a_real_dsk() {
+        use cpclib_runner::delegated::InternetStaticCompiledApplication as _;
+
+        let observer = Arc::new(TestObserver);
+        let song = At3Version::default()
+            .configuration::<()>()
+            .cache_folder()
+            .join("songs")
+            .join("ArkosTracker3")
+            .join("Ok3anos - Cpc Dream.aks");
+        for player in [
+            MusicPlayer::Akg,
+            MusicPlayer::Akm,
+            MusicPlayer::Akys,
+            MusicPlayer::Akyu
+        ] {
+            let options = MusicOptions {
+                player,
+                ..MusicOptions::default()
+            };
+            let dsk = build_music_dsk(&song, "ARKOS", &options, &observer)
+                .unwrap_or_else(|e| panic!("{player:?}: {e}"));
+            assert!(dsk.is_file(), "{player:?}");
         }
     }
 

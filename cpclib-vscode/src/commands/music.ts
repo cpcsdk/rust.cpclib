@@ -23,6 +23,9 @@ interface MusicSidInfo {
 const PLAYER_DESCRIPTIONS: Record<string, string> = {
     auto: 'What the song needs (the default - see "[music] player" in cpclib-lsp.toml)',
     akg: 'Arkos Tracker 3 AKG - Arkos Tracker songs only',
+    akm: 'Arkos Tracker 3 AKM (smaller songs, slower) - Arkos Tracker songs only',
+    akys: 'Arkos Tracker 3 AKY, stabilized (constant CPU time) - Arkos Tracker songs only',
+    akyu: 'Arkos Tracker 3 AKY, unstabilized (the fastest) - Arkos Tracker songs only',
     chipnsfx: 'CHIPNSFX - .chp songs only',
     fap: 'FAP, the Fast AY Player - any song (converted to YM first)',
     ayt: 'AYT, Logon System\'s player builder - any song (converted to YM first)',
