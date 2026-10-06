@@ -6,6 +6,8 @@ All notable changes to the CPClib VS Code extension are documented here.
 
 - Music: Explorer context menu / commands accept CHIPNSFX `.chp` songs, played by CHIPNSFX's
   own player
+- Music: `.ym` songs, and three YM-based players (FAP, AYT, MinYMiser) that play any song
+  (converted to YM first), chosen with `[music] player` or the "with a specific player" commands
 - Generated music players print the song's title, author and comment, and which player is used
 
 ## [0.0.1] - Initial release

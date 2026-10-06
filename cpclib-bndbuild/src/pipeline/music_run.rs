@@ -46,8 +46,9 @@ use crate::event::BndBuilderObserver;
 /// list): AKS (Arkos Tracker 1/2/3), SKS (STarKos), 128 (BSC's Soundtrakker),
 /// VT2 (Vortex Tracker 2), WYZ (Wyz Tracker) - plus CHP (CHIPNSFX), which is
 /// not an Arkos Tracker format at all and gets its own player (see
-/// [`PlayerKind::Chp`]).
-pub const DEFAULT_SONG_EXTENSIONS: &[&str] = &["aks", "sks", "128", "vt2", "wyz", "chp"];
+/// [`PlayerKind::Chp`]) - and YM (AY register dumps), played by the YM-based
+/// players ([`MusicPlayer::Fap`] & co).
+pub const DEFAULT_SONG_EXTENSIONS: &[&str] = &["aks", "sks", "128", "vt2", "wyz", "chp", "ym"];
 
 /// The AKG player-harness source, embedded at compile time - see
 /// `music_akg_harness.asm` next to this file for the full commented source
@@ -57,6 +58,19 @@ const AKG_HARNESS_SOURCE: &str = include_str!("music_akg_harness.asm");
 /// The CHIPNSFX player-harness source, embedded at compile time - see
 /// `music_chp_harness.asm` next to this file.
 const CHP_HARNESS_SOURCE: &str = include_str!("music_chp_harness.asm");
+
+/// The FAP, AYT and MinYMiser player harnesses - the YM-based players, see
+/// [`PlayerKind`] and `music_fap_harness.asm` & co.
+const FAP_HARNESS_SOURCE: &str = include_str!("music_fap_harness.asm");
+const AYT_HARNESS_SOURCE: &str = include_str!("music_ayt_harness.asm");
+const MINY_HARNESS_SOURCE: &str = include_str!("music_miny_harness.asm");
+
+/// The two YM players that are not downloaded by the tool that packs for them
+/// - AYT's player builder (Logon System's AYT-Format) and MinYMiser's Z80 port
+/// (Megachur's `ymp_z80.z80`) - are embedded, and written next to the harness
+/// that includes them.
+const AYT_BUILDER_SOURCE: &str = include_str!("players/AytPlayerBuilder-CPC.asm");
+const YMP_SOURCE: &str = include_str!("players/ymp_z80.z80");
 
 /// The SID player-harness source, embedded at compile time - see
 /// `music_sid_harness.asm` next to this file for the full commented source.
@@ -234,27 +248,137 @@ const BASM_PLAYER_LOAD_ADDRESS: u16 = 0x500;
 /// immediately after), with no fixed-address gap to reserve first.
 const SID_LOAD_ADDRESS: u16 = 0x100;
 
-/// Which player a song needs - see [`super::song_uses_sid`].
+/// The player the user asks for - [`MusicPlayer::Auto`] lets the song decide.
+///
+/// The YM-based ones (FAP, AYT, MinYMiser) play any song: anything that is
+/// not a YM already is converted to one first.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MusicPlayer {
+    /// AKG for an Arkos Tracker song (or its SID player, if it uses that
+    /// feature), CHIPNSFX's player for a `.chp`, FAP for a `.ym`.
+    #[default]
+    Auto,
+    /// Arkos Tracker 3's AKG player - Arkos Tracker songs only.
+    Akg,
+    /// CHIPNSFX's player - `.chp` songs only.
+    Chip,
+    /// FAP, the Fast AY Player.
+    Fap,
+    /// AYT, Logon System's player builder.
+    Ayt,
+    /// MinYMiser's Z80 port.
+    Miny
+}
+
+impl MusicPlayer {
+    /// Every choice, in the order a menu should list them.
+    pub const ALL: [MusicPlayer; 6] = [
+        Self::Auto,
+        Self::Akg,
+        Self::Chip,
+        Self::Fap,
+        Self::Ayt,
+        Self::Miny
+    ];
+
+    /// The name this player is given in `cpclib-lsp.toml` and in commands.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Akg => "akg",
+            Self::Chip => "chipnsfx",
+            Self::Fap => "fap",
+            Self::Ayt => "ayt",
+            Self::Miny => "miny"
+        }
+    }
+}
+
+impl std::str::FromStr for MusicPlayer {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        Self::ALL
+            .into_iter()
+            .find(|p| p.name().eq_ignore_ascii_case(s.trim()))
+            .ok_or_else(|| {
+                format!(
+                    "unknown music player `{s}` (expected one of: {})",
+                    Self::ALL.map(Self::name).join(", ")
+                )
+            })
+    }
+}
+
+/// How to turn a song into a player program.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MusicOptions {
+    /// Only matters if the player ends up being the SID one
+    /// (`MusicConfig::sid_wait_line_count`) - see `music_sid_harness.asm`'s
+    /// own doc comment for what it controls.
+    pub sid_wait_line_count: u16,
+    pub player: MusicPlayer
+}
+
+impl Default for MusicOptions {
+    fn default() -> Self {
+        Self {
+            sid_wait_line_count: 72,
+            player: MusicPlayer::Auto
+        }
+    }
+}
+
+/// Which player a song is played with, once [`MusicPlayer::Auto`] is resolved
+/// - see [`super::song_uses_sid`] for the SID one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PlayerKind {
     Akg,
     Sid,
     /// CHIPNSFX's own player, for `.chp` songs.
-    Chp
+    Chp,
+    Fap,
+    Ayt,
+    Miny
 }
 
-fn player_kind(song_path: &Utf8Path) -> Result<PlayerKind, String> {
-    if super::song_is_chp(song_path) {
-        Ok(PlayerKind::Chp)
-    }
-    else if super::song_uses_sid(song_path)? {
-        Ok(PlayerKind::Sid)
-    }
-    else {
-        Ok(PlayerKind::Akg)
+fn player_kind(song_path: &Utf8Path, requested: MusicPlayer) -> Result<PlayerKind, String> {
+    let is_arkos = !super::song_is_chp(song_path) && !super::song_is_ym(song_path);
+    match requested {
+        MusicPlayer::Auto => {
+            if super::song_is_chp(song_path) {
+                Ok(PlayerKind::Chp)
+            }
+            else if super::song_is_ym(song_path) {
+                Ok(PlayerKind::Fap)
+            }
+            else if super::song_uses_sid(song_path)? {
+                Ok(PlayerKind::Sid)
+            }
+            else {
+                Ok(PlayerKind::Akg)
+            }
+        },
+        MusicPlayer::Akg if is_arkos => Ok(PlayerKind::Akg),
+        MusicPlayer::Akg => {
+            Err(format!(
+                "The AKG player needs an Arkos Tracker song, not {song_path}"
+            ))
+        },
+        MusicPlayer::Chip if super::song_is_chp(song_path) => Ok(PlayerKind::Chp),
+        MusicPlayer::Chip => {
+            Err(format!(
+                "The CHIPNSFX player needs a .chp song, not {song_path}"
+            ))
+        },
+        MusicPlayer::Fap => Ok(PlayerKind::Fap),
+        MusicPlayer::Ayt => Ok(PlayerKind::Ayt),
+        MusicPlayer::Miny => Ok(PlayerKind::Miny)
     }
 }
 
-/// Everything that differs between the basm-assembled players (AKG, CHP) -
+/// Everything that differs between the basm-assembled players (AKG, CHP, FAP,
+/// AYT, MinYMiser) -
 /// see [`assemble_basm_player`].
 struct BasmPlayer<'a> {
     /// The harness source, `{{PLACEHOLDER}}`s still in.
@@ -263,8 +387,6 @@ struct BasmPlayer<'a> {
     player_name: &'a str,
     /// The converted song, `{{MUSIC_DATA_FNAME}}`.
     music_path: &'a Utf8Path,
-    /// The player routine's source, `{{PLAYER_SOURCE_FNAME}}`.
-    player_source_path: &'a Utf8Path,
     /// Harness-specific placeholders, already escaped.
     extra_substitutions: &'a [(&'a str, String)]
 }
@@ -309,10 +431,6 @@ fn assemble_basm_player<E: BndBuilderObserver + 'static>(
 
     let mut substitutions = vec![
         ("{{MUSIC_DATA_FNAME}}", basm_escaped_path(player.music_path)),
-        (
-            "{{PLAYER_SOURCE_FNAME}}",
-            basm_escaped_path(player.player_source_path)
-        ),
         ("{{MUSIC_EXEC_FNAME}}", basm_escaped_path(&bin_path)),
     ];
     substitutions.extend(player.extra_substitutions.iter().cloned());
@@ -370,11 +488,16 @@ fn convert_and_assemble_akg<E: BndBuilderObserver + 'static>(
             template: AKG_HARNESS_SOURCE,
             player_name: "Arkos Tracker 3 AKG",
             music_path: &akg_path,
-            player_source_path: &At3Version::default().akg_path::<()>(),
-            extra_substitutions: &[(
-                "{{PLAYER_CONFIG_FNAME}}",
-                basm_escaped_path(&player_config_path)
-            )]
+            extra_substitutions: &[
+                (
+                    "{{PLAYER_CONFIG_FNAME}}",
+                    basm_escaped_path(&player_config_path)
+                ),
+                (
+                    "{{PLAYER_SOURCE_FNAME}}",
+                    basm_escaped_path(&At3Version::default().akg_path::<()>())
+                )
+            ]
         },
         song_path,
         name_hint,
@@ -408,8 +531,10 @@ fn convert_and_assemble_chp<E: BndBuilderObserver + 'static>(
             template: CHP_HARNESS_SOURCE,
             player_name: "CHIPNSFX",
             music_path: &music_path,
-            player_source_path: &ChipnsfxVersion::default().player_path::<()>(),
-            extra_substitutions: &[]
+            extra_substitutions: &[(
+                "{{PLAYER_SOURCE_FNAME}}",
+                basm_escaped_path(&ChipnsfxVersion::default().player_path::<()>())
+            )]
         },
         song_path,
         name_hint,
@@ -418,10 +543,134 @@ fn convert_and_assemble_chp<E: BndBuilderObserver + 'static>(
     )
 }
 
-/// [`convert_and_assemble_akg`] or [`convert_and_assemble_chp`], as `kind` says
-/// - the two basm-assembled players, which differ only in their conversion.
+#[cfg(feature = "fap")]
+fn fap_cruncher() -> Result<crate::runners::ay::YmCruncher, String> {
+    Ok(crate::runners::ay::YmCruncher::Fap)
+}
+
+#[cfg(not(feature = "fap"))]
+fn fap_cruncher() -> Result<crate::runners::ay::YmCruncher, String> {
+    Err("This build of bndbuild has no FAP support".to_string())
+}
+
+/// The FAP player's two binaries, only known once `fap` has been downloaded.
+#[cfg(feature = "fap")]
+fn fap_player_paths() -> Result<(Utf8PathBuf, Utf8PathBuf), String> {
+    let fap = cpclib_runner::runner::ay::fap::FAPVersion::default();
+    Ok((fap.fap_init_path::<()>(), fap.fap_play_path::<()>()))
+}
+
+#[cfg(not(feature = "fap"))]
+fn fap_player_paths() -> Result<(Utf8PathBuf, Utf8PathBuf), String> {
+    Err("This build of bndbuild has no FAP support".to_string())
+}
+
+/// Converts `song_path` to a YM, packs it for `kind` (FAP, AYT or MinYMiser)
+/// and assembles that player's harness around it - same shape as
+/// [`convert_and_assemble_akg`], whose `Build` it returns.
+fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
+    kind: PlayerKind,
+    song_path: &Utf8Path,
+    name_hint: &str,
+    extra_asm_args: &[String],
+    observer: &Arc<E>
+) -> Result<Build, String> {
+    use super::YmVersion;
+    use crate::runners::ay::YmCruncher;
+
+    let (version, extension, cruncher, template, player_name) = match kind {
+        PlayerKind::Fap => {
+            (
+                YmVersion::Ym6,
+                "fap",
+                fap_cruncher()?,
+                FAP_HARNESS_SOURCE,
+                "FAP (Fast AY Player)"
+            )
+        },
+        PlayerKind::Ayt => {
+            (
+                YmVersion::Ym6,
+                "ayt",
+                YmCruncher::Ayt,
+                AYT_HARNESS_SOURCE,
+                "AYT"
+            )
+        },
+        PlayerKind::Miny => {
+            (
+                YmVersion::Ym3,
+                "miny",
+                YmCruncher::Miny,
+                MINY_HARNESS_SOURCE,
+                "MinYMiser"
+            )
+        },
+        PlayerKind::Akg | PlayerKind::Sid | PlayerKind::Chp => {
+            return Err("not a YM-based player".to_string());
+        }
+    };
+
+    let dir = camino_tempfile::tempdir()
+        .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
+
+    let ym_path = super::ym_for_player(song_path, &dir.path().join("song.ym"), version, observer)?;
+    let packed_path = dir.path().join(format!("song.{extension}"));
+    let report = super::pack_ym(cruncher, &ym_path, &packed_path, observer)
+        .map_err(|e| format!("Could not pack {ym_path} for {player_name}: {e}"))?;
+
+    let mut asm_args = extra_asm_args.to_vec();
+    let mut substitutions = Vec::new();
+    let buffer_size = |label: &str| {
+        super::tool_reported_size(&report, label)
+            .map(|n| n.to_string())
+            .ok_or_else(|| format!("{player_name}'s packer did not report a `{label}`"))
+    };
+    match kind {
+        PlayerKind::Fap => {
+            // only now: the packing is what downloads FAP
+            let (init, play) = fap_player_paths()?;
+            substitutions.push(("{{FAP_INIT_PATH}}", basm_escaped_path(&init)));
+            substitutions.push(("{{FAP_PLAY_PATH}}", basm_escaped_path(&play)));
+            substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer_size("Decrunch buffer size")?));
+        },
+        PlayerKind::Ayt => {
+            let builder = dir.path().join("AytPlayerBuilder-CPC.asm");
+            fs_err::write(&builder, AYT_BUILDER_SOURCE)
+                .map_err(|e| format!("Could not write the AYT player builder: {e}"))?;
+            substitutions.push(("{{AYT_BUILDER_FNAME}}", basm_escaped_path(&builder)));
+            // the builder is written for a case-insensitive assembler
+            asm_args.insert(0, "--case-insensitive".to_string());
+        },
+        PlayerKind::Miny => {
+            let ymp = dir.path().join("ymp_z80.z80");
+            fs_err::write(&ymp, YMP_SOURCE)
+                .map_err(|e| format!("Could not write the MinYMiser player: {e}"))?;
+            substitutions.push(("{{YMP_FNAME}}", basm_escaped_path(&ymp)));
+            substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer_size("Total cache size")?));
+        },
+        PlayerKind::Akg | PlayerKind::Sid | PlayerKind::Chp => unreachable!()
+    }
+
+    assemble_basm_player(
+        dir,
+        &BasmPlayer {
+            template,
+            player_name,
+            music_path: &packed_path,
+            extra_substitutions: &substitutions
+        },
+        song_path,
+        name_hint,
+        &asm_args,
+        observer
+    )
+}
+
+/// The `convert_and_assemble_*` function `kind` needs, among the basm-assembled
+/// players - which differ only in their conversion.
 fn convert_and_assemble_basm_kind<E: BndBuilderObserver + 'static>(
-    kind: &PlayerKind,
+    kind: PlayerKind,
     song_path: &Utf8Path,
     name_hint: &str,
     extra_asm_args: &[String],
@@ -431,6 +680,9 @@ fn convert_and_assemble_basm_kind<E: BndBuilderObserver + 'static>(
         PlayerKind::Chp => convert_and_assemble_chp(song_path, name_hint, extra_asm_args, observer),
         PlayerKind::Akg | PlayerKind::Sid => {
             convert_and_assemble_akg(song_path, name_hint, extra_asm_args, observer)
+        },
+        PlayerKind::Fap | PlayerKind::Ayt | PlayerKind::Miny => {
+            convert_and_assemble_ym_player(kind, song_path, name_hint, extra_asm_args, observer)
         },
     }
 }
@@ -508,21 +760,20 @@ fn convert_and_assemble_sid<E: BndBuilderObserver + 'static>(
 /// `cpclib_runner::emucontrol` accepts is valid here - unlike `basic_run`,
 /// there is no auto-RUN-only restriction to honor.
 ///
-/// `sid_wait_line_count` only matters if `song_path` turns out to use SID
-/// (`MusicConfig::sid_wait_line_count`, ignored otherwise) - see
-/// `music_sid_harness.asm`'s own doc comment for what it controls.
+/// `options` says which player to use (by default, the one the song needs),
+/// and the SID player's safety margin - see [`MusicOptions`].
 pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
     song_path: &Utf8Path,
     name_hint: &str,
     emulator: &str,
-    sid_wait_line_count: u16,
+    options: &MusicOptions,
     observer: &Arc<E>
 ) -> MusicRunOutcome {
     if !song_path.is_file() {
         return failure(format!("{song_path} does not exist"));
     }
 
-    let kind = match player_kind(song_path) {
+    let kind = match player_kind(song_path, options.player) {
         Ok(k) => k,
         Err(e) => return failure(e)
     };
@@ -534,9 +785,13 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
     let sna_path = dir.path().join("song.sna");
 
     let result = match kind {
-        PlayerKind::Akg | PlayerKind::Chp => {
+        PlayerKind::Akg
+        | PlayerKind::Chp
+        | PlayerKind::Fap
+        | PlayerKind::Ayt
+        | PlayerKind::Miny => {
             convert_and_assemble_basm_kind(
-                &kind,
+                kind,
                 song_path,
                 name_hint,
                 &[
@@ -552,7 +807,7 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
             convert_and_assemble_sid(
                 song_path,
                 name_hint,
-                sid_wait_line_count,
+                options.sid_wait_line_count,
                 true,
                 &["-oi".to_string(), sna_path.to_string()],
                 observer
@@ -600,22 +855,25 @@ fn wrap_and_build_dsk<E: BndBuilderObserver + 'static>(
 /// containing just that file - no emulator launch. Mirrors
 /// `basic_run::run_basic_in_emulator`'s DSK-building half.
 ///
-/// `sid_wait_line_count` only matters if `song_path` turns out to use SID -
-/// see [`run_music_in_emulator`]'s doc comment.
+/// `options`: see [`run_music_in_emulator`].
 pub fn build_music_dsk<E: BndBuilderObserver + 'static>(
     song_path: &Utf8Path,
     name_hint: &str,
-    sid_wait_line_count: u16,
+    options: &MusicOptions,
     observer: &Arc<E>
 ) -> Result<Utf8PathBuf, String> {
     if !song_path.is_file() {
         return Err(format!("{song_path} does not exist"));
     }
 
-    match player_kind(song_path)? {
-        kind @ (PlayerKind::Akg | PlayerKind::Chp) => {
+    match player_kind(song_path, options.player)? {
+        kind @ (PlayerKind::Akg
+        | PlayerKind::Chp
+        | PlayerKind::Fap
+        | PlayerKind::Ayt
+        | PlayerKind::Miny) => {
             // Both players load, and are entered, at the same address.
-            let built = convert_and_assemble_basm_kind(&kind, song_path, name_hint, &[], observer)?;
+            let built = convert_and_assemble_basm_kind(kind, song_path, name_hint, &[], observer)?;
             wrap_and_build_dsk(
                 &built.bin_path,
                 &built.bin_name,
@@ -632,7 +890,7 @@ pub fn build_music_dsk<E: BndBuilderObserver + 'static>(
             convert_and_assemble_sid(
                 song_path,
                 name_hint,
-                sid_wait_line_count,
+                options.sid_wait_line_count,
                 false,
                 &["-ob".to_string(), bin_path.to_string()],
                 observer
@@ -682,7 +940,7 @@ mod tests {
     #[test]
     fn chp_songs_are_detected_by_extension_and_get_their_own_player() {
         assert!(matches!(
-            player_kind(Utf8Path::new("/nowhere/Song.CHP")),
+            player_kind(Utf8Path::new("/nowhere/Song.CHP"), MusicPlayer::Auto),
             Ok(PlayerKind::Chp)
         ));
         assert!(DEFAULT_SONG_EXTENSIONS.contains(&"chp"));
@@ -715,9 +973,112 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/tests/chipnsfx/WINGSOD5.CHP"
         ));
-        let dsk = build_music_dsk(&song, "WINGS", 72, &observer)
+        let dsk = build_music_dsk(&song, "WINGS", &MusicOptions::default(), &observer)
             .expect("the real CHP conversion+assemble+DSK pipeline should succeed");
         assert!(dsk.is_file());
+    }
+
+    #[test]
+    fn players_are_chosen_by_name_and_checked_against_the_song() {
+        assert_eq!("FAP".parse::<MusicPlayer>(), Ok(MusicPlayer::Fap));
+        assert_eq!(" chipnsfx ".parse::<MusicPlayer>(), Ok(MusicPlayer::Chip));
+        assert!(
+            "nope"
+                .parse::<MusicPlayer>()
+                .unwrap_err()
+                .contains("expected one of")
+        );
+
+        let ym = Utf8Path::new("/nowhere/tune.ym");
+        assert_eq!(player_kind(ym, MusicPlayer::Auto), Ok(PlayerKind::Fap));
+        assert_eq!(player_kind(ym, MusicPlayer::Miny), Ok(PlayerKind::Miny));
+        assert!(player_kind(ym, MusicPlayer::Akg).is_err());
+        assert!(player_kind(ym, MusicPlayer::Chip).is_err());
+        // any song can go through a YM-based player
+        let chp = Utf8Path::new("/nowhere/tune.chp");
+        assert_eq!(player_kind(chp, MusicPlayer::Ayt), Ok(PlayerKind::Ayt));
+    }
+
+    #[test]
+    fn ym_metadata_reads_the_strings_after_the_header_and_digidrums() {
+        let ym = fs_err::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/ay_players/ym/Targhan - Hocus Pocus.ym"
+        ))
+        .unwrap();
+        let meta = crate::pipeline::ym_metadata(&ym);
+        assert_eq!(meta.title, "Hocus Pocus - Main");
+        assert_eq!(meta.author, "Targhan");
+        assert_eq!(meta.comment, "For Tom's Opus Pocus");
+        assert_eq!(
+            crate::pipeline::ym_metadata(b"YM3!whatever"),
+            crate::pipeline::SongMetadata::default()
+        );
+    }
+
+    #[test]
+    fn a_ym6_goes_down_to_a_ym3_register_by_register() {
+        let ym = fs_err::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/ay_players/ym/Targhan - Hocus Pocus.ym"
+        ))
+        .unwrap();
+        let ym3 = crate::pipeline::ym6_to_ym3(&ym).expect("a real YM6");
+        let layout = crate::pipeline::Ym6Layout::parse(&ym).unwrap();
+        let (start, frames) = (layout.data_start, layout.frames);
+        assert!(layout.interleaved);
+        assert_eq!(frames, 7060);
+        assert_eq!(&ym3[..4], b"YM3!");
+        assert_eq!(ym3.len(), 4 + 14 * frames);
+        // register 1 of frame 5, in both layouts
+        assert_eq!(ym3[4 + frames + 5], ym[start + frames + 5]);
+        assert!(crate::pipeline::ym6_to_ym3(b"YM3!short").is_none());
+    }
+
+    #[test]
+    fn tool_reported_sizes_are_found_in_the_packers_output() {
+        let out = "Summary:\n  - Decrunch buffer size: 3144 (#C48)\nTotal cache size:   1248\n";
+        assert_eq!(
+            crate::pipeline::tool_reported_size(out, "Decrunch buffer size"),
+            Some(3144)
+        );
+        assert_eq!(
+            crate::pipeline::tool_reported_size(out, "Total cache size"),
+            Some(1248)
+        );
+        assert_eq!(crate::pipeline::tool_reported_size(out, "Nothing"), None);
+    }
+
+    /// Every YM-based player on every kind of song, through the real tools
+    /// (downloaded on demand; wine on Linux) - hence `#[ignore]`d.
+    #[test]
+    #[ignore]
+    fn real_ym_players_build_a_real_dsk_from_every_kind_of_song() {
+        use cpclib_runner::delegated::InternetStaticCompiledApplication as _;
+
+        let observer = Arc::new(TestObserver);
+        let tests = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests");
+        let songs = [
+            tests.join("ay_players/ym/Targhan - Hocus Pocus.ym"),
+            tests.join("chipnsfx/WINGSOD5.CHP"),
+            At3Version::default()
+                .configuration::<()>()
+                .cache_folder()
+                .join("songs")
+                .join("ArkosTracker3")
+                .join("Ok3anos - Cpc Dream.aks")
+        ];
+        for song in &songs {
+            for player in [MusicPlayer::Fap, MusicPlayer::Ayt, MusicPlayer::Miny] {
+                let options = MusicOptions {
+                    player,
+                    ..MusicOptions::default()
+                };
+                let dsk = build_music_dsk(song, "YMTEST", &options, &observer)
+                    .unwrap_or_else(|e| panic!("{player:?} on {song}: {e}"));
+                assert!(dsk.is_file(), "{player:?} on {song}");
+            }
+        }
     }
 
     #[test]
@@ -727,7 +1088,7 @@ mod tests {
             Utf8Path::new("/no/such/song.aks"),
             "PROG",
             "ace",
-            72,
+            &MusicOptions::default(),
             &observer
         );
         assert!(!outcome.success);
@@ -737,8 +1098,13 @@ mod tests {
     #[test]
     fn missing_song_file_is_rejected_before_touching_disc_dsk_path() {
         let observer = Arc::new(TestObserver);
-        let err =
-            build_music_dsk(Utf8Path::new("/no/such/song.aks"), "PROG", 72, &observer).unwrap_err();
+        let err = build_music_dsk(
+            Utf8Path::new("/no/such/song.aks"),
+            "PROG",
+            &MusicOptions::default(),
+            &observer
+        )
+        .unwrap_err();
         assert!(err.contains("does not exist"));
     }
 
@@ -755,7 +1121,7 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/tests/at3/Targhan - Crtc - End part.aks"
         ));
-        let dsk_path = build_music_dsk(song, "TARGHAN", 72, &observer)
+        let dsk_path = build_music_dsk(song, "TARGHAN", &MusicOptions::default(), &observer)
             .expect("the real conversion+assemble+DSK pipeline should succeed");
         use cpclib_disc::disc::Disc;
         let disc = cpclib_disc::open_disc(&dsk_path, true).unwrap();
@@ -792,7 +1158,7 @@ mod tests {
             "fixture should be SID-tagged"
         );
 
-        let dsk_path = build_music_dsk(&song, "SIDTEST", 72, &observer)
+        let dsk_path = build_music_dsk(&song, "SIDTEST", &MusicOptions::default(), &observer)
             .expect("the real SID conversion+assemble+DSK pipeline should succeed");
         let disc = cpclib_disc::open_disc(&dsk_path, true).unwrap();
         let fname = cpclib_disc::amsdos::AmsdosFileName::try_from("SIDTEST.BIN").unwrap();

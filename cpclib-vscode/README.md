@@ -206,22 +206,44 @@ real CPC program, without writing any Z80:
   named by `[music] run_emulator` in `cpclib-lsp.toml` (`ace` by default).
 - **Build DSK with music** builds the same player into a `.dsk` saved next to
   the song, without launching anything.
+- **...with a specific player** (`Play music in emulator with a specific
+  player...`, `Build DSK with music using a specific player...`) first asks
+  which player to use.
 
 Supported songs:
 
-| Extension | Tracker | Player used |
-|-----------|---------|-------------|
+| Extension | Tracker | Default player |
+|-----------|---------|----------------|
 | `.aks`, `.sks`, `.128`, `.vt2`, `.wyz` | [Arkos Tracker](https://www.julien-nevo.com/arkostracker/) (the other formats are imported by Arkos Tracker 3) | AKG, or a dedicated cycle-exact player for songs using Arkos Tracker's SID feature (detected automatically) |
 | `.chp` | [CHIPNSFX](http://cngsoft.no-ip.org/chipnsfx.htm) (CNGSOFT) | CHIPNSFX's own player |
+| `.ym` | AY/YM register dumps (YM3, YM5, YM6) | FAP |
 
-Whatever the format, the generated program looks the same: a mode 2 screen with
+Players (the `[music] player` setting in `cpclib-lsp.toml` - `auto` by default -
+or the "specific player" commands):
+
+| Player | Plays | Notes |
+|--------|-------|-------|
+| `akg` | Arkos Tracker songs | Arkos Tracker 3's AKG player |
+| `chipnsfx` | `.chp` songs | CHIPNSFX's own player |
+| `fap` | **any song** | [Fast AY Player](https://github.com/grim1z/FastAyPlayer) - constant, very low CPU use |
+| `ayt` | **any song** | [AYT](https://github.com/Logon-System/AYT-Format) - the player is built at run time for the song |
+| `miny` | **any song** | [MinYMiser](https://github.com/tattlemuss/minymiser) (Z80 port) - small data |
+
+`fap`, `ayt` and `miny` are YM-based players: a song that is not a YM already is
+converted to one first (Arkos Tracker's `SongToYm`, or `chipnsfx -y` for a
+`.chp`), then packed by the player's own tool. This is what makes it possible to
+compare how the same song sounds, weighs and costs with each player.
+
+Whatever the player, the generated program looks the same: a mode 2 screen with
 the song's title, author/composer and comment (the fields of Arkos Tracker's
-song properties, or the text header of a `.chp` file), then a `Player:` line
-telling which player is playing it. The text is drawn without any firmware call
-(the players kill the system), with the font read from the CPC's ROM.
+song properties, the text header of a `.chp` file, or the strings of a YM5/YM6
+file), then a `Player:` line telling which player is playing it. The text is
+drawn without any firmware call (the players kill the system), with the font
+read from the CPC's ROM.
 
-The conversion tools (Arkos Tracker 3, CHIPNSFX) are downloaded on first use. On
-Linux/macOS CHIPNSFX, a Windows program, needs `wine`.
+The conversion tools (Arkos Tracker 3, CHIPNSFX, FAP, AYT, MinYMiser) are downloaded
+on first use. Those that are Windows programs (CHIPNSFX, AYT, MinYMiser) need
+`wine` on Linux/macOS.
 
 For a SID song the extension asks for a *wait line count*: raise it if playback
 freezes. The default comes from `[music] sid_wait_line_count`. The
@@ -326,7 +348,7 @@ cpclib-lsp --update-config
 | `bndbuild.yml` | bndbuild | Build configuration (YAML) |
 | `.bas`, `.BAS` | Locomotive BASIC | Amstrad CPC BASIC programs |
 | `.CAT`, `.cat`, `.ASC`, `.asc` | CatArt | CatArt catalog BASIC files |
-| `.aks`, `.sks`, `.128`, `.vt2`, `.wyz`, `.chp` | (songs) | Explorer menu: play in emulator / build DSK |
+| `.aks`, `.sks`, `.128`, `.vt2`, `.wyz`, `.chp`, `.ym` | (songs) | Explorer menu: play in emulator / build DSK |
 
 ## Troubleshooting
 

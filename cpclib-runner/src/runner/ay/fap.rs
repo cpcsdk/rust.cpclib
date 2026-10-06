@@ -32,14 +32,14 @@ impl FAPVersion {
 
         #[cfg(target_os = "linux")]
         let (url, folder, exec) = match self {
-            FAPVersion::V1_0_2 => (DOWNLOAD_URL_V1_0_2, "fap1.0.2", "Build/FapCrunchLin"),
-            FAPVersion::V1_0_0 => (DOWNLOAD_URL_V1_0, "fap1.0.0", "Build/FapCrunchLin")
+            FAPVersion::V1_0_2 => (DOWNLOAD_URL_V1_0_2, "fap1.0.2", "FapCrunchLin"),
+            FAPVersion::V1_0_0 => (DOWNLOAD_URL_V1_0, "fap1.0.0", "FapCrunchLin")
         };
 
         #[cfg(target_os = "windows")]
         let (url, folder, exec) = match self {
-            FAPVersion::V1_0_2 => (DOWNLOAD_URL_V1_0_2, "fap1.0.2", "Build/FapCrunchWin.exe"),
-            FAPVersion::V1_0_0 => (DOWNLOAD_URL_V1_0, "fap1.0.0", "Build/FapCrunchWin.exe")
+            FAPVersion::V1_0_2 => (DOWNLOAD_URL_V1_0_2, "fap1.0.2", "FapCrunchWin.exe"),
+            FAPVersion::V1_0_0 => (DOWNLOAD_URL_V1_0, "fap1.0.0", "FapCrunchWin.exe")
         };
 
         let builder = DelegateApplicationDescription::builder()
@@ -135,8 +135,8 @@ impl FAPVersion {
                 fs_err::create_dir_all(&release_dir).map_err(|e| e.to_string())?;
 
                 let zip_content = fs_err::read(&release_zip).map_err(|e| e.to_string())?;
-                let mut archive = zip::ZipArchive::new(Cursor::new(zip_content))
-                    .map_err(|e| e.to_string())?;
+                let mut archive =
+                    zip::ZipArchive::new(Cursor::new(zip_content)).map_err(|e| e.to_string())?;
                 archive
                     .extract_unwrapped_root_dir(
                         release_dir.as_std_path(),

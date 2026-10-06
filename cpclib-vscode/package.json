@@ -248,6 +248,16 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.playMusicWithPlayer",
+        "title": "Play music in emulator with a specific player...",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.buildMusicDskWithPlayer",
+        "title": "Build DSK with music using a specific player...",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.runCslFile",
         "title": "Run CSL script in emulator",
         "category": "CPClib"
@@ -894,12 +904,22 @@
         },
         {
           "command": "cpclib.playMusic",
-          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp)$/i",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp|ym)$/i",
           "group": "cpclib"
         },
         {
           "command": "cpclib.buildMusicDsk",
-          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp)$/i",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp|ym)$/i",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.playMusicWithPlayer",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp|ym)$/i",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.buildMusicDskWithPlayer",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp|ym)$/i",
           "group": "cpclib"
         },
         {

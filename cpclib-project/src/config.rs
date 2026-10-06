@@ -444,7 +444,7 @@ impl Default for BndbuildWarningClasses {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct MusicConfig {
-    /// Arkos-Tracker-compatible (plus CHIPNSFX `chp`) source-file extensions (case-insensitive,
+    /// Arkos-Tracker-compatible (plus CHIPNSFX `chp` and AY `ym`) source-file extensions (case-insensitive,
     /// no leading dot) recognized by the file browser context menu / command
     /// palette. User-editable - add/remove entries to taste.
     ///
@@ -473,7 +473,14 @@ pub struct MusicConfig {
     /// a given song and the generated player **freezes**. 72 is Arkos
     /// Tracker's own official SID player example's default; if a SID song's
     /// generated player freezes, raise this value and rebuild.
-    pub sid_wait_line_count: u16
+    pub sid_wait_line_count: u16,
+    /// The player songs are played with: `auto` (the default - what each song
+    /// needs: AKG for an Arkos Tracker one, or its SID player if it uses that
+    /// feature, CHIPNSFX's for a `.chp`, FAP for a `.ym`), or one of `akg`,
+    /// `chipnsfx`, `fap`, `ayt`, `miny` - the last three being YM-based
+    /// players, which play any song: whatever is not a YM already is first
+    /// converted to one. See `cpclib_bndbuild::pipeline::music_run::MusicPlayer`.
+    pub player: String
 }
 
 impl Default for MusicConfig {
@@ -484,7 +491,8 @@ impl Default for MusicConfig {
                 .map(|s| s.to_string())
                 .collect(),
             run_emulator: "ace".to_string(),
-            sid_wait_line_count: 72
+            sid_wait_line_count: 72,
+            player: "auto".to_string()
         }
     }
 }
@@ -768,13 +776,13 @@ code_lens = true
 run_emulator = "amspirit"
 
 [music]
-# Arkos-Tracker-compatible (and CHIPNSFX `chp`) source-file extensions recognized by the "Play in
+# Arkos-Tracker-compatible (and CHIPNSFX `chp`, AY `ym`) source-file extensions recognized by the "Play in
 # emulator" / "Build DSK" file browser context menu and command palette
 # entries. Add/remove entries to taste - the VS Code extension's own menu
 # entries are a static regex kept manually in sync with this default, so
 # changing this alone won't add a new extension to the context menu without
 # also updating the extension.
-song_extensions = ["aks", "sks", "128", "vt2", "wyz", "chp"]
+song_extensions = ["aks", "sks", "128", "vt2", "wyz", "chp", "ym"]
 # Emulator launched by "▶ Play in emulator". Any emulator
 # cpclib_runner::emucontrol accepts is valid (the player boots from a
 # snapshot, unlike basic.run_emulator's auto-RUN disc).
@@ -785,6 +793,11 @@ run_emulator = "ace"
 # player freezes. 72 is Arkos Tracker's own official SID example's default;
 # raise it and rebuild if a SID song's generated player freezes.
 sid_wait_line_count = 72
+# The player songs are played with. "auto" picks what each song needs (AKG
+# for an Arkos Tracker one, CHIPNSFX's for a .chp, FAP for a .ym); "akg",
+# "chipnsfx", "fap", "ayt" or "miny" force one. fap/ayt/miny are YM-based and
+# play any song: what is not a YM already is converted to one first.
+player = "auto"
 "#;
 
 #[cfg(test)]

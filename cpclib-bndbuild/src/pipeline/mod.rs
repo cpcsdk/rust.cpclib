@@ -272,6 +272,270 @@ pub fn convert_chp_to_z80<E: BndBuilderObserver + 'static>(
     task.execute(observer)
 }
 
+/// Whether `song_path` is an AY/YM song (`.ym`) - playable as is by the
+/// YM-based players ([`music_run`](self::music_run)'s FAP/AYT/MinYMiser), which
+/// every other kind of song can also be converted to.
+pub fn song_is_ym(song_path: &Utf8Path) -> bool {
+    song_path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("ym"))
+}
+
+/// What `song_converter` + `chipnsfx` need to produce YM files, the common
+/// ground of the YM-based players - see [`convert_to_ym`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum YmVersion {
+    /// Raw, uncompressed register dump, no metadata: what MinYMiser reads.
+    Ym3,
+    /// YM5/YM6, with title/author/comment: what FAP and AYT read.
+    Ym6
+}
+
+/// The version of the YM file `path`, from its magic number; `None` when it
+/// is not one (e.g. an old LHA-compressed one).
+pub fn ym_version(path: &Utf8Path) -> Option<YmVersion> {
+    use std::io::Read;
+
+    let mut magic = [0u8; 4];
+    fs_err::File::open(path).ok()?.read_exact(&mut magic).ok()?;
+    match &magic {
+        b"YM3!" | b"YM3b" => Some(YmVersion::Ym3),
+        b"YM5!" | b"YM6!" => Some(YmVersion::Ym6),
+        _ => None
+    }
+}
+
+/// Converts any song `song_path` (Arkos Tracker's AKS/SKS/128/VT2/WYZ, CHIPNSFX's CHP, or
+/// a YM of the other version) to a YM of `version` at `output_path`.
+/// A YM already of that version is not touched: it is up to the caller to
+/// use `song_path` directly then (see [`ym_for_player`]).
+pub fn convert_to_ym<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    output_path: &Utf8Path,
+    version: YmVersion,
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let ym_from = |input: &Utf8Path, output: &Utf8Path| -> Result<(), String> {
+        let mut args = Vec::new();
+        if version == YmVersion::Ym3 {
+            args.push("--ym3");
+        }
+        args.push(input.as_str());
+        args.push(output.as_str());
+        let args = shlex::try_join(args)
+            .map_err(|e| format!("Could not build SongToYm arguments: {e}"))?;
+        let task: Task = InnerTask::with_songconverter(
+            crate::runners::tracker::SongConverter::new_song_to_ym_default(),
+            StandardTaskArguments::new(args)
+        )
+        .into();
+        task.execute(observer)
+    };
+
+    if song_is_chp(song_path) {
+        // CHIPNSFX only knows how to write YM3
+        let ym3 = if version == YmVersion::Ym3 {
+            output_path.to_owned()
+        }
+        else {
+            output_path.with_extension("ym3")
+        };
+        let args = shlex::try_join([song_path.as_str(), "-y", ym3.as_str()])
+            .map_err(|e| format!("Could not build chipnsfx arguments: {e}"))?;
+        let task: Task = InnerTask::with_tracker(
+            crate::runners::tracker::Tracker::new_chipnsfx_default(),
+            StandardTaskArguments::new(args)
+        )
+        .into();
+        task.execute(observer)?;
+        if version == YmVersion::Ym6 {
+            ym_from(&ym3, output_path)?;
+        }
+        Ok(())
+    }
+    else {
+        ym_from(song_path, output_path)
+    }
+}
+
+/// The YM, of the `version` a player needs, to feed it for `song_path`: the
+/// song itself when it already is one, else the result of [`convert_to_ym`],
+/// written at `converted_path`.
+pub fn ym_for_player<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    converted_path: &Utf8Path,
+    version: YmVersion,
+    observer: &Arc<E>
+) -> Result<Utf8PathBuf, String> {
+    if song_is_ym(song_path) {
+        match (ym_version(song_path), version) {
+            (Some(found), wanted) if found == wanted => return Ok(song_path.to_owned()),
+            // `SongToYm` hands a YM back as a YM6 whatever it is asked, so
+            // the way down to YM3 is done here
+            (Some(YmVersion::Ym6), YmVersion::Ym3) => {
+                let ym3 = ym6_to_ym3(
+                    &fs_err::read(song_path)
+                        .map_err(|e| format!("Could not read {song_path}: {e}"))?
+                )
+                .ok_or_else(|| format!("{song_path} is not a YM file this can convert to YM3"))?;
+                fs_err::write(converted_path, ym3)
+                    .map_err(|e| format!("Could not write {converted_path}: {e}"))?;
+                return Ok(converted_path.to_owned());
+            },
+            _ => {}
+        }
+    }
+    convert_to_ym(song_path, converted_path, version, observer)
+        .map_err(|e| format!("Could not convert {song_path} to YM: {e}"))?;
+    Ok(converted_path.to_owned())
+}
+
+/// Packs the YM `ym_path` with `cruncher` (FAP, AYT or MinYMiser) into
+/// `output_path`, and returns what the tool printed - where the players'
+/// buffer sizes are to be found.
+pub fn pack_ym<E: BndBuilderObserver + 'static>(
+    cruncher: crate::runners::ay::YmCruncher,
+    ym_path: &Utf8Path,
+    output_path: &Utf8Path,
+    observer: &Arc<E>
+) -> Result<String, String> {
+    use crate::runners::ay::YmCruncher;
+
+    let args = match cruncher {
+        #[cfg(feature = "fap")]
+        YmCruncher::Fap => shlex::try_join([ym_path.as_str(), output_path.as_str()]),
+        YmCruncher::Ayt => {
+            shlex::try_join([
+                "--verbose",
+                "--target",
+                "CPC",
+                ym_path.as_str(),
+                "-o",
+                output_path.as_str()
+            ])
+        },
+        YmCruncher::Miny => shlex::try_join(["quick", ym_path.as_str(), output_path.as_str()])
+    }
+    .map_err(|e| format!("Could not build the packer arguments: {e}"))?;
+
+    let captured = Arc::new(cpclib_common::event::CapturingObserver::new());
+    let task: Task = InnerTask::with_ym_cruncher(cruncher, StandardTaskArguments::new(args)).into();
+    let result = task.execute(&captured);
+
+    // the tools are chatty: forward what they said, whatever happened
+    let stdout = captured.stdout_joined();
+    observer.emit_stdout(&stdout);
+    observer.emit_stderr(&captured.stderr_joined());
+    result?;
+    Ok(stdout)
+}
+
+/// The number following `label` on the line of `output` that has it, e.g.
+/// 3144 for `Decrunch buffer size: 3144 (#C48)`.
+pub fn tool_reported_size(output: &str, label: &str) -> Option<usize> {
+    output
+        .lines()
+        .find(|l| l.contains(label))
+        .and_then(|l| l.split_once(label))
+        .map(|(_, rest)| rest.trim_start_matches([':', ' ', '\t']))
+        .and_then(|rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse().ok()
+        })
+}
+
+/// Where things are in a YM5/YM6 file.
+struct Ym6Layout {
+    /// The title, author and comment: three NUL-terminated strings, after the
+    /// header and the digidrums.
+    strings_start: usize,
+    /// The frames, right after the strings.
+    data_start: usize,
+    frames: usize,
+    /// All the frames of a register, then the next register (YM6's usual
+    /// layout) - or one frame after the other.
+    interleaved: bool
+}
+
+impl Ym6Layout {
+    /// `None` if `bytes` is not a (complete) YM5/YM6 file's header.
+    fn parse(bytes: &[u8]) -> Option<Self> {
+        let be16 = |at: usize| {
+            bytes
+                .get(at..at + 2)
+                .map(|b| usize::from(u16::from_be_bytes([b[0], b[1]])))
+        };
+        let be32 = |at: usize| {
+            bytes
+                .get(at..at + 4)
+                .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize)
+        };
+        if !(bytes.starts_with(b"YM5!") || bytes.starts_with(b"YM6!")) {
+            return None;
+        }
+        let frames = be32(12)?;
+        let interleaved = be32(16)? & 1 != 0;
+        let mut at = 34 + be16(32)?;
+        for _ in 0..be16(20)? {
+            at += 4 + be32(at)?;
+        }
+        let strings_start = at;
+        for _ in 0..3 {
+            at += bytes.get(at..)?.iter().position(|&b| b == 0)? + 1;
+        }
+        Some(Self {
+            strings_start,
+            data_start: at,
+            frames,
+            interleaved
+        })
+    }
+}
+
+/// A YM5/YM6 file as a YM3: its 14 first registers per frame, interleaved -
+/// what MinYMiser reads. The effects and digidrums YM5/6 may add are dropped.
+/// `None` if `bytes` is not a (complete) YM5/YM6 file.
+fn ym6_to_ym3(bytes: &[u8]) -> Option<Vec<u8>> {
+    const REGISTERS: usize = 14;
+    let layout = Ym6Layout::parse(bytes)?;
+    let frames = layout.frames;
+    // YM5/6 store 16 registers per frame
+    let data =
+        bytes.get(layout.data_start..layout.data_start.checked_add(frames.checked_mul(16)?)?)?;
+
+    let mut ym3 = Vec::with_capacity(4 + frames * REGISTERS);
+    ym3.extend_from_slice(b"YM3!");
+    for register in 0..REGISTERS {
+        ym3.extend((0..frames).map(|frame| {
+            if layout.interleaved {
+                data[register * frames + frame]
+            }
+            else {
+                data[frame * 16 + register]
+            }
+        }));
+    }
+    Some(ym3)
+}
+
+/// The title, author and comment of a YM5/YM6 file. No metadata for YM3
+/// (a bare register dump) or for anything unrecognised.
+fn ym_metadata(bytes: &[u8]) -> SongMetadata {
+    let Some(layout) = Ym6Layout::parse(bytes)
+    else {
+        return SongMetadata::default();
+    };
+    let mut strings = bytes[layout.strings_start..layout.data_start]
+        .split(|&b| b == 0)
+        .map(|s| s.iter().map(|&b| char::from(b)).collect::<String>());
+    SongMetadata {
+        title: strings.next().unwrap_or_default(),
+        author: strings.next().unwrap_or_default(),
+        comment: strings.next().unwrap_or_default(),
+        ..SongMetadata::default()
+    }
+}
+
 /// Detects whether `song_path` (an Arkos Tracker `.aks` project - a ZIP
 /// archive with a single inner XML entry) uses AT3's experimental
 /// single-channel CPC "SID" feature, which the AKG/AKM players cannot play at
@@ -288,8 +552,8 @@ pub fn convert_chp_to_z80<E: BndBuilderObserver + 'static>(
 pub fn song_uses_sid(song_path: &Utf8Path) -> Result<bool, String> {
     use std::io::Read;
 
-    // CHIPNSFX songs are plain text, and have no such feature.
-    if song_is_chp(song_path) {
+    // CHIPNSFX and YM songs are not Arkos Tracker projects, and have no such feature.
+    if song_is_chp(song_path) || song_is_ym(song_path) {
         return Ok(false);
     }
 
@@ -390,6 +654,11 @@ pub fn song_metadata(song_path: &Utf8Path) -> SongMetadata {
     if song_is_chp(song_path) {
         return fs_err::read(song_path)
             .map(|bytes| chp_metadata(&bytes))
+            .unwrap_or(meta);
+    }
+    if song_is_ym(song_path) {
+        return fs_err::read(song_path)
+            .map(|bytes| ym_metadata(&bytes))
             .unwrap_or(meta);
     }
     let Ok(file) = fs_err::File::open(song_path)

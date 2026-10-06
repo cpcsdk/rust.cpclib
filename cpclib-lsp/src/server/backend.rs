@@ -1010,6 +1010,23 @@ impl CpcLspBackend {
 /// exactly one whenever a new language is added here, same as it just did
 /// for CSL.
 #[allow(clippy::too_many_arguments)]
+/// The options of a music command: the config's, overridden by what the
+/// client sent (a SID wait-line-count it prompted for, a player the user
+/// picked).
+fn music_options(
+    config: &cpclib_project::config::MusicConfig,
+    sid_wait_line_count: Option<u16>,
+    player: Option<&str>
+) -> std::result::Result<cpclib_bndbuild::pipeline::music_run::MusicOptions, String> {
+    Ok(cpclib_bndbuild::pipeline::music_run::MusicOptions {
+        sid_wait_line_count: sid_wait_line_count.unwrap_or(config.sid_wait_line_count),
+        player: player
+            .unwrap_or(&config.player)
+            .parse()
+            .map_err(|e| format!("[music] player: {e}"))?
+    })
+}
+
 fn compute_diagnostics(
     asm_analyzer: &AssemblyAnalyzer,
     build_analyzer: &BuildFileAnalyzer,
@@ -3443,7 +3460,9 @@ impl LanguageServer for CpcLspBackend {
 
             return Ok(Some(serde_json::json!({
                 "isSid": is_sid,
-                "defaultWaitLineCount": default_wait_line_count
+                "defaultWaitLineCount": default_wait_line_count,
+                "players": cpclib_bndbuild::pipeline::music_run::MusicPlayer::ALL
+                    .map(cpclib_bndbuild::pipeline::music_run::MusicPlayer::name)
             })));
         }
 
@@ -3467,6 +3486,9 @@ impl LanguageServer for CpcLspBackend {
             // `isSid`) or when this is invoked some other way.
             let sid_wait_line_count_override =
                 args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
+            // Third argument: the player the user picked client-side
+            // (`MusicPlayer::name`) - overrides `[music] player`.
+            let player_override = args.next().and_then(|v| v.as_str().map(str::to_string));
             let song_path = camino::Utf8PathBuf::from(fname);
             let name_hint = song_path
                 .file_stem()
@@ -3502,8 +3524,17 @@ impl LanguageServer for CpcLspBackend {
             )
             .config
             .music;
-            let sid_wait_line_count =
-                sid_wait_line_count_override.unwrap_or(music_config.sid_wait_line_count);
+            let options = match music_options(
+                &music_config,
+                sid_wait_line_count_override,
+                player_override.as_deref()
+            ) {
+                Ok(o) => o,
+                Err(e) => {
+                    self.client.show_message(MessageType::ERROR, &e).await;
+                    return Ok(None);
+                }
+            };
 
             let outcome = tokio::task::spawn_blocking(move || {
                 let observer = std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
@@ -3511,7 +3542,7 @@ impl LanguageServer for CpcLspBackend {
                     &song_path,
                     &name_hint,
                     &music_config.run_emulator,
-                    sid_wait_line_count,
+                    &options,
                     &observer
                 )
             })
@@ -3555,6 +3586,9 @@ impl LanguageServer for CpcLspBackend {
             // See `cpclib.musicPlay`'s identical second argument.
             let sid_wait_line_count_override =
                 args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
+            // Third argument: the player the user picked client-side
+            // (`MusicPlayer::name`) - overrides `[music] player`.
+            let player_override = args.next().and_then(|v| v.as_str().map(str::to_string));
             let song_path = camino::Utf8PathBuf::from(fname);
             let name_hint = song_path
                 .file_stem()
@@ -3586,14 +3620,22 @@ impl LanguageServer for CpcLspBackend {
                 })
             };
 
-            let sid_wait_line_count = sid_wait_line_count_override.unwrap_or_else(|| {
-                crate::common::config::load_config(
-                    self.workspace_roots().first().map(|p| p.as_path())
-                )
-                .config
-                .music
-                .sid_wait_line_count
-            });
+            let music_config = crate::common::config::load_config(
+                self.workspace_roots().first().map(|p| p.as_path())
+            )
+            .config
+            .music;
+            let options = match music_options(
+                &music_config,
+                sid_wait_line_count_override,
+                player_override.as_deref()
+            ) {
+                Ok(o) => o,
+                Err(e) => {
+                    self.client.show_message(MessageType::ERROR, &e).await;
+                    return Ok(None);
+                }
+            };
 
             let result = {
                 let dest_path = dest_path.clone();
@@ -3603,7 +3645,7 @@ impl LanguageServer for CpcLspBackend {
                     let dsk_path = cpclib_bndbuild::pipeline::music_run::build_music_dsk(
                         &song_path,
                         &name_hint,
-                        sid_wait_line_count,
+                        &options,
                         &observer
                     )?;
                     fs_err::copy(&dsk_path, &dest_path)
