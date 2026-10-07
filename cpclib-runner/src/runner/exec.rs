@@ -362,7 +362,11 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         // below defaults to canonical/cooked mode and gives no clean way to
         // signal EOF on stdin just by closing the write side, and it also
         // merges stdout/stderr into one stream, defeating `>`/`|` outright.
-        if stdin.is_some() || stdout.is_some() {
+        //
+        // Windows always uses this path: ConPTY can deadlock (child.wait() /
+        // ClosePseudoConsole never return, the reader thread never sees EOF),
+        // which hung CI for 6 hours.
+        if cfg!(windows) || stdin.is_some() || stdout.is_some() {
             use std::io::BufReader;
             use std::process::{Child, Stdio};
 
