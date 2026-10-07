@@ -21,8 +21,10 @@ MyStack equ AYT_Player
     ; Load address == entry point (see music_akg_harness.asm).
     jp Start
 
+PlayerStart
 AYT_Builder
     read "{{AYT_BUILDER_FNAME}}"
+PlayerEnd
 
     run $
 Start

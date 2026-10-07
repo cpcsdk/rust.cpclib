@@ -77,7 +77,9 @@ WaitVsync
 
 {{INFO_PRINT_CODE}}
 
+PlayerStart
     include "{{PLAYER_SOURCE_FNAME}}"
+PlayerEnd
 
     ; Song info text, then the (unsaved) glyph buffer right after the binary.
 InfoText

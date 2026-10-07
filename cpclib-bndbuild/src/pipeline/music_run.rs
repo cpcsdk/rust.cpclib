@@ -978,6 +978,10 @@ pub struct PlayerSizes {
     /// The song, converted to the player's own format. `None` for CHIPNSFX,
     /// whose song is Z80 source: the program size is the figure to look at.
     pub song_bytes: Option<u64>,
+    /// The player's code alone (from the harness's `PlayerStart`/`PlayerEnd`
+    /// labels, in the assembler's symbol table). For AYT, that is the builder:
+    /// the player it writes at run time, 250 to 340 bytes, comes on top.
+    pub player_bytes: Option<u64>,
     /// The whole player program: song, player, and the song-info screen.
     pub program_bytes: u64
 }
@@ -999,24 +1003,63 @@ pub fn compare_music_players<E: BndBuilderObserver + 'static>(
         return Err(format!("{song_path} does not exist"));
     }
 
+    let symbols_dir = camino_tempfile::tempdir()
+        .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
+
     Ok(MusicPlayer::ALL
         .into_iter()
         .filter(|&p| p != MusicPlayer::Auto)
         .filter_map(|player| {
             let kind = player_kind(song_path, player).ok()?;
-            let outcome = convert_and_assemble_basm_kind(kind, song_path, name_hint, &[], observer)
-                .and_then(|build| {
-                    let program_bytes = fs_err::metadata(&build.bin_path)
-                        .map_err(|e| format!("Could not measure the program: {e}"))?
-                        .len();
-                    Ok(PlayerSizes {
-                        song_bytes: build.song_bytes,
-                        program_bytes
-                    })
-                });
+            let symbols_path = symbols_dir.path().join(format!("{}.sym", player.name()));
+            let asm_args = ["--sym".to_string(), symbols_path.to_string()];
+            let outcome =
+                convert_and_assemble_basm_kind(kind, song_path, name_hint, &asm_args, observer)
+                    .and_then(|build| {
+                        let program_bytes = fs_err::metadata(&build.bin_path)
+                            .map_err(|e| format!("Could not measure the program: {e}"))?
+                            .len();
+                        let player_bytes = fs_err::read_to_string(&symbols_path)
+                            .ok()
+                            .and_then(|symbols| player_code_size(&symbols));
+                        Ok(PlayerSizes {
+                            song_bytes: build.song_bytes,
+                            player_bytes,
+                            program_bytes
+                        })
+                    });
             Some(PlayerComparison { player, outcome })
         })
         .collect())
+}
+
+/// The value of the symbol `name` in basm's symbol table dump (`Name equ
+/// #1A2B` lines).
+fn symbol_value(symbols: &str, name: &str) -> Option<u64> {
+    symbols.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        // (a case-insensitive assembly - AYT's - writes them in lower case)
+        if !words.next()?.eq_ignore_ascii_case(name) {
+            return None;
+        }
+        let value = words
+            .skip_while(|w| !w.eq_ignore_ascii_case("equ"))
+            .nth(1)?;
+        match value
+            .strip_prefix('#')
+            .or_else(|| value.strip_prefix('$'))
+            .or_else(|| value.strip_prefix("0x"))
+        {
+            Some(hex) => u64::from_str_radix(hex, 16).ok(),
+            None => value.parse().ok()
+        }
+    })
+}
+
+/// How many bytes the harness's `PlayerStart`..`PlayerEnd` span, from the
+/// assembler's symbol table.
+fn player_code_size(symbols: &str) -> Option<u64> {
+    symbol_value(symbols, "PlayerEnd")?.checked_sub(symbol_value(symbols, "PlayerStart")?)
 }
 
 /// `comparisons` as a plain-text table, smallest program first (failures
@@ -1025,20 +1068,19 @@ pub fn format_player_comparison(comparisons: &[PlayerComparison]) -> String {
     let mut rows: Vec<&PlayerComparison> = comparisons.iter().collect();
     rows.sort_by_key(|c| c.outcome.as_ref().map_or(u64::MAX, |s| s.program_bytes));
 
+    let bytes = |b: Option<u64>| b.map_or_else(|| "-".to_string(), |b| b.to_string());
     let mut table = format!(
-        "{:<10} {:>12} {:>14}\n",
-        "player", "song (bytes)", "program (bytes)"
+        "{:<10} {:>7} {:>12} {:>9}\n",
+        "player", "song", "player code", "program"
     );
     for row in rows {
         match &row.outcome {
             Ok(sizes) => {
-                let song = sizes
-                    .song_bytes
-                    .map_or_else(|| "-".to_string(), |b| b.to_string());
                 table.push_str(&format!(
-                    "{:<10} {:>12} {:>14}\n",
+                    "{:<10} {:>7} {:>12} {:>9}\n",
                     row.player.name(),
-                    song,
+                    bytes(sizes.song_bytes),
+                    bytes(sizes.player_bytes),
                     sizes.program_bytes
                 ));
             },
@@ -1048,6 +1090,9 @@ pub fn format_player_comparison(comparisons: &[PlayerComparison]) -> String {
             }
         }
     }
+    table.push_str(
+        "\nIn bytes. \"program\" is song + player + the song-info screen. AYT's player code is\nits builder: the player it writes at run time (250 to 340 bytes) comes on top.\n"
+    );
     table
 }
 
@@ -1361,12 +1406,23 @@ mod tests {
     }
 
     #[test]
+    fn the_player_code_size_comes_from_the_symbol_table() {
+        let symbols =
+            "FontBuf equ #4194\nPlayerEnd equ #3A00\nStart equ #35C1\nPlayerStart equ #3000\n";
+        assert_eq!(symbol_value(symbols, "Start"), Some(0x35C1));
+        assert_eq!(symbol_value(symbols, "Nope"), None);
+        assert_eq!(player_code_size(symbols), Some(0xA00));
+        assert_eq!(player_code_size("PlayerStart equ 10\n"), None);
+    }
+
+    #[test]
     fn the_comparison_table_lists_the_smallest_first_and_failures_last() {
         let ok = |player, song, program| {
             PlayerComparison {
                 player,
                 outcome: Ok(PlayerSizes {
                     song_bytes: song,
+                    player_bytes: Some(program / 2),
                     program_bytes: program
                 })
             }
@@ -1382,6 +1438,7 @@ mod tests {
         let names: Vec<&str> = table
             .lines()
             .skip(1)
+            .take(3)
             .map(|l| l.split_whitespace().next().unwrap())
             .collect();
         assert_eq!(names, ["chipnsfx", "akg", "miny"]);
@@ -1412,6 +1469,13 @@ mod tests {
                 .as_ref()
                 .unwrap_or_else(|e| panic!("{:?}: {e}", c.player));
             assert!(sizes.program_bytes > sizes.song_bytes.unwrap());
+            assert!(
+                sizes
+                    .player_bytes
+                    .is_some_and(|p| p > 100 && p < sizes.program_bytes),
+                "{:?}: {sizes:?}",
+                c.player
+            );
         }
         println!("{}", format_player_comparison(&comparisons));
     }

@@ -28,7 +28,9 @@ chip_song_b equ song_b
 chip_song_c equ song_c
 
 chipnsfx
+PlayerStart
     include "{{PLAYER_SOURCE_FNAME}}"
+PlayerEnd
 
     run $
 Start

@@ -51,33 +51,34 @@
 ;; C Unix/Windows AYT converter  : Siko (Logon System) (Stephane Sikora @ https://www.sikorama.fr)
 ;; CPC AYT Z80A player/Builder   : Longshot (Logon System) (Serge Querne @ logon.system@free.fr)
 ;;
+;; 07.11.2025 : Bug fix on r13 validation 
+;;
 ;;============================================================================================================================================
 ;; Performances
 ;; ------------
 ;; Option PlayerAccessByJP equ 0	; call player
-;;     10 registers  : 369 nops (5.76 raster lines) / Player size : 252 bytes (*)
-;;     11 registers  : 400 nops (6.25 raster lines) / Player size : 268 bytes (*)
-;;     12 registers  : 431 nops (6.73 raster lines) / Player size : 286 bytes (*)
-;;     13 registers  : 461 nops (7.20 raster lines) / Player size : 302 bytes (*)
-;;     14 registers  : 490 nops (7.65 raster lines) / Player size : 317 bytes
-;;     Size of Ayt_Builder : 480 bytes
-;; (*) 56 last bytes of player are free again after 1st call of the player.
+;;     10 registers  : 371 nops (5.76 raster lines) / Player size : 274 bytes (*)
+;;     11 registers  : 402 nops (6.25 raster lines) / Player size : 291 bytes (*)
+;;     12 registers  : 433 nops (6.73 raster lines) / Player size : 308 bytes (*)
+;;     13 registers  : 463 nops (7.20 raster lines) / Player size : 325 bytes (*)
+;;     14 registers  : 492 nops (7.65 raster lines) / Player size : 342 bytes (*)
+;;     Size of Ayt_Builder : 490 bytes
 ;;
 ;; Option PlayerAccessByJP equ 1	; jp player
-;;     10 registers  : 358 nops (5sav.59 raster lines) / Player size : 247 bytes (*)
-;;     11 registers  : 389 nops (6.07 raster lines) / Player size : 264 bytes (*)
-;;     12 registers  : 420 nops (6.56 raster lines) / Player size : 281 bytes (*)
-;;     13 registers  : 450 nops (7.03 raster lines) / Player size : 297 bytes (*)
-;;     14 registers  : 479 nops (7.48 raster lines) / Player size : 312 bytes
-;;     Size of Ayt_Builder : 466 bytes
+;;     10 registers  : 360 nops (5.59 raster lines) / Player size : 269 bytes (*)
+;;     11 registers  : 391 nops (6.07 raster lines) / Player size : 286 bytes (*)
+;;     12 registers  : 422 nops (6.56 raster lines) / Player size : 303 bytes (*)
+;;     13 registers  : 452 nops (7.03 raster lines) / Player size : 320 bytes (*)
+;;     14 registers  : 481 nops (7.48 raster lines) / Player size : 337 bytes (*)
+;;     Size of Ayt_Builder : 476 bytes
 ;;
-;; (*)With less than 13 registers, performance could vary by a few nops & bytes depending on the position of the constant registers.
+;; (*) with less than 13 registers, performance could vary by a few nops & bytes depending on the position of the constant registers.
+;; (*) 57 last bytes of player are free again after 1st call of the player.
 ;;--------------------------------------------------------------------------
-;; Init AY Reg routine(only when register number < 14)
+;; Init AY Reg routine
 ;;----------------------------------------------------
 ;; Size of routine : 57 bytes
 ;; The AY register initialization routine is created if constant registers require prior initialization. 
-;; Note that if the initialization routine is not necessary, it will contain a single ret.
 ;;--------------------------------------------------------------------------
 ;; Notes :
 ;; Ayt Builder can be removed once music player built & music data initialized.
@@ -126,8 +127,6 @@
 ;;          001 25 hz
 ;;          010 60 hz
 ;;          011 30 hz
-;;          100 100 hz
-;;          101 200 hz
 ;;          111 UNKNOWN
 ;;
 ;; Start of Sequences of ptr on Pattern by Reg  
@@ -174,7 +173,7 @@
 ;;
 ;;
 ifndef PlayerAccessByJP
-PlayerAccessByJP	equ 1		; If 1, requires you to take into account that SP has been wildly modified
+PlayerAccessByJP	equ 0		; If 1, requires you to take into account that SP has been wildly modified
 endif
 ;;
 ;;----------------------------------------------------------------------------------------------------------------------------------------------
@@ -301,9 +300,9 @@ Ayt_PtrFix_b1
 		;;-------------------------------------------------------------------------------------------------------------------------------
 		exx 
 	if PlayerAccessByJP
-			ld hl,21+56			; part of constant time player jp mode
+			ld hl,21+58			; part of constant time player jp mode
 	else
-			ld hl,29+59			; part of constant time player call mode
+			ld hl,29+61			; part of constant time player call mode
 	endif
 		ld bc,31			; cpu in nop for send ay with inc c
 		exx
@@ -328,7 +327,7 @@ Ayt_ActiveReg_Found
 		;----------------------------------------------------------------
 		;
 		push hl				; Save active reg param
-		ld hl,Ayt_PLayer_B1_Start
+		ld hl,Ayt_Player_B1_Start
 		ld bc,Ayt_Player_B1_End-Ayt_Player_B1_Start
 		ldir
 		pop hl	
@@ -516,75 +515,81 @@ Ayt_Player_B3_Start
 		pop hl			; Get Pattern Ptr for r13
 		add hl,de		; + offset in Pattern
 		bit 7,(hl)		; is it a valid reg ?
-					; 47 nop left
-		jr z,Ayt_SendAY_r13	; 3/2/2/2 
-		bit 6,(hl)		; 0/3/3/3 is it the end of music
-		jr nz,Ayt_NotLastSeq	; 0/3/2/2
-Ayt_MusicCnt equ $+1
-		ld a,0			; 0/0/2/2 loop counter 
-		dec a			; 0/0/1/1
-		jr z,Ayt_MusicEnd	; 0/0/3/2 loop finished ?
-Ayt_MusicCntPtr equ $+1
-		ld (0),a		; 0/0/0/4 no, loop counter upd
-Ayt_LoopSeq  equ $+1
-		ld sp,0			; 0/0/0/3 Ptr on sequence loop
-		pop hl
-		push hl
-		inc hl
-		dec hl			; 11 to wait
-		jr Ayt_Player_NewSeq	; 0/0/0/3 >> 22+14=36 to 47
-Ayt_MusicEnd				; Player on mute
-					; 13
-		ex (sp),hl		; 28 left
-		ex (sp),hl
-		ex (sp),hl
-		ex (sp),hl
-		inc hl
-		dec hl	
-		jr Ayt_PlayerExit	;  6 >> 19 to 47
-		;------------------------
-Ayt_NotLastSeq				;   8
-		nop			; 
-		ex (sp),hl		; 0/6/0
-		ex (sp),hl		; 0/6/0 
-		jr Ayt_Player_r13end	; 0/3/0 >> 24
-Ayt_SendAY_r13				;(3)
-		inc c			; 1 
-		out (c),c		; 4  ; Port A, select No Reg AY
-	        ld b,a			; 1  ; Port C (F6)
-		db #ed,#71		; 4  ; out (c),#0 / Valid
-	        dec b			; 1  ; F5
-	        outi        		; 5  ; On Port A (F4) send (hl), hl++
-	        exx        		; 1
-	        out (c),c    		; 4 >>24 ; Port C, mode data
+					; 46 nop left
+		jr nz,Ayt_IsMusicEnd	; 02/02/03/03/03/03 
+Ayt_SendAY_r13				;
+		inc c			; 01/01/00/00/00/00 
+		out (c),c		; 04/04/00/00/00/00  ; Port A, select No Reg AY
+	        ld b,a			; 01/01/00/00/00/00  ; Port C (F6)
+		db #ed,#71		; 04/04/00/00/00/00  ; out (c),#0 / Valid
+	        dec b			; 01/01/00/00/00/00  ; F5
+	        outi        		; 05/05/00/00/00/00  ; On Port A (F4) send (hl), hl++
+	        exx        		; 01/01/00/00/00/00
+	        out (c),c    		; 04/04/00/00/00/00  ; Port C, mode data
+		out (#ff),a		; 03/03/00/00/00/00  ; Port C, mode IdxReg+Valid
 Ayt_Player_r13end
 					;------------------
 Ayt_PatCountPtr1 equ $+1
-		ld a,(0)		; 4 Get Pattern offset
-		inc a			; 1 Offset +1
+		ld a,(0)		; 04/04/04/00/00/04 Get Pattern offset
+		inc a			; 01/01/01/00/00/01 Offset +1
 Ayt_PatternSize	equ $+1
-		cp  0			; 2 Pattern completed ?
-		jr nz,Ayt_PatternCur	; 3/2 
+		cp  0			; 02/02/02/00/00/02 Pattern completed ?
+		jr nz,Ayt_PatternCur	; 02/03/02/00/00/03 
+		;------------------------
 Ayt_Player_NewSeq
 Ayt_SeqPatternPtr_Upd equ $+2		; !!! Critical here !!!
-		ld (0),sp		; 0/6 update ptr of seq on patterns
-		xor a			; 0/1 offset all pattern to 0
+		ld (0),sp		; 06/00/06/00/06/00 update ptr of seq on patterns
+		xor a			; 01/00/01/00/01/00 offset all pattern to 0
+		;------------------------
 Ayt_SeqPat
 Ayt_PatCountPtr2 equ $+1		; 
-		ld (0),a		; 0/4 update offset on patterns
+		ld (0),a		; 04/04/04/00/04/04 update offset on patterns
+					; -------------------------------------
+					; 46/46/46/46/46/46
 Ayt_PlayerExit
 	if PlayerAccessByJP
 Ayt_ExitPtr01	equ $+1
-		jp 0 			; 0/3 exit from player >> 23 nops
+		jp 0 			; 3 exit from player >> 23 nops
 	else	
 Ayt_ReloadSP	equ $+1
 		ld sp,0			; 3 nop Player was called , SP is restored
 		ret			; 3 and return to main code
 	endif
-Ayt_PatternCur				; 10+7=17 
-		cp (hl)			; 2
-		nop			; 1
-		jr Ayt_SeqPat		; 3 >> 23 nops
+		;------------------------
+Ayt_IsMusicEnd
+		bit 6,(hl)		; 00/00/03/03/03/03 is it the end of music
+		jr nz,Ayt_NotLastSeq	; 00/00/03/02/02/03 
+Ayt_MusicCnt equ $+1
+		ld a,0			; 00/00/00/02/02/00 loop counter 
+		dec a			; 00/00/00/01/01/00
+		jr z,Ayt_MusicEnd	; 00/00/00/03/02/00 loop finished ?
+Ayt_MusicCntPtr equ $+1
+		ld (0),a		; 00/00/00/00/04/00 no, loop counter upd
+Ayt_LoopSeq  equ $+1
+		ld sp,0			; 00/00/00/00/03/00 Ptr on sequence loop
+		ex (sp),hl		; 00/00/00/00/06/00
+		ex (sp),hl		; 00/00/00/00/06/00
+		jr Ayt_Player_NewSeq	; 00/00/00/00/03/00
+		;------------------------
+Ayt_MusicEnd				; Player on mute
+		ex (sp),hl		; 00/00/00/06/00/00 
+		ex (sp),hl		; 00/00/00/06/00/00
+		ex (sp),hl		; 00/00/00/06/00/00
+		ex (sp),hl		; 00/00/00/06/00/00
+		cp (hl)			; 00/00/00/02/00/00
+		jr $+2			; 00/00/00/03/00/00
+		jr Ayt_PlayerExit	; 00/00/00/03/00/00
+		;------------------------
+Ayt_NotLastSeq				;   
+		cp (hl)			; 00/00/02/00/00/02
+		ex (sp),hl		; 00/00/06/00/00/06
+		ex (sp),hl		; 00/00/06/00/00/06
+		jr Ayt_Player_r13end	; 00/00/03/00/00/03
+		;------------------------
+Ayt_PatternCur				;  
+		cp (hl)			; 00/02/00/00/00/02
+		nop			; 00/01/00/00/00/01
+		jr Ayt_SeqPat		; 00/03/00/00/00/03
 Ayt_Player_B3_End
 ;-----------------------------------------------------------------------------------------------------------------------------------------------
 ; Init of non active AY reg
@@ -640,6 +645,5 @@ Ayt_Player_B4_End
 
 Ayt_Builder_End
 ;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 
 

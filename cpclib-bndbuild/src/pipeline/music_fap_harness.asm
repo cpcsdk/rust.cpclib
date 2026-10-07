@@ -60,10 +60,12 @@ RestoreSp = $+1
 
 {{INFO_PRINT_CODE}}
 
+PlayerStart
 FapInit
     incbin "{{FAP_INIT_PATH}}"
 FapPlay
     incbin "{{FAP_PLAY_PATH}}"
+PlayerEnd
 FapData
     incbin "{{MUSIC_DATA_FNAME}}"
 

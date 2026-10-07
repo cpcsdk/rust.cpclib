@@ -19,7 +19,9 @@
 MINIQ_FILE
     incbin "{{MUSIC_DATA_FNAME}}"
 
+PlayerStart
     read "{{YMP_FNAME}}"
+PlayerEnd
 
     run $
 Start
