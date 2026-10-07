@@ -242,7 +242,12 @@ struct Build {
     bin_name: String,
     /// The size of the song, as the player reads it; `None` when that is not
     /// a binary file (CHIPNSFX's is Z80 source).
-    song_bytes: Option<u64>
+    song_bytes: Option<u64>,
+    /// RAM the player needs beyond the program (FAP's decrunch buffer,
+    /// MinYMiser's cache) - not part of the saved binary.
+    buffer_bytes: Option<u64>,
+    /// What the packer says one frame costs (FAP).
+    play_nops: Option<u64>
 }
 
 /// The AKG and CHP harnesses' AMSDOS binary load/execution address (both start
@@ -500,6 +505,10 @@ struct BasmPlayer<'a> {
     /// Whether `music_path` is a binary the player reads (not source, as for
     /// CHIPNSFX) - its size is then the song's.
     song_is_binary: bool,
+    /// See [`Build::buffer_bytes`].
+    buffer_bytes: Option<u64>,
+    /// See [`Build::play_nops`].
+    play_nops: Option<u64>,
     /// Harness-specific placeholders, already escaped.
     extra_substitutions: &'a [(&'a str, String)]
 }
@@ -572,7 +581,9 @@ fn assemble_basm_player<E: BndBuilderObserver + 'static>(
         _dir: dir,
         bin_path,
         bin_name,
-        song_bytes
+        song_bytes,
+        buffer_bytes: player.buffer_bytes,
+        play_nops: player.play_nops
     })
 }
 
@@ -617,6 +628,8 @@ fn convert_and_assemble_arkos<E: BndBuilderObserver + 'static>(
             player_name: player.display_name(),
             music_path: &music_path,
             song_is_binary: true,
+            buffer_bytes: None,
+            play_nops: None,
             extra_substitutions: &[
                 (
                     "{{PLAYER_CONFIG_FNAME}}",
@@ -665,6 +678,8 @@ fn convert_and_assemble_chp<E: BndBuilderObserver + 'static>(
             player_name: "CHIPNSFX",
             music_path: &music_path,
             song_is_binary: false,
+            buffer_bytes: None,
+            play_nops: None,
             extra_substitutions: &[(
                 "{{PLAYER_SOURCE_FNAME}}",
                 basm_escaped_path(&ChipnsfxVersion::default().player_path::<()>())
@@ -755,9 +770,10 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
 
     let mut asm_args = extra_asm_args.to_vec();
     let mut substitutions = Vec::new();
+    let mut buffer_bytes = None;
+    let mut play_nops = None;
     let buffer_size = |label: &str| {
         super::tool_reported_size(&report, label)
-            .map(|n| n.to_string())
             .ok_or_else(|| format!("{player_name}'s packer did not report a `{label}`"))
     };
     match kind {
@@ -766,7 +782,10 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
             let (init, play) = fap_player_paths()?;
             substitutions.push(("{{FAP_INIT_PATH}}", basm_escaped_path(&init)));
             substitutions.push(("{{FAP_PLAY_PATH}}", basm_escaped_path(&play)));
-            substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer_size("Decrunch buffer size")?));
+            let buffer = buffer_size("Decrunch buffer size")?;
+            substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer.to_string()));
+            buffer_bytes = Some(buffer as u64);
+            play_nops = super::tool_reported_size(&report, "Play time").map(|n| n as u64);
         },
         PlayerKind::Ayt => {
             let builder = dir.path().join("AytPlayerBuilder-CPC.asm");
@@ -781,7 +800,9 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
             fs_err::write(&ymp, YMP_SOURCE)
                 .map_err(|e| format!("Could not write the MinYMiser player: {e}"))?;
             substitutions.push(("{{YMP_FNAME}}", basm_escaped_path(&ymp)));
-            substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer_size("Total cache size")?));
+            let buffer = buffer_size("Total cache size")?;
+            substitutions.push(("{{MUSIC_BUFF_SIZE}}", buffer.to_string()));
+            buffer_bytes = Some(buffer as u64);
         },
         PlayerKind::Arkos(_) | PlayerKind::Sid | PlayerKind::Chp => unreachable!()
     }
@@ -793,6 +814,8 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
             player_name,
             music_path: &packed_path,
             song_is_binary: true,
+            buffer_bytes,
+            play_nops,
             extra_substitutions: &substitutions
         },
         song_path,
@@ -888,13 +911,136 @@ fn convert_and_assemble_sid<E: BndBuilderObserver + 'static>(
         .map_err(|e| format!("Could not assemble the SID player harness: {e}"))
 }
 
+/// What [`build_music`] makes of a song.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MusicBuild {
+    /// The player the song ended up with, once [`MusicPlayer::Auto`] is
+    /// resolved: a [`MusicPlayer::name`], or `sid` for Arkos Tracker's SID
+    /// player (which is what a SID song needs, not a choice).
+    pub player: &'static str,
+    /// The player program, headerless: what is saved from `load_address`.
+    pub program: Vec<u8>,
+    /// Where `program` loads, and is entered.
+    pub load_address: u16,
+    /// The song as the player reads it. `None` for CHIPNSFX (its song is Z80
+    /// source) and for the SID player.
+    pub song_bytes: Option<u64>,
+    /// The player's code alone (from the harness's `PlayerStart`/`PlayerEnd`
+    /// labels, in the assembler's symbol table). For AYT, that is the builder:
+    /// the player it writes at run time, 250 to 340 bytes, comes on top. `None`
+    /// for the SID player.
+    pub player_bytes: Option<u64>,
+    /// RAM the player needs beyond `program`: FAP's decrunch buffer,
+    /// MinYMiser's cache.
+    pub buffer_bytes: Option<u64>,
+    /// What FAP's packer says one frame costs, in NOPs.
+    pub play_nops: Option<u64>
+}
+
+impl PlayerKind {
+    /// A [`MusicPlayer::name`], or `sid`.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Arkos(ArkosPlayer::Akg) => MusicPlayer::Akg.name(),
+            Self::Arkos(ArkosPlayer::Akm) => MusicPlayer::Akm.name(),
+            Self::Arkos(ArkosPlayer::Akys) => MusicPlayer::Akys.name(),
+            Self::Arkos(ArkosPlayer::Akyu) => MusicPlayer::Akyu.name(),
+            Self::Sid => "sid",
+            Self::Chp => MusicPlayer::Chip.name(),
+            Self::Fap => MusicPlayer::Fap.name(),
+            Self::Ayt => MusicPlayer::Ayt.name(),
+            Self::Miny => MusicPlayer::Miny.name()
+        }
+    }
+}
+
+/// Converts `song_path` and assembles it into a standalone player - the core
+/// the other entry points are built on. With `snapshot`, a snapshot of the
+/// running player is written there too, from the same assembly.
+///
+/// `name_hint` names the AMSDOS binary the program makes (see
+/// [`wrap_and_build_dsk`]'s doc comment on why its header is made in Rust).
+pub fn build_music<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    name_hint: &str,
+    options: &MusicOptions,
+    snapshot: Option<&Utf8Path>,
+    observer: &Arc<E>
+) -> Result<MusicBuild, String> {
+    if !song_path.is_file() {
+        return Err(format!("{song_path} does not exist"));
+    }
+    let kind = player_kind(song_path, options.player)?;
+
+    if kind == PlayerKind::Sid {
+        // rasm writes either a snapshot or a binary, not both: one run each
+        let dir = camino_tempfile::tempdir()
+            .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
+        let bin_path = dir.path().join("song.bin");
+        convert_and_assemble_sid(
+            song_path,
+            name_hint,
+            options.sid_wait_line_count,
+            false,
+            &["-ob".to_string(), bin_path.to_string()],
+            observer
+        )?;
+        if let Some(snapshot) = snapshot {
+            convert_and_assemble_sid(
+                song_path,
+                name_hint,
+                options.sid_wait_line_count,
+                true,
+                &["-oi".to_string(), snapshot.to_string()],
+                observer
+            )?;
+        }
+        return Ok(MusicBuild {
+            player: kind.name(),
+            program: fs_err::read(&bin_path)
+                .map_err(|e| format!("Could not read the assembled binary: {e}"))?,
+            load_address: SID_LOAD_ADDRESS,
+            song_bytes: None,
+            player_bytes: None,
+            buffer_bytes: None,
+            play_nops: None
+        });
+    }
+
+    let symbols_dir = camino_tempfile::tempdir()
+        .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
+    let symbols_path = symbols_dir.path().join("song.sym");
+    let mut asm_args = vec!["--sym".to_string(), symbols_path.to_string()];
+    if let Some(snapshot) = snapshot {
+        asm_args.extend([
+            "--snapshot".to_string(),
+            "-o".to_string(),
+            snapshot.to_string()
+        ]);
+    }
+
+    let build = convert_and_assemble_basm_kind(kind, song_path, name_hint, &asm_args, observer)?;
+    Ok(MusicBuild {
+        player: kind.name(),
+        program: fs_err::read(&build.bin_path)
+            .map_err(|e| format!("Could not read the assembled binary: {e}"))?,
+        load_address: BASM_PLAYER_LOAD_ADDRESS,
+        song_bytes: build.song_bytes,
+        player_bytes: fs_err::read_to_string(&symbols_path)
+            .ok()
+            .and_then(|symbols| player_code_size(&symbols)),
+        buffer_bytes: build.buffer_bytes,
+        play_nops: build.play_nops
+    })
+}
+
 /// Converts `song_path`, assembles it into a standalone player, and launches
 /// `emulator` on the resulting snapshot - built in the same assemble pass as
-/// the AMSDOS binary (AKG: `--snapshot -o <path>`; SID: `-oi <path>`), so
-/// this is the snapshot-boot path (like `basm::run::run_document_in_emulator`),
-/// not the DSK-auto-run path `basic_run` uses. Any emulator name
-/// `cpclib_runner::emucontrol` accepts is valid here - unlike `basic_run`,
-/// there is no auto-RUN-only restriction to honor.
+/// the AMSDOS binary, so this is the snapshot-boot path (like
+/// `basm::run::run_document_in_emulator`), not the DSK-auto-run path
+/// `basic_run` uses. Any emulator name `cpclib_runner::emucontrol` accepts is
+/// valid here - unlike `basic_run`, there is no auto-RUN-only restriction to
+/// honor.
 ///
 /// `options` says which player to use (by default, the one the song needs),
 /// and the SID player's safety margin - see [`MusicOptions`].
@@ -905,52 +1051,13 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
     options: &MusicOptions,
     observer: &Arc<E>
 ) -> MusicRunOutcome {
-    if !song_path.is_file() {
-        return failure(format!("{song_path} does not exist"));
-    }
-
-    let kind = match player_kind(song_path, options.player) {
-        Ok(k) => k,
-        Err(e) => return failure(e)
-    };
-
     let dir = match camino_tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => return failure(format!("Could not create a temp working directory: {e}"))
     };
     let sna_path = dir.path().join("song.sna");
 
-    let result = match kind {
-        PlayerKind::Arkos(_)
-        | PlayerKind::Chp
-        | PlayerKind::Fap
-        | PlayerKind::Ayt
-        | PlayerKind::Miny => {
-            convert_and_assemble_basm_kind(
-                kind,
-                song_path,
-                name_hint,
-                &[
-                    "--snapshot".to_string(),
-                    "-o".to_string(),
-                    sna_path.to_string()
-                ],
-                observer
-            )
-            .map(|_| ())
-        },
-        PlayerKind::Sid => {
-            convert_and_assemble_sid(
-                song_path,
-                name_hint,
-                options.sid_wait_line_count,
-                true,
-                &["-oi".to_string(), sna_path.to_string()],
-                observer
-            )
-        },
-    };
-    if let Err(e) = result {
+    if let Err(e) = build_music(song_path, name_hint, options, Some(&sna_path), observer) {
         return failure(e);
     }
 
@@ -969,28 +1076,24 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlayerComparison {
     pub player: MusicPlayer,
-    pub outcome: Result<PlayerSizes, String>
+    pub outcome: Result<MusicBuild, String>
 }
 
-/// How big a player program is, for [`PlayerComparison`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PlayerSizes {
-    /// The song, converted to the player's own format. `None` for CHIPNSFX,
-    /// whose song is Z80 source: the program size is the figure to look at.
-    pub song_bytes: Option<u64>,
-    /// The player's code alone (from the harness's `PlayerStart`/`PlayerEnd`
-    /// labels, in the assembler's symbol table). For AYT, that is the builder:
-    /// the player it writes at run time, 250 to 340 bytes, comes on top.
-    pub player_bytes: Option<u64>,
-    /// The whole player program: song, player, and the song-info screen.
-    pub program_bytes: u64
+/// The players (never [`MusicPlayer::Auto`]) that can play `song_path`: the
+/// Arkos Tracker ones for an Arkos Tracker song, CHIPNSFX's for a `.chp`, the
+/// YM-based ones for anything.
+pub fn compatible_players(song_path: &Utf8Path) -> Vec<MusicPlayer> {
+    MusicPlayer::ALL
+        .into_iter()
+        .filter(|&p| p != MusicPlayer::Auto && player_kind(song_path, p).is_ok())
+        .collect()
 }
 
 /// Builds `song_path` with every player that can play it (the Arkos Tracker
 /// ones for an Arkos Tracker song, CHIPNSFX's for a `.chp`, the YM-based ones
-/// for anything), and measures each - to compare how heavy they are on the
-/// same song. A player that fails (a tool missing, a song it cannot play) is
-/// reported as such: it does not stop the others.
+/// for anything), to compare how heavy they are on the same song. A player
+/// that fails (a tool missing, a song it cannot play) is reported as such: it
+/// does not stop the others.
 ///
 /// The SID player is not part of it: it is not a choice, but what a SID song
 /// needs.
@@ -1003,32 +1106,17 @@ pub fn compare_music_players<E: BndBuilderObserver + 'static>(
         return Err(format!("{song_path} does not exist"));
     }
 
-    let symbols_dir = camino_tempfile::tempdir()
-        .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
-
-    Ok(MusicPlayer::ALL
+    Ok(compatible_players(song_path)
         .into_iter()
-        .filter(|&p| p != MusicPlayer::Auto)
-        .filter_map(|player| {
-            let kind = player_kind(song_path, player).ok()?;
-            let symbols_path = symbols_dir.path().join(format!("{}.sym", player.name()));
-            let asm_args = ["--sym".to_string(), symbols_path.to_string()];
-            let outcome =
-                convert_and_assemble_basm_kind(kind, song_path, name_hint, &asm_args, observer)
-                    .and_then(|build| {
-                        let program_bytes = fs_err::metadata(&build.bin_path)
-                            .map_err(|e| format!("Could not measure the program: {e}"))?
-                            .len();
-                        let player_bytes = fs_err::read_to_string(&symbols_path)
-                            .ok()
-                            .and_then(|symbols| player_code_size(&symbols));
-                        Ok(PlayerSizes {
-                            song_bytes: build.song_bytes,
-                            player_bytes,
-                            program_bytes
-                        })
-                    });
-            Some(PlayerComparison { player, outcome })
+        .map(|player| {
+            let options = MusicOptions {
+                player,
+                ..MusicOptions::default()
+            };
+            PlayerComparison {
+                player,
+                outcome: build_music(song_path, name_hint, &options, None, observer)
+            }
         })
         .collect())
 }
@@ -1066,7 +1154,7 @@ fn player_code_size(symbols: &str) -> Option<u64> {
 /// last).
 pub fn format_player_comparison(comparisons: &[PlayerComparison]) -> String {
     let mut rows: Vec<&PlayerComparison> = comparisons.iter().collect();
-    rows.sort_by_key(|c| c.outcome.as_ref().map_or(u64::MAX, |s| s.program_bytes));
+    rows.sort_by_key(|c| c.outcome.as_ref().map_or(usize::MAX, |s| s.program.len()));
 
     let bytes = |b: Option<u64>| b.map_or_else(|| "-".to_string(), |b| b.to_string());
     let mut table = format!(
@@ -1081,7 +1169,7 @@ pub fn format_player_comparison(comparisons: &[PlayerComparison]) -> String {
                     row.player.name(),
                     bytes(sizes.song_bytes),
                     bytes(sizes.player_bytes),
-                    sizes.program_bytes
+                    sizes.program.len()
                 ));
             },
             Err(e) => {
@@ -1096,22 +1184,20 @@ pub fn format_player_comparison(comparisons: &[PlayerComparison]) -> String {
     table
 }
 
-/// Wraps `bin_path`'s headerless raw bytes into an AMSDOS binary named
+/// Wraps the headerless raw `bytes` into an AMSDOS binary named
 /// `bin_name`, loaded/executed at `load_address`, and builds a fresh DSK
 /// containing just that file. Shared by both player kinds' DSK-building
 /// half - see `Build`'s doc comment for why the header is built in Rust
 /// rather than by the assembler's own save/output mechanism.
 fn wrap_and_build_dsk<E: BndBuilderObserver + 'static>(
-    bin_path: &Utf8Path,
+    bytes: &[u8],
     bin_name: &str,
     load_address: u16,
     observer: &Arc<E>
 ) -> Result<Utf8PathBuf, String> {
-    let bytes =
-        fs_err::read(bin_path).map_err(|e| format!("Could not read the assembled binary: {e}"))?;
     let fname = AmsdosFileName::try_from(bin_name)
         .map_err(|e| format!("Could not build an AMSDOS filename: {e:?}"))?;
-    let file = AmsdosFile::binary_file_from_buffer(&fname, load_address, load_address, &bytes)
+    let file = AmsdosFile::binary_file_from_buffer(&fname, load_address, load_address, bytes)
         .map_err(|e| format!("Could not build the AMSDOS binary file: {e:?}"))?;
 
     super::build_dsk_with_single_amsdos_file(&file, observer)
@@ -1129,42 +1215,13 @@ pub fn build_music_dsk<E: BndBuilderObserver + 'static>(
     options: &MusicOptions,
     observer: &Arc<E>
 ) -> Result<Utf8PathBuf, String> {
-    if !song_path.is_file() {
-        return Err(format!("{song_path} does not exist"));
-    }
-
-    match player_kind(song_path, options.player)? {
-        kind @ (PlayerKind::Arkos(_)
-        | PlayerKind::Chp
-        | PlayerKind::Fap
-        | PlayerKind::Ayt
-        | PlayerKind::Miny) => {
-            // Both players load, and are entered, at the same address.
-            let built = convert_and_assemble_basm_kind(kind, song_path, name_hint, &[], observer)?;
-            wrap_and_build_dsk(
-                &built.bin_path,
-                &built.bin_name,
-                BASM_PLAYER_LOAD_ADDRESS,
-                observer
-            )
-        },
-        PlayerKind::Sid => {
-            let dir = camino_tempfile::tempdir()
-                .map_err(|e| format!("Could not create a temp working directory: {e}"))?;
-            let bin_name = format!("{}.BIN", super::sanitize_amsdos_stem(name_hint));
-            let bin_path = dir.path().join(&bin_name);
-
-            convert_and_assemble_sid(
-                song_path,
-                name_hint,
-                options.sid_wait_line_count,
-                false,
-                &["-ob".to_string(), bin_path.to_string()],
-                observer
-            )?;
-            wrap_and_build_dsk(&bin_path, &bin_name, SID_LOAD_ADDRESS, observer)
-        }
-    }
+    let built = build_music(song_path, name_hint, options, None, observer)?;
+    wrap_and_build_dsk(
+        &built.program,
+        &format!("{}.BIN", super::sanitize_amsdos_stem(name_hint)),
+        built.load_address,
+        observer
+    )
 }
 
 #[cfg(test)]
@@ -1420,10 +1477,14 @@ mod tests {
         let ok = |player, song, program| {
             PlayerComparison {
                 player,
-                outcome: Ok(PlayerSizes {
+                outcome: Ok(MusicBuild {
+                    player: player.name(),
+                    program: vec![0; program],
+                    load_address: BASM_PLAYER_LOAD_ADDRESS,
                     song_bytes: song,
-                    player_bytes: Some(program / 2),
-                    program_bytes: program
+                    player_bytes: Some(program as u64 / 2),
+                    buffer_bytes: None,
+                    play_nops: None
                 })
             }
         };
@@ -1468,16 +1529,44 @@ mod tests {
                 .outcome
                 .as_ref()
                 .unwrap_or_else(|e| panic!("{:?}: {e}", c.player));
-            assert!(sizes.program_bytes > sizes.song_bytes.unwrap());
+            assert!(sizes.program.len() as u64 > sizes.song_bytes.unwrap());
             assert!(
                 sizes
                     .player_bytes
-                    .is_some_and(|p| p > 100 && p < sizes.program_bytes),
+                    .is_some_and(|p| p > 100 && p < sizes.program.len() as u64),
                 "{:?}: {sizes:?}",
                 c.player
             );
         }
         println!("{}", format_player_comparison(&comparisons));
+    }
+
+    /// What `build_music` measures, on a real YM, with FAP: the packer's own
+    /// figures, and a snapshot of the player - through the real tools, hence
+    /// `#[ignore]`d.
+    #[test]
+    #[ignore]
+    fn real_build_music_reports_what_fap_says_and_writes_a_snapshot() {
+        let observer = Arc::new(TestObserver);
+        let song = Utf8PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/ay_players/ym/Targhan - Hocus Pocus.ym"
+        ));
+        let dir = camino_tempfile::tempdir().unwrap();
+        let sna = dir.path().join("hocus.sna");
+        let options = MusicOptions {
+            player: MusicPlayer::Fap,
+            ..MusicOptions::default()
+        };
+        let build = build_music(&song, "HOCUS", &options, Some(&sna), &observer).unwrap();
+        assert_eq!(build.player, "fap");
+        assert_eq!(build.load_address, 0x500);
+        assert_eq!(build.song_bytes, Some(11924));
+        assert_eq!(build.buffer_bytes, Some(3144));
+        assert_eq!(build.play_nops, Some(712));
+        assert!(build.player_bytes.is_some_and(|p| p > 100));
+        assert!(build.program.len() as u64 > 11924);
+        assert!(sna.is_file());
     }
 
     #[test]

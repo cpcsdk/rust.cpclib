@@ -14,6 +14,31 @@ This crate currently provides placeholder functions and small submodules for:
 
 Extend the submodules to call into the underlying Rust crate APIs.
 
+Music players
+-------------
+
+`cpclib_python.music` turns a song (Arkos Tracker, CHIPNSFX or YM) into a
+standalone CPC player program, with any player bndbuild knows - `akg`, `akm`,
+`akys`, `akyu`, `chipnsfx`, `fap`, `ayt`, `miny` - and measures what it weighs:
+
+```python
+from cpclib_python import music
+
+music.compatible_players("tune.aks")            # the players that can play it
+info = music.song_info("tune.aks")              # title, author, tracker, uses_sid...
+b = music.build("tune.aks", "fap", snapshot="tune.sna")
+b.song_bytes, b.player_bytes, b.program_bytes   # what it weighs
+b.buffer_bytes, b.play_nops                     # FAP/MinYMiser RAM, FAP's NOPs per frame
+music.build_dsk("tune.aks", "tune.dsk", "akg")  # a DSK with the program
+music.play("tune.aks", "ace", "ayt")            # launch it in an emulator
+for c in music.compare("tune.aks"):             # every compatible player
+    print(c.player, c.error or c.build.program_bytes)
+```
+
+See `examples/music_compare.py`. The conversion tools are downloaded on first
+use; CHIPNSFX, AYT and MinYMiser are Windows programs and need `wine` on Linux.
+The tests that really build players run with `CPCLIB_REAL_TOOLS=1`.
+
 Quick dev commands
 ------------------
 

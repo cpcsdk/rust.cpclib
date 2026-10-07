@@ -13,7 +13,7 @@ use pyo3::types::PyAny;
 
 // Observer that forwards outputs to process streams (no internal storage)
 #[derive(Default)]
-struct PyConsoleObserver;
+pub(crate) struct PyConsoleObserver;
 
 impl fmt::Debug for PyConsoleObserver {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -100,6 +100,7 @@ impl PyBndTask {
     ///  - `PyBndTask("basm toto.asm -o toto.o")` (single string, YAML-like parse)
     ///  - `PyBndTask("basm", ["toto.asm", "-o", "toto.o"])` (command + args list)
     #[new]
+    #[pyo3(signature = (task, args=None))]
     pub fn new(task: &Bound<'_, PyAny>, args: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         match args {
             None => {

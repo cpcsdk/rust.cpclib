@@ -21,7 +21,7 @@ cpclib-asm = { workspace = true, default-features = false }
 cpclib-basic = { workspace = true, default-features = false }
 cpclib-basm = { workspace = true, default-features = false }
 cpclib-bdasm = { workspace = true, default-features = false }
-cpclib-bndbuild = { workspace = true, default-features = false }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["fap"] }
 cpclib-cpr = { workspace = true, default-features = false }
 cpclib-crunchers = { workspace = true, default-features = false }
 cpclib-common = { workspace = true, default-features = false }

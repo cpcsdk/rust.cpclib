@@ -4,6 +4,7 @@ use pyo3::types::PyDict;
 mod basm;
 mod bndbuild;
 mod builders;
+mod music;
 
 // Lightweight placeholders for crate-specific wrappers.
 // These functions are intentionally minimal so the crate builds
@@ -88,6 +89,11 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     bndbuild_mod.add_class::<builders::PyAytBuilder>()?;
     bndbuild_mod.add_class::<builders::PySongConverterBuilder>()?;
     m.add_submodule(&bndbuild_mod)?;
+
+    // music: songs to standalone CPC players, with any of bndbuild's players
+    let music_mod = PyModule::new(py, "music")?;
+    music::music(py, &music_mod)?;
+    m.add_submodule(&music_mod)?;
 
     let cpr_mod = PyModule::new(py, "cpr")?;
     cpr_mod.add_function(wrap_pyfunction!(cpr_info, &cpr_mod)?)?;
