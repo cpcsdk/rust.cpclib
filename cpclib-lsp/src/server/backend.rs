@@ -1558,6 +1558,7 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.musicPlay",
     "cpclib.musicBuildDsk",
     "cpclib.musicSidInfo",
+    "cpclib.musicCompare",
     "cpclib.setActiveDocument",
     "cpclib.findUnreferencedLabels"
 ];
@@ -3496,6 +3497,83 @@ impl LanguageServer for CpcLspBackend {
                 "players": cpclib_bndbuild::pipeline::music_run::MusicPlayer::ALL
                     .map(cpclib_bndbuild::pipeline::music_run::MusicPlayer::name)
             })));
+        }
+
+        // "Compare music players": builds the song with every player that can
+        // play it, and answers with the table of what each weighs (see
+        // `compare_music_players`). Several conversions - each possibly a
+        // download or a wine run - so off the async thread, with the tools'
+        // output streamed to the log like the other music commands.
+        if params.command == "cpclib.musicCompare" {
+            let fname = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let song_path = camino::Utf8PathBuf::from(fname);
+            let name_hint = song_path
+                .file_stem()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "SONG".to_string());
+
+            self.client
+                .log_message(MessageType::INFO, "Building the song with every player...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let result = tokio::task::spawn_blocking(move || {
+                let observer =
+                    std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
+                cpclib_bndbuild::pipeline::music_run::compare_music_players(
+                    &song_path, &name_hint, &observer
+                )
+            })
+            .await
+            .map_err(|e| {
+                tower_lsp::jsonrpc::Error {
+                    code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                    message: format!("comparison task panicked: {e}").into(),
+                    data: None
+                }
+            })?;
+            let _ = log_task.await;
+
+            return match result {
+                Ok(comparisons) => {
+                    Ok(Some(serde_json::json!({
+                        "table": cpclib_bndbuild::pipeline::music_run::format_player_comparison(
+                            &comparisons
+                        )
+                    })))
+                },
+                Err(e) => {
+                    self.client.show_message(MessageType::ERROR, &e).await;
+                    Ok(None)
+                }
+            };
         }
 
         // File-browser "▶ Play music in emulator" - unlike `runBasic`/

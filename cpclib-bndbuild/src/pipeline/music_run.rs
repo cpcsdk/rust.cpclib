@@ -239,7 +239,10 @@ fn info_text_db(song_path: &Utf8Path, name_hint: &str, player: &str) -> String {
 struct Build {
     _dir: camino_tempfile::Utf8TempDir,
     bin_path: Utf8PathBuf,
-    bin_name: String
+    bin_name: String,
+    /// The size of the song, as the player reads it; `None` when that is not
+    /// a binary file (CHIPNSFX's is Z80 source).
+    song_bytes: Option<u64>
 }
 
 /// The AKG and CHP harnesses' AMSDOS binary load/execution address (both start
@@ -494,6 +497,9 @@ struct BasmPlayer<'a> {
     player_name: &'a str,
     /// The converted song, `{{MUSIC_DATA_FNAME}}`.
     music_path: &'a Utf8Path,
+    /// Whether `music_path` is a binary the player reads (not source, as for
+    /// CHIPNSFX) - its size is then the song's.
+    song_is_binary: bool,
     /// Harness-specific placeholders, already escaped.
     extra_substitutions: &'a [(&'a str, String)]
 }
@@ -556,10 +562,17 @@ fn assemble_basm_player<E: BndBuilderObserver + 'static>(
     super::assemble_source(&harness_path, extra_asm_args, observer)
         .map_err(|e| format!("Could not assemble the player harness: {e}"))?;
 
+    let song_bytes = player
+        .song_is_binary
+        .then(|| fs_err::metadata(player.music_path).map(|m| m.len()))
+        .transpose()
+        .map_err(|e| format!("Could not measure the converted song: {e}"))?;
+
     Ok(Build {
         _dir: dir,
         bin_path,
-        bin_name
+        bin_name,
+        song_bytes
     })
 }
 
@@ -603,6 +616,7 @@ fn convert_and_assemble_arkos<E: BndBuilderObserver + 'static>(
             template: ARKOS_HARNESS_SOURCE,
             player_name: player.display_name(),
             music_path: &music_path,
+            song_is_binary: true,
             extra_substitutions: &[
                 (
                     "{{PLAYER_CONFIG_FNAME}}",
@@ -650,6 +664,7 @@ fn convert_and_assemble_chp<E: BndBuilderObserver + 'static>(
             template: CHP_HARNESS_SOURCE,
             player_name: "CHIPNSFX",
             music_path: &music_path,
+            song_is_binary: false,
             extra_substitutions: &[(
                 "{{PLAYER_SOURCE_FNAME}}",
                 basm_escaped_path(&ChipnsfxVersion::default().player_path::<()>())
@@ -777,6 +792,7 @@ fn convert_and_assemble_ym_player<E: BndBuilderObserver + 'static>(
             template,
             player_name,
             music_path: &packed_path,
+            song_is_binary: true,
             extra_substitutions: &substitutions
         },
         song_path,
@@ -947,6 +963,92 @@ pub fn run_music_in_emulator<E: BndBuilderObserver + 'static>(
         },
         Err(e) => failure(format!("Failed to launch emulator: {e}"))
     }
+}
+
+/// What one player makes of a song - see [`compare_music_players`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerComparison {
+    pub player: MusicPlayer,
+    pub outcome: Result<PlayerSizes, String>
+}
+
+/// How big a player program is, for [`PlayerComparison`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerSizes {
+    /// The song, converted to the player's own format. `None` for CHIPNSFX,
+    /// whose song is Z80 source: the program size is the figure to look at.
+    pub song_bytes: Option<u64>,
+    /// The whole player program: song, player, and the song-info screen.
+    pub program_bytes: u64
+}
+
+/// Builds `song_path` with every player that can play it (the Arkos Tracker
+/// ones for an Arkos Tracker song, CHIPNSFX's for a `.chp`, the YM-based ones
+/// for anything), and measures each - to compare how heavy they are on the
+/// same song. A player that fails (a tool missing, a song it cannot play) is
+/// reported as such: it does not stop the others.
+///
+/// The SID player is not part of it: it is not a choice, but what a SID song
+/// needs.
+pub fn compare_music_players<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    name_hint: &str,
+    observer: &Arc<E>
+) -> Result<Vec<PlayerComparison>, String> {
+    if !song_path.is_file() {
+        return Err(format!("{song_path} does not exist"));
+    }
+
+    Ok(MusicPlayer::ALL
+        .into_iter()
+        .filter(|&p| p != MusicPlayer::Auto)
+        .filter_map(|player| {
+            let kind = player_kind(song_path, player).ok()?;
+            let outcome = convert_and_assemble_basm_kind(kind, song_path, name_hint, &[], observer)
+                .and_then(|build| {
+                    let program_bytes = fs_err::metadata(&build.bin_path)
+                        .map_err(|e| format!("Could not measure the program: {e}"))?
+                        .len();
+                    Ok(PlayerSizes {
+                        song_bytes: build.song_bytes,
+                        program_bytes
+                    })
+                });
+            Some(PlayerComparison { player, outcome })
+        })
+        .collect())
+}
+
+/// `comparisons` as a plain-text table, smallest program first (failures
+/// last).
+pub fn format_player_comparison(comparisons: &[PlayerComparison]) -> String {
+    let mut rows: Vec<&PlayerComparison> = comparisons.iter().collect();
+    rows.sort_by_key(|c| c.outcome.as_ref().map_or(u64::MAX, |s| s.program_bytes));
+
+    let mut table = format!(
+        "{:<10} {:>12} {:>14}\n",
+        "player", "song (bytes)", "program (bytes)"
+    );
+    for row in rows {
+        match &row.outcome {
+            Ok(sizes) => {
+                let song = sizes
+                    .song_bytes
+                    .map_or_else(|| "-".to_string(), |b| b.to_string());
+                table.push_str(&format!(
+                    "{:<10} {:>12} {:>14}\n",
+                    row.player.name(),
+                    song,
+                    sizes.program_bytes
+                ));
+            },
+            Err(e) => {
+                let first_line = e.lines().next().unwrap_or("failed");
+                table.push_str(&format!("{:<10} failed: {first_line}\n", row.player.name()));
+            }
+        }
+    }
+    table
 }
 
 /// Wraps `bin_path`'s headerless raw bytes into an AMSDOS binary named
@@ -1256,6 +1358,62 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{player:?}: {e}"));
             assert!(dsk.is_file(), "{player:?}");
         }
+    }
+
+    #[test]
+    fn the_comparison_table_lists_the_smallest_first_and_failures_last() {
+        let ok = |player, song, program| {
+            PlayerComparison {
+                player,
+                outcome: Ok(PlayerSizes {
+                    song_bytes: song,
+                    program_bytes: program
+                })
+            }
+        };
+        let table = format_player_comparison(&[
+            PlayerComparison {
+                player: MusicPlayer::Miny,
+                outcome: Err("wine is missing\nsecond line".to_string())
+            },
+            ok(MusicPlayer::Akg, Some(900), 4000),
+            ok(MusicPlayer::Chip, None, 2000)
+        ]);
+        let names: Vec<&str> = table
+            .lines()
+            .skip(1)
+            .map(|l| l.split_whitespace().next().unwrap())
+            .collect();
+        assert_eq!(names, ["chipnsfx", "akg", "miny"]);
+        assert!(table.contains("failed: wine is missing"));
+        assert!(!table.contains("second line"));
+    }
+
+    /// Every player that can play a real song, through the real tools -
+    /// hence `#[ignore]`d.
+    #[test]
+    #[ignore]
+    fn real_comparison_measures_every_compatible_player() {
+        use cpclib_runner::delegated::InternetStaticCompiledApplication as _;
+
+        let observer = Arc::new(TestObserver);
+        let song = At3Version::default()
+            .configuration::<()>()
+            .cache_folder()
+            .join("songs")
+            .join("ArkosTracker3")
+            .join("Ok3anos - Cpc Dream.aks");
+        let comparisons = compare_music_players(&song, "CMP", &observer).unwrap();
+        // 4 Arkos Tracker players + 3 YM-based ones; not CHIPNSFX's
+        assert_eq!(comparisons.len(), 7, "{comparisons:?}");
+        for c in &comparisons {
+            let sizes = c
+                .outcome
+                .as_ref()
+                .unwrap_or_else(|e| panic!("{:?}: {e}", c.player));
+            assert!(sizes.program_bytes > sizes.song_bytes.unwrap());
+        }
+        println!("{}", format_player_comparison(&comparisons));
     }
 
     #[test]

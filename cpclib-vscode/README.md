@@ -210,6 +210,11 @@ real CPC program, without writing any Z80:
   player...`, `Build DSK with music using a specific player...`) first asks
   which player to use.
 
+- **Compare music players** builds the song with every player that can play it
+  and lists what each weighs - the song in the player's own format, and the whole
+  program - smallest first. Several conversions, some of them downloads: it takes a
+  while.
+
 Supported songs:
 
 | Extension | Tracker | Default player |

@@ -258,6 +258,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.compareMusicPlayers",
+        "title": "Compare music players",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.runCslFile",
         "title": "Run CSL script in emulator",
         "category": "CPClib"
@@ -919,6 +924,11 @@
         },
         {
           "command": "cpclib.buildMusicDskWithPlayer",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp|ym)$/i",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.compareMusicPlayers",
           "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz|chp|ym)$/i",
           "group": "cpclib"
         },

@@ -194,12 +194,40 @@ async function buildMusicDsk(
     });
 }
 
+/**
+ * "Compare music players" - builds the song with every player that can play it
+ * and shows what each weighs (the song in its format, the whole program), the
+ * smallest first. Slow: it is several conversions, some of them downloads.
+ * The server streams the tools' output to the log meanwhile.
+ */
+async function compareMusicPlayers(target: string | vscode.Uri | undefined): Promise<void> {
+    let fileName = target instanceof vscode.Uri ? target.fsPath : target;
+    if (!fileName) {
+        fileName = await pickMusicFile();
+        if (!fileName) { return; }
+    }
+    const response = await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: 'Building the song with every player...',
+        },
+        () => client.sendRequest<{ table: string } | null>('workspace/executeCommand', {
+            command: 'cpclib.musicCompare',
+            arguments: [fileName],
+        }),
+    );
+    if (!response?.table) { return; }
+    const doc = await vscode.workspace.openTextDocument({ content: response.table, language: 'plaintext' });
+    await vscode.window.showTextDocument(doc, { preview: true });
+}
+
 export function registerMusic(context: ExtensionContext): void {
     musicSidWaitLineCountMemory = context.globalState;
     context.subscriptions.push(
         vscode.commands.registerCommand('cpclib.playMusic', playMusic),
         vscode.commands.registerCommand('cpclib.buildMusicDsk', buildMusicDsk),
         vscode.commands.registerCommand('cpclib.playMusicWithPlayer', (target) => playMusic(target, true)),
+        vscode.commands.registerCommand('cpclib.compareMusicPlayers', compareMusicPlayers),
         vscode.commands.registerCommand('cpclib.buildMusicDskWithPlayer', (target) => buildMusicDsk(target, true)),
     );
 }
