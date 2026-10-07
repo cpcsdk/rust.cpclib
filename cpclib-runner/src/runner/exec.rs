@@ -363,10 +363,14 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         // signal EOF on stdin just by closing the write side, and it also
         // merges stdout/stderr into one stream, defeating `>`/`|` outright.
         //
-        // Windows always uses this path: ConPTY can deadlock (child.wait() /
-        // ClosePseudoConsole never return, the reader thread never sees EOF),
-        // which hung CI for 6 hours.
-        if cfg!(windows) || stdin.is_some() || stdout.is_some() {
+        // This is now the path for every command: the PTY approach could
+        // deadlock (the reader thread never saw EOF once the child exited,
+        // e.g. with ConPTY or when a grandchild kept the slave open).
+        #[cfg(feature = "transparent-x11")]
+        let use_plain_pipes = !self.transparent;
+        #[cfg(not(feature = "transparent-x11"))]
+        let use_plain_pipes = true;
+        if use_plain_pipes {
             use std::io::BufReader;
             use std::process::{Child, Stdio};
 
@@ -569,181 +573,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             };
         }
 
-        // Standard path: use a PTY (pseudo-terminal) so the child process sees a real
-        // terminal and keeps stdout line-buffered rather than block-buffering it on a pipe.
-        // This enables real-time output streaming (e.g. emulator output visible immediately).
-        //
-        // Note: the OS-level PTY (ConPTY on Windows, posix_openpt on Linux/macOS) merges
-        // the child's stdout and stderr into a single stream through the pseudo-console.
-        // There is no portable way to separate them when using a PTY, so all child output
-
-        #[cfg(target_os = "macos")]
-        {
-            use std::io::BufReader;
-            use std::process::{Child, Stdio};
-
-            use utf8_chars::BufReadCharsExt;
-
-            let mut cmd = std::process::Command::new(app);
-            cmd.current_dir(&in_dir);
-            for arg in &itr[1..] {
-                cmd.arg(arg);
-            }
-            let cmd = cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
-            let mut child: Child = cmd
-                .spawn()
-                .map_err(|e| format!("Error while launching {}. {}", app, e))?;
-            let child_pid = child.id();
-            register_child_pid(child_pid);
-            let child_stdout = child
-                .stdout
-                .take()
-                .expect("Internal error, could not take stdout");
-            let child_stderr = child
-                .stderr
-                .take()
-                .expect("Internal error, could not take stderr");
-
-            thread::scope(|s| {
-                s.spawn(|| {
-                    let mut stdout = BufReader::new(child_stdout);
-                    let mut current_string = String::new();
-                    for c in stdout.chars().flatten() {
-                        current_string.push(c);
-                        if c == '\n' {
-                            o.emit_stdout(&current_string);
-                            current_string.clear();
-                        }
-                    }
-                    if !current_string.is_empty() {
-                        o.emit_stdout(&current_string);
-                    }
-                });
-                s.spawn(|| {
-                    let mut stderr = BufReader::new(child_stderr);
-                    let mut current_string = String::new();
-                    for c in stderr.chars().flatten() {
-                        current_string.push(c);
-                        if c == '\n' {
-                            o.emit_stderr(&current_string);
-                            current_string.clear();
-                        }
-                    }
-                    if !current_string.is_empty() {
-                        o.emit_stderr(&current_string);
-                    }
-                });
-            });
-
-            let status = child
-                .wait()
-                .map_err(|e| format!("Error while executing {}. {}", app, e))?;
-            deregister_child_pid(child_pid);
-
-            return if status.success() {
-                Ok(())
-            }
-            else {
-                Err(match status.code() {
-                    Some(code) => format!("Error while launching the command. (exit code {code})"),
-                    None => "Error while launching the command. (terminated by signal)".to_owned()
-                })
-            };
-        }
-        // is forwarded to emit_stdout.
-        use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-
-        let pty_system = native_pty_system();
-        let pair = pty_system
-            .openpty(PtySize {
-                rows: 24,
-                cols: 120,
-                pixel_width: 0,
-                pixel_height: 0
-            })
-            .map_err(|e| format!("Failed to create PTY: {e}"))?;
-
-        let slave = pair.slave;
-        let master = pair.master;
-
-        let mut cmd_builder = CommandBuilder::new(app);
-        cmd_builder.cwd(&in_dir);
-        for arg in &itr[1..] {
-            cmd_builder.arg(arg);
-        }
-        #[cfg(target_os = "linux")]
-        for var in SNAP_LEAKED_ENV_VARS {
-            cmd_builder.env_remove(var);
-        }
-
-        let mut child = slave
-            .spawn_command(cmd_builder)
-            .map_err(|e| format!("Error while launching {}. {e}", app))?;
-
-        let child_pid_opt = child.process_id();
-        if let Some(pid) = child_pid_opt {
-            register_child_pid(pid);
-        }
-
-        let mut pty_reader = master
-            .try_clone_reader()
-            .map_err(|e| format!("Failed to get PTY reader: {e}"))?;
-
-        // The scope body (main thread) waits for the child then drops the slave,
-        // which signals EOF to the PTY master reader running in the spawned thread.
-        let mut pty_exit = None;
-        thread::scope(|s| {
-            // PTY master → emit_stdout (merges both stdout and stderr from child)
-            s.spawn(|| {
-                let mut current_line = String::new();
-                let mut buf = [0u8; 4096];
-                loop {
-                    match pty_reader.read(&mut buf) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => {
-                            let text = String::from_utf8_lossy(&buf[..n]);
-                            for c in text.chars() {
-                                current_line.push(c);
-                                if c == '\n' {
-                                    o.emit_stdout(&current_line);
-                                    current_line.clear();
-                                }
-                            }
-                        }
-                    }
-                }
-                if !current_line.is_empty() {
-                    o.emit_stdout(&current_line);
-                }
-            });
-            // Wait for child, then close both slave and master.
-            //
-            // On Windows (ConPTY) the output pipe is only closed once the
-            // pseudoconsole is destroyed, which happens when `master` is
-            // dropped (calls CloseConsolePseudoConsole).  Dropping `slave`
-            // alone is not enough — the reader thread blocks forever.
-            // Dropping `master` here (inside the scope, before the implicit
-            // join) forces the pty_reader to see EOF/error and exit.
-            pty_exit = Some(child.wait());
-            drop(slave);
-            drop(master);
-        });
-
-        let status = pty_exit
-            .unwrap()
-            .map_err(|e| format!("Error while executing {}. {e}", app))?;
-
-        if let Some(pid) = child_pid_opt {
-            deregister_child_pid(pid);
-        }
-
-        if !status.success() {
-            return Err(format!(
-                "Error while launching the command. (exit code {})",
-                status.exit_code()
-            ));
-        }
-
+        #[allow(unreachable_code)]
         Ok(())
     }
 
