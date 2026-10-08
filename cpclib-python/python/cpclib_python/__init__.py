@@ -10,11 +10,16 @@ The submodules:
 - `build`: bndbuild build files;
 - `cpr`: Plus-range cartridges;
 - `crunchers`: ZX0, ZX7, Exomizer, LZSA, Shrinkler... compression;
+- `csl`: CSL scenario scripts;
 - `disc`: `.dsk` images and their AMSDOS catalog;
 - `emu`: drive a live emulator;
-- `image`: screen memory to PNG;
+- `fmt`: the source formatter;
+- `image`: picture conversion, screen memory to PNG;
 - `music`: songs to standalone players, with any of the players;
-- `sna`: snapshots.
+- `orgams`: Orgams binary sources;
+- `sna`: snapshots;
+- `tools`: every other tool bndbuild knows, as a function;
+- `xfer`: the M4 board / CPC Wifi.
 """
 from . import cpclib_python as _native
 from .cpclib_python import crate_info, hello
@@ -30,14 +35,20 @@ from .cpclib_python import (  # noqa: F401
     build,
     cpr,
     crunchers,
+    csl,
     disc,
     emu,
+    fmt,
     image,
     music,
+    orgams,
     sna,
+    xfer,
 )
+from . import tools
 
 __all__ = [
     "analysis", "asm", "basic", "basm", "bdasm", "bndbuild", "build", "cpr",
-    "crunchers", "crate_info", "disc", "emu", "hello", "image", "music", "sna",
+    "crunchers", "crate_info", "csl", "disc", "emu", "fmt", "hello", "image",
+    "music", "orgams", "sna", "tools", "xfer",
 ]

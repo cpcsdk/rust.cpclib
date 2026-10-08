@@ -29,17 +29,22 @@ Modules
 |--------|--------------|
 | `asm` | The basm assembler with its options: defines, include dirs, symbols, listing, snapshot, cartridge. `assemble(source)`, `assemble_file(path)`. |
 | `analysis` | Diagnostics (`check`), control-flow-aware NOP counts (`count_nops`) and peephole optimisation (`suggest_optimizations`, `apply_optimizations_in_place`). |
-| `basic` | Locomotive BASIC: `tokenize`, `detokenize`, `line_numbers`. |
+| `basic` | Locomotive BASIC: `tokenize`, `detokenize`, `line_numbers`, `to_snapshot` (a CPC with the program loaded, ready to `RUN`). |
 | `bdasm` | The Z80 disassembler: `disassemble` (address, bytes, text, NOPs), `disassemble_to_source`. |
 | `bndbuild` | `Task`: any bndbuild tool as a task (`Task("img2cpc", [...]).execute(capture=True)`); builders for snapshots, Arkos Tracker, CHIPNSFX, MinYMiser, AYT. |
 | `build` | bndbuild build files: `Build(path)` - `targets()`, `is_outdated()`, `run()`. |
 | `cpr` | Plus-range cartridges: `Cartridge` - banks, `load`/`save`. |
+| `csl` | CSL scenario scripts (what emulators replay): `parse`, `normalize`. |
 | `crunchers` | ZX0, ZX7, Exomizer, LZSA, Shrinkler, apultra, UPKR, pucrunch, LZ4/48/49: `compress`, `compare`, `formats`. |
-| `disc` | `.dsk` images: `Disc` - `create`, `catalog`, `add_binary`/`add_basic`/`add_ascii`/`add_file`, `extract`, `file_info`, `erase`, `rename`, sectors. |
+| `disc` | `.dsk` images: `Disc` - `create`, `catalog`, `add_binary`/`add_basic`/`add_ascii`/`add_file`, `extract`, `file_info`, `erase`, `rename`, sectors; `add_amsdos_header`/`read_amsdos_header`. |
 | `emu` | `Emulator`: boot a snapshot or disc in a real emulator, read and write memory, type, take screenshots. |
-| `image` | `render_screen`: screen memory to PNG. |
+| `fmt` | The basm source formatter: `format_source`, `format_range`, `default_options`. |
+| `image` | `convert`: a picture to an OCP screen, snapshot, disc, sprite or tile (the `img2cpc` tool); `render_screen`: screen memory to PNG. |
 | `music` | Songs to standalone players with any of the players (AKG, AKM, AKY, CHIPNSFX, FAP, AYT, MinYMiser), measured: `build`, `compare`, `build_dsk`, `play`. |
+| `orgams` | `to_utf8`: an Orgams binary source as text. |
 | `sna` | Snapshots: `Snapshot` - `load`, flags, memory, `save`. |
+| `tools` | **Every other tool** bndbuild knows, as a function: `tools.commands()` describes them, `tools.catalog(...)`, `tools.hideur(...)`, `tools.rtzx(...)`, `tools.run("2cdt", ...)`. They take the tool's command line arguments. |
+| `xfer` | The M4 board / CPC Wifi: `M4(host)` - `upload`, `upload_and_run`, `run`, `ls`, `reset_cpc`... |
 
 Whatever runs a tool prints to the console, unless given `on_output=callback`:
 a `callback(kind, text)` that receives `stdout`, `stderr` and, for builds,

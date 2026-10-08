@@ -48,3 +48,14 @@ class Disc:
         self, head: int, track: int, sector_id: int, data: bytes
     ) -> None: ...
     def save(self, path: str | None = None) -> None: ...
+
+class AmsdosHeaderInfo(TypedDict, total=False):
+    type: str
+    length: int
+    load_address: int
+    execution_address: int
+
+def add_amsdos_header(
+    data: bytes, name: str, load_address: int, execution_address: int | None = None
+) -> bytes: ...
+def read_amsdos_header(data: bytes) -> tuple[AmsdosHeaderInfo | None, bytes]: ...

@@ -41,9 +41,23 @@ fn line_numbers(code: &str) -> PyResult<Vec<u16>> {
     Ok(program.lines().iter().map(|l| l.line_number()).collect())
 }
 
+/// A snapshot of a CPC that has the program loaded in BASIC memory, ready to
+/// `RUN` (see `sna.Snapshot`).
+///
+/// Raises `ValueError` if `code` is not valid Locomotive BASIC.
+#[pyfunction]
+fn to_snapshot(code: &str) -> PyResult<crate::sna::PySnapshot> {
+    let program = BasicProgram::parse(code).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    program
+        .as_sna()
+        .map(crate::sna::PySnapshot::from_inner)
+        .map_err(PyValueError::new_err)
+}
+
 pub fn basic(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tokenize, m)?)?;
     m.add_function(wrap_pyfunction!(detokenize, m)?)?;
     m.add_function(wrap_pyfunction!(line_numbers, m)?)?;
+    m.add_function(wrap_pyfunction!(to_snapshot, m)?)?;
     Ok(())
 }

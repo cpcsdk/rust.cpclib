@@ -10,11 +10,16 @@ from . import (
     build as build,
     cpr as cpr,
     crunchers as crunchers,
+    csl as csl,
     disc as disc,
     emu as emu,
+    fmt as fmt,
     image as image,
     music as music,
+    orgams as orgams,
     sna as sna,
+    tools as tools,
+    xfer as xfer,
 )
 
 def hello() -> str: ...

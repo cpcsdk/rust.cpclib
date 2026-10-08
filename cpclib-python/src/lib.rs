@@ -11,12 +11,17 @@ mod build;
 mod builders;
 mod cpr;
 mod crunchers;
+mod csl;
 mod disc;
 mod emu;
+mod fmt;
 mod image;
 mod music;
 mod observer;
+mod orgams;
 mod sna;
+mod tools;
+mod xfer;
 
 // Lightweight placeholders for crate-specific wrappers.
 // These functions are intentionally minimal so the crate builds
@@ -150,6 +155,27 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let analysis_mod = PyModule::new(py, "analysis")?;
     analysis::analysis(py, &analysis_mod)?;
     add_submodule(m, &analysis_mod)?;
+
+    let csl_mod = PyModule::new(py, "csl")?;
+    csl::csl(py, &csl_mod)?;
+    add_submodule(m, &csl_mod)?;
+
+    let fmt_mod = PyModule::new(py, "fmt")?;
+    fmt::fmt(py, &fmt_mod)?;
+    add_submodule(m, &fmt_mod)?;
+
+    let orgams_mod = PyModule::new(py, "orgams")?;
+    orgams::orgams(py, &orgams_mod)?;
+    add_submodule(m, &orgams_mod)?;
+
+    let xfer_mod = PyModule::new(py, "xfer")?;
+    xfer::xfer(py, &xfer_mod)?;
+    add_submodule(m, &xfer_mod)?;
+
+    // the native half of the `tools` module (python/cpclib_python/tools.py)
+    let tools_mod = PyModule::new(py, "_tools")?;
+    tools::tools(py, &tools_mod)?;
+    m.add_submodule(&tools_mod)?;
 
     let cpr_mod = PyModule::new(py, "cpr")?;
     cpr_mod.add_function(wrap_pyfunction!(cpr_info, &cpr_mod)?)?;

@@ -289,7 +289,65 @@ impl PyDisc {
     }
 }
 
+/// `data` with an AMSDOS header in front (what the `hideur` tool adds): a
+/// binary at `load_address`, entered at `execution_address` (default: the load
+/// address), named `name`.
+#[pyfunction]
+#[pyo3(signature = (data, name, load_address, execution_address=None))]
+fn add_amsdos_header<'py>(
+    py: Python<'py>,
+    data: &[u8],
+    name: &str,
+    load_address: u16,
+    execution_address: Option<u16>
+) -> PyResult<Bound<'py, PyBytes>> {
+    let name = filename(name, 0)?;
+    let file = AmsdosFile::binary_file_from_buffer(
+        &name,
+        load_address,
+        execution_address.unwrap_or(load_address),
+        data
+    )
+    .map_err(runtime)?;
+    Ok(PyBytes::new(py, file.header_and_content()))
+}
+
+/// Reads the AMSDOS header of `data` (a file as it is on a disc):
+/// `(info, content)`, where `info` is `None` if there is no valid header and
+/// else `{"type", "load_address", "execution_address", "length"}` as
+/// `Disc.file_info` gives it.
+#[pyfunction]
+fn read_amsdos_header<'py>(
+    py: Python<'py>,
+    data: &[u8]
+) -> PyResult<(Option<Bound<'py, PyDict>>, Bound<'py, PyBytes>)> {
+    let file = AmsdosFile::from_buffer(data);
+    let header = file.header().filter(|h| h.represent_a_valid_file());
+    let info = match header {
+        Some(header) => {
+            let info = PyDict::new(py);
+            let kind = match header.file_type().map_err(runtime)? {
+                AmsdosFileType::Basic => "basic",
+                AmsdosFileType::Protected => "protected",
+                AmsdosFileType::Binary => "binary"
+            };
+            info.set_item("type", kind)?;
+            info.set_item("length", file.content().len())?;
+            if kind != "basic" {
+                info.set_item("load_address", header.loading_address())?;
+                info.set_item("execution_address", header.execution_address())?;
+            }
+            Some(info)
+        },
+        None => None
+    };
+    let content = if info.is_some() { file.content() } else { data };
+    Ok((info, PyBytes::new(py, content)))
+}
+
 pub fn disc(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDisc>()?;
+    m.add_function(wrap_pyfunction!(add_amsdos_header, m)?)?;
+    m.add_function(wrap_pyfunction!(read_amsdos_header, m)?)?;
     Ok(())
 }

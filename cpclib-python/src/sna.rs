@@ -70,6 +70,13 @@ pub struct PySnapshot {
 }
 
 impl PySnapshot {
+    /// Wraps a snapshot made elsewhere (`basic.to_snapshot`).
+    pub(crate) fn from_inner(snapshot: Snapshot) -> Self {
+        Self {
+            inner: Mutex::new(snapshot)
+        }
+    }
+
     fn with<R>(&self, f: impl FnOnce(&mut Snapshot) -> R) -> R {
         f(&mut self.inner.lock().expect("snapshot lock poisoned"))
     }

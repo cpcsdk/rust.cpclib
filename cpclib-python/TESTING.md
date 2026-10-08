@@ -42,5 +42,6 @@ Tests that need more than the extension
   with a display and OpenGL.
 
 Type stubs
+- `python/cpclib_python/tools.pyi` is generated: after bndbuild gains or loses a tool, run `python dev/gen_tools_stub.py` (a test checks it covers every tool).
 - The stubs in `python/cpclib_python/*.pyi` follow the Rust signatures by hand. After changing one,
   check them: `pip install mypy && mypy --strict python/cpclib_python/*.pyi`.
