@@ -1,11 +1,19 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+mod analysis;
+mod asm;
+mod basic;
 mod basm;
+mod bdasm;
 mod bndbuild;
+mod build;
 mod builders;
+mod cpr;
 mod crunchers;
 mod disc;
+mod emu;
+mod image;
 mod music;
 mod observer;
 mod sna;
@@ -81,10 +89,12 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // create submodules exposing minimal info functions for each component
     let asm_mod = PyModule::new(py, "asm")?;
     asm_mod.add_function(wrap_pyfunction!(asm_info, &asm_mod)?)?;
+    asm::asm(py, &asm_mod)?;
     add_submodule(m, &asm_mod)?;
 
     let basic_mod = PyModule::new(py, "basic")?;
     basic_mod.add_function(wrap_pyfunction!(basic_info, &basic_mod)?)?;
+    basic::basic(py, &basic_mod)?;
     add_submodule(m, &basic_mod)?;
 
     // basm submodule: assemble helper
@@ -96,6 +106,7 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     let bdasm_mod = PyModule::new(py, "bdasm")?;
     bdasm_mod.add_function(wrap_pyfunction!(bdasm_info, &bdasm_mod)?)?;
+    bdasm::bdasm(py, &bdasm_mod)?;
     add_submodule(m, &bdasm_mod)?;
 
     let bndbuild_mod = PyModule::new(py, "bndbuild")?;
@@ -124,8 +135,25 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     disc::disc(py, &disc_mod)?;
     add_submodule(m, &disc_mod)?;
 
+    let image_mod = PyModule::new(py, "image")?;
+    image::image(py, &image_mod)?;
+    add_submodule(m, &image_mod)?;
+
+    let build_mod = PyModule::new(py, "build")?;
+    build::build(py, &build_mod)?;
+    add_submodule(m, &build_mod)?;
+
+    let emu_mod = PyModule::new(py, "emu")?;
+    emu::emu(py, &emu_mod)?;
+    add_submodule(m, &emu_mod)?;
+
+    let analysis_mod = PyModule::new(py, "analysis")?;
+    analysis::analysis(py, &analysis_mod)?;
+    add_submodule(m, &analysis_mod)?;
+
     let cpr_mod = PyModule::new(py, "cpr")?;
     cpr_mod.add_function(wrap_pyfunction!(cpr_info, &cpr_mod)?)?;
+    cpr::cpr(py, &cpr_mod)?;
     add_submodule(m, &cpr_mod)?;
 
     let crunchers_mod = PyModule::new(py, "crunchers")?;

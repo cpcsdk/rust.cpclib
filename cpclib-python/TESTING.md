@@ -1,6 +1,6 @@
-# Testing `cpclib-python` (PyBndTask)
+# Testing `cpclib-python`
 
-This document shows how to build the Python extension and run the pytest suite that verifies the `PyBndTask` API.
+This document shows how to build the Python extension and run its pytest suite.
 
 Prerequisites
 - Python 3.8+ with `pip`.
@@ -32,3 +32,15 @@ pip install target/wheels/cpclib_python-*.whl
 ```
 
 - If you need assistance packaging or running the tests in CI, tell me your CI environment and I can produce a minimal `workflow` or `tox` file.
+
+
+Tests that need more than the extension
+- `CPCLIB_REAL_TOOLS=1`: the tests that really build players (`tests/test_music.py`) download the
+  conversion tools on first use, and need `wine` on Linux for CHIPNSFX, AYT and MinYMiser.
+- `CPCLIB_REAL_EMULATOR=1`: `tests/test_emu.py` boots a real emulator (a window, sound).
+- `tests/test_tools_help.py` starts every tool, GUI emulators included: it needs a machine
+  with a display and OpenGL.
+
+Type stubs
+- The stubs in `python/cpclib_python/*.pyi` follow the Rust signatures by hand. After changing one,
+  check them: `pip install mypy && mypy --strict python/cpclib_python/*.pyi`.

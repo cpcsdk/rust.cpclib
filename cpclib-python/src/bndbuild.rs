@@ -53,17 +53,10 @@ impl PyBndTask {
                 let vec: Vec<String> = py_args
                     .extract()
                     .map_err(pyo3::exceptions::PyValueError::new_err)?;
-                // Surround each argument with quotes and escape internal quotes.
-                let quoted: Vec<String> = vec
-                    .into_iter()
-                    .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
-                    .collect();
-                let joined = quoted.join(" ");
-                let std = StandardTaskArguments::new(joined);
-                let inner = InnerTask::from_command_and_arguments(code, std)
+                let task = task_from_command(code, &vec)
                     .map_err(pyo3::exceptions::PyValueError::new_err)?;
                 Ok(PyBndTask {
-                    inner: Mutex::new(inner.into())
+                    inner: Mutex::new(task)
                 })
             }
         }
@@ -102,6 +95,18 @@ impl PyBndTask {
             Ok(None)
         }
     }
+}
+
+/// The task `code` (`basm`, `dsk`, ...) with `args` - each argument quoted, so
+/// that spaces and quotes in file names survive.
+pub(crate) fn task_from_command(code: &str, args: &[String]) -> Result<Task, String> {
+    // Surround each argument with quotes and escape internal quotes.
+    let joined = args
+        .iter()
+        .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+        .collect::<Vec<_>>()
+        .join(" ");
+    InnerTask::from_command_and_arguments(code, StandardTaskArguments::new(joined)).map(Into::into)
 }
 
 impl PyBndTask {

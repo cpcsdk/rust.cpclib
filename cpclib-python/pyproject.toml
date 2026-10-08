@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "cpclib-python"
+description = "Python bindings for cpclib: assemble, crunch, build discs and snapshots, and play CPC music, from Python"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["amstrad", "cpc", "z80", "demoscene", "assembler"]
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Typing :: Typed",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+# a mixed package: `python/cpclib_python/` holds the `__init__.py`, the type
+# stubs (`*.pyi`) and `py.typed`; the extension is `cpclib_python.cpclib_python`
+python-source = "python"
+module-name = "cpclib_python.cpclib_python"
+features = ["extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

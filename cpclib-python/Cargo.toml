@@ -21,11 +21,20 @@ cpclib-asm = { workspace = true, default-features = false }
 cpclib-basic = { workspace = true, default-features = false }
 cpclib-basm = { workspace = true, default-features = false }
 cpclib-bdasm = { workspace = true, default-features = false }
-cpclib-bndbuild = { workspace = true, default-features = false, features = ["fap"] }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["fap", "rayon"] }
 cpclib-cpr = { workspace = true, default-features = false }
 cpclib-crunchers = { workspace = true, default-features = false }
 cpclib-crunch = { workspace = true }
 shlex.workspace = true
+cpclib-basmopt = { workspace = true }
+cpclib-lsp = { workspace = true }
+tower-lsp.workspace = true
+cpclib-runner = { workspace = true, default-features = false, features = ["screenshot"] }
+cpclib-dap = { workspace = true }
+cpclib-image = { workspace = true }
+base64 = { workspace = true }
+serde_json = { workspace = true }
+camino-tempfile.workspace = true
 cpclib-disc = { workspace = true, default-features = false }
 cpclib-common = { workspace = true, default-features = false }
 cpclib-sna = { workspace = true, features = ["cmdline", "interactive"], default-features = false }

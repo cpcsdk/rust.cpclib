@@ -1,0 +1,6 @@
+# `maturin develop` puts the built extension next to the package sources
+*.so
+*.pyd
+__pycache__/
+.pytest_cache/
+.venv/
