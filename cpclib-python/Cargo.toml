@@ -24,6 +24,9 @@ cpclib-bdasm = { workspace = true, default-features = false }
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["fap"] }
 cpclib-cpr = { workspace = true, default-features = false }
 cpclib-crunchers = { workspace = true, default-features = false }
+cpclib-crunch = { workspace = true }
+shlex.workspace = true
+cpclib-disc = { workspace = true, default-features = false }
 cpclib-common = { workspace = true, default-features = false }
 cpclib-sna = { workspace = true, features = ["cmdline", "interactive"], default-features = false }
 

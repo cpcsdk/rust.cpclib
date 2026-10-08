@@ -2877,10 +2877,13 @@ dependencies = [
  "cpclib-bndbuild",
  "cpclib-common",
  "cpclib-cpr",
+ "cpclib-crunch",
  "cpclib-crunchers",
+ "cpclib-disc",
  "cpclib-sna",
  "pyo3",
  "pyo3-build-config",
+ "shlex 1.3.0",
 ]
 
 [[package]]

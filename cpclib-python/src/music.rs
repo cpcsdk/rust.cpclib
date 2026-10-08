@@ -24,7 +24,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
-use crate::bndbuild::PyConsoleObserver;
+use crate::observer::PyObserver;
 
 fn parse_player(player: Option<&str>) -> PyResult<MusicPlayer> {
     player
@@ -199,17 +199,21 @@ fn song_info<'py>(py: Python<'py>, song: &str) -> PyResult<Bound<'py, PyDict>> {
 /// `snapshot`, a snapshot of the running player is written there too. `name`
 /// defaults to the song's file name.
 ///
+/// The tools' output goes to the console, or to `on_output(kind, text)` when
+/// given (see `Task.execute`).
+///
 /// Raises `RuntimeError` when a conversion or the assembly fails, `ValueError`
 /// for an unknown player.
 #[pyfunction]
-#[pyo3(signature = (song, player=None, snapshot=None, name=None, sid_wait_line_count=72))]
+#[pyo3(signature = (song, player=None, snapshot=None, name=None, sid_wait_line_count=72, on_output=None))]
 fn build(
     py: Python,
     song: &str,
     player: Option<&str>,
     snapshot: Option<&str>,
     name: Option<&str>,
-    sid_wait_line_count: u16
+    sid_wait_line_count: u16,
+    on_output: Option<Py<PyAny>>
 ) -> PyResult<PyMusicBuild> {
     let options = options(player, sid_wait_line_count)?;
     let song = Utf8PathBuf::from(song);
@@ -223,7 +227,7 @@ fn build(
                 &name,
                 &options,
                 snapshot.as_deref(),
-                &Arc::new(PyConsoleObserver)
+                &Arc::new(PyObserver::new(on_output))
             )
         })
         .map_err(PyRuntimeError::new_err)?;
@@ -233,21 +237,29 @@ fn build(
 /// Same as `build`, but wraps the program as an AMSDOS binary on a fresh DSK,
 /// saved at `dsk`. Returns `dsk`.
 #[pyfunction]
-#[pyo3(signature = (song, dsk, player=None, name=None, sid_wait_line_count=72))]
+#[pyo3(signature = (song, dsk, player=None, name=None, sid_wait_line_count=72, on_output=None))]
 fn build_dsk(
     py: Python,
     song: &str,
     dsk: &str,
     player: Option<&str>,
     name: Option<&str>,
-    sid_wait_line_count: u16
+    sid_wait_line_count: u16,
+    on_output: Option<Py<PyAny>>
 ) -> PyResult<String> {
     let options = options(player, sid_wait_line_count)?;
     let song = Utf8PathBuf::from(song);
     let name = name_of(&song, name);
 
     let built = py
-        .detach(|| music_run::build_music_dsk(&song, &name, &options, &Arc::new(PyConsoleObserver)))
+        .detach(|| {
+            music_run::build_music_dsk(
+                &song,
+                &name,
+                &options,
+                &Arc::new(PyObserver::new(on_output))
+            )
+        })
         .map_err(PyRuntimeError::new_err)?;
     std::fs::copy(&built, dsk)
         .map_err(|e| PyRuntimeError::new_err(format!("Could not write {dsk}: {e}")))?;
@@ -257,14 +269,15 @@ fn build_dsk(
 /// Builds the player and launches `emulator` on it (any name bndbuild's `emu`
 /// accepts, `ace` by default). Returns what happened, as a message.
 #[pyfunction]
-#[pyo3(signature = (song, emulator="ace", player=None, name=None, sid_wait_line_count=72))]
+#[pyo3(signature = (song, emulator="ace", player=None, name=None, sid_wait_line_count=72, on_output=None))]
 fn play(
     py: Python,
     song: &str,
     emulator: &str,
     player: Option<&str>,
     name: Option<&str>,
-    sid_wait_line_count: u16
+    sid_wait_line_count: u16,
+    on_output: Option<Py<PyAny>>
 ) -> PyResult<String> {
     let options = options(player, sid_wait_line_count)?;
     let song = Utf8PathBuf::from(song);
@@ -276,7 +289,7 @@ fn play(
             &name,
             emulator,
             &options,
-            &Arc::new(PyConsoleObserver)
+            &Arc::new(PyObserver::new(on_output))
         )
     });
     if outcome.success {
@@ -290,13 +303,20 @@ fn play(
 /// Builds `song` with every player that can play it, to compare them: one
 /// `PlayerComparison` each, with its `build` or the `error` that stopped it.
 #[pyfunction]
-#[pyo3(signature = (song, name=None))]
-fn compare(py: Python, song: &str, name: Option<&str>) -> PyResult<Vec<PyPlayerComparison>> {
+#[pyo3(signature = (song, name=None, on_output=None))]
+fn compare(
+    py: Python,
+    song: &str,
+    name: Option<&str>,
+    on_output: Option<Py<PyAny>>
+) -> PyResult<Vec<PyPlayerComparison>> {
     let song = Utf8PathBuf::from(song);
     let name = name_of(&song, name);
 
     let comparisons = py
-        .detach(|| music_run::compare_music_players(&song, &name, &Arc::new(PyConsoleObserver)))
+        .detach(|| {
+            music_run::compare_music_players(&song, &name, &Arc::new(PyObserver::new(on_output)))
+        })
         .map_err(PyRuntimeError::new_err)?;
 
     comparisons
@@ -325,13 +345,18 @@ fn compare(py: Python, song: &str, name: Option<&str>) -> PyResult<Vec<PyPlayerC
 
 /// `compare`, as the plain-text table bndbuild's VS Code extension shows.
 #[pyfunction]
-#[pyo3(signature = (song, name=None))]
-fn compare_table(py: Python, song: &str, name: Option<&str>) -> PyResult<String> {
+#[pyo3(signature = (song, name=None, on_output=None))]
+fn compare_table(
+    py: Python,
+    song: &str,
+    name: Option<&str>,
+    on_output: Option<Py<PyAny>>
+) -> PyResult<String> {
     let song = Utf8PathBuf::from(song);
     let name = name_of(&song, name);
 
     py.detach(|| {
-        music_run::compare_music_players(&song, &name, &Arc::new(PyConsoleObserver))
+        music_run::compare_music_players(&song, &name, &Arc::new(PyObserver::new(on_output)))
             .map(|c| music_run::format_player_comparison(&c))
     })
     .map_err(PyRuntimeError::new_err)

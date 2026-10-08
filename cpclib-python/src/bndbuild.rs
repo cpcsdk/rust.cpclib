@@ -4,81 +4,12 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-use cpclib_bndbuild::event::{BndBuilderEvent, BndBuilderObserver};
 use cpclib_bndbuild::task::{InnerTask, StandardTaskArguments, Task};
-use cpclib_common::event::EventObserver;
 use pyo3::Py;
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
+use pyo3::types::{PyAny, PyDict};
 
-// Observer that forwards outputs to process streams (no internal storage)
-#[derive(Default)]
-pub(crate) struct PyConsoleObserver;
-
-impl fmt::Debug for PyConsoleObserver {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PyConsoleObserver").finish()
-    }
-}
-
-impl EventObserver for PyConsoleObserver {
-    fn emit_stdout(&self, s: &str) {
-        println!("{}", s);
-    }
-
-    fn emit_stderr(&self, s: &str) {
-        eprintln!("{}", s);
-    }
-}
-
-impl BndBuilderObserver for PyConsoleObserver {
-    fn update(&self, event: BndBuilderEvent) {
-        use cpclib_bndbuild::event::BndBuilderEvent::*;
-        match event {
-            ChangeState(_) => {
-                self.emit_stdout("ChangeState");
-            },
-            StartRule { rule, nb, out_of } => {
-                self.emit_stdout(&format!("StartRule {} {}/{}", rule, nb, out_of));
-            },
-            StopRule(p) => {
-                self.emit_stdout(&format!("StopRule {}", p));
-            },
-            FailedRule(p) => {
-                self.emit_stdout(&format!("FailedRule {}", p));
-            },
-            StartTask(_r, t) => {
-                self.emit_stdout(&format!("StartTask {}", t));
-            },
-            StopTask(_r, t, d) => {
-                self.emit_stdout(&format!("StopTask {} {}ms", t, d.as_millis()));
-            },
-            TaskStdout(tgt, _task, txt) => {
-                println!("[{}] {}", tgt, txt);
-            },
-            TaskStderr(tgt, _task, txt) => {
-                eprintln!("[{}] {}", tgt, txt);
-            },
-            Stdout(s) => {
-                println!("{}", s);
-            },
-            Stderr(s) => {
-                eprintln!("{}", s);
-            },
-            StartRuleAlias {
-                alias: _,
-                representative: _,
-                nb: _,
-                out_of: _
-            } => todo!(),
-            SkippedRule(_utf8_path) => todo!(),
-            BuildFileContext(_utf8_path) => todo!(),
-            TaskIgnoredError(tgt, _task, err) => {
-                eprintln!("[{}] Error ignored: {}", tgt, err);
-            }
-        }
-    }
-}
+use crate::observer::PyObserver;
 
 impl fmt::Debug for PyBndTask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -138,25 +69,42 @@ impl PyBndTask {
         }
     }
 
-    /// Execute the stored task synchronously and return a result dict.
-    pub fn execute(&self, py: Python) -> PyResult<()> {
-        let observer = Arc::new(PyConsoleObserver);
-        self.execute_with_observer(py, observer)
+    /// Execute the stored task synchronously.
+    ///
+    /// Its output goes to the console, unless `on_output` is given: a callable
+    /// `on_output(kind, text)` (kinds: `stdout`, `stderr`, `task-start`, ...).
+    /// With `capture=True`, returns `{"stdout": ..., "stderr": ...}`; returns
+    /// None otherwise. Raises `RuntimeError` if the task fails.
+    #[pyo3(signature = (on_output=None, capture=false))]
+    pub fn execute(
+        &self,
+        py: Python,
+        on_output: Option<Py<PyAny>>,
+        capture: bool
+    ) -> PyResult<Option<Py<PyDict>>> {
+        let observer = Arc::new(PyObserver::new(on_output));
+        // Execute the task without holding the GIL.
+        let result = py.detach(|| {
+            let guard = self.inner.lock().unwrap();
+            guard.execute(&observer)
+        });
+
+        if capture {
+            let (stdout, stderr) = observer.captured();
+            let captured = PyDict::new(py);
+            captured.set_item("stdout", stdout)?;
+            captured.set_item("stderr", stderr)?;
+            result.map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+            Ok(Some(captured.into()))
+        }
+        else {
+            result.map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+            Ok(None)
+        }
     }
 }
 
 impl PyBndTask {
-    /// Execute the stored task using the provided observer.
-    /// This is a Rust-level helper where the observer is an argument.
-    fn execute_with_observer(&self, py: Python, observer: Arc<PyConsoleObserver>) -> PyResult<()> {
-        // Execute the task without holding the GIL.
-        py.detach(|| {
-            let guard = self.inner.lock().unwrap();
-            guard.execute(&observer)
-        })
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-    }
-
     /// Helper to create PyBndTask from a Task instance (for builders)
     pub(crate) fn new_from_task(py: Python, task: Task) -> PyResult<Py<PyBndTask>> {
         Py::new(
