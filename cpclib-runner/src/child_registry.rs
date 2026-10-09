@@ -23,12 +23,45 @@ pub fn kill_all_children() {
     }
 }
 
+/// Every process below `pid`, children first. An AppImage - the way most of
+/// the emulators are shipped on Linux - is a launcher that starts the real
+/// emulator as its child: killing the launcher alone leaves the emulator
+/// running (and holding its debug port, so the next launch cannot reach its own).
+#[cfg(unix)]
+fn descendants_of(pid: u32) -> Vec<u32> {
+    let children: Vec<u32> = std::process::Command::new("pgrep")
+        .args(["-P", &pid.to_string()])
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .split_whitespace()
+                .filter_map(|p| p.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut all = Vec::new();
+    for child in children {
+        all.extend(descendants_of(child));
+        all.push(child);
+    }
+    all
+}
+
+/// Kills `pid` and, on Unix, everything it started.
 pub(crate) fn kill_pid(pid: u32) {
     #[cfg(unix)]
     {
-        let _ = std::process::Command::new("kill")
-            .args(["-9", &pid.to_string()])
-            .status();
+        // the descendants are listed first: once the parent is gone they are
+        // re-parented, and no longer found below it
+        let victims: Vec<u32> = descendants_of(pid)
+            .into_iter()
+            .chain(std::iter::once(pid))
+            .collect();
+        for victim in victims {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &victim.to_string()])
+                .status();
+        }
     }
     #[cfg(windows)]
     {

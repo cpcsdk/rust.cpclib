@@ -2977,6 +2977,13 @@ impl<E: UsedEmulator> RobotImpl<E> {
 impl<E: UsedEmulator> RobotImpl<E> {
     pub fn close(&mut self) {
         self.events_manager.alt_key(HostKey::F4);
+
+        // A window that does not answer to Alt+F4 (the emulators driven by
+        // their own API, most of the time) must not be left running: it keeps
+        // its port, and the next launch then talks to the wrong instance.
+        // Give it a moment to close by itself, then end what is left.
+        std::thread::sleep(Duration::from_millis(500));
+        crate::child_registry::kill_all_children();
     }
 }
 
