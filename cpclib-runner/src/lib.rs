@@ -6,6 +6,8 @@ pub mod ace_config;
 pub mod child_registry;
 pub mod csl_interpreter;
 pub mod delegated;
+#[cfg(test)]
+mod download_audit;
 pub mod embedded;
 pub mod emucontrol;
 pub mod runner;

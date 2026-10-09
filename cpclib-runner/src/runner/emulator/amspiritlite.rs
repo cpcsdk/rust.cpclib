@@ -25,9 +25,20 @@ pub const DOWNLOAD_URL_V1_14_MACOS: &str = "https://github.com/AMSpiriT-Emulator
 /// there, which is why the three platforms do not share a package.
 pub const DOWNLOAD_URL_V1_14_LINUX: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.14.3/Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage";
 
+/// 1.14.3's releases are gone from GitHub: 1.16.0 is published by the author
+/// on amspirit.fr, as zips - the AppImage on Linux, the macOS dmg, and the SDL
+/// build on Windows (the Qt one is not offered there any more).
+pub const DOWNLOAD_URL_V1_16_WINDOWS: &str =
+    "https://amspirit.fr/content/files/2026/09/Amspirit-Lite-SDL-1.16.0-win64.zip";
+pub const DOWNLOAD_URL_V1_16_MACOS: &str =
+    "https://amspirit.fr/content/files/2026/09/Amspirit-Lite-SDL-1.16.0-mac-arm64.zip";
+pub const DOWNLOAD_URL_V1_16_LINUX: &str =
+    "https://amspirit.fr/content/files/2026/09/Amspirit-Lite-SDL-ImGui-1.16.0-x86_64-appimage.zip";
+
 #[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AmspiritLiteVersion {
     #[default]
+    V1_16_0,
     V1_14_3
 }
 
@@ -38,14 +49,16 @@ impl AmspiritLiteVersion {
 
     fn target_folder(&self) -> &'static str {
         match self {
-            Self::V1_14_3 => "amspirit_lite_1.14.3"
+            Self::V1_14_3 => "amspirit_lite_1.14.3",
+            Self::V1_16_0 => "amspirit_lite_1.16.0"
         }
     }
 
     #[cfg(target_os = "windows")]
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
-            Self::V1_14_3 => DOWNLOAD_URL_V1_14_WINDOWS
+            Self::V1_14_3 => DOWNLOAD_URL_V1_14_WINDOWS,
+            Self::V1_16_0 => DOWNLOAD_URL_V1_16_WINDOWS
         }
         .into()
     }
@@ -53,7 +66,8 @@ impl AmspiritLiteVersion {
     #[cfg(target_os = "linux")]
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
-            Self::V1_14_3 => DOWNLOAD_URL_V1_14_LINUX
+            Self::V1_14_3 => DOWNLOAD_URL_V1_14_LINUX,
+            Self::V1_16_0 => DOWNLOAD_URL_V1_16_LINUX
         }
         .into()
     }
@@ -61,7 +75,8 @@ impl AmspiritLiteVersion {
     #[cfg(target_os = "macos")]
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
-            Self::V1_14_3 => DOWNLOAD_URL_V1_14_MACOS
+            Self::V1_14_3 => DOWNLOAD_URL_V1_14_MACOS,
+            Self::V1_16_0 => DOWNLOAD_URL_V1_16_MACOS
         }
         .into()
     }
@@ -69,12 +84,18 @@ impl AmspiritLiteVersion {
     fn target_exec_fname(&self) -> &'static str {
         #[cfg(target_os = "windows")]
         {
-            return "Amspirit-Lite-Qt.exe";
+            return match self {
+                Self::V1_14_3 => "Amspirit-Lite-Qt.exe",
+                Self::V1_16_0 => "amspirit-lite-sdl.exe"
+            };
         }
 
         #[cfg(target_os = "linux")]
         {
-            "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage"
+            match self {
+                Self::V1_14_3 => "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage",
+                Self::V1_16_0 => "Amspirit-Lite-SDL-ImGui-1.16.0-x86_64.AppImage"
+            }
         }
 
         #[cfg(target_os = "macos")]
@@ -89,17 +110,24 @@ impl AmspiritLiteVersion {
             return ArchiveFormat::Zip;
         }
 
-        // An AppImage is the executable; there is nothing to unpack.
+        // An AppImage is the executable; there is nothing to unpack - unless it
+        // comes in a zip, as it does since 1.16.0.
         #[cfg(target_os = "linux")]
         {
-            ArchiveFormat::Raw
+            match self {
+                Self::V1_14_3 => ArchiveFormat::Raw,
+                Self::V1_16_0 => ArchiveFormat::Zip
+            }
         }
 
         // A `.dmg` is mounted rather than extracted, which the post-install
-        // step below does.
+        // step below does (1.16.0 puts it in a zip).
         #[cfg(target_os = "macos")]
         {
-            return ArchiveFormat::Raw;
+            return match self {
+                Self::V1_14_3 => ArchiveFormat::Raw,
+                Self::V1_16_0 => ArchiveFormat::Zip
+            };
         }
     }
 

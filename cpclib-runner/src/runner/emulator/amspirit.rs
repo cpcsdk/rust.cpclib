@@ -69,7 +69,11 @@ impl StaticInformation for AmspiritVersion {
             },
             Self::V2_04b => {
                 static URLS4: OnceLock<MutiplatformUrls> = OnceLock::new();
-                URLS4.get_or_init(|| MutiplatformUrls::unique_url("https://www.amspirit.fr/content/files/2026/07/CPC_AMSpiriT_v2.04b_Win_x64.7z"))
+                URLS4.get_or_init(|| {
+                    MutiplatformUrls::unique_url(
+                        "https://amspirit.fr/content/files/2026/09/CPC_AMSpiriT_v2.04b_Win_x64.zip"
+                    )
+                })
             }
         }
     }
@@ -78,7 +82,11 @@ impl StaticInformation for AmspiritVersion {
 impl DownloadableInformation for AmspiritVersion {
     #[cfg(feature = "archive-7z")]
     fn target_os_archive_format(&self) -> ArchiveFormat {
-        ArchiveFormat::SevenZ
+        match self {
+            // republished by its author as a zip
+            Self::V2_04b => ArchiveFormat::Zip,
+            _ => ArchiveFormat::SevenZ
+        }
     }
 
     #[cfg(not(feature = "archive-7z"))]

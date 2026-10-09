@@ -664,10 +664,10 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         //    };
         //}
         //// is forwarded to emit_stdout.
-        //use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+        // use portable_pty::{CommandBuilder, PtySize, native_pty_system};
         //
-        //let pty_system = native_pty_system();
-        //let pair = pty_system
+        // let pty_system = native_pty_system();
+        // let pair = pty_system
         //    .openpty(PtySize {
         //        rows: 24,
         //        cols: 120,
@@ -676,36 +676,34 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         //    })
         //    .map_err(|e| format!("Failed to create PTY: {e}"))?;
         //
-        //let slave = pair.slave;
-        //let master = pair.master;
+        // let slave = pair.slave;
+        // let master = pair.master;
         //
-        //let mut cmd_builder = CommandBuilder::new(app);
-        //cmd_builder.cwd(&in_dir);
-        //for arg in &itr[1..] {
+        // let mut cmd_builder = CommandBuilder::new(app);
+        // cmd_builder.cwd(&in_dir);
+        // for arg in &itr[1..] {
         //    cmd_builder.arg(arg);
         //}
         //#[cfg(target_os = "linux")]
-        //for var in SNAP_LEAKED_ENV_VARS {
+        // for var in SNAP_LEAKED_ENV_VARS {
         //    cmd_builder.env_remove(var);
         //}
-        //
-        //let mut child = slave
+        // let mut child = slave
         //    .spawn_command(cmd_builder)
         //    .map_err(|e| format!("Error while launching {}. {e}", app))?;
         //
-        //let child_pid_opt = child.process_id();
-        //if let Some(pid) = child_pid_opt {
+        // let child_pid_opt = child.process_id();
+        // if let Some(pid) = child_pid_opt {
         //    register_child_pid(pid);
         //}
-        //
-        //let mut pty_reader = master
+        // let mut pty_reader = master
         //    .try_clone_reader()
         //    .map_err(|e| format!("Failed to get PTY reader: {e}"))?;
         //
         //// The scope body (main thread) waits for the child then drops the slave,
         //// which signals EOF to the PTY master reader running in the spawned thread.
-        //let mut pty_exit = None;
-        //thread::scope(|s| {
+        // let mut pty_exit = None;
+        // thread::scope(|s| {
         //    // PTY master → emit_stdout (merges both stdout and stderr from child)
         //    s.spawn(|| {
         //        let mut current_line = String::new();
@@ -741,23 +739,20 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         //    drop(slave);
         //    drop(master);
         //});
-        //
-        //let status = pty_exit
+        // let status = pty_exit
         //    .unwrap()
         //    .map_err(|e| format!("Error while executing {}. {e}", app))?;
         //
-        //if let Some(pid) = child_pid_opt {
+        // if let Some(pid) = child_pid_opt {
         //    deregister_child_pid(pid);
         //}
-        //
-        //if !status.success() {
+        // if !status.success() {
         //    return Err(format!(
         //        "Error while launching the command. (exit code {})",
         //        status.exit_code()
         //    ));
         //}
-        //
-        //Ok(())
+        // Ok(())
 
         Ok(())
     }
