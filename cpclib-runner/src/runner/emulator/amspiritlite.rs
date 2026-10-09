@@ -188,11 +188,30 @@ fn ensure_executable(_path: &Utf8Path) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// 1.16.0: one zip per platform, on the author's own site.
+    #[test]
+    fn the_current_release_is_a_zip_per_platform() {
+        for url in [
+            DOWNLOAD_URL_V1_16_WINDOWS,
+            DOWNLOAD_URL_V1_16_MACOS,
+            DOWNLOAD_URL_V1_16_LINUX
+        ] {
+            assert!(
+                url.starts_with("https://amspirit.fr/content/files/"),
+                "{url}"
+            );
+            assert!(url.contains("1.16.0") && url.ends_with(".zip"), "{url}");
+        }
+        assert_ne!(DOWNLOAD_URL_V1_16_WINDOWS, DOWNLOAD_URL_V1_16_LINUX);
+        assert_ne!(DOWNLOAD_URL_V1_16_MACOS, DOWNLOAD_URL_V1_16_LINUX);
+    }
+
     /// Three platforms, three unrelated packages.
     ///
-    /// Upstream ships a Qt build for Windows and macOS and an SDL/ImGui
+    /// Upstream shipped a Qt build for Windows and macOS and an SDL/ImGui
     /// AppImage for Linux, so unlike most emulators here the URL, the archive
-    /// format *and* the executable name all differ per platform.
+    /// format *and* the executable name all differ per platform. (1.14.3: its
+    /// GitHub releases are gone, the addresses are kept for the record.)
     #[test]
     fn every_platform_has_its_own_package() {
         for url in [
@@ -226,7 +245,7 @@ mod tests {
         let executable = version.target_exec_fname();
 
         #[cfg(target_os = "linux")]
-        assert_eq!(executable, "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage");
+        assert_eq!(executable, "Amspirit-Lite-SDL-ImGui-1.16.0-x86_64.AppImage");
         #[cfg(target_os = "windows")]
         assert!(executable.ends_with(".exe"), "{executable}");
         #[cfg(target_os = "macos")]
@@ -239,8 +258,12 @@ mod tests {
         let folder = AmspiritLiteVersion::default().target_folder();
         assert!(folder.contains("lite"), "{folder}");
         assert!(
-            folder.contains("1.14.3"),
+            folder.contains("1.16.0"),
             "and per release, so two versions never share one: {folder}"
+        );
+        assert_ne!(
+            AmspiritLiteVersion::V1_14_3.target_folder(),
+            AmspiritLiteVersion::V1_16_0.target_folder()
         );
     }
 

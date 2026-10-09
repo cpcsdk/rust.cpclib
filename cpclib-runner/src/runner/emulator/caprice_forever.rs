@@ -11,6 +11,7 @@ pub const CAPRICEFOREVER_CMD: &str = "caprice";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum CapriceForeverVersion {
     #[default]
+    V26_10,
     V25_3
 }
 
@@ -19,13 +20,14 @@ impl InternetStaticCompiledApplication for CapriceForeverVersion {}
 impl ExecutableInformation for CapriceForeverVersion {
     fn target_os_folder(&self) -> &'static str {
         match self {
+            Self::V26_10 => "CapriceForever_26.10",
             Self::V25_3 => "CapriceForever_25.3"
         }
     }
 
     fn target_os_exec_fname(&self) -> &'static str {
         match self {
-            Self::V25_3 => {
+            Self::V26_10 | Self::V25_3 => {
                 #[cfg(target_os = "windows")]
                 return "Caprice64.exe";
                 #[cfg(target_os = "linux")]
@@ -44,6 +46,12 @@ impl ExecutableInformation for CapriceForeverVersion {
 impl StaticInformation for CapriceForeverVersion {
     fn static_download_urls(&self) -> &'static MutiplatformUrls {
         match self {
+            // the 25.3 file is no longer there: cpc-power only keeps the latest
+            CapriceForeverVersion::V26_10 => {
+                let url = "https://www.cpc-power.com/cpcarchives/download/Emulateurs/%5BWin64%5D%20Caprice_Forever_v26.10.7z";
+                static URLS: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URLS.get_or_init(|| MutiplatformUrls::builder().windows(url).linux(url).build())
+            },
             CapriceForeverVersion::V25_3 => {
                 let url = "https://www.cpc-power.com/cpcarchives/download/Emulateurs/%5BWin64%5D%20Caprice_Forever_v25.3.7z";
                 static URLS: OnceLock<MutiplatformUrls> = OnceLock::new();

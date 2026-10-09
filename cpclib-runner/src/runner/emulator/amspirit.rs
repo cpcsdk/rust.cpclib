@@ -39,7 +39,9 @@ impl ExecutableInformation for AmspiritVersion {
             Self::V2RC1 => "CPC_AMSpiriT_v2.00b_Win_x64\\Amspirit v2.00b_x64.exe",
             Self::Rc1_01 => "CPC_AMSpiriT_RC_v1.01_Win_x64\\Amspirit_v1.01_RC_x64.exe",
             Self::V2_03b => "CPC_AMSpiriT_v2.03b_Win_x64\\Amspirit v2.03b_x64.exe",
-            Self::V2_04b => "CPC_AMSpiriT_v2.04b_Win_x64\\Amspirit v2.04b_x64.exe"
+            // a zip, whose single root folder is unwrapped on extraction (the
+            // 7z archives of the other versions keep theirs)
+            Self::V2_04b => "Amspirit v2.04b_x64.exe"
         }
     }
 
