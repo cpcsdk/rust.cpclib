@@ -971,6 +971,7 @@ where
 
     let executable = configuration.exec_fname();
     let mut command = std::process::Command::new(executable.as_str());
+    cpclib_runner::runner::exec::configure_appimage(&mut command, executable.as_str());
     command
         .arg(path.as_os_str())
         .arg("--web-server")
@@ -1034,6 +1035,7 @@ where
     // table, `PROGRAM_START`) already assumes.
     let executable = configuration.exec_fname();
     let mut command = std::process::Command::new(executable.as_str());
+    cpclib_runner::runner::exec::configure_appimage(&mut command, executable.as_str());
     command
         .arg("--model")
         .arg("6128")
@@ -1116,6 +1118,7 @@ where
 
     let executable = configuration.exec_fname();
     let mut command = std::process::Command::new(executable.as_str());
+    cpclib_runner::runner::exec::configure_appimage(&mut command, executable.as_str());
     command
         .arg(disk.as_os_str())
         .arg("--web-server")

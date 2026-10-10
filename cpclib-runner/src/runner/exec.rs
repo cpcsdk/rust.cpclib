@@ -67,6 +67,17 @@ pub const SNAP_LEAKED_ENV_VARS: &[&str] = &[
     "SNAP_LIBRARY_PATH"
 ];
 
+/// Makes `cmd`, which launches `executable`, able to run an AppImage on a
+/// system whose FUSE cannot mount it: it is unpacked and run instead (the
+/// unpacked copy is kept, so only the first run pays for it). With recent
+/// distributions' fusermount a mount fails with "file descriptor 5 is not a
+/// socket" and nothing starts. Does nothing for any other executable.
+pub fn configure_appimage(cmd: &mut std::process::Command, executable: &str) {
+    if cfg!(target_os = "linux") && executable.ends_with(".AppImage") {
+        cmd.env("APPIMAGE_EXTRACT_AND_RUN", "1");
+    }
+}
+
 #[derive(Default, Clone, Copy, Debug)]
 pub enum RunInDir {
     #[default]
@@ -385,6 +396,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             for var in SNAP_LEAKED_ENV_VARS {
                 cmd.env_remove(var);
             }
+            configure_appimage(&mut cmd, app);
             let stdin_stdio = match stdin {
                 Some(TaskStdin::File(path)) => {
                     Stdio::from(
@@ -514,6 +526,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             for var in SNAP_LEAKED_ENV_VARS {
                 cmd.env_remove(var);
             }
+            configure_appimage(&mut cmd, app);
             let cmd = cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
             let mut child: Child = cmd
                 .spawn_transparent(&TransparentRunner::new())
@@ -759,5 +772,24 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
 
     fn get_command(&self) -> &str {
         "external"
+    }
+}
+
+#[cfg(test)]
+mod appimage_tests {
+    use super::configure_appimage;
+
+    fn extract_and_run(executable: &str) -> bool {
+        let mut cmd = std::process::Command::new(executable);
+        configure_appimage(&mut cmd, executable);
+        cmd.get_envs()
+            .any(|(k, v)| k == "APPIMAGE_EXTRACT_AND_RUN" && v.is_some_and(|v| v == "1"))
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn an_appimage_is_unpacked_rather_than_mounted() {
+        assert!(extract_and_run("/cache/Emulator-1.0-x86_64.AppImage"));
+        assert!(!extract_and_run("/cache/emulator"));
     }
 }
