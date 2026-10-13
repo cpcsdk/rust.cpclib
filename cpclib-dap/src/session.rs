@@ -1101,7 +1101,10 @@ impl<P: DapPeer> Session<P> {
             return Ok(());
         }
         self.started = true;
-        Ok(())
+        // An emulator started paused (bemu) is let go now, the breakpoints
+        // armed - or held, on entry, when the launch asked to stop there.
+        let hold = self.program_breakpoints.iter().any(|bp| bp.one_shot);
+        self.peer_mut().release(hold)
     }
 
     /// What this adapter tells the editor it can do.

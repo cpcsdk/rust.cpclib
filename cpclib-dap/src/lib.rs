@@ -21,6 +21,7 @@
 
 pub mod ace;
 pub mod amspiritlite;
+pub mod bemu;
 pub mod basic;
 pub mod basic_session;
 pub mod callstack;
@@ -98,6 +99,11 @@ impl peer::DapPeer for ServedPeer {
     /// what a step over means inside the emulator where we cannot reach.
     /// Stepping over a `defs` there is still one `NOP` per press.
     fn note_line_at_pc(&mut self, _line: peer::LineAtPc) {}
+
+    /// Already running when attached: nothing to let go.
+    fn release(&mut self, _hold: bool) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Which emulator a session is talking to.
@@ -152,6 +158,15 @@ impl peer::DapPeer for Backend {
             Self::AmspiritLite(peer) => peer.note_line_at_pc(line),
             Self::SugarBox(peer) => peer.note_line_at_pc(line),
             Self::Ace(peer) => peer.note_line_at_pc(line)
+        }
+    }
+
+    fn release(&mut self, hold: bool) -> std::io::Result<()> {
+        match self {
+            Self::Served(peer) => peer.release(hold),
+            Self::AmspiritLite(peer) => peer.release(hold),
+            Self::SugarBox(peer) => peer.release(hold),
+            Self::Ace(peer) => peer.release(hold)
         }
     }
 
@@ -1048,18 +1063,26 @@ fn start_session(
     // why the setting did nothing.
     if !chosen_emulator.eq_ignore_ascii_case("1984js")
         && !chosen_emulator.eq_ignore_ascii_case("amspiritlite")
+        && !chosen_emulator.eq_ignore_ascii_case("bemu")
         && !chosen_emulator.eq_ignore_ascii_case("sugarbox")
         && !chosen_emulator.eq_ignore_ascii_case("ace")
     {
         notices.push(format!(
             "\"{chosen_emulator}\" cannot be debugged; this session uses 1984js. \
-             Debuggable emulators: 1984js, amspiritlite, sugarbox, ace - set one in the launch \
+             Debuggable emulators: 1984js, amspiritlite, bemu, sugarbox, ace - set one in the launch \
              configuration, or as `emulator` under `[dap]` in cpclib-lsp.toml."
         ));
     }
     let wants_sugarbox = chosen_emulator.eq_ignore_ascii_case("sugarbox");
     if wants_sugarbox {
         notices.push("Debugging through SugarboxV2, in its own window.".to_string());
+    }
+    if chosen_emulator.eq_ignore_ascii_case("bemu") {
+        notices.push(
+            "Debugging through bemu, started paused so every breakpoint is armed before the \
+             program runs."
+                .to_string()
+        );
     }
     let wants_ace = chosen_emulator.eq_ignore_ascii_case("ace");
     if wants_ace {
@@ -1166,10 +1189,52 @@ fn connect_backend(
 
     let (chosen_emulator, dap_config) = resolve_emulator_choice(arguments);
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
+    let wants_bemu = chosen_emulator.eq_ignore_ascii_case("bemu");
     let wants_sugarbox = chosen_emulator.eq_ignore_ascii_case("sugarbox");
     let wants_ace = chosen_emulator.eq_ignore_ascii_case("ace");
 
-    let (backend, url) = if wants_lite {
+    let (backend, url) = if wants_bemu {
+        // bemu serves the AMSpiriT Lite API: the same peer. Attached to one
+        // already running (`endpoint`), or started here with the program
+        // loaded and paused, so the breakpoints are armed before it runs.
+        let attached_to = arguments.get("endpoint").and_then(Value::as_str).map(str::to_string);
+        let (endpoint, started) = match attached_to {
+            Some(named) => {
+                amspiritlite::wait_until_listening(&named, std::time::Duration::from_secs(5))
+                    .map_err(|e| format!("{e}. Start bemu with --debug-server, or drop \"endpoint\"."))?;
+                (named, None)
+            },
+            None => {
+                let port = arguments
+                    .get("port")
+                    .and_then(Value::as_u64)
+                    .and_then(|port| u16::try_from(port).ok())
+                    .unwrap_or(dap_config.port);
+                let load = if is_basic {
+                    bemu::Load::Boot
+                }
+                else if let Some(disk) = disk_path {
+                    bemu::Load::Disk(disk)
+                }
+                else {
+                    bemu::Load::Snapshot(&snapshot)
+                };
+                let held = matches!(load, bemu::Load::Snapshot(_));
+                let (endpoint, child) = bemu::launch(arguments, load, port)?;
+                (endpoint, Some((child, held)))
+            }
+        };
+        let mut peer = amspiritlite::AmspiritLitePeer::connect(&endpoint)
+            .map_err(|e| format!("cannot reach bemu at {endpoint}: {e}"))?;
+        if let Some((child, held)) = started {
+            peer = peer.owning(child);
+            if held {
+                peer = peer.held_at_start();
+            }
+        }
+        (Backend::AmspiritLite(peer), String::new())
+    }
+    else if wants_lite {
         // An instance already serving, named by the configuration or found at
         // the emulator's own default port.
         //
@@ -1345,8 +1410,8 @@ fn connect_backend(
     else {
         if disk_path.is_some() {
             return Err(
-                "running a .dsk directly is only supported with the \"amspiritlite\" or \
-                 \"sugarbox\" emulator today - set one in the launch configuration, or as \
+                "running a .dsk directly is only supported with the \"amspiritlite\", \"bemu\" \
+                 or \"sugarbox\" emulator today - set one in the launch configuration, or as \
                  `emulator` under `[dap]` in cpclib-lsp.toml."
                     .to_string()
             );

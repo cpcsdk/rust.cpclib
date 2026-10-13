@@ -518,6 +518,11 @@ impl DapPeer for SugarBoxPeer {
     /// what kind of line the PC is sitting on.
     fn note_line_at_pc(&mut self, _line: LineAtPc) {}
 
+    /// Already running when attached: nothing to let go.
+    fn release(&mut self, _hold: bool) -> std::io::Result<()> {
+        Ok(())
+    }
+
     fn quirks(&self) -> Quirks {
         Quirks {
             instruction_breakpoints_only: true,
