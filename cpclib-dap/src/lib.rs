@@ -728,8 +728,17 @@ fn start_session(
     // threads a `&mut early_notices` borrow through several branches, which
     // would need real refactoring to move across a thread boundary for no
     // benefit over warming this smaller, self-contained step instead.
-    let (early_chosen_emulator, _) = resolve_emulator_choice(&arguments);
-    let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite");
+    let (early_chosen_emulator, early_dap_config) = resolve_emulator_choice(&arguments);
+    // Attaching to an emulator already serving (`endpoint`, from the launch or
+    // the configuration) starts nothing, so needs nothing installed: checking
+    // anyway downloaded AMSpiriT Lite for a session that never runs it (and
+    // failed loudly where downloads are blocked).
+    let attaches = arguments
+        .get("endpoint")
+        .and_then(Value::as_str)
+        .is_some_and(|endpoint| !endpoint.trim().is_empty())
+        || !early_dap_config.endpoint.trim().is_empty();
+    let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite") && !attaches;
     let wants_sugarbox_early = early_chosen_emulator.eq_ignore_ascii_case("sugarbox");
     let wants_ace_early = early_chosen_emulator.eq_ignore_ascii_case("ace");
     let install_check = std::thread::spawn(move || {
