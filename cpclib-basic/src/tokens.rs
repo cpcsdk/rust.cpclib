@@ -1042,26 +1042,19 @@ impl TryFrom<f64> for BasicFloat {
 
         let (is_pos, nb) = if nb >= 0f64 { (true, nb) } else { (false, -nb) };
 
-        let deci = nb.trunc() as u64;
-        let _fract = nb.fract();
-
         let mut bitpos = 0;
         let mut exp: i32 = 0;
         let mut mantissa: u64;
         let mut mask: u64;
 
-        if deci >= 1 {
-            // nb is >=1
-            mask = 0x80000000;
-
-            // search for the first (from the left) bit to 1
-            while (deci & mask) == 0 {
-                mask /= 2;
-            }
-            // count the number of remaining bits
-            while mask > 0 {
+        if nb >= 1.0 {
+            // nb is >=1: its exponent is the number of bits of its integer
+            // part, counted by halving (exact in f64) rather than in a u32,
+            // which saturated from 2^32 on (`1E10` came out as 2^31).
+            let mut halved = nb;
+            while halved >= 1.0 && exp < 256 {
+                halved /= 2.0;
                 exp += 1;
-                mask /= 2;
             }
             // build the mantissa part of the decimal value
             mantissa = (nb * 2f64.powi(32 - exp) + 0.5) as _;
