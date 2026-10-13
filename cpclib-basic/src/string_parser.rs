@@ -5404,12 +5404,22 @@ pub fn f64_to_amstrad_float(nb: f64) -> Result<BasicFloat, BasicError> {
 
 pub fn parse_floating_point<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     // The integer part is optional - Locomotive BASIC accepts ".9" as a
-    // literal (equivalent to "0.9"), not just "0.9" itself.
+    // literal (equivalent to "0.9"), not just "0.9" itself. An exponent
+    // (`1E3`, `1.5E-3`, `.5E2`) always makes a float, even for an integral
+    // value: the ROM stores `PRINT 1E3` as `1F 00 00 00 7A 8A`.
+    let exponent = || (one_of(['e', 'E']), opt(one_of(['+', '-'])), take_while(1.., '0'..='9'));
     let float_str = (
         opt('-'),
-        take_while(0.., '0'..='9'), // Integer part
-        '.',
-        take_while(1.., '0'..='9') // Fractional part (no limit)
+        alt((
+            (
+                take_while(0.., '0'..='9'), // Integer part
+                '.',
+                take_while(1.., '0'..='9'), // Fractional part (no limit)
+                opt(exponent())
+            )
+                .void(),
+            (take_while(1.., '0'..='9'), exponent()).void()
+        ))
     )
         .take()
         .parse_next(input)?;
