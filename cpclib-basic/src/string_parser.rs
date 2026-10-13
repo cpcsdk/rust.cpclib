@@ -312,9 +312,11 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
                 parse_return
             )),
             alt((
-                parse_on_goto_gosub,
+                // Before ON expr GOTO, which would take ERROR or BREAK for
+                // a variable.
                 parse_on_error_goto,
                 parse_on_break,
+                parse_on_goto_gosub,
                 parse_resume,
                 parse_error,
                 parse_cont,
@@ -2024,52 +2026,28 @@ pub fn parse_plotr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// DATA value1 [, value2, ...]
 pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DATA").parse_next(input)?;
-    peek(alt((
-        ' '.void(),
-        '\t'.void(),
-        ':'.void(),
-        '\n'.void(),
-        '\r'.void(),
-        eof.void()
-    )))
-    .parse_next(input)?;
+    peek_keyword_end.parse_next(input)?;
 
-    let space = parse_basic_space0.parse_next(input)?;
+    // The ROM keeps a DATA's items as typed - READ parses them when it
+    // reads them: every character up to a `:` outside quotes or the end of
+    // the line (`DATA 1,2,300` stores `8C 20 31 2C 32 2C 33 30 30`).
+    let mut quoted = false;
+    let length = input
+        .char_indices()
+        .find(|&(_, c)| {
+            if c == '"' {
+                quoted = !quoted;
+            }
+            c == '\n' || c == '\r' || (!quoted && c == ':')
+        })
+        .map_or(input.len(), |(index, _)| index);
+    let raw = input.next_slice(length);
 
-    // Parse comma-separated data values (strings or numbers)
-    let opt_values: OptCommaSeparatedList = opt((
-        alt((
-            parse_quoted_string(false),
-            parse_numeric_expression(NumericExpressionConstraint::None)
-        )),
-        repeat(
-            0..,
-            (
-                parse_comma,
-                alt((
-                    parse_quoted_string(false),
-                    parse_numeric_expression(NumericExpressionConstraint::None)
-                ))
-            )
-        )
-    ))
-    .parse_next(input)?;
-
-    Ok(if let Some((first, rest)) = opt_values {
-        let mut res = construct_token_list!(
-            BasicToken::SimpleToken(BasicTokenNoPrefix::Data),
-            space,
-            first
-        );
-        for (comma, val) in rest {
-            AppendToTokenList::append_to(comma, &mut res);
-            AppendToTokenList::append_to(val, &mut res);
-        }
-        res
-    }
-    else {
-        construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Data), space)
-    })
+    Ok(vec![BasicToken::CommentOrString(
+        BasicTokenNoPrefix::Data,
+        raw.as_bytes().to_vec(),
+        false
+    )])
 }
 
 /// READ variable [, variable, ...]
@@ -2458,18 +2436,28 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
     Ok(res)
 }
 
-/// ON ERROR GOTO line
+/// ON ERROR GOTO line, as the ROM stores it: `ON` `ERROR` `GOTO` line, or
+/// the single `OnErrorGoto` token for `ON ERROR GOTO 0` (switching error
+/// trapping off).
 pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, space_a, _, space_b, _, space_c, line_num) = (
+    let (_, space_a, _, _, space_b, _, space_c) = (
         Caseless("ON"),
         parse_basic_space1,
-        cut_err(Caseless("ERROR").context(StrContext::Label("ERROR expected"))),
+        Caseless("ERROR"),
+        peek_keyword_end,
         parse_basic_space1,
         cut_err(Caseless("GOTO").context(StrContext::Label("GOTO expected"))),
-        parse_basic_space1,
-        cut_err(parse_line_number_expression.context(StrContext::Label("Line number expected")))
+        parse_basic_space1
     )
         .parse_next(input)?;
+
+    let off: Option<&str> = opt(terminated("0", peek_keyword_end)).parse_next(input)?;
+    if off.is_some() {
+        return Ok(vec![BasicToken::SimpleToken(BasicTokenNoPrefix::OnErrorGoto)]);
+    }
+    let line_num =
+        cut_err(parse_line_number_expression.context(StrContext::Label("Line number expected")))
+            .parse_next(input)?;
 
     Ok(construct_token_list!(
         BasicToken::SimpleToken(BasicTokenNoPrefix::On),
@@ -2482,21 +2470,41 @@ pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
     ))
 }
 
-/// ON BREAK STOP / CONT / GOSUB line
+/// ON BREAK STOP / CONT / GOSUB line: the ROM's single `OnBreak` token
+/// for `ON BREAK`, then the keyword.
 pub fn parse_on_break<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, space_a, _, space_b) = (
+    let (_, _, _, _, space_a) = (
         Caseless("ON"),
         parse_basic_space1,
-        cut_err(Caseless("BREAK").context(StrContext::Label("BREAK expected"))),
+        Caseless("BREAK"),
+        peek_keyword_end,
         parse_basic_space1
     )
         .parse_next(input)?;
 
+    let what = cut_err(
+        alt((
+            terminated(Caseless("STOP"), peek_keyword_end)
+                .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Stop)]),
+            terminated(Caseless("CONT"), peek_keyword_end)
+                .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Cont)]),
+            (
+                Caseless("GOSUB"),
+                parse_basic_space1,
+                cut_err(parse_line_number_expression.context(StrContext::Label("Line number expected")))
+            )
+                .map(|(_, space, line)| {
+                    construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub), space, line)
+                })
+        ))
+        .context(StrContext::Label("STOP, CONT or GOSUB expected"))
+    )
+    .parse_next(input)?;
+
     Ok(construct_token_list!(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::On),
+        BasicToken::SimpleToken(BasicTokenNoPrefix::OnBreak),
         space_a,
-        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::OnBreak)],
-        space_b
+        what
     ))
 }
 
@@ -4441,8 +4449,7 @@ pub fn parse_numeric_expression<'code>(
                     )),
                     alt((
                         parse_parenthesized_numeric_expression,
-                        parse_pi,
-                        parse_time,
+                        parse_niladic_functions,
                         parse_basic_value.map(|v| vec![v]),
                         parse_integer_variable,
                         parse_float_variable
@@ -4456,6 +4463,7 @@ pub fn parse_numeric_expression<'code>(
                     parse_val,
                     parse_len,
                     parse_all_generated_numeric_functions_int,
+                    parse_niladic_functions,
                     parse_integer_value_16bits.map(|v| vec![v]),
                     parse_integer_variable
                 ))
@@ -4476,8 +4484,7 @@ pub fn parse_numeric_expression<'code>(
                     )),
                     alt((
                         parse_parenthesized_numeric_expression,
-                        parse_pi,
-                        parse_time,
+                        parse_niladic_functions,
                         parse_basic_value_compact.map(|v| vec![v]),
                         parse_integer_variable,
                         parse_float_variable
@@ -4563,8 +4570,7 @@ pub fn parse_numeric_expression<'code>(
                             parse_all_generated_numeric_functions_any2,
                             parse_all_generated_numeric_functions_int,
                             parse_parenthesized_numeric_expression,
-                            parse_pi,
-                            parse_time,
+                            parse_niladic_functions,
                             parse_basic_value.map(|v| vec![v]),
                             parse_integer_variable,
                             parse_float_variable
@@ -4598,8 +4604,7 @@ pub fn parse_numeric_expression<'code>(
                             parse_all_generated_numeric_functions_any2,
                             parse_all_generated_numeric_functions_int,
                             parse_parenthesized_numeric_expression,
-                            parse_pi,
-                            parse_time,
+                            parse_niladic_functions,
                             parse_basic_value_compact.map(|v| vec![v]),
                             parse_integer_variable,
                             parse_float_variable
@@ -5225,6 +5230,33 @@ pub fn parse_time<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     parse_niladic_prefixed("TIME", BasicTokenPrefixed::Time)(input)
 }
 
+/// The values read without parentheses: PI, TIME, and RND, HIMEM, ERR,
+/// ERL, EOF, DERR (RND also takes an argument in parentheses, tried
+/// before). Without this, a bare RND or HIMEM parsed as a variable of that
+/// name - checked against a 6128's own tokenisation of `X=RND*100`.
+pub fn parse_niladic_functions<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    alt((
+        parse_pi,
+        parse_time,
+        parse_niladic_prefixed("RND", BasicTokenPrefixed::Rnd),
+        parse_niladic_prefixed("HIMEM", BasicTokenPrefixed::Himem),
+        parse_niladic_prefixed("DERR", BasicTokenPrefixed::Derr),
+        parse_niladic_prefixed("ERR", BasicTokenPrefixed::Err),
+        parse_niladic_prefixed("EOF", BasicTokenPrefixed::Eof),
+        (
+            Caseless("ERL"),
+            peek(cpclib_common::winnow::combinator::not(one_of((
+                'a'..='z',
+                'A'..='Z',
+                '0'..='9',
+                '_'
+            ))))
+        )
+            .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Erl)])
+    ))
+    .parse_next(input)
+}
+
 macro_rules! generate_numeric_functions {
     ( $(
         $const:ty | $kind:ident => {
@@ -5433,36 +5465,15 @@ pub fn parse_hexadecimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTo
         .parse_next(input)
 }
 
+/// A decimal literal, encoded as the ROM's own tokeniser does wherever it
+/// appears (assignment, command or function argument alike - checked by
+/// typing lines on a 6128 and reading back what BASIC stored): `0`-`9` are
+/// the one-byte `ConstantNumber0`..`9`, `10`-`255`
+/// `ValueIntegerDecimal8bits`, up to `32767` `ValueIntegerDecimal16bits`,
+/// and larger values a `ValueFloatingPoint` (`POKE 49152,1` stores
+/// `1F 00 00 00 40 90`). The ROM keeps a leading `-` as its own operator
+/// token; a `-` reaching this parser keeps the 16-bit form.
 pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
-    (
-        opt('-'),
-        terminated(dec_u16_inner, cpclib_common::winnow::combinator::not('.'))
-    )
-        .map(|(neg, val)| {
-            let val = val as i16;
-            BasicToken::Constant(
-                BasicTokenNoPrefix::ValueIntegerDecimal16bits,
-                BasicValue::new_integer(if neg.is_some() { -val } else { val })
-            )
-        })
-        .parse_next(input)
-}
-
-/// Like `parse_decimal_value_16bits`, but a small non-negative literal uses
-/// the compact `ConstantNumber0`..`10`/`ValueIntegerDecimal8bits` encodings,
-/// confirmed against a real CPC's own re-tokenisation of pendulum.bas:
-/// `0`/`1` become the single-byte ConstantNumber0/1 (no value bytes at all,
-/// see `BasicTokenNoPrefix::is_small_constant`), `100`/`250` become
-/// `ValueIntegerDecimal8bits` (one value byte, not two). Only reachable via
-/// `NumericExpressionConstraint::AssignmentValue`, see its doc comment for
-/// why this can't simply replace `parse_decimal_value_16bits` everywhere.
-/// Left unscoped for negative values: there is no confirmed evidence yet
-/// for how the ROM encodes those (in practice the leading `-` is stripped
-/// by `parse_unary_operator` before this ever runs, so `neg` is always
-/// `None` on this call path regardless).
-pub fn parse_decimal_value_16bits_compact<'src>(
-    input: &mut &'src str
-) -> BasicOneTokenResult<'src> {
     (
         opt('-'),
         terminated(dec_u16_inner, cpclib_common::winnow::combinator::not('.'))
@@ -5478,8 +5489,13 @@ pub fn parse_decimal_value_16bits_compact<'src>(
                         BasicValue::new_integer_by_bytes(val as u8, 0)
                     );
                 }
+                if val > i16::MAX as u16 {
+                    return BasicToken::Constant(
+                        BasicTokenNoPrefix::ValueFloatingPoint,
+                        BasicValue::Float(BasicFloat::from_f64(val as f64))
+                    );
+                }
             }
-
             let val = val as i16;
             BasicToken::Constant(
                 BasicTokenNoPrefix::ValueIntegerDecimal16bits,
@@ -5487,6 +5503,14 @@ pub fn parse_decimal_value_16bits_compact<'src>(
             )
         })
         .parse_next(input)
+}
+
+/// The same as [`parse_decimal_value_16bits`], which now always uses the
+/// ROM's compact forms; kept for the `AssignmentValue` callers.
+pub fn parse_decimal_value_16bits_compact<'src>(
+    input: &mut &'src str
+) -> BasicOneTokenResult<'src> {
+    parse_decimal_value_16bits(input)
 }
 
 /// Parse binary digits (0-1) into a u16 value
@@ -5537,7 +5561,7 @@ pub fn dec_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
             }
             res
         })
-        .verify(|nb| *nb < u32::from(u16::MAX))
+        .verify(|nb| *nb <= u32::from(u16::MAX))
         .map(|nb| nb as u16)
         .parse_next(input)
 }
