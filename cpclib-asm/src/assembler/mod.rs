@@ -3955,7 +3955,9 @@ impl Env {
     pub fn visit_print(&mut self, info: &[FormattedExpr], span: Option<&Z80Span>) {
         let print_or_error = match self.prepropress_string_formatted_expression(info) {
             Ok(msg) => either::Either::Left(msg),
-            Err(error) => either::Either::Right(error)
+            // the error is reported later (2nd pass), when the position is
+            // otherwise lost: attach the PRINT location now
+            Err(error) => either::Either::Right(locate_boxed(error, span))
         };
 
         let keep_alive = self.expansion_keep_alive();
@@ -3975,10 +3977,14 @@ impl Env {
 
     pub fn visit_fail(
         &mut self,
-        info: Option<&[FormattedExpr]>
+        info: Option<&[FormattedExpr]>,
+        span: Option<&Z80Span>
     ) -> Result<(), Box<AssemblerError>> {
         let repr = info
-            .map(|info| self.prepropress_string_formatted_expression(info))
+            .map(|info| {
+                self.prepropress_string_formatted_expression(info)
+                    .map_err(|e| locate_boxed(e, span))
+            })
             .unwrap_or_else(|| Ok(Default::default()))?;
         Err(Box::new(AssemblerError::Fail {
             msg: repr.to_string()
@@ -3987,10 +3993,14 @@ impl Env {
 
     pub fn visit_warning(
         &mut self,
-        info: Option<&[FormattedExpr]>
+        info: Option<&[FormattedExpr]>,
+        span: Option<&Z80Span>
     ) -> Result<(), Box<AssemblerError>> {
         let repr = info
-            .map(|info| self.prepropress_string_formatted_expression(info))
+            .map(|info| {
+                self.prepropress_string_formatted_expression(info)
+                    .map_err(|e| locate_boxed(e, span))
+            })
             .unwrap_or_else(|| Ok(Default::default()))?;
         let warning = AssemblerWarning::AlreadyRenderedError(format!("Warning: {}", repr));
         self.add_warning(warning);
@@ -5055,8 +5065,8 @@ macro_rules! visit_token_impl {
             $cls::Equ { label, expr } => $env.visit_equ(&label, expr),
             $cls::Even => $env.visit_even(),
 
-            $cls::Fail(exp) => $env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
-            $cls::Warning(exp) => $env.visit_warning(exp.as_ref().map(|v| v.as_slice())),
+            $cls::Fail(exp) => $env.visit_fail(exp.as_ref().map(|v| v.as_slice()), $span),
+            $cls::Warning(exp) => $env.visit_warning(exp.as_ref().map(|v| v.as_slice()), $span),
             $cls::Field { label, expr, .. } => $env.visit_field(label, expr),
 
             $cls::Label(label, offset) => $env.visit_label(label, *offset),
@@ -9521,5 +9531,13 @@ mod test {
         let env = res.unwrap();
         let bytes = env.memory(0x100, 4);
         assert_eq!(bytes, vec![0xFD, 0xCB, 0x2, 0xA7]);
+    }
+}
+
+/// Attach `span` to an error that would otherwise be reported without position
+fn locate_boxed(error: Box<AssemblerError>, span: Option<&Z80Span>) -> Box<AssemblerError> {
+    match span {
+        Some(span) => Box::new((*error).locate(span.clone())),
+        None => error
     }
 }
