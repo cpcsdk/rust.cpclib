@@ -1217,6 +1217,19 @@ impl<P: DapPeer> Session<P> {
                 self.peer_mut().send(message.clone())?;
                 Ok(Vec::new())
             },
+            // A free run: with no NOP count from the emulator, what it costs
+            // is unknown - even if it comes back to the very same address
+            // (a loop to its own breakpoint), which the program counter alone
+            // cannot tell from not having run at all.
+            "continue" => {
+                if self.last_ticks.is_none() {
+                    for timer in &mut self.timers {
+                        timer.exact = false;
+                    }
+                }
+                self.peer_mut().send(message.clone())?;
+                Ok(Vec::new())
+            },
             // Noted *and* forwarded: the emulator wants it too, and this is
             // where the program is finally allowed to run.
             "configurationDone" => {

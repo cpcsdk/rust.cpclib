@@ -2500,6 +2500,24 @@ fn a_timer_is_exact_across_a_run_when_the_emulator_counts() {
     assert_eq!(timer_command(&mut session, "-timer"), "frame: 6 NOPs");
 }
 
+/// A continue back to the same breakpoint (a loop) ran, even though the
+/// program counter is where it was: without a count from the emulator the
+/// timer is a floor, not an unchanged exact total.
+#[test]
+fn a_continue_back_to_the_same_address_is_a_free_run() {
+    let mut session = timed_session();
+    report_pc(&mut session, 0x4000);
+    timer_command(&mut session, "-timer add loop");
+    session
+        .on_editor_message(&json!({
+            "seq": 2, "type": "request", "command": "continue", "arguments": {"threadId": 1}
+        }))
+        .unwrap();
+    report_pc(&mut session, 0x4000);
+    let listed = timer_command(&mut session, "-timer");
+    assert!(listed.contains("at least"), "{listed}");
+}
+
 /// Named, reset and removed.
 #[test]
 fn timers_can_be_named_reset_and_removed() {
