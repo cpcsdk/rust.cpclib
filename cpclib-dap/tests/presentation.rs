@@ -2459,6 +2459,47 @@ fn a_timer_that_spans_a_free_run_says_so() {
     );
 }
 
+/// A stop as an emulator reporting its NOP count gives it (`cpclib/ticks`,
+/// AMSpiriT Lite's `emu.ticks`, bemu's).
+fn report_pc_at(session: &mut Session<RecordingPeer>, pc: u16, ticks: u64) -> Vec<Value> {
+    session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {
+            "variables": [
+                {"name": "AF", "value": "0x0044", "variablesReference": 0},
+                {"name": "PC", "value": format!("0x{pc:04X}"), "variablesReference": 0}
+            ],
+            "cpclib/ticks": ticks
+        }
+    }))
+}
+
+/// With the emulator's own count, a timer is exact across a free run: what
+/// ran between the two stops, however it ran.
+#[test]
+fn a_timer_is_exact_across_a_run_when_the_emulator_counts() {
+    let mut session = timed_session();
+    report_pc_at(&mut session, 0x4000, 1_000);
+    timer_command(&mut session, "-timer add frame");
+
+    // A continue to a breakpoint far away, 19968 NOPs later (a frame).
+    report_pc_at(&mut session, 0x9000, 1_000 + 19_968);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 19968 NOPs");
+    // The same stop asked again (the pane refreshed): nothing more.
+    report_pc_at(&mut session, 0x9000, 1_000 + 19_968);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 19968 NOPs");
+
+    // A step: its cost, from the count too.
+    report_pc_at(&mut session, 0x9001, 1_000 + 19_968 + 4);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 19972 NOPs");
+    assert_eq!(session.timer_variables()[0]["value"], json!("19972 NOPs"));
+
+    timer_command(&mut session, "-timer reset frame");
+    report_pc_at(&mut session, 0x9002, 1_000 + 19_968 + 10);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 6 NOPs");
+}
+
 /// Named, reset and removed.
 #[test]
 fn timers_can_be_named_reset_and_removed() {
