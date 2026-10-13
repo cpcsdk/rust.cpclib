@@ -9,8 +9,11 @@
 //! LineNumber/compact-literal treatment a real CPC gives them; assignment
 //! `=` (including FOR's own) using the wrong token; `PI` not recognised as
 //! a keyword; small integer literals not using the compact encodings a
-//! real CPC writes for a `LET`/assignment right-hand side (but *not* for a
-//! command or function argument - the actual rule, found the hard way);
+//! real CPC writes for a `LET`/assignment right-hand side - and, it turned
+//! out later, everywhere else too: typing the lines on the ROM itself
+//! (`rom_typed_tokenisation.rs`) shows a command or function argument is
+//! compacted the same way; the 16-bit forms some lines below keep are this
+//! crate's old output on lines the CPC never retokenised;
 //! and DEFINT/DEFSTR/DEFREAL not changing the type marker of later
 //! sigil-less references to a variable starting with a declared letter.
 //! These tests assert our *current* tokeniser output is byte-identical to
@@ -134,11 +137,18 @@ fn pendulum_matches_a_real_cpcs_own_save() {
     // real, then-unrecognised `TIME` keyword later on the same line) and
     // is the reliable data point that MODE compacts its argument like an
     // assignment does.
+    // Lines 5 and 9 ("100"/"140 move bx-4,by+4:graphics pen 0/1:...
+    // chr$(231)...") keep
+    // 16-bit literals (`1A 04 00`, `1A 00 00`, `1A E7 00`) the ROM never
+    // writes: typed on a 464, 664 or 6128, `MOVE B-4,C+4`, `GRAPHICS PEN 0`
+    // and `CHR$(231)` store `12`, `0E` and `19 E7` (see
+    // rom_typed_tokenisation.rs). These bytes are this crate's own former
+    // output, kept because the lines were not retokenised.
     assert_matches_real_cpc(
         source,
         "tests/fixtures/pendulum_real_cpc.dsk",
         "PENDULU2.BAS",
-        &[0]
+        &[0, 5, 9]
     );
 }
 
@@ -182,11 +192,15 @@ fn mandelbrot_matches_a_real_cpcs_own_save() {
     // same dedicated `LineNumber` token `GOTO`/`GOSUB` already use
     // (verified via hello.bas's own "GOTO 10"), no synthetic `Goto`
     // marker - see `parse_if`'s own doc comment for the full reasoning.
+    //
+    // Line 8 ("80 IF x2+y2<=4 ...") keeps `<=4` as `1A 04 00`: the ROM
+    // stores `12` for it (`IF X<=4 THEN 20` typed on a 464, 664 or 6128),
+    // so the line holds this crate's former output, not a retokenisation.
     assert_matches_real_cpc(
         source,
         "tests/fixtures/mandelbrot_real_cpc.dsk",
         "MANDEL2.BAS",
-        &[0, 6]
+        &[0, 6, 8]
     );
 }
 
@@ -233,10 +247,14 @@ fn magic8b_matches_a_real_cpcs_own_save() {
                   280 print \"Outlook not so good\":return\n\
                   290 print \"Very doubtful\":return\n";
 
+    // Line 3 ("40 q=1+19*rnd") holds `rnd` as a variable named "rnd"
+    // (`0B 00 00 72 6E E4`): the ROM reads a bare RND as the function
+    // (`FF 45`, `W=1+19*RND` typed on a 464, 664 or 6128), so this is this
+    // crate's former output, never retokenised by the CPC.
     assert_matches_real_cpc(
         source,
         "tests/fixtures/magic8b_real_cpc.dsk",
         "MAGIC8B2.BAS",
-        &[]
+        &[3]
     );
 }

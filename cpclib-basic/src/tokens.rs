@@ -779,7 +779,7 @@ impl BasicTokenNoPrefix {
     }
 
     /// The dedicated single-byte token for a non-negative literal in
-    /// `0..=10`, if one exists. Confirmed against a real CPC's own
+    /// `0..=9`, if one exists. Confirmed against a real CPC's own
     /// tokenisation of `l=1`/`sp=0`: it is genuinely shorter than the
     /// generic decimal-integer encoding, not just an equivalent
     /// alternative, so a program re-tokenised without it will not match
@@ -796,7 +796,8 @@ impl BasicTokenNoPrefix {
             7 => Self::ConstantNumber7,
             8 => Self::ConstantNumber8,
             9 => Self::ConstantNumber9,
-            10 => Self::ConstantNumber10,
+            // 10 is `ValueIntegerDecimal8bits` for the ROM (`19 0A`):
+            // `ConstantNumber10` (&18) is decoded but never written.
             _ => return None
         })
     }
