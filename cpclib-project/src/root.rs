@@ -89,10 +89,47 @@ pub fn project_root_or_own_dir(file: &Path) -> Option<PathBuf> {
 /// Resolve `filename` as `from_file` would: try each ancestor directory as a
 /// base, stopping at the project root.
 pub fn resolve_include_path(filename: &str, from_file: &Path) -> Option<PathBuf> {
-    ancestor_directories(from_file)
-        .into_iter()
+    let dirs = ancestor_directories(from_file);
+    dirs.iter()
         .map(|dir| dir.join(filename))
         .find(|candidate| candidate.exists())
+        // basm ignores the case of file names, so the editor must as well
+        .or_else(|| {
+            dirs.iter()
+                .find_map(|dir| find_ignoring_case(dir, Path::new(filename)))
+        })
+}
+
+/// Look for `relative` below `base`, ignoring the case of each component.
+/// None when nothing, or something ambiguous, matches.
+fn find_ignoring_case(base: &Path, relative: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+
+    let mut current = base.to_path_buf();
+    for component in relative.components() {
+        let name = match component {
+            Component::Normal(name) => name,
+            Component::CurDir => continue,
+            _ => return None
+        };
+        let exact = current.join(name);
+        if exact.exists() {
+            current = exact;
+            continue;
+        }
+        let wanted = name.to_str()?;
+        let mut found = std::fs::read_dir(&current)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name())
+            .filter(|n| n.to_str().is_some_and(|n| n.eq_ignore_ascii_case(wanted)));
+        let name = found.next()?;
+        if found.next().is_some() {
+            return None;
+        }
+        current.push(name);
+    }
+    current.exists().then_some(current)
 }
 
 /// Every filename referenced by an `INCLUDE`/`INCBIN`/`BINCLUDE` directive in
@@ -148,6 +185,19 @@ mod tests {
     use super::*;
 
     /// The three walks used to disagree here; this pins what each answers.
+    #[test]
+    fn include_resolution_ignores_case_like_basm() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/mdk_int.asm"), "").unwrap();
+        let from = tmp.path().join("main.asm");
+        std::fs::write(&from, "").unwrap();
+
+        let found = resolve_include_path("SRC/MDK_Int.asm", from.as_std_path()).unwrap();
+        assert!(found.ends_with("src/mdk_int.asm"), "{found:?}");
+        assert!(resolve_include_path("src/nope.asm", from.as_std_path()).is_none());
+    }
+
     #[test]
     fn a_file_outside_any_project_has_a_search_base_but_no_root() {
         let tmp = camino_tempfile::tempdir().unwrap();
