@@ -8,6 +8,7 @@ from . import (
     bdasm as bdasm,
     bndbuild as bndbuild,
     build as build,
+    catalog as catalog,
     cpr as cpr,
     crunchers as crunchers,
     csl as csl,

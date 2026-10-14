@@ -9,6 +9,7 @@ mod bdasm;
 mod bndbuild;
 mod build;
 mod builders;
+mod catalog;
 mod cpr;
 mod crunchers;
 mod csl;
@@ -176,6 +177,10 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let tools_mod = PyModule::new(py, "_tools")?;
     tools::tools(py, &tools_mod)?;
     m.add_submodule(&tools_mod)?;
+
+    let catalog_mod = PyModule::new(py, "catalog")?;
+    catalog::catalog(py, &catalog_mod)?;
+    add_submodule(m, &catalog_mod)?;
 
     let cpr_mod = PyModule::new(py, "cpr")?;
     cpr_mod.add_function(wrap_pyfunction!(cpr_info, &cpr_mod)?)?;

@@ -33,6 +33,7 @@ Modules
 | `bdasm` | The Z80 disassembler: `disassemble` (address, bytes, text, NOPs), `disassemble_to_source`. |
 | `bndbuild` | `Task`: any bndbuild tool as a task (`Task("img2cpc", [...]).execute(capture=True)`); builders for snapshots, Arkos Tracker, CHIPNSFX, MinYMiser, AYT. |
 | `build` | bndbuild build files: `Build(path)` - `targets()`, `is_outdated()`, `run()`. |
+| `catalog` | CatArt: `screen_output`, `basic_listing`, `basic_program` from `Disc.catalog_bytes()`. |
 | `cpr` | Plus-range cartridges: `Cartridge` - banks, `load`/`save`. |
 | `csl` | CSL scenario scripts (what emulators replay): `parse`, `normalize`. |
 | `crunchers` | ZX0, ZX7, Exomizer, LZSA, Shrinkler, apultra, UPKR, pucrunch, LZ4/48/49: `compress`, `compare`, `formats`. |

@@ -26,6 +26,8 @@ cpclib-cpr = { workspace = true, default-features = false }
 cpclib-crunchers = { workspace = true, default-features = false }
 cpclib-crunch = { workspace = true }
 shlex.workspace = true
+cpclib-catalog = { workspace = true }
+cpclib-catart = { workspace = true }
 cpclib-asmfmt = { workspace = true }
 cpclib-csl = { workspace = true }
 cpclib-orgams-ascii = { workspace = true }

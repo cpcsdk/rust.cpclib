@@ -149,3 +149,24 @@ def test_a_basic_program_in_a_snapshot():
     sna = basic.to_snapshot('10 PRINT "HI"\n')
     assert isinstance(sna, Snapshot)
     assert sna.memory_kb >= 64
+
+
+# ---- catalog (CatArt) -------------------------------------------------------
+
+def test_catart_from_a_disc_catalog(tmp_path):
+    from cpclib_python import catalog
+    from cpclib_python.disc import Disc
+
+    dsk = Disc.create(str(tmp_path / "art.dsk"))
+    dsk.add_ascii(b"x", "HELLO.TXT")
+    raw = dsk.catalog_bytes()
+    assert len(raw) == 2048
+
+    listing = catalog.basic_listing(raw)
+    assert "PRINT" in listing.upper()
+    assert isinstance(catalog.screen_output(raw, "dir"), str)
+    assert catalog.basic_program(raw)[:2] != b""
+    with pytest.raises(ValueError, match="2048"):
+        catalog.basic_listing(b"short")
+    with pytest.raises(ValueError, match="kind"):
+        catalog.basic_listing(raw, "sideways")

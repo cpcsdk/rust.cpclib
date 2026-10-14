@@ -8,6 +8,7 @@ The submodules:
 - `bdasm`: the Z80 disassembler;
 - `bndbuild`: bndbuild tasks (every tool bndbuild knows), with builders;
 - `build`: bndbuild build files;
+- `catalog`: CatArt - a catalog shown as art, and the BASIC that draws it;
 - `cpr`: Plus-range cartridges;
 - `crunchers`: ZX0, ZX7, Exomizer, LZSA, Shrinkler... compression;
 - `csl`: CSL scenario scripts;
@@ -33,6 +34,7 @@ from .cpclib_python import (  # noqa: F401
     bdasm,
     bndbuild,
     build,
+    catalog,
     cpr,
     crunchers,
     csl,
@@ -48,7 +50,7 @@ from .cpclib_python import (  # noqa: F401
 from . import tools
 
 __all__ = [
-    "analysis", "asm", "basic", "basm", "bdasm", "bndbuild", "build", "cpr",
+    "analysis", "asm", "basic", "basm", "bdasm", "bndbuild", "build", "catalog", "cpr",
     "crunchers", "crate_info", "csl", "disc", "emu", "fmt", "hello", "image",
     "music", "orgams", "sna", "tools", "xfer",
 ]

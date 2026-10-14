@@ -124,6 +124,17 @@ impl PyDisc {
             .collect()
     }
 
+    /// The raw catalog: 2048 bytes, 64 entries of 32 (what `catalog` module
+    /// functions take to show a CatArt).
+    fn catalog_bytes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let bytes = self.with(|dsk| {
+            AmsdosManagerNonMut::new_from_disc(dsk, Head::A)
+                .catalog_slice()
+                .map_err(runtime)
+        })?;
+        Ok(PyBytes::new(py, &bytes))
+    }
+
     /// The content of the file `name` (header stripped, when it has one).
     /// Raises `KeyError` if it is not on the disc.
     #[pyo3(signature = (name, user=0))]

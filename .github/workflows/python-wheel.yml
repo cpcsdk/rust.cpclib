@@ -1,0 +1,64 @@
+name: Python bindings
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "cpclib-python/**"
+      - "cpclib-bndbuild/src/pipeline/**"
+      - ".github/workflows/python-wheel.yml"
+  pull_request:
+    paths:
+      - "cpclib-python/**"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: >
+        sudo apt update && sudo apt install -y
+        libwayland-dev libegl1-mesa-dev libgbm-dev libdrm-dev libxkbcommon-dev
+        libxkbcommon-x11-dev libdbus-1-dev libpipewire-0.3-dev libssl-dev
+        libxdo-dev libasound2-dev libxrandr-dev libxcursor-dev libxinerama-dev
+        libfontconfig-dev wayland-protocols pkg-config
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        profile: minimal
+    - uses: Swatinem/rust-cache@v2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Build and install the extension
+      run: |
+        python -m venv .venv
+        . .venv/bin/activate
+        pip install maturin pytest mypy
+        cd cpclib-python
+        maturin develop
+    - name: Type stubs
+      run: |
+        . .venv/bin/activate
+        cd cpclib-python
+        mypy --strict python/cpclib_python/*.pyi
+    - name: Tests (the ones that need no downloaded tool, no emulator, no display)
+      run: |
+        . .venv/bin/activate
+        cd cpclib-python
+        pytest -q tests --deselect tests/test_tools_help.py
+    - name: Wheel
+      run: |
+        . .venv/bin/activate
+        cd cpclib-python
+        maturin build --release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: wheel
+        path: target/wheels/*.whl
+        if-no-files-found: ignore

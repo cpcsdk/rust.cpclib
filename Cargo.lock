@@ -2824,6 +2824,8 @@ dependencies = [
  "cpclib-basmopt",
  "cpclib-bdasm",
  "cpclib-bndbuild",
+ "cpclib-catalog",
+ "cpclib-catart",
  "cpclib-common",
  "cpclib-cpr",
  "cpclib-crunch",
