@@ -28,6 +28,7 @@ import { showFdc } from './webviews/fdc';
 import { showPpi } from './webviews/ppi';
 import { showTape } from './webviews/tape';
 import { showScreen, disposeScreen } from './webviews/screen';
+import { showFrame, disposeFrame } from './webviews/frame';
 import { showBasicListing, registerBasicListingDoc, disposeBasicListing } from './basicListingDoc';
 import { showDisassembly, registerDisassemblyDoc, disposeDisassemblyDoc } from './disassemblyDoc';
 import { StopLocation } from './types';
@@ -176,6 +177,7 @@ export function registerDebugging(
             () => consoleCommand('-mv all,follow'),
         ),
         vscode.commands.registerCommand('cpclib.openCrtcView', () => consoleCommand('-crtcview')),
+        vscode.commands.registerCommand('cpclib.openFrameView', () => consoleCommand('-frame')),
         vscode.commands.registerCommand('cpclib.openBasicListing', () => consoleCommand('-bv')),
         vscode.commands.registerCommand('cpclib.revealProgramCounter', async () => {
             const where = lastStop;
@@ -279,6 +281,9 @@ export function registerDebugging(
             if (event.event === 'cpclib/screenView') {
                 showScreen(event.session, event.body);
             }
+            if (event.event === 'cpclib/frameView') {
+                showFrame(event.session, event.body);
+            }
             // The adapter opened a disassembly view by itself because the
             // program had left the source, and the program is back on a line it
             // was built from. The view has done its job.
@@ -318,6 +323,7 @@ export function registerDebugging(
                 disposeEmulator(session.id);
                 disposeMemory(session.id);
                 disposeScreen(session.id);
+                disposeFrame(session.id);
                 await disposeBasicListing(session.id);
                 await disposeDisassemblyDoc(session.id);
                 emulatorUrls.delete(session.id);

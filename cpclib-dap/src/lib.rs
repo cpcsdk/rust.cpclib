@@ -213,6 +213,7 @@ impl Backend {
 /// the future. Kept as one list so every such command has exactly one place
 /// that decides whether it's worth telling the client about.
 const ADVERTISED_CAPABILITIES: &[&str] = &[
+    "cpclib/frame",
     "cpclib/psg",
     "cpclib/ppi",
     "cpclib/fdc",

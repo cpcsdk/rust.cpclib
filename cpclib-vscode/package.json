@@ -537,6 +537,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.openFrameView",
+        "title": "Open the emulator's frame, with the beam",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.openBasicListing",
         "title": "Open the live BASIC listing",
         "category": "CPClib"
@@ -1487,6 +1492,10 @@
         },
         {
           "command": "cpclib.openCrtcView",
+          "when": "inDebugMode"
+        },
+        {
+          "command": "cpclib.openFrameView",
           "when": "inDebugMode"
         },
         {

@@ -147,6 +147,43 @@ pub fn perform_bytes(endpoint: &str, call: &Call) -> std::io::Result<Vec<u8>> {
     Ok(bytes_body_of(&raw).to_vec())
 }
 
+/// An answer with its status and headers, for a call whose headers carry
+/// part of the answer (`/api/screenshot`'s `X-Crop-*` and `X-Beam-*`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Answer {
+    pub status: u16,
+    /// Names in lower case.
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>
+}
+
+impl Answer {
+    pub fn header(&self, name: &str) -> Option<&str> {
+        let name = name.to_ascii_lowercase();
+        self.headers.iter().find(|(key, _)| *key == name).map(|(_, value)| value.as_str())
+    }
+}
+
+/// Make one call and return the whole answer.
+pub fn perform_answer(endpoint: &str, call: &Call) -> std::io::Result<Answer> {
+    let mut stream = connect_and_send(endpoint, call)?;
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw)?;
+    let end = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(raw.len());
+    let head = String::from_utf8_lossy(&raw[..end]).to_string();
+    let mut lines = head.split("\r\n");
+    let status = lines
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|code| code.parse().ok())
+        .unwrap_or(0);
+    let headers = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.trim().to_ascii_lowercase(), value.trim().to_owned()))
+        .collect();
+    Ok(Answer { status, headers, body: raw.get(end + 4..).unwrap_or_default().to_vec() })
+}
+
 /// Everything after the blank line that ends the headers.
 pub fn body_of(response: &str) -> &str {
     match response.find("\r\n\r\n") {

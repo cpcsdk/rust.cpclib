@@ -25,7 +25,7 @@
 //! exposes none of it and the chip panes have to round-trip a whole snapshot.
 //! The cost is that it runs in its own window rather than in an editor tab.
 
-use cpclib_runner::runner::emulator::amspiritlite_api::{Call, bytes_from_hex, host_of, perform};
+use cpclib_runner::runner::emulator::amspiritlite_api::{Call, bytes_from_hex, host_of, perform, perform_answer};
 #[cfg(test)]
 use cpclib_runner::runner::emulator::amspiritlite_api::{DEFAULT_ENDPOINT, Method, body_of};
 use serde_json::{Value, json};
@@ -1389,6 +1389,47 @@ impl Breakpoints {
     }
 }
 
+/// The emulator's own picture (`GET /api/screenshot`), for the frame view:
+/// `whole` the whole raster rather than the visible area, `live` the frame
+/// being drawn rather than the last complete one, `over` (with `live`) drawn
+/// over the previous frame. Answers the PNG in base64, its size, where it
+/// sits in the raster and the beam in it (bemu says both in its headers).
+pub(crate) fn frame(endpoint: &str, arguments: &Value) -> Result<Value, String> {
+    let flag = |name: &str| arguments.get(name).and_then(Value::as_bool).unwrap_or(false);
+    let call = Call::get("/api/screenshot")
+        .query("crop", if flag("whole") { 0 } else { 1 })
+        .query("live", if flag("live") { 1 } else { 0 })
+        .query("full", if flag("over") { 0 } else { 1 });
+    let answer = perform_answer(endpoint, &call).map_err(|e| format!("no frame from the emulator: {e}"))?;
+    if answer.status != 200 || !answer.body.starts_with(b"\x89PNG") {
+        let text = String::from_utf8_lossy(&answer.body).to_string();
+        let error = serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_owned))
+            .unwrap_or(text);
+        return Err(format!("no frame from the emulator ({}): {error}", answer.status));
+    }
+    // The PNG's own IHDR: width and height, big-endian, at 16 and 20.
+    let be32 = |at: usize| {
+        answer.body.get(at..at + 4).map(|b| u32::from_be_bytes(b.try_into().unwrap())).unwrap_or(0)
+    };
+    let number = |name: &str| answer.header(name).and_then(|v| v.parse::<i64>().ok());
+    let mut body = json!({
+        "png": encode_base64(&answer.body),
+        "width": be32(16),
+        "height": be32(20)
+    });
+    if let (Some(x), Some(y), Some(w), Some(h)) =
+        (number("X-Crop-X"), number("X-Crop-Y"), number("X-Crop-W"), number("X-Crop-H"))
+    {
+        body["crop"] = json!({ "x": x, "y": y, "w": w, "h": h });
+    }
+    if let (Some(x), Some(y)) = (number("X-Beam-X"), number("X-Beam-Y")) {
+        body["beam"] = json!({ "x": x, "y": y });
+    }
+    Ok(body)
+}
+
 /// Write the whole breakpoint set to the emulator.
 ///
 /// `/api/z80_bp` replaces everything it is given, so the temporaries have to go
@@ -2062,6 +2103,17 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             self.forget_temporary_breakpoints();
         }
 
+        if command == "cpclib/frame" {
+            let answer = frame(&self.endpoint, message.get("arguments").unwrap_or(&Value::Null));
+            let seq = self.next_seq();
+            let response = match answer {
+                Ok(body) => crate::protocol::response(&message, body, seq),
+                Err(problem) => crate::protocol::failure(&message, &problem, seq)
+            };
+            let _ = self.outgoing.send(response);
+            return Ok(());
+        }
+
         // Step over and step out are the same trick, aimed at different
         // addresses - see `step_over`.
         if command == "next" || command == "stepOut" {
@@ -2200,6 +2252,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "cpclib/psg"
                 | "cpclib/fdc"
                 | "cpclib/history"
+                | "cpclib/frame"
         )
     }
 }
