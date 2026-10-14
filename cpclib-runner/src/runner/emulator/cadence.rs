@@ -150,7 +150,12 @@ impl CadenceVersion {
                     match &_version {
                         CadenceVersion::V0_3a => install_macos_source_release(&cache_folder)?,
                         CadenceVersion::V1_1 | CadenceVersion::V1_4 => {
-                            install_macos_dmg_release(&cache_folder, &desc.exec_fname())?
+                            install_macos_dmg_release(
+                                &cache_folder,
+                                &desc.exec_fname(),
+                                "cadence.app",
+                                Some(("cadence", "cadence"))
+                            )?
                         },
                     }
 
@@ -238,16 +243,20 @@ fn install_macos_source_release(cache_folder: &Utf8Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Copy the `bundle` (e.g. `cadence.app`) out of the dmg at `dmg_path` into the
+/// cache folder. `launcher` is an optional `(script name, binary name)` pair: a
+/// script next to the bundle that execs the binary inside it.
 #[cfg(target_os = "macos")]
 pub(super) fn install_macos_dmg_release(
     cache_folder: &Utf8Path,
-    dmg_path: &Utf8Path
+    dmg_path: &Utf8Path,
+    bundle: &str,
+    launcher: Option<(&str, &str)>
 ) -> Result<(), String> {
     use std::process::Command;
 
-    let target_app = cache_folder.join("cadence.app");
-    let mount_point = cache_folder.join("cadence_mount");
-    let launcher = cache_folder.join("cadence");
+    let target_app = cache_folder.join(bundle);
+    let mount_point = cache_folder.join(format!("{}_mount", bundle.trim_end_matches(".app")));
 
     if mount_point.exists() {
         let _ = Command::new("hdiutil")
@@ -256,7 +265,7 @@ pub(super) fn install_macos_dmg_release(
         let _ = fs_err::remove_dir_all(&mount_point);
     }
     fs_err::create_dir_all(&mount_point)
-        .map_err(|e| format!("Failed to create Cadence mount directory {mount_point}: {e}"))?;
+        .map_err(|e| format!("Failed to create mount directory {mount_point}: {e}"))?;
 
     let attach = Command::new("hdiutil")
         .args([
@@ -268,38 +277,38 @@ pub(super) fn install_macos_dmg_release(
             "-quiet"
         ])
         .output()
-        .map_err(|e| format!("Failed to mount Cadence DMG {}: {e}", dmg_path))?;
+        .map_err(|e| format!("Failed to mount DMG {}: {e}", dmg_path))?;
     if !attach.status.success() {
         return Err(format!(
-            "Unable to mount Cadence DMG {}: {}",
+            "Unable to mount DMG {}: {}",
             dmg_path,
             String::from_utf8_lossy(&attach.stderr)
         ));
     }
 
-    let mounted_app = mount_point.join("cadence.app");
+    let mounted_app = mount_point.join(bundle);
     if !mounted_app.exists() {
         let _ = Command::new("hdiutil")
             .args(["detach", mount_point.as_str(), "-quiet", "-force"])
             .output();
         return Err(format!(
-            "Cadence app bundle not found in mounted DMG at {mounted_app}"
+            "{bundle} not found in mounted DMG at {mounted_app}"
         ));
     }
 
     if target_app.exists() {
         fs_err::remove_dir_all(&target_app).map_err(|e| {
-            format!("Failed to remove previous Cadence app bundle {target_app}: {e}")
+            format!("Failed to remove previous {bundle} {target_app}: {e}")
         })?;
     }
 
     let copy = Command::new("cp")
         .args(["-R", mounted_app.as_str(), target_app.as_str()])
         .output()
-        .map_err(|e| format!("Failed to copy Cadence app bundle from DMG to cache: {e}"))?;
+        .map_err(|e| format!("Failed to copy {bundle} from DMG to cache: {e}"))?;
     if !copy.status.success() {
         return Err(format!(
-            "Unable to copy Cadence app bundle from DMG: {}",
+            "Unable to copy {bundle} from DMG: {}",
             String::from_utf8_lossy(&copy.stderr)
         ));
     }
@@ -307,19 +316,24 @@ pub(super) fn install_macos_dmg_release(
     let detach = Command::new("hdiutil")
         .args(["detach", mount_point.as_str(), "-quiet"])
         .output()
-        .map_err(|e| format!("Failed to unmount Cadence DMG: {e}"))?;
+        .map_err(|e| format!("Failed to unmount DMG: {e}"))?;
     if !detach.status.success() {
         return Err(format!(
-            "Unable to unmount Cadence DMG: {}",
+            "Unable to unmount DMG: {}",
             String::from_utf8_lossy(&detach.stderr)
         ));
     }
     let _ = fs_err::remove_dir_all(&mount_point);
 
-    let launcher_content = "#!/bin/sh\nSCRIPT_DIR=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"\nexec \"$SCRIPT_DIR/cadence.app/Contents/MacOS/cadence\" \"$@\"\n";
-    fs_err::write(&launcher, launcher_content)
-        .map_err(|e| format!("Failed to create Cadence launcher at {launcher}: {e}"))?;
-    ensure_executable(&launcher)?;
+    if let Some((launcher_name, binary)) = launcher {
+        let launcher = cache_folder.join(launcher_name);
+        let launcher_content = format!(
+            "#!/bin/sh\nSCRIPT_DIR=\"$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\"\nexec \"$SCRIPT_DIR/{bundle}/Contents/MacOS/{binary}\" \"$@\"\n"
+        );
+        fs_err::write(&launcher, launcher_content)
+            .map_err(|e| format!("Failed to create launcher at {launcher}: {e}"))?;
+        ensure_executable(&launcher)?;
+    }
 
     Ok(())
 }

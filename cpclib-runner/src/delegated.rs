@@ -431,6 +431,10 @@ pub struct DelegateApplicationDescription<E: EventObserver> {
     pub download_fn_url: UrlGenerator,
     pub folder: &'static str,
     pub exec_fname: &'static str,
+    /// Where a `Raw` download is saved, relative to the cache folder, when it is
+    /// not the executable itself (a macOS dmg, which must not land inside the
+    /// bundle it is about to be unpacked into). Defaults to `exec_fname`.
+    pub download_fname: Option<&'static str>,
     pub archive_format: ArchiveFormat,
     #[builder(into)]
     pub compile: Option<Compiler<E>>,
@@ -498,11 +502,12 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         // uncompress it
         match self.archive_format {
             ArchiveFormat::Raw => {
-                o.emit_stdout(&format!(">> Save to {}\n", self.exec_fname()));
+                let target = self.download_fname.map_or_else(|| self.exec_fname(), |f| dest.join(f));
+                o.emit_stdout(&format!(">> Save to {target}\n"));
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 fs_err::create_dir_all(&dest).map_err(|e| e.to_string())?;
-                fs_err::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
+                fs_err::write(&target, &buffer).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::Tar => {
                 o.emit_stdout(">> Open tar archive\n");

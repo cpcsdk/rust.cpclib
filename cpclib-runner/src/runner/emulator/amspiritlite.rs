@@ -10,7 +10,7 @@
 //! It also carries an embedded HTTP debug server, which is why it is worth
 //! having: it can answer far more than the wasm emulator can.
 
-use cpclib_common::camino::Utf8Path;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
 use crate::delegated::{
     ArchiveFormat, DelegateApplicationDescription, PostInstallFn, UrlGenerator
@@ -100,7 +100,10 @@ impl AmspiritLiteVersion {
 
         #[cfg(target_os = "macos")]
         {
-            return "Amspirit-Lite.app/Contents/MacOS/Amspirit-Lite";
+            return match self {
+                Self::V1_14_3 => "Amspirit-Lite.app/Contents/MacOS/Amspirit-Lite",
+                Self::V1_16_0 => "amspirit-lite-sdl.app/Contents/MacOS/amspirit-lite-sdl"
+            };
         }
     }
 
@@ -121,7 +124,7 @@ impl AmspiritLiteVersion {
         }
 
         // A `.dmg` is mounted rather than extracted, which the post-install
-        // step below does (1.16.0 puts it in a zip).
+        // step below does (1.16.0 puts it in a zip, which holds the dmg).
         #[cfg(target_os = "macos")]
         {
             return match self {
@@ -149,14 +152,17 @@ impl AmspiritLiteVersion {
             builder.post_install(post_install)
         };
 
+        // The dmg is a download, not the executable: it is saved next to the
+        // app bundle (1.14.3), or unzipped there (1.16.0), then unpacked.
         #[cfg(target_os = "macos")]
         let builder = {
+            let builder = builder.maybe_download_fname(match self {
+                Self::V1_14_3 => Some("Amspirit-Lite.dmg"),
+                Self::V1_16_0 => None
+            });
             let post_install: Box<PostInstallFn<E>> = Box::new(
                 |desc: &DelegateApplicationDescription<E>, _o: &E| -> Result<(), String> {
-                    super::cadence::install_macos_dmg_release(
-                        &desc.cache_folder(),
-                        &desc.exec_fname()
-                    )
+                    install_dmg(desc)
                 }
             );
             builder.post_install(post_install)
@@ -164,6 +170,25 @@ impl AmspiritLiteVersion {
 
         builder.build()
     }
+}
+
+/// Unpack the dmg left in the cache folder into the app bundle `exec_fname`
+/// lives in, then drop the dmg.
+#[cfg(target_os = "macos")]
+fn install_dmg<E: EventObserver>(desc: &DelegateApplicationDescription<E>) -> Result<(), String> {
+    let cache_folder = desc.cache_folder();
+    let bundle = desc.exec_fname.split('/').next().unwrap_or_default();
+
+    let dmg = fs_err::read_dir(&cache_folder)
+        .map_err(|e| format!("Unable to list {cache_folder}: {e}"))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|ext| ext == "dmg"))
+        .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+        .ok_or_else(|| format!("No dmg found in {cache_folder}"))?;
+
+    super::cadence::install_macos_dmg_release(&cache_folder, &dmg, bundle, None)?;
+    fs_err::remove_file(&dmg).map_err(|e| format!("Unable to remove {dmg}: {e}"))
 }
 
 #[cfg(target_os = "linux")]
