@@ -36,7 +36,7 @@ pub fn download(url: &str) -> Result<Box<dyn Read + Send + Sync>, String> {
         .with_config()
         .limit(1024 * 1024 * 1024) // 1GB limit for large downloads
         .read_to_vec()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{url}: {e}"))?;
     Ok(Box::new(Cursor::new(bytes)))
 }
 
@@ -63,7 +63,7 @@ pub fn download_response(url: &str) -> Result<http::Response<ureq::Body>, String
         .header("From", "krusty.benediction@gmail.com")
         .header("User-Agent", "cpclib")
         .call()
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("{url}: {e}"))
 }
 
 /// Upload a file using multipart/form-data encoding.
@@ -151,14 +151,14 @@ pub fn get_to_string(url: &str) -> Result<String, String> {
     let mut response = ureq::get(url)
         .header("User-Agent", "cpclib")
         .call()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{url}: {e}"))?;
 
     let bytes = response
         .body_mut()
         .with_config()
         .limit(1024 * 1024 * 100) // 100MB limit
         .read_to_vec()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{url}: {e}"))?;
 
     String::from_utf8(bytes).map_err(|e| format!("Invalid UTF-8 in response: {}", e))
 }

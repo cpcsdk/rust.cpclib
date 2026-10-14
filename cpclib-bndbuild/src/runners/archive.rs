@@ -313,7 +313,26 @@ fn compute_archive_name(
         path.as_str().to_string()
     };
 
-    archive_name.replace('\\', "/")
+    // Archives always use '/'. Only the platform's own separator is rewritten:
+    // on Unix a backslash is a legal filename character and must survive.
+    if std::path::MAIN_SEPARATOR == '\\' {
+        archive_name.replace('\\', "/")
+    }
+    else {
+        archive_name
+    }
+}
+
+#[cfg(test)]
+mod archive_name_tests {
+    use super::compute_archive_name;
+    use cpclib_common::camino::Utf8Path;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_backslash_in_a_unix_file_name_is_kept() {
+        assert_eq!(compute_archive_name(Utf8Path::new("dir/a\\b.txt"), None, false), "dir/a\\b.txt");
+    }
 }
 
 fn create_tar_gz<E: EventObserver>(
