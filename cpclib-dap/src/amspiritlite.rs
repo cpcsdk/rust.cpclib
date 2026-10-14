@@ -1466,6 +1466,20 @@ impl AmspiritLitePeer {
 
     /// Connect to an emulator already serving at `endpoint`.
     pub fn connect(endpoint: &str) -> std::io::Result<Self> {
+        Self::connect_with(endpoint, false)
+    }
+
+    /// Connect to an emulator started paused, for the breakpoints to be armed
+    /// before anything runs: the session lets it go once configured.
+    ///
+    /// The watchers are born knowing about that pause (its generation already
+    /// told), so it is never reported as a stop of its own, whatever the time
+    /// the configuration takes; `release` publishes or resumes it.
+    pub fn connect_held(endpoint: &str) -> std::io::Result<Self> {
+        Self::connect_with(endpoint, true)
+    }
+
+    fn connect_with(endpoint: &str, held: bool) -> std::io::Result<Self> {
         let (outgoing, pending) = std::sync::mpsc::channel();
 
         // The event stream, on its own thread. It ends when the emulator does,
@@ -1484,7 +1498,7 @@ impl AmspiritLitePeer {
         // editor hears about.
         let expecting_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let generation = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1));
-        let told = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let told = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(u64::from(held)));
         let stepping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stepping_over = std::sync::Arc::new(std::sync::Mutex::new(None));
         let breakpoints = std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()));
@@ -1527,7 +1541,7 @@ impl AmspiritLitePeer {
             breakpoints,
             extensions,
             advanced,
-            held_at_start: false,
+            held_at_start: held,
             resume_confirmation: Self::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
@@ -1535,13 +1549,6 @@ impl AmspiritLitePeer {
             outgoing,
             seq
         })
-    }
-
-    /// The emulator was started paused, for the breakpoints to be armed
-    /// before anything runs: the session lets it go once configured.
-    pub fn held_at_start(mut self) -> Self {
-        self.held_at_start = true;
-        self
     }
 
     /// Clear the advanced breakpoints the emulator holds (bemu's, from the

@@ -120,6 +120,9 @@ enum Backend {
     Served(ServedPeer),
     /// AMSpiriT Lite, reached over its HTTP debug API.
     AmspiritLite(amspiritlite::AmspiritLitePeer),
+    /// bemu, which serves the AMSpiriT Lite API: the same peer, but its own
+    /// name, which clients match against what they asked for.
+    Bemu(amspiritlite::AmspiritLitePeer),
     /// SugarboxV2, reached over its own newline-delimited-JSON TCP debug
     /// server.
     SugarBox(sugarbox::SugarBoxPeer),
@@ -132,7 +135,7 @@ impl peer::DapPeer for Backend {
         transcript().record("-> emulator", &message);
         match self {
             Self::Served(peer) => peer.send(message),
-            Self::AmspiritLite(peer) => peer.send(message),
+            Self::AmspiritLite(peer) | Self::Bemu(peer) => peer.send(message),
             Self::SugarBox(peer) => peer.send(message),
             Self::Ace(peer) => peer.send(message)
         }
@@ -141,7 +144,7 @@ impl peer::DapPeer for Backend {
     fn drain(&mut self) -> Vec<Value> {
         match self {
             Self::Served(peer) => peer.drain(),
-            Self::AmspiritLite(peer) => peer.drain(),
+            Self::AmspiritLite(peer) | Self::Bemu(peer) => peer.drain(),
             Self::SugarBox(peer) => peer.drain(),
             Self::Ace(peer) => peer.drain()
         }
@@ -156,7 +159,7 @@ impl peer::DapPeer for Backend {
     fn note_line_at_pc(&mut self, line: peer::LineAtPc) {
         match self {
             Self::Served(peer) => peer.note_line_at_pc(line),
-            Self::AmspiritLite(peer) => peer.note_line_at_pc(line),
+            Self::AmspiritLite(peer) | Self::Bemu(peer) => peer.note_line_at_pc(line),
             Self::SugarBox(peer) => peer.note_line_at_pc(line),
             Self::Ace(peer) => peer.note_line_at_pc(line)
         }
@@ -165,7 +168,7 @@ impl peer::DapPeer for Backend {
     fn release(&mut self, hold: bool) -> std::io::Result<()> {
         match self {
             Self::Served(peer) => peer.release(hold),
-            Self::AmspiritLite(peer) => peer.release(hold),
+            Self::AmspiritLite(peer) | Self::Bemu(peer) => peer.release(hold),
             Self::SugarBox(peer) => peer.release(hold),
             Self::Ace(peer) => peer.release(hold)
         }
@@ -174,7 +177,7 @@ impl peer::DapPeer for Backend {
     fn quirks(&self) -> peer::Quirks {
         match self {
             Self::Served(peer) => peer.quirks(),
-            Self::AmspiritLite(peer) => peer.quirks(),
+            Self::AmspiritLite(peer) | Self::Bemu(peer) => peer.quirks(),
             Self::SugarBox(peer) => peer.quirks(),
             Self::Ace(peer) => peer.quirks()
         }
@@ -183,7 +186,7 @@ impl peer::DapPeer for Backend {
     fn supports(&self, command: &str) -> bool {
         match self {
             Self::Served(peer) => peer.supports(command),
-            Self::AmspiritLite(peer) => peer.supports(command),
+            Self::AmspiritLite(peer) | Self::Bemu(peer) => peer.supports(command),
             Self::SugarBox(peer) => peer.supports(command),
             Self::Ace(peer) => peer.supports(command)
         }
@@ -201,6 +204,7 @@ impl Backend {
         match self {
             Self::Served(_) => "1984js",
             Self::AmspiritLite(_) => "amspiritlite",
+            Self::Bemu(_) => "bemu",
             Self::SugarBox(_) => "sugarbox",
             Self::Ace(_) => "ace"
         }
@@ -1090,8 +1094,8 @@ fn start_session(
     }
     if chosen_emulator.eq_ignore_ascii_case("bemu") {
         notices.push(
-            "Debugging through bemu, started paused so every breakpoint is armed before the \
-             program runs."
+            "Debugging through bemu. A snapshot it starts itself is held paused until every \
+             breakpoint is armed; an emulator attached to, or a disk, is already running."
                 .to_string()
         );
     }
@@ -1208,7 +1212,11 @@ fn connect_backend(
         // bemu serves the AMSpiriT Lite API: the same peer. Attached to one
         // already running (`endpoint`), or started here with the program
         // loaded and paused, so the breakpoints are armed before it runs.
-        let attached_to = arguments.get("endpoint").and_then(Value::as_str).map(str::to_string);
+        let attached_to = arguments
+            .get("endpoint")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| Some(dap_config.endpoint.clone()).filter(|value| !value.trim().is_empty()));
         let (endpoint, started) = match attached_to {
             Some(named) => {
                 amspiritlite::wait_until_listening(&named, std::time::Duration::from_secs(5))
@@ -1235,19 +1243,22 @@ fn connect_backend(
                 (endpoint, Some((child, held)))
             }
         };
-        let mut peer = amspiritlite::AmspiritLitePeer::connect(&endpoint)
-            .map_err(|e| format!("cannot reach bemu at {endpoint}: {e}"))?;
-        if let Some((child, held)) = started {
+        let held = matches!(&started, Some((_, true)));
+        let mut peer = if held {
+            amspiritlite::AmspiritLitePeer::connect_held(&endpoint)
+        }
+        else {
+            amspiritlite::AmspiritLitePeer::connect(&endpoint)
+        }
+        .map_err(|e| format!("cannot reach bemu at {endpoint}: {e}"))?;
+        if let Some((child, _)) = started {
             peer = peer.owning(child);
-            if held {
-                peer = peer.held_at_start();
-            }
             // The snapshot's breakpoints are the program's `BREAKPOINT`
             // directives, which the session arms itself from the source map:
             // bemu's copies would double them and outlive a red dot removed.
             peer.forget_emulator_breakpoints();
         }
-        (Backend::AmspiritLite(peer), String::new())
+        (Backend::Bemu(peer), String::new())
     }
     else if wants_lite {
         // An instance already serving, named by the configuration or found at

@@ -66,7 +66,7 @@ pub fn launch(arguments: &Value, load: Load, port: u16) -> Result<(String, std::
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     crate::amspiritlite::strip_snap_leaked_env_vars(&mut command);
-    let child = command.spawn().map_err(|e| {
+    let mut child = command.spawn().map_err(|e| {
         format!(
             "cannot start bemu ({}): {e} - set \"emulatorPath\" in the launch configuration, \
              or $CPCLIB_BEMU, to its amsrust executable",
@@ -80,7 +80,13 @@ pub fn launch(arguments: &Value, load: Load, port: u16) -> Result<(String, std::
     if let Some(path) = snapshot_file {
         let _ = fs_err::remove_file(path);
     }
-    listening.map_err(|e| e.replace("AMSpiriT Lite", "bemu"))?;
+    if let Err(e) = listening {
+        // Dropping a `Child` does not stop it: a bemu that never served would
+        // outlive the failed launch.
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(e.replace("AMSpiriT Lite", "bemu"));
+    }
     Ok((endpoint, child))
 }
 
