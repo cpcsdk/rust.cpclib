@@ -66,9 +66,14 @@ impl<'src> Formatter<'src> {
         register_case: CaseStyle
     ) -> String {
         let word_end = content
-            .find(|c: char| c.is_ascii_whitespace())
+            .find(|c: char| c.is_ascii_whitespace() || c == ':')
             .unwrap_or(content.len());
         let mnemonic = Self::apply_case(&content[..word_end], mnemonic_case);
+        // `nop:done`: what follows a `:` right after the mnemonic is another
+        // statement, possibly a label whose spelling is not ours to change.
+        if content[word_end..].starts_with(':') {
+            return format!("{mnemonic}{}", &content[word_end..]);
+        }
         let rest = content[word_end..].trim_start();
         if rest.is_empty() {
             mnemonic

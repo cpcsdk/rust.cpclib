@@ -111,16 +111,7 @@ mod tests {
     #[test]
     fn test_colonless_label_after_an_instruction_is_kept() {
         assert_labels_survive("nop: done\n", &["done"]);
-        // without splitting, the mnemonic case rule still upper-cases the whole
-        // `nop:done` word (a separate, older limitation): only presence is checked
-        for one_instruction_per_line in [false, true] {
-            let options = AsmFormatOptions {
-                one_instruction_per_line,
-                ..AsmFormatOptions::default()
-            };
-            let out = format("nop:done\n", &options).expect("parse failed");
-            assert_eq!(out.to_lowercase().matches("done").count(), 1, "{out:?}");
-        }
+        assert_labels_survive("nop:done\n", &["done"]);
     }
 
     #[test]
