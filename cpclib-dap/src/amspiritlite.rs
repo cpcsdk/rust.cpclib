@@ -1266,6 +1266,14 @@ pub struct AmspiritLitePeer {
     /// Both leave the editor believing the program is running, with a dead
     /// toolbar, until you press pause by hand.
     expecting_stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Stops are told once each: `generation` counts the runs (a resume asked
+    /// for here, or the machine seen running after its last stop was told),
+    /// `told` is the run whose stop the editor has heard - from the poll or
+    /// the event stream, whichever saw it first.
+    generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    told: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// The stop owed is the end of a single step.
+    stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// The emulator this session started, if it started one.
     ///
     /// Closed when the session ends: an emulator left behind keeps its port,
@@ -1404,11 +1412,7 @@ impl AmspiritLitePeer {
         // The event stream, on its own thread. It ends when the emulator does,
         // and a dead stream simply stops producing rather than failing the
         // session - the editor is still useful without live stop events.
-        let events = outgoing.clone();
         let address = host_of(endpoint)?;
-        std::thread::Builder::new()
-            .name("amspiritlite-events".into())
-            .spawn(move || read_events(&address, &events))?;
 
         // The run state, asked for rather than waited on.
         //
@@ -1420,6 +1424,9 @@ impl AmspiritLitePeer {
         // state is polled, several times a second, and a change is what the
         // editor hears about.
         let expecting_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let generation = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1));
+        let told = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let stepping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stepping_over = std::sync::Arc::new(std::sync::Mutex::new(None));
         let breakpoints = std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()));
         let seq = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
@@ -1427,9 +1434,18 @@ impl AmspiritLitePeer {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             out: outgoing.clone(),
             expecting_stop: expecting_stop.clone(),
+            generation: generation.clone(),
+            told: told.clone(),
+            stepping: stepping.clone(),
             stepping_over: stepping_over.clone(),
             breakpoints: breakpoints.clone()
         };
+        // Both threads report stops through the same `Stops`, so a stop seen
+        // by both is told once, settled the same way whichever is first.
+        let streamed = watching.clone();
+        std::thread::Builder::new()
+            .name("amspiritlite-events".into())
+            .spawn(move || read_events(&address, &streamed))?;
         std::thread::Builder::new()
             .name("amspiritlite-runstate".into())
             .spawn(move || watch_run_state(&watching))?;
@@ -1437,6 +1453,9 @@ impl AmspiritLitePeer {
         Ok(Self {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             expecting_stop,
+            generation,
+            told,
+            stepping,
             stepping_over,
             breakpoints,
             resume_confirmation: Self::RESUME_CONFIRMATION,
@@ -1560,29 +1579,42 @@ impl AmspiritLitePeer {
         // A resume is asked for here and happens over there, a moment later, so
         // nothing is owed a stop until the machine has really gone.
         self.wait_until_it_is_really_running();
-        self.expecting_stop
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.owe_a_stop();
         Ok(())
     }
 
     /// One instruction, which is what stepping over anything else means.
     fn step_once(&mut self, message: &Value) -> std::io::Result<()> {
+        self.begin_run(true);
         let stepped = perform(&self.endpoint, &Call::post("/api/step"));
         let seq = self.next_seq();
         let _ = self
             .outgoing
             .send(crate::protocol::response(message, json!({}), seq));
         match stepped {
-            Ok(_) => {
-                self.expecting_stop
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
-            },
+            Ok(_) => self.owe_a_stop(),
             Err(why) => {
                 self.say(&format!("step over could not finish: {why}\n"));
                 self.announce_a_stop_anyway();
             }
         }
         Ok(())
+    }
+
+    /// A run is about to be asked for: its stop, whoever sees it first,
+    /// is a new one - the end of a single step or wherever a resume ends up.
+    /// Before the request, so a stop that comes back faster than the request
+    /// returns is still this run's.
+    fn begin_run(&self, single_step: bool) {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.stepping.store(single_step, SeqCst);
+        self.generation.fetch_add(1, SeqCst);
+    }
+
+    /// From here the editor is owed this run's stop (see `expecting_stop`).
+    fn owe_a_stop(&self) {
+        self.expecting_stop
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// One line in the Debug Console.
@@ -2020,6 +2052,9 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             return Ok(());
         };
 
+        if matches!(command.as_str(), "continue" | "stepIn") {
+            self.begin_run(command == "stepIn");
+        }
         let body = perform(&self.endpoint, &call)?;
         let mut state: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
 
@@ -2060,8 +2095,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         // ask for is sampled from a program in flight: a stop at a random
         // address, with no breakpoint anywhere near it.
         if matches!(command.as_str(), "continue" | "stepIn") {
-            self.expecting_stop
-                .store(true, std::sync::atomic::Ordering::Relaxed);
+            self.owe_a_stop();
         }
         let seq = self.next_seq();
         let _ = self.outgoing.send(response_for(&message, &state, seq));
@@ -2137,10 +2171,16 @@ impl Drop for AmspiritLitePeer {
 }
 
 /// What the run-state poller watches, and what it answers into.
+#[derive(Clone)]
 pub(crate) struct Stops {
     pub(crate) endpoint: String,
     pub(crate) out: std::sync::mpsc::Sender<Value>,
     pub(crate) expecting_stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// See `AmspiritLitePeer::generation` and `told`.
+    pub(crate) generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    pub(crate) told: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// See `AmspiritLitePeer::stepping`.
+    pub(crate) stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) stepping_over: std::sync::Arc<std::sync::Mutex<Option<StepTarget>>>,
     pub(crate) breakpoints: std::sync::Arc<std::sync::Mutex<Breakpoints>>
 }
@@ -2252,6 +2292,7 @@ fn watch_run_state(watched: &Stops) {
             }
         }
         else {
+            watched.running();
             seq += 1;
             let event = crate::protocol::event(
                 "continued",
@@ -2266,12 +2307,33 @@ fn watch_run_state(watched: &Stops) {
 }
 
 impl Stops {
+    /// The machine was seen running: if its last stop was told, this is a
+    /// new run (resumed from elsewhere, say the emulator's own window), and
+    /// its stop is news. A run asked for here began its generation already.
+    fn running(&self) {
+        use std::sync::atomic::Ordering::SeqCst;
+        let current = self.generation.load(SeqCst);
+        if self.told.load(SeqCst) == current {
+            let _ = self
+                .generation
+                .compare_exchange(current, current + 1, SeqCst, SeqCst);
+        }
+    }
+
     /// Tell the editor the machine has stopped, having first worked out
-    /// whether this is the end of a step over.
+    /// whether this is the end of a step over - once per stop, whichever of
+    /// the poll and the event stream sees it first.
     ///
     /// Returns false when the session is gone.
     fn announce_stop(&self, seq: &mut i64) -> bool {
+        use std::sync::atomic::Ordering::SeqCst;
+        // This run's stop was told already, by the other thread.
+        let run = self.generation.load(SeqCst);
+        if self.told.swap(run, SeqCst) == run {
+            return true;
+        }
         let notice = self.settle(self.stopped_at());
+        let single_step = self.stepping.swap(false, SeqCst);
         if let Some(text) = notice.as_ref().and_then(|notice| notice.text.clone()) {
             *seq += 1;
             let said = crate::protocol::event(
@@ -2287,7 +2349,9 @@ impl Stops {
         let stopped = crate::protocol::event(
             "stopped",
             json!({
-                "reason": notice.map(|notice| notice.reason).unwrap_or("breakpoint"),
+                "reason": notice
+                    .map(|notice| notice.reason)
+                    .unwrap_or(if single_step { "step" } else { "breakpoint" }),
                 "description": "Execution stopped",
                 "threadId": 1,
                 "allThreadsStopped": true
@@ -2388,7 +2452,8 @@ struct Stop {
 }
 
 /// Read `/api/events` forever, turning each event into a DAP one.
-fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
+fn read_events(host: &str, stops: &Stops) {
+    let out = &stops.out;
     use std::io::{BufRead, BufReader, Write};
 
     let Ok(mut stream) = std::net::TcpStream::connect(host)
@@ -2447,30 +2512,27 @@ fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
         }
 
         // Any event that mentions it updates our idea of the run state, and a
-        // change is what the editor needs to hear about.
+        // change is what the editor needs to hear about. A stop is told
+        // through `Stops`, the poll's own way: once, whichever of the two sees
+        // it first, with a step over settled whoever tells it.
         let event = match payload.get("paused").and_then(Value::as_bool) {
             Some(paused) if paused == running => {
                 running = !paused;
-                seq += 1;
-                Some(if paused {
-                    crate::protocol::event(
-                        "stopped",
-                        json!({
-                            "reason": "breakpoint",
-                            "description": "Execution stopped",
-                            "threadId": 1,
-                            "allThreadsStopped": true
-                        }),
-                        seq
-                    )
+                if paused {
+                    if !stops.announce_stop(&mut seq) {
+                        return;
+                    }
+                    None
                 }
                 else {
-                    crate::protocol::event(
+                    stops.running();
+                    seq += 1;
+                    Some(crate::protocol::event(
                         "continued",
                         json!({ "threadId": 1, "allThreadsContinued": true }),
                         seq
-                    )
-                })
+                    ))
+                }
             },
             // No change, or an event that says nothing about it: the named
             // ones still have their own meaning.
@@ -2488,16 +2550,10 @@ fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
                     // authoritative rather than depending on `paused` agreeing.
                     "basic_bp" | "z80_bp" if running => {
                         running = false;
-                        Some(crate::protocol::event(
-                            "stopped",
-                            json!({
-                                "reason": "breakpoint",
-                                "description": "Execution stopped",
-                                "threadId": 1,
-                                "allThreadsStopped": true
-                            }),
-                            seq
-                        ))
+                        if !stops.announce_stop(&mut seq) {
+                            return;
+                        }
+                        None
                     },
                     // Already known to be stopped - the state change above (or
                     // an earlier basic_bp/z80_bp) already reported it.
@@ -2746,6 +2802,63 @@ mod tests {
         }
     }
 
+    /// A `Stops` for one thread alone, nothing armed, writing to `out`.
+    fn test_stops(out: std::sync::mpsc::Sender<Value>) -> Stops {
+        Stops {
+            endpoint: "http://127.0.0.1:1".to_string(),
+            out,
+            expecting_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            told: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()))
+        }
+    }
+
+    /// One stop, one `stopped`: the poll and the event stream both see a
+    /// breakpoint hit, and used to tell it twice (seen against bemu's
+    /// AMSpiriT-compatible server: every stop came as two events). The second
+    /// to see it stays quiet; the machine running again makes the next stop
+    /// news; a single step is told as a step.
+    #[test]
+    fn a_stop_seen_twice_is_told_once() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let stops = test_stops(sender);
+        let other_thread = stops.clone();
+        let (mut seq_a, mut seq_b) = (0, 1_000_000);
+
+        assert!(stops.announce_stop(&mut seq_a));
+        assert!(other_thread.announce_stop(&mut seq_b));
+        let told: Vec<Value> = receiver.try_iter().collect();
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert_eq!(told[0]["body"]["reason"], json!("breakpoint"));
+
+        // Resumed from elsewhere: seen running, its stop is news.
+        other_thread.running();
+        assert!(stops.announce_stop(&mut seq_a));
+        assert_eq!(receiver.try_iter().count(), 1, "a new stop after running");
+
+        // A continue that stops again at once: the event stream tells the stop
+        // (and sees the machine run before it) before the request returns and
+        // the poll, owed a stop, looks - still one stop, not two.
+        stops.generation.fetch_add(1, SeqCst); // begin_run, before the request
+        other_thread.running(); // this run, already counted
+        assert!(other_thread.announce_stop(&mut seq_b));
+        assert!(stops.announce_stop(&mut seq_a));
+        assert_eq!(receiver.try_iter().count(), 1, "one stop for one continue");
+
+        // A single step: told as a step, once.
+        stops.stepping.store(true, SeqCst);
+        stops.generation.fetch_add(1, SeqCst);
+        assert!(stops.announce_stop(&mut seq_a));
+        assert!(other_thread.announce_stop(&mut seq_b));
+        let told: Vec<Value> = receiver.try_iter().collect();
+        assert_eq!(told.len(), 1);
+        assert_eq!(told[0]["body"]["reason"], json!("step"));
+    }
+
     /// A BASIC breakpoint hit was reaching the stream and being dropped: its
     /// payload does not necessarily flip `paused` the way `frame`'s does (the
     /// reference web client does not trust `paused` for this either, it reacts
@@ -2770,7 +2883,7 @@ mod tests {
         });
 
         let (sender, receiver) = std::sync::mpsc::channel();
-        read_events(&addr.to_string(), &sender);
+        read_events(&addr.to_string(), &test_stops(sender));
 
         let logged = receiver
             .try_recv()
@@ -4316,6 +4429,9 @@ mod tests {
         let peer = AmspiritLitePeer {
             endpoint: DEFAULT_ENDPOINT.to_string(),
             expecting_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            told: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
