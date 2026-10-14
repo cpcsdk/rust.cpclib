@@ -18,10 +18,32 @@ impl<'src> Formatter<'src> {
 
     // Split "content ; comment" → (content.trim_end(), Option<"; comment">)
     pub(super) fn split_comment(line: &str) -> (&str, Option<&str>) {
-        match line.find(';') {
-            Some(pos) => (line[..pos].trim_end(), Some(line[pos..].trim_end())),
-            None => (line, None)
+        // the first `;` outside a quoted string starts the comment
+        let mut quote: Option<char> = None;
+        let mut escaped = false;
+        let mut previous = ' ';
+        for (pos, c) in line.char_indices() {
+            let before = std::mem::replace(&mut previous, c);
+            if let Some(q) = quote {
+                if escaped {
+                    escaped = false;
+                }
+                else if c == '\\' {
+                    escaped = true;
+                }
+                else if c == q {
+                    quote = None;
+                }
+            }
+            // `'` right after a name is the shadow register (`af'`), not a quote
+            else if c == '"' || (c == '\'' && !(before.is_ascii_alphanumeric() || before == '_')) {
+                quote = Some(c);
+            }
+            else if c == ';' {
+                return (line[..pos].trim_end(), Some(line[pos..].trim_end()));
+            }
         }
+        (line, None)
     }
 
     // Split `content` (already stripped of trailing comment) into `:` separated instruction

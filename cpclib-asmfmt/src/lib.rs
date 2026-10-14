@@ -82,6 +82,74 @@ mod tests {
         }
     }
 
+    /// Every label of `src` must survive formatting, once, in both splitting
+    /// modes (a label silently dropped or doubled changes the program).
+    fn assert_labels_survive(src: &str, labels: &[&str]) {
+        for one_instruction_per_line in [false, true] {
+            for postfix in [LabelPostfix::Untouched, LabelPostfix::WithColumn] {
+                let options = AsmFormatOptions {
+                    one_instruction_per_line,
+                    label_definition_postfix_with_column: postfix,
+                    ..AsmFormatOptions::default()
+                };
+                let out = format(src, &options).expect("parse failed");
+                for label in labels {
+                    let count = out
+                        .split(|c: char| !(c.is_alphanumeric() || "_+*".contains(c)))
+                        .filter(|w| w == label)
+                        .count();
+                    assert_eq!(
+                        count, 1,
+                        "label `{label}` x{count} (split={one_instruction_per_line}, \
+                         postfix={postfix:?}) in {out:?} from {src:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_colonless_label_after_an_instruction_is_kept() {
+        assert_labels_survive("nop: done\n", &["done"]);
+        // without splitting, the mnemonic case rule still upper-cases the whole
+        // `nop:done` word (a separate, older limitation): only presence is checked
+        for one_instruction_per_line in [false, true] {
+            let options = AsmFormatOptions {
+                one_instruction_per_line,
+                ..AsmFormatOptions::default()
+            };
+            let out = format("nop:done\n", &options).expect("parse failed");
+            assert_eq!(out.to_lowercase().matches("done").count(), 1, "{out:?}");
+        }
+    }
+
+    #[test]
+    fn test_smc_offset_spellings_are_kept() {
+        assert_labels_survive("answer+0x1:\n nop\n", &["answer+1"]);
+        assert_labels_survive("answer+01:\n nop\n", &["answer+1"]);
+    }
+
+    #[test]
+    fn test_label_after_a_quoted_semicolon_is_kept() {
+        assert_labels_survive("db \";\": next_label:\n nop\n", &["next_label"]);
+    }
+
+    #[test]
+    fn test_compact_label_chain_is_not_duplicated() {
+        assert_labels_survive("first:second:nop\n", &["first", "second"]);
+        assert_labels_survive("first: second:nop\n", &["first", "second"]);
+    }
+
+    #[test]
+    fn test_label_that_is_a_substring_of_an_earlier_one_keeps_its_colon() {
+        let options = AsmFormatOptions {
+            label_definition_postfix_with_column: LabelPostfix::Untouched,
+            ..AsmFormatOptions::default()
+        };
+        let out = format("foobar: foo: ld a,1\n", &options).expect("parse failed");
+        assert!(out.contains("foo:\n") || out.contains("foo: "), "colon removed: {out:?}");
+    }
+
     #[test]
     fn test_repeat_block() {
         let out = fmt("repeat 10\n push af\n endrepeat");

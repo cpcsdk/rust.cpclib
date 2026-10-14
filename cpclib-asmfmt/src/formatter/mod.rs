@@ -37,6 +37,14 @@ pub(super) struct Formatter<'src> {
     // wrapping within it - those don't open their own scope, see
     // `tokens::Formatter::assign_depth`'s own doc comment).
     pub(super) function_nesting: usize,
+    /// Without instruction splitting, the source line already written out whole
+    /// (its labels included) - a label token of that line must not write it again.
+    pub(super) whole_line_done: Option<usize>,
+    /// Set by `format_tokens` for the token about to be formatted: the token
+    /// before it is a label on the same source line.
+    pub(super) previous_is_label_on_same_line: bool,
+    /// Likewise: the token after it is a genuine label definition on that line.
+    pub(super) next_label_is_definition: bool,
     // 0-based, inclusive `(start, end)` source-line ranges where formatting is
     // suppressed - between a `; fmt: off` line and its matching `; fmt: on`
     // (both marker lines included) - see `pragma`'s own doc comment.
@@ -83,6 +91,9 @@ impl<'src> Formatter<'src> {
             current_line: 0,
             output: String::new(),
             function_nesting: 0,
+            whole_line_done: None,
+            previous_is_label_on_same_line: false,
+            next_label_is_definition: false,
             disabled_ranges,
             opt: opt.clone()
         }
