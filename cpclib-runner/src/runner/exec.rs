@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::thread;
@@ -299,6 +298,98 @@ impl<E: EventObserver> Default for ExternRunner<E> {
     }
 }
 
+/// How long the output of a finished command is still waited for when
+/// something else (a background process it started) keeps its pipes open.
+const OUTPUT_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Forward the output of `child` to `o` until it has exited and its output is
+/// drained, then return its status.
+///
+/// The pipes only end when *every* holder of their write side has closed it:
+/// a command that leaves a background process behind keeps them open after it
+/// exited, and waiting for their end would hang forever. Readers therefore run
+/// on their own threads and hand lines to this one; once the child has exited,
+/// whatever is still arriving is given [`OUTPUT_GRACE`] to settle, and the
+/// readers are left to end by themselves.
+fn drain_until_exit<E: EventObserver>(
+    child: &mut std::process::Child,
+    stdout: Option<std::process::ChildStdout>,
+    stderr: std::process::ChildStderr,
+    o: &E
+) -> std::io::Result<std::process::ExitStatus> {
+    use std::io::{BufReader, Read};
+    use std::sync::mpsc::{RecvTimeoutError, channel};
+    use std::time::Instant;
+
+    use utf8_chars::BufReadCharsExt;
+
+    enum Line {
+        Out(String),
+        Err(String),
+        Closed
+    }
+
+    fn spawn_reader<R: Read + Send + 'static>(
+        stream: R,
+        wrap: fn(String) -> Line,
+        tx: std::sync::mpsc::Sender<Line>
+    ) {
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut current = String::new();
+            for c in reader.chars().flatten() {
+                current.push(c);
+                if c == '\n' && tx.send(wrap(std::mem::take(&mut current))).is_err() {
+                    return;
+                }
+            }
+            if !current.is_empty() {
+                let _ = tx.send(wrap(current));
+            }
+            let _ = tx.send(Line::Closed);
+        });
+    }
+
+    let (tx, rx) = channel();
+    let mut open = 1;
+    spawn_reader(stderr, Line::Err, tx.clone());
+    if let Some(stdout) = stdout {
+        open += 1;
+        spawn_reader(stdout, Line::Out, tx.clone());
+    }
+    drop(tx);
+
+    let mut status = None;
+    let mut settle_by: Option<Instant> = None;
+    loop {
+        match rx.recv_timeout(std::time::Duration::from_millis(20)) {
+            Ok(line) => {
+                match line {
+                    Line::Out(text) => o.emit_stdout(&text),
+                    Line::Err(text) => o.emit_stderr(&text),
+                    Line::Closed => open -= 1
+                }
+                if status.is_some() {
+                    settle_by = Some(Instant::now() + OUTPUT_GRACE);
+                }
+            },
+            Err(RecvTimeoutError::Timeout) => {},
+            Err(RecvTimeoutError::Disconnected) => open = 0
+        }
+        if status.is_none()
+            && let Some(exited) = child.try_wait()?
+        {
+            status = Some(exited);
+            settle_by = Some(Instant::now() + OUTPUT_GRACE);
+        }
+        if let Some(status) = status
+            && (open == 0 || settle_by.is_some_and(|by| Instant::now() >= by))
+        {
+            return Ok(status);
+        }
+    }
+}
+
 impl<E: EventObserver> ExternRunner<E> {
     pub fn new(in_dir: RunInDir) -> Self {
         Self {
@@ -383,10 +474,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         #[cfg(not(feature = "transparent-x11"))]
         let use_plain_pipes = true;
         if use_plain_pipes {
-            use std::io::BufReader;
             use std::process::{Child, Stdio};
-
-            use utf8_chars::BufReadCharsExt;
 
             let mut cmd = std::process::Command::new(app);
             cmd.current_dir(&in_dir);
@@ -461,41 +549,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 .take()
                 .expect("Internal error, could not take stderr");
 
-            thread::scope(|s| {
-                if let Some(child_stdout) = child_stdout {
-                    s.spawn(|| {
-                        let mut stdout = BufReader::new(child_stdout);
-                        let mut current_string = String::new();
-                        for c in stdout.chars().flatten() {
-                            current_string.push(c);
-                            if c == '\n' {
-                                o.emit_stdout(&current_string);
-                                current_string.clear();
-                            }
-                        }
-                        if !current_string.is_empty() {
-                            o.emit_stdout(&current_string);
-                        }
-                    });
-                }
-                s.spawn(|| {
-                    let mut stderr = BufReader::new(child_stderr);
-                    let mut current_string = String::new();
-                    for c in stderr.chars().flatten() {
-                        current_string.push(c);
-                        if c == '\n' {
-                            o.emit_stderr(&current_string);
-                            current_string.clear();
-                        }
-                    }
-                    if !current_string.is_empty() {
-                        o.emit_stderr(&current_string);
-                    }
-                });
-            });
-
-            let status = child
-                .wait()
+            let status = drain_until_exit(&mut child, child_stdout, child_stderr, o)
                 .map_err(|e| format!("Error while executing {}. {}", app, e))?;
             deregister_child_pid(child_pid);
 
@@ -792,5 +846,29 @@ mod appimage_tests {
     fn an_appimage_is_unpacked_rather_than_mounted() {
         assert!(extract_and_run("/cache/Emulator-1.0-x86_64.AppImage"));
         assert!(!extract_and_run("/cache/emulator"));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod pipe_tests {
+    use cpclib_common::event::CapturingObserver;
+
+    use super::*;
+
+    /// A background process keeping the pipes open must not keep the run
+    /// waiting for them.
+    #[test]
+    fn a_background_process_holding_the_pipes_does_not_hang_the_run() {
+        let runner = ExternRunner::<CapturingObserver>::new(RunInDir::CurrentDir);
+        let observer = CapturingObserver::new();
+        let start = std::time::Instant::now();
+        let result = runner.inner_run(&["sh", "-c", "sleep 30 & echo hello"], &observer);
+        assert!(result.is_ok(), "{result:?}");
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(10),
+            "waited {:?}",
+            start.elapsed()
+        );
+        assert!(observer.stdout_joined().contains("hello"));
     }
 }
