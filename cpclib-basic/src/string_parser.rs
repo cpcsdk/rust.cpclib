@@ -4584,6 +4584,7 @@ pub fn parse_numeric_expression<'code>(
                         parse_val,
                         parse_len,
                         parse_all_generated_numeric_functions_int,
+                        parse_niladic_functions,
                         parse_integer_value_16bits.map(|v| vec![v]),
                         parse_integer_variable
                     ))

@@ -133,3 +133,17 @@ fn tiny_floats_convert_and_round_trip() {
         );
     }
 }
+
+/// `RND` is a token (`FF 45`) in every position of an integer-typed
+/// expression, the right-hand operand included.
+#[test]
+fn niladic_function_as_right_operand_of_an_integer_expression() {
+    let bytes = cpclib_basic::BasicProgram::parse("10 POKE 1+RND,1\n")
+        .unwrap()
+        .as_bytes();
+    assert!(
+        bytes.windows(2).any(|w| w == [0xff, 0x45]),
+        "RND not tokenised: {bytes:02X?}"
+    );
+    assert!(!bytes.contains(&0x0d), "RND read as a variable: {bytes:02X?}");
+}
