@@ -159,6 +159,13 @@ CPC debug console commands:
                                 view (the default), 0-7 (C0-C7) or mode:page
                                 (e.g. 4:2) to render what a chosen
                                 configuration would show instead
+  -frame [whole] [last] [alone] the emulator's own picture, in a panel kept
+                                up to date at every stop, with the beam
+                                marked: by default the visible area, the
+                                frame being drawn over the previous one;
+                                `whole` the whole raster (borders and syncs),
+                                `last` the last complete frame, `alone` the
+                                part drawn so far alone (bemu, AMSpiriT)
   -help                         this list
 
 Anything not starting with `-` is read as a label: `animation_state` shows the
@@ -255,6 +262,8 @@ enum Purpose {
     ScreenViewGa,
     /// `-sv`'s own pixel bytes, once address/mode/palette are all known.
     ScreenViewMemory,
+    /// The emulator's own picture, for the frame view (`-frame`).
+    FrameView,
     /// `-tapeview`'s own answer - see `tape_view_command`'s doc comment.
     TapeState
 }
@@ -817,6 +826,9 @@ pub struct Session<P: DapPeer> {
     /// The screen view currently open, if any - see `OpenScreenView`'s own
     /// doc comment.
     open_screen_view: Option<OpenScreenView>,
+    /// The frame view's options while it is open (`-frame`): asked again at
+    /// every stop.
+    open_frame_view: Option<Value>,
     /// The last snapshot the emulator wrote, valid until it runs again.
     ///
     /// Expanding CRTC and then Gate Array must not cost two whole-machine
@@ -906,6 +918,7 @@ impl<P: DapPeer> Session<P> {
             pending_basic_listing: None,
             pending_screen_view: None,
             open_screen_view: None,
+            open_frame_view: None,
             machine_state: None,
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
@@ -1467,6 +1480,7 @@ impl<P: DapPeer> Session<P> {
                 Purpose::ScreenViewCrtc => return self.complete_screen_view_crtc(message),
                 Purpose::ScreenViewGa => return self.complete_screen_view_ga(message),
                 Purpose::ScreenViewMemory => return self.complete_screen_view_memory(message),
+                Purpose::FrameView => return self.complete_frame_view(message),
                 Purpose::TapeState => return self.complete_tape_state(message),
                 Purpose::Plain => {}
             }
@@ -1936,6 +1950,7 @@ impl<P: DapPeer> Session<P> {
         self.refresh_memory_view();
         self.refresh_disassembly_view();
         self.refresh_screen_view();
+        self.refresh_frame_view();
         out
     }
 
@@ -2895,6 +2910,60 @@ impl<P: DapPeer> Session<P> {
 
         self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
         Ok(Vec::new())
+    }
+
+    /// `-frame [whole] [last] [alone]`: the emulator's own picture, as it
+    /// drew it - borders, rasters and the beam where it stands - unlike
+    /// `-sv`, which renders video memory. Opened in a panel and asked again
+    /// at every stop.
+    fn frame_view_command(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
+        let seq = self.next_seq();
+        if !self.peer_mut().supports("cpclib/frame") {
+            return Ok(vec![protocol::failure(
+                request,
+                "this emulator does not give its picture: -sv renders video memory instead",
+                seq
+            )]);
+        }
+        let mut options = json!({ "whole": false, "live": true, "over": true });
+        for argument in arguments {
+            match argument.to_ascii_lowercase().as_str() {
+                "whole" => options["whole"] = json!(true),
+                "visible" => options["whole"] = json!(false),
+                "last" => options["live"] = json!(false),
+                "live" => options["live"] = json!(true),
+                "alone" => options["over"] = json!(false),
+                "over" => options["over"] = json!(true),
+                other => {
+                    return Ok(vec![protocol::failure(
+                        request,
+                        &format!("-frame does not know '{other}': whole|visible, last|live, alone|over"),
+                        seq
+                    )]);
+                }
+            }
+        }
+        self.open_frame_view = Some(options.clone());
+        self.send_own("cpclib/frame", options, Purpose::FrameView)?;
+        Ok(vec![protocol::response(request, json!({ "result": "", "variablesReference": 0 }), seq)])
+    }
+
+    /// The frame view, asked again at a stop while it is open.
+    fn refresh_frame_view(&mut self) {
+        if let Some(options) = self.open_frame_view.clone() {
+            let _ = self.send_own("cpclib/frame", options, Purpose::FrameView);
+        }
+    }
+
+    fn complete_frame_view(&mut self, message: &Value) -> Vec<Value> {
+        let seq = self.next_seq();
+        if message.get("success").and_then(Value::as_bool) != Some(true) {
+            let problem = message.get("message").and_then(Value::as_str).unwrap_or("no frame from the emulator");
+            return vec![protocol::event("output", json!({ "category": "console", "output": format!("{problem}\n") }), seq)];
+        }
+        let mut body = message.get("body").cloned().unwrap_or(json!({}));
+        body["options"] = self.open_frame_view.clone().unwrap_or(Value::Null);
+        vec![protocol::event("cpclib/frameView", body, seq)]
     }
 
     fn complete_screen_view_crtc(&mut self, message: &Value) -> Vec<Value> {
@@ -3857,6 +3926,7 @@ impl<P: DapPeer> Session<P> {
             "-timer" | "-t" => self.timer_command(request, &arguments),
             "-bv" | "-listing" => self.basic_listing_view(request),
             "-sv" | "-screen" => self.screen_view_command(request, &arguments),
+            "-frame" | "-fr" => self.frame_view_command(request, &arguments),
             "-help" | "-h" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(

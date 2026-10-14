@@ -130,6 +130,14 @@ code, and steps through your *source* rather than through addresses.
   *instruction*, not to the start of its line; addresses in operands are named
   when a label matches.
   `-help` lists the commands.
+- **The emulator's own frame** (`-frame`, or *CPClib: Open the emulator's
+  frame, with the beam*), on bemu and AMSpiriT: the picture as the monitor got
+  it - borders and raster effects included - with the **beam marked** where the
+  stop left it, refreshed at every stop. By default the frame being drawn, over
+  the previous one, so a stop mid-frame shows exactly how far the raster got;
+  `whole` shows the whole raster (blanking and syncs), `last` the last complete
+  frame, `alone` the part drawn so far alone. `-sv`, by contrast, renders video
+  memory.
 - **Sound needs a browser.** A VS Code webview does not hand the page a user
   gesture Chromium accepts for audio - asking directly, asking on resume and a
   click-to-enable button all fail - so the emulator is silent in the editor

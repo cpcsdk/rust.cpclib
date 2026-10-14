@@ -388,3 +388,41 @@ fn a_data_breakpoint_stops_on_the_write() {
     assert_eq!(hex_value(&adapter.register("A")), 4);
     adapter.finish();
 }
+
+#[test]
+fn the_frame_view_shows_the_emulators_picture_and_beam() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": LINE_INC_A }] }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+
+    let png_size = |frame: &Value| (frame["body"]["width"].as_u64().unwrap(), frame["body"]["height"].as_u64().unwrap());
+    adapter.request("evaluate", json!({ "expression": "-frame", "context": "repl" }));
+    let frame = adapter.wait("frame view", |m| m["event"] == "cpclib/frameView");
+    assert_eq!(png_size(&frame), (768, 272), "the visible area");
+    assert!(frame["body"]["png"].as_str().unwrap().starts_with("iVBOR"), "a PNG");
+    assert!(frame["body"]["beam"]["y"].is_u64(), "bemu says where the beam is: {}", frame["body"]["crop"]);
+    assert_eq!(frame["body"]["options"], json!({ "whole": false, "live": true, "over": true }));
+
+    adapter.request("evaluate", json!({ "expression": "-frame whole", "context": "repl" }));
+    let whole = adapter.wait("whole frame", |m| m["event"] == "cpclib/frameView");
+    assert_eq!(png_size(&whole), (1024, 350), "the whole raster");
+    assert_eq!(whole["body"]["crop"], json!({ "x": 0, "y": 0, "w": 1024, "h": 350 }));
+
+    // Kept up to date: the next stop brings a new frame by itself.
+    adapter.request("continue", json!({ "threadId": 1 }));
+    adapter.stopped();
+    let refreshed = adapter.wait("refreshed frame", |m| m["event"] == "cpclib/frameView");
+    assert_eq!(refreshed["body"]["options"]["whole"], true, "with the options last asked for");
+
+    let refused = adapter.send("evaluate", json!({ "expression": "-frame sideways", "context": "repl" }));
+    let answer = adapter.wait("refusal", |m| m["type"] == "response" && m["request_seq"] == refused);
+    assert_eq!(answer["success"], false, "{answer}");
+    adapter.finish();
+}
