@@ -21,6 +21,7 @@
 
 pub mod ace;
 mod advanced_breakpoints;
+pub mod breakpoint_manager;
 pub mod amspiritlite;
 pub mod bemu;
 pub mod basic;

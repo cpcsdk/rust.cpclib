@@ -542,6 +542,12 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.openBreakpointManager",
+        "title": "Open the breakpoint manager",
+        "category": "CPClib",
+        "icon": "$(edit)"
+      },
+      {
         "command": "cpclib.refreshBreakpoints",
         "title": "Refresh",
         "category": "CPClib",
@@ -804,6 +810,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "cpclib.openBreakpointManager",
+          "when": "view == cpclib.breakpoints",
+          "group": "navigation"
+        },
         {
           "command": "cpclib.refreshBreakpoints",
           "when": "view == cpclib.breakpoints",

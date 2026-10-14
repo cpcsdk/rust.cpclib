@@ -126,6 +126,16 @@ code, and steps through your *source* rather than through addresses.
   marking what this emulator does not apply in full, and why. With bemu it
   adds **what the emulator itself has armed**, whoever armed it, with **hit
   counts**, and its raster breakpoints. Clicking an entry opens its line.
+- **Breakpoint manager** (*CPClib: Open the breakpoint manager*, or the
+  pencil on the CPC Breakpoints view), after ACE's breakpoint window: tabs
+  **Execution**, **Memory** and **Ports**, each listing every breakpoint of its
+  kind with the red dots, directives and data breakpoints beside it (marked
+  with where they come from, double-click to open them), and a form to
+  **add, update or remove** one made by hand - address (or a label) or port
+  with its mask, access, value with its mask, size, a condition in ACE's
+  language, stop or watch, a pass count and a name. *Pass* shows hits / passes
+  let through. bemu applies them whole; another emulator keeps the plain
+  execution ones and says why it cannot take the others.
 - **Debug console commands**: `-mv 0xC000 0x40` (or `-mv animation_state`)
   opens a memory view in its own tab, with your labels marked in the dump. It
   **re-reads itself on every stop and highlights the bytes that moved**, which

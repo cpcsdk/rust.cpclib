@@ -32,7 +32,10 @@ pub(crate) struct Advanced {
     pub watches: Vec<Value>,
     /// `cpclib/setProgramBreakpoints` entries: the program's `BREAKPOINT`
     /// directives, whole (`/api/breakpoints` fields and a `label`).
-    pub program: Vec<Value>
+    pub program: Vec<Value>,
+    /// `cpclib/setManagerBreakpoints` entries: the breakpoint manager's,
+    /// whole, with their `id` and `label`.
+    pub manager: Vec<Value>
 }
 
 /// Whether a `setInstructionBreakpoints` entry needs more than `/api/z80_bp`.
@@ -108,20 +111,34 @@ impl Advanced {
                 })
             ));
         }
-        for (index, entry) in self.program.iter().enumerate() {
-            let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
+        let whole = |entry: &Value, name: String| {
             let mut body = entry.clone();
             if let Some(fields) = body.as_object_mut() {
                 fields.remove("label");
+                fields.remove("id");
             }
-            body["name"] = json!(program_name(index));
-            requests.push((format!("BREAKPOINT directive at {label}"), body));
+            body["name"] = json!(name);
+            body
+        };
+        for (index, entry) in self.program.iter().enumerate() {
+            let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
+            requests.push((format!("BREAKPOINT directive at {label}"), whole(entry, program_name(index))));
+        }
+        for entry in &self.manager {
+            let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
+            let id = entry.get("id").and_then(Value::as_u64).unwrap_or(0);
+            requests.push((format!("breakpoint {label}"), whole(entry, format!("{OURS}manager:{id}"))));
         }
         requests
     }
 
-    /// The label of a program breakpoint by its name.
+    /// The label of a breakpoint sent whole (a directive's, the manager's)
+    /// by its name.
     fn program_label(&self, name: &str) -> Option<&str> {
+        if let Some(id) = name.strip_prefix(&format!("{OURS}manager:")).and_then(|id| id.parse::<u64>().ok()) {
+            let entry = self.manager.iter().find(|e| e.get("id").and_then(Value::as_u64) == Some(id))?;
+            return entry.get("label").and_then(Value::as_str);
+        }
         let index = name.strip_prefix(&format!("{OURS}program:"))?.parse::<usize>().ok()?;
         self.program.get(index)?.get("label").and_then(Value::as_str)
     }
@@ -227,6 +244,9 @@ impl Advanced {
                 .to_owned();
             (if entry.is_some_and(|e| e.get("logMessage").is_some()) { "log point" } else { "source" }, label)
         }
+        else if let Some(id) = rest("manager") {
+            ("manager", id.to_owned())
+        }
         else if let Some(label) = self.program_label(name) {
             ("directive", label.to_owned())
         }
@@ -313,6 +333,10 @@ mod tests {
             program: vec![json!({
                 "kind": "io", "access": "w", "run": "stop", "addr": 0x7f00, "mask": 0xff00, "size": 1,
                 "value": 0x40, "valmask": 0xc0, "condition": "A = &55", "label": "ink"
+            })],
+            manager: vec![json!({
+                "id": 3, "label": "TrackDone", "kind": "exec", "access": "rw", "run": "stop", "addr": 0xc03c,
+                "mask": 0xffff, "size": 1, "value": 0, "valmask": 0, "condition": "BC=7 AND FlagC"
             })]
         }
     }
@@ -329,7 +353,14 @@ mod tests {
                 "kind": "io", "access": "w", "run": "stop", "addr": 0x7f00, "mask": 0xff00, "size": 1,
                 "value": 0x40, "valmask": 0xc0, "condition": "A = &55", "name": "cpclib:program:0"
             }),
+            json!({
+                "kind": "exec", "access": "rw", "run": "stop", "addr": 0xc03c, "mask": 0xffff, "size": 1,
+                "value": 0, "valmask": 0, "condition": "BC=7 AND FlagC", "name": "cpclib:manager:3"
+            }),
         ]);
+        // A manager watch reports under its label.
+        let watch = json!({ "name": "cpclib:manager:3", "pc": "0xc03c" });
+        assert_eq!(set().report(&watch).unwrap(), "TrackDone (PC #C03C)\n");
     }
 
     #[test]
