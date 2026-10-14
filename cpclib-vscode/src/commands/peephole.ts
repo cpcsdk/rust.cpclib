@@ -244,10 +244,49 @@ async function clearPeephole(): Promise<void> {
 // "command already exists" and aborts the whole client start - which
 // surfaces to the user as "Client is not running" the moment they invoke
 // anything.
+/// Balance the branch timings of the current selection. The server has the same
+/// thing as a Refactor code action, but a code action can only offer nothing
+/// when it cannot help; this asks the server directly, so a refusal comes back
+/// with its reason and is shown instead of leaving the user with silence.
+async function stabilizeSelection(): Promise<void> {
+    const editor = window.activeTextEditor;
+    if (!editor) {
+        window.showInformationMessage('Open an assembly file first.');
+        return;
+    }
+    if (editor.selection.isEmpty) {
+        window.showInformationMessage('Select the code to stabilize first.');
+        return;
+    }
+    let result: { edits?: { range: unknown; newText: string }[]; reason?: string } | null | undefined;
+    try {
+        result = await client.sendRequest('workspace/executeCommand', {
+            command: 'cpclib.stabilizeEdits',
+            arguments: [{
+                uri: editor.document.uri.toString(),
+                range: client.code2ProtocolConverter.asRange(editor.selection),
+            }],
+        });
+    } catch (err) {
+        window.showErrorMessage(`Stabilize failed: the language server did not answer (${(err as Error).message}).`);
+        return;
+    }
+    if (!result?.edits) {
+        window.showInformationMessage(`Stabilize: ${result?.reason ?? 'no answer from the language server.'}`);
+        return;
+    }
+    const edit = new vscode.WorkspaceEdit();
+    for (const e of result.edits) {
+        edit.replace(editor.document.uri, client.protocol2CodeConverter.asRange(e.range as never)!, e.newText);
+    }
+    await vscode.workspace.applyEdit(edit);
+}
+
 export function registerPeephole(context: ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('cpclib.findPeepholeInFile', () => analyzePeephole('file')),
         vscode.commands.registerCommand('cpclib.findPeepholeInSelection', () => analyzePeephole('selection')),
+        vscode.commands.registerCommand('cpclib.stabilizeSelection', stabilizeSelection),
         vscode.commands.registerCommand('cpclib.findPeepholeInProject', () => analyzePeephole('project')),
         vscode.commands.registerCommand('cpclib.clearPeepholeResults', clearPeephole),
     );

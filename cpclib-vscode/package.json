@@ -432,6 +432,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.stabilizeSelection",
+        "title": "Stabilize Selection (balance branch timings)",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.findPeepholeInProject",
         "title": "Find Peephole Optimizations in Project",
         "category": "CPClib"
@@ -820,6 +825,11 @@
           "command": "cpclib.buildActiveFile",
           "when": "editorLangId == basm",
           "group": "cpclib.run@3"
+        },
+        {
+          "command": "cpclib.stabilizeSelection",
+          "when": "editorLangId == basm && editorHasSelection",
+          "group": "cpclib.peephole@0"
         },
         {
           "command": "cpclib.findPeepholeInFile",

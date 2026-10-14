@@ -1545,6 +1545,7 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.runAssembly",
     "cpclib.resolveEntry",
     "cpclib.cycleCountForSelection",
+    "cpclib.stabilizeEdits",
     "cpclib.registersAtPosition",
     "cpclib.fileRegions",
     "cpclib.removeUnusedParameter",
@@ -3947,6 +3948,47 @@ impl LanguageServer for CpcLspBackend {
                 }
             }
             return Ok(None);
+        }
+
+        // Unlike the Refactor code action (which offers nothing when it can't
+        // help), this always answers: `{"edits": [...]}` or `{"reason": "..."}`,
+        // so the editor's explicit "Stabilize Selection" can say why.
+        if params.command == "cpclib.stabilizeEdits" {
+            let Some(arg) = params.arguments.into_iter().next()
+            else {
+                return Ok(None);
+            };
+            let uri = arg
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<Url>().ok());
+            let range = arg
+                .get("range")
+                .and_then(|v| serde_json::from_value::<Range>(v.clone()).ok());
+            let (Some(uri), Some(range)) = (uri, range)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(Some(serde_json::json!({ "reason": "the document isn't open" })));
+            };
+            let line_count = document.text().lines().count();
+            let Some((start_line, end_line)) =
+                crate::basm::command::line_range_from_selection(range, line_count)
+            else {
+                return Ok(Some(serde_json::json!({ "reason": "the selection is empty" })));
+            };
+            let asm_analyzer = Arc::clone(&self.asm_analyzer);
+            let result = tokio::task::spawn_blocking(move || {
+                asm_analyzer.stabilize_text_edits(&document, start_line, end_line)
+            })
+            .await;
+            return Ok(Some(match result {
+                Ok(Ok(edits)) => serde_json::json!({ "edits": edits }),
+                Ok(Err(reason)) => serde_json::json!({ "reason": reason }),
+                Err(_) => serde_json::json!({ "reason": "the analysis crashed" })
+            }));
         }
 
         if params.command == "cpclib.cycleCountForSelection" {

@@ -161,73 +161,7 @@ impl AssemblyAnalyzer {
         // user made, so it gets no action at all rather than an error
         // popup - same "nothing recognizable -> no entry" precedent as the
         // cycle-count action above.
-        if let Some(listing) = self.parse_document(document).ok()
-            && let Ok(edits) = super::stabilize::stabilize_lines(&listing, start_line, end_line)
-            && !edits.is_empty()
-        {
-            let text_edits: Vec<TextEdit> = edits
-                .into_iter()
-                .map(|edit| {
-                    match edit {
-                        super::stabilize::StabilizeTextEdit::InsertPadding { line, nop_count } => {
-                            let pos = Position {
-                                line: line as u32,
-                                character: 0
-                            };
-                            TextEdit {
-                                range: Range {
-                                    start: pos,
-                                    end: pos
-                                },
-                                new_text: format!("    waitnops {nop_count}\n")
-                            }
-                        },
-                        super::stabilize::StabilizeTextEdit::ReplaceRetWithJump {
-                            range,
-                            new_text
-                        } => TextEdit { range, new_text },
-                        super::stabilize::StabilizeTextEdit::AppendTailBlocks {
-                            at,
-                            text: append_text
-                        } => {
-                            // If `at` doesn't correspond to any real
-                            // existing line (past the document's own last
-                            // line) and the document has no trailing
-                            // newline, there is no real line break for `at`
-                            // to anchor to - inserting there would glue
-                            // straight onto the end of the last line's own
-                            // text instead of starting a fresh line. Anchor
-                            // to the end of that last line's own content
-                            // instead and supply the leading newline
-                            // ourselves.
-                            let past_last_line = at.line as usize >= all_lines.len();
-                            let needs_own_newline = past_last_line && !text.ends_with('\n');
-                            let (pos, new_text) = if needs_own_newline {
-                                let last_line = all_lines.len().saturating_sub(1);
-                                let end_char =
-                                    all_lines.get(last_line).map_or(0, |l| l.len()) as u32;
-                                (
-                                    Position {
-                                        line: last_line as u32,
-                                        character: end_char
-                                    },
-                                    format!("\n{append_text}")
-                                )
-                            }
-                            else {
-                                (at, append_text)
-                            };
-                            TextEdit {
-                                range: Range {
-                                    start: pos,
-                                    end: pos
-                                },
-                                new_text
-                            }
-                        }
-                    }
-                })
-                .collect();
+        if let Ok(text_edits) = self.stabilize_text_edits(document, start_line, end_line) {
             actions.push(CodeAction {
                 title: "Balance branch timings in selection".to_string(),
                 kind: Some(CodeActionKind::REFACTOR_REWRITE),
@@ -237,6 +171,114 @@ impl AssemblyAnalyzer {
         }
 
         actions
+    }
+
+    /// The `TextEdit`s that balance the branch timings of whole lines
+    /// `start_line..=end_line`, or the reason there are none: the document
+    /// doesn't parse, the selection holds something this feature can't
+    /// balance (see `stabilize.rs`), or it's already balanced.
+    ///
+    /// Shared by the Refactor code action - which offers nothing at all on
+    /// `Err`, since an unsupported shape isn't a mistake the user made - and
+    /// the `cpclib.stabilizeEdits` command behind the editor's explicit
+    /// "Stabilize Selection", which is the one place that shows the reason.
+    pub fn stabilize_text_edits(
+        &self,
+        document: &Document,
+        start_line: usize,
+        end_line: usize
+    ) -> Result<Vec<TextEdit>, String> {
+        let text = document.text();
+        let all_lines: Vec<&str> = text.lines().collect();
+        let listing = self
+            .parse_document(document)
+            .map_err(|_| "the document doesn't parse".to_string())?;
+        let edits = super::stabilize::stabilize_lines(&listing, start_line, end_line)?;
+        if edits.is_empty() {
+            return Err(
+                "nothing to balance: the selection has no branch whose two paths differ in \
+                 timing (a branch with a loop or a jump out of the selection on one of its arms \
+                 is left alone)"
+                    .to_string()
+            );
+        }
+        let text_edits: Vec<TextEdit> = edits
+            .into_iter()
+            .map(|edit| {
+                match edit {
+                    super::stabilize::StabilizeTextEdit::InsertPadding { line, nop_count } => {
+                        let pos = Position {
+                            line: line as u32,
+                            character: 0
+                        };
+                        TextEdit {
+                            range: Range {
+                                start: pos,
+                                end: pos
+                            },
+                            new_text: format!("    waitnops {nop_count}\n")
+                        }
+                    },
+                    super::stabilize::StabilizeTextEdit::InsertText { line, text } => {
+                        let pos = Position {
+                            line: line as u32,
+                            character: 0
+                        };
+                        TextEdit {
+                            range: Range {
+                                start: pos,
+                                end: pos
+                            },
+                            new_text: text
+                        }
+                    },
+                    super::stabilize::StabilizeTextEdit::ReplaceRetWithJump {
+                        range,
+                        new_text
+                    } => TextEdit { range, new_text },
+                    super::stabilize::StabilizeTextEdit::AppendTailBlocks {
+                        at,
+                        text: append_text
+                    } => {
+                        // If `at` doesn't correspond to any real
+                        // existing line (past the document's own last
+                        // line) and the document has no trailing
+                        // newline, there is no real line break for `at`
+                        // to anchor to - inserting there would glue
+                        // straight onto the end of the last line's own
+                        // text instead of starting a fresh line. Anchor
+                        // to the end of that last line's own content
+                        // instead and supply the leading newline
+                        // ourselves.
+                        let past_last_line = at.line as usize >= all_lines.len();
+                        let needs_own_newline = past_last_line && !text.ends_with('\n');
+                        let (pos, new_text) = if needs_own_newline {
+                            let last_line = all_lines.len().saturating_sub(1);
+                            let end_char =
+                                all_lines.get(last_line).map_or(0, |l| l.len()) as u32;
+                            (
+                                Position {
+                                    line: last_line as u32,
+                                    character: end_char
+                                },
+                                format!("\n{append_text}")
+                            )
+                        }
+                        else {
+                            (at, append_text)
+                        };
+                        TextEdit {
+                            range: Range {
+                                start: pos,
+                                end: pos
+                            },
+                            new_text
+                        }
+                    }
+                }
+            })
+            .collect();
+        Ok(text_edits)
     }
 
     /// Total NOP count for the instructions in `range`, or `None` when
@@ -307,7 +349,7 @@ impl AssemblyAnalyzer {
 /// or `None` when there's no real selection (`range.start == range.end`) or
 /// it's empty/inverted after clamping to `line_count`. Handles the
 /// "`end.line` is exclusive when `character == 0`" LSP quirk.
-pub(super) fn line_range_from_selection(range: Range, line_count: usize) -> Option<(usize, usize)> {
+pub(crate) fn line_range_from_selection(range: Range, line_count: usize) -> Option<(usize, usize)> {
     if range.start == range.end {
         return None;
     }
@@ -554,6 +596,182 @@ mod stabilize_branch_timings_action_tests {
         assert_eq!(text_edits.len(), 1);
         assert_eq!(text_edits[0].new_text, "    waitnops 1\n");
         assert_eq!(text_edits[0].range.start.line, 6);
+    }
+
+    /// The routine around the branch is itself a loop (the `jp .main` back-edge
+    /// and a `djnz`), which used to make the whole selection ineligible. The
+    /// `jr nz` diamond must still be balanced. Its taken arm is empty (it jumps
+    /// straight to `.save_ptr`) and costs 3 NOPs; the fall-through costs 2 +
+    /// `ld hl,nn` (3) + the guard `jr` (3) = 8, so the pad block holds 5.
+    #[test]
+    fn the_action_still_appears_for_a_branch_inside_a_loop() {
+        let text = ".main\n\tld b,8\n.inner\n\tdjnz .inner\n\tld de, color_table_end\n\tor a : sbc hl, de : add hl, de ; Z if hl == color_table_end\n\tjr nz, .save_ptr\n\tld hl, color_table\n.save_ptr\n\tld (.ptr), hl\n\tjp .main\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 11));
+        let action = stabilize_action(&actions).expect("expected the stabilize action");
+        let edit = action.edit.as_ref().expect("expected an edit");
+        let text_edits = edit.changes.as_ref().unwrap().get(&d.uri).unwrap();
+        assert_eq!(text_edits.len(), 2, "{text_edits:?}");
+        assert_eq!(text_edits[0].new_text, "jr nz,.__BASM__stabilize_pad_1");
+        assert_eq!(
+            text_edits[1].new_text,
+            "    jr .save_ptr\n.__BASM__stabilize_pad_1\n    waitnops 5\n"
+        );
+        assert_eq!(text_edits[1].range.start.line, 8);
+    }
+
+    /// Applies `edits` (all expressed against the *original* text) and returns
+    /// the rewritten lines.
+    fn apply_edits(text: &str, edits: &[TextEdit]) -> Vec<String> {
+        let mut sorted: Vec<&TextEdit> = edits.iter().collect();
+        sorted.sort_by_key(|e| std::cmp::Reverse((e.range.start.line, e.range.start.character)));
+        let mut out = text.to_string();
+        let offset = |t: &str, p: Position| -> usize {
+            let mut off = 0;
+            for (i, l) in t.split_inclusive('\n').enumerate() {
+                if i as u32 == p.line {
+                    return off + p.character as usize;
+                }
+                off += l.len();
+            }
+            off
+        };
+        for e in sorted {
+            let (a, b) = (offset(&out, e.range.start), offset(&out, e.range.end));
+            out.replace_range(a..b, &e.new_text);
+        }
+        out.lines().map(str::to_string).collect()
+    }
+
+    /// Runs `lines` from the top to the end, forcing the one conditional jump
+    /// to be taken or not, and returns the total cost in NOPs - computed from
+    /// the timing table, independently of the balancing code. `waitnops N`
+    /// is N NOPs.
+    fn run_path(lines: &[String], condition_true: bool) -> u32 {
+        use cpclib_z80flow::InstructionCost;
+        let label_line = |name: &str| -> usize {
+            // `global.local` -> the local label as written on its own line
+            let name = name.find('.').map_or(name, |i| &name[i..]);
+            lines
+                .iter()
+                .position(|l| l.split(';').next().unwrap().trim() == name.trim())
+                .unwrap_or_else(|| panic!("no label {name} in {lines:?}"))
+        };
+        let (mut pc, mut total) = (0usize, 0u32);
+        while pc < lines.len() {
+            let code = lines[pc].split(';').next().unwrap().trim().to_string();
+            pc += 1;
+            let is_label = !lines[pc - 1].starts_with(char::is_whitespace);
+            if code.is_empty() || is_label || code.ends_with(':') {
+                continue;
+            }
+            // `a : b : c` chains
+            for ins in code.split(" : ") {
+                let ins = ins.trim();
+                if let Some(n) = ins.strip_prefix("waitnops ") {
+                    total += n.trim().parse::<u32>().unwrap();
+                    continue;
+                }
+                let lower = ins.to_lowercase();
+                if lower.starts_with("jr ") || lower.starts_with("jp ") {
+                    let ops: Vec<&str> = ins[3..].split(',').map(str::trim).collect();
+                    let (cond, target) = if ops.len() == 2 { (true, ops[1]) } else { (false, ops[0]) };
+                    match crate::basm::timing::nops_of(ins) {
+                        InstructionCost::Conditional { taken, not_taken } if cond => {
+                            total += if condition_true { taken } else { not_taken };
+                            if condition_true {
+                                pc = label_line(target) + 1;
+                            }
+                        },
+                        InstructionCost::Fixed(n) => {
+                            total += n;
+                            pc = label_line(target) + 1;
+                        },
+                        other => panic!("unexpected cost {other:?} for {ins}"),
+                    }
+                    break;
+                }
+                match crate::basm::timing::nops_of(ins) {
+                    InstructionCost::Fixed(n) => total += n,
+                    other => panic!("cannot cost `{ins}`: {other:?}"),
+                }
+            }
+        }
+        total
+    }
+
+    fn stabilized_lines(text: &str) -> Vec<String> {
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let n = text.lines().count() as u32;
+        let actions = analyzer.code_actions(&d, full_line_range(0, n));
+        let action = stabilize_action(&actions).expect("expected the stabilize action");
+        let edit = action.edit.as_ref().expect("expected an edit");
+        apply_edits(text, edit.changes.as_ref().unwrap().get(&d.uri).unwrap())
+    }
+
+    /// The user's real routine: `jr nz` straight to the merge label, so the
+    /// taken arm is empty and cheaper. Padding must end up on the *taken*
+    /// path only - the first version of this feature put it before
+    /// `.save_ptr`, which the fall-through path also runs.
+    #[test]
+    fn an_empty_taken_arm_is_padded_on_the_taken_path_only() {
+        let text = "start\n\tor a : sbc hl, bc : add hl, bc\n\tjr nz, .save_ptr\n\tld hl, color_table\n.save_ptr\n\tld (.ptr), hl\n";
+        let before: Vec<String> = text.lines().map(str::to_string).collect();
+        assert_ne!(
+            run_path(&before, true),
+            run_path(&before, false),
+            "the input must start unbalanced"
+        );
+        let after = stabilized_lines(text);
+        assert_eq!(
+            run_path(&after, true),
+            run_path(&after, false),
+            "both paths must now cost the same: {after:#?}"
+        );
+    }
+
+    /// Same, when the fall-through arm already ends in an unconditional jump
+    /// to the merge point: no extra guard jump is needed (or wanted).
+    #[test]
+    fn an_empty_taken_arm_whose_other_arm_jumps_needs_no_guard() {
+        let text = "start\n\tjr nz, .merge\n\tld a, b\n\tld c, d\n\tjr .merge\n.merge\n\tld e, h\n";
+        let before: Vec<String> = text.lines().map(str::to_string).collect();
+        assert_ne!(run_path(&before, true), run_path(&before, false));
+        let after = stabilized_lines(text);
+        assert_eq!(run_path(&after, true), run_path(&after, false), "{after:#?}");
+    }
+
+    /// Every shape the balancer handles, checked the same independent way:
+    /// after the edits, forcing the conditional either way costs the same.
+    #[test]
+    fn stabilized_code_costs_the_same_on_both_paths_for_every_supported_shape() {
+        let shapes = [
+            // classic diamond, expensive taken arm
+            "start\n\tjr nz,.b\n\tld a,b\n\tjr .over\n.b\n\tld a,b\n\tld c,d\n.over\n\tld e,h\n",
+            // expensive fall-through arm, taken arm non-empty
+            "start\n\tjr nz,.b\n\tld a,b\n\tld c,d\n\tld e,h\n\tjr .over\n.b\n\tld a,b\n.over\n\tld e,h\n",
+            // empty taken arm, expensive fall-through (user's shape)
+            "start\n\tjr z,.m\n\tld hl,1\n\tld a,b\n.m\n\tld e,h\n",
+            // empty taken arm, fall-through is a single `ld`
+            "start\n\tjr z,.m\n\tld a,b\n.m\n\tld e,h\n",
+            // empty fall-through arm, expensive taken arm
+            "start\n\tjr z,.b\n\tjr .m\n.b\n\tld a,b\n\tld c,d\n\tld e,h\n.m\n\tld e,h\n",
+        ];
+        for text in shapes {
+            let before: Vec<String> = text.lines().map(str::to_string).collect();
+            let (t, n) = (run_path(&before, true), run_path(&before, false));
+            if t == n {
+                continue;
+            }
+            let after = stabilized_lines(text);
+            assert_eq!(
+                run_path(&after, true),
+                run_path(&after, false),
+                "was {t} vs {n}; now: {after:#?}"
+            );
+        }
     }
 
     #[test]

@@ -61,6 +61,10 @@ pub(super) enum StabilizeTextEdit {
     /// Insert `nop_count` cost-units' worth of padding right before `line`
     /// (0-based, a real document line).
     InsertPadding { line: usize, nop_count: u32 },
+    /// Insert `text` (already newline terminated) at the very start of
+    /// `line` - the pad block that a taken-arm branch is redirected to, see
+    /// `StabilizeEdit::PadEmptyTakenArm`.
+    InsertText { line: usize, text: String },
     /// Replace `range` (a conditional `RET`'s own span) with `new_text`
     /// (`"JR cc,<qualified label>"`).
     ReplaceRetWithJump { range: Range, new_text: String },
@@ -207,6 +211,52 @@ pub(super) fn stabilize_selection(
                     range.end.line as usize
                 };
                 edits.push(StabilizeTextEdit::InsertPadding { line, nop_count });
+            },
+            StabilizeEdit::PadEmptyTakenArm {
+                branch_token_index,
+                insert_before_index,
+                nop_count,
+                guard_jump
+            } => {
+                let branch_token = tokens[branch_token_index];
+                let owning_global = owning_global_label(&tokens, branch_token_index);
+                // The pad label is defined bare (see the module doc comment),
+                // so every global label between the branch and the pad block
+                // would put the two in different scopes: refuse that.
+                let spans_a_global_label = tokens[branch_token_index..insert_before_index]
+                    .iter()
+                    .any(|t| t.is_label() && !t.label_symbol().starts_with('.'));
+                if spans_a_global_label {
+                    return Err(
+                        "a global label sits between the branch and its merge point, so a local \
+                         pad label could not be scoped reliably"
+                            .to_string()
+                    );
+                }
+                let branch_text = branch_token.to_string();
+                let (head, target) = branch_text
+                    .rsplit_once(',')
+                    .ok_or_else(|| format!("cannot find the target of \"{branch_text}\""))?;
+                let target = target.trim();
+
+                label_counter += 1;
+                let bare_label = format!(".__BASM__stabilize_pad_{label_counter}");
+                let reference = match owning_global {
+                    Some(global) => format!("{global}{bare_label}"),
+                    None => bare_label.clone()
+                };
+
+                edits.push(StabilizeTextEdit::ReplaceRetWithJump {
+                    range: token_lsp_range(branch_token),
+                    new_text: format!("{head},{reference}")
+                });
+                let mut block = String::new();
+                if guard_jump {
+                    block.push_str(&format!("    jr {target}\n"));
+                }
+                block.push_str(&format!("{bare_label}\n    waitnops {nop_count}\n"));
+                let line = token_lsp_range(tokens[insert_before_index]).start.line as usize;
+                edits.push(StabilizeTextEdit::InsertText { line, text: block });
             },
             StabilizeEdit::RewriteConditionalRetAndPad {
                 ret_token_index,
@@ -400,9 +450,11 @@ mod tests {
     }
 
     #[test]
-    fn a_backward_jump_is_rejected_as_a_loop() {
+    fn a_backward_jump_is_opaque_not_an_error() {
+        // Nothing to balance, but not a reason to refuse the selection either:
+        // see `a_diamond_inside_a_loop_is_still_balanced`.
         let text = ".loop:\n    nop\n    jr nz,.loop\n";
-        assert!(stabilize(text).is_err());
+        assert!(stabilize(text).unwrap().is_empty());
     }
 
     /// `DJNZ` is still out of scope - its taken arm is a loop, and padding an
@@ -473,9 +525,9 @@ mod tests {
     }
 
     #[test]
-    fn a_jump_target_outside_the_selection_is_rejected() {
+    fn a_jump_target_outside_the_selection_is_left_alone() {
         let text = "    jr nz,.elsewhere\n    nop\n";
-        assert!(stabilize(text).is_err());
+        assert!(stabilize(text).unwrap().is_empty());
     }
 
     /// A branch sharing its line with another `:`-chained instruction - the
