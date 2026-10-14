@@ -1,0 +1,42 @@
+name: Download audit
+
+# Every tool bndbuild installs is fetched from a third party's site, and those
+# change their pages and file names without notice (ACE, AMSpiriT, GrafX2 and
+# Caprice Forever all broke within weeks of each other). This resolves the
+# address of each tool the way a first run would and asks each address for its
+# headers: a red run says which tool to look at, before a user finds out.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+    paths:
+      - "cpclib-runner/src/runner/**"
+      - "cpclib-runner/src/delegated.rs"
+      - "cpclib-runner/src/download_audit.rs"
+      - ".github/workflows/download-audit.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Dependencies
+      run: >
+        sudo apt update && sudo apt install -y
+        libwayland-dev libegl1-mesa-dev libgbm-dev libdrm-dev libxkbcommon-dev
+        libxkbcommon-x11-dev libdbus-1-dev libpipewire-0.3-dev libssl-dev
+        libxdo-dev libasound2-dev libxrandr-dev libxcursor-dev libxinerama-dev
+        libfontconfig-dev wayland-protocols pkg-config
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        profile: minimal
+    - uses: Swatinem/rust-cache@v2
+    - name: Audit the downloads
+      run: cargo test -p cpclib-runner --lib download_audit -- --ignored --nocapture

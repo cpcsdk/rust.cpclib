@@ -154,9 +154,13 @@ pub trait DynamicUrlInformation: DownloadableInformation + Clone + 'static {
             Box::new(move || -> Result<String, String> {
                 let inside: Self = cloned.clone();
                 let urls = inside.dynamic_download_urls()?;
-                urls.target_os_url()
-                    .cloned()
-                    .ok_or("No url for this os".to_string())
+                urls.target_os_url().cloned().ok_or_else(|| {
+                    format!(
+                        "no download address for this OS ({}): the tool is not published for it, \
+                             or its download page no longer lists a build for it",
+                        std::env::consts::OS
+                    )
+                })
             });
         deferred.into()
     }
@@ -184,9 +188,13 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
             Box::new(move || -> Result<String, String> {
                 let inside = cloned.clone();
                 let urls = inside.github_download_urls()?;
-                urls.target_os_url()
-                    .cloned()
-                    .ok_or("No url for this os".to_string())
+                urls.target_os_url().cloned().ok_or_else(|| {
+                    format!(
+                        "no download address for this OS ({}): the tool is not published for it, \
+                             or its download page no longer lists a build for it",
+                        std::env::consts::OS
+                    )
+                })
             });
         deferred.into()
     }
@@ -474,12 +482,10 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     }
 
     pub fn install(&self, o: &E) -> Result<(), String> {
-        self.inner_install(o).inspect_err(|e| {
-            dbg!("There was an error, we need to do some cleaning", e);
-            let dest = self.cache_folder();
-            dbg!("Try to remove ", &dest);
-            let _ = fs_err::remove_dir_all(dest); // ignore error
-            dbg!("Should be done");
+        self.inner_install(o).map_err(|e| {
+            // a half-installed tool must not look installed
+            let _ = fs_err::remove_dir_all(self.cache_folder());
+            e
         })
     }
 
@@ -487,9 +493,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         // get the file
         let dest = self.cache_folder();
 
-        let mut input = self
-            .download(o)
-            .map_err(|e| format!("Unable to download the expected file. {e}"))?;
+        let mut input = self.download(o)?;
 
         // uncompress it
         match self.archive_format {
@@ -565,10 +569,25 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }
     }
 
+    /// What went wrong tells which tool it was, and where: the sites these
+    /// tools come from change their pages and their file names without notice,
+    /// and "no download address" alone does not say what to look at.
     fn download(&self, o: &E) -> Result<Box<dyn Read + Send + Sync>, String> {
-        let url = self.download_fn_url.deref()()?;
+        let tool = self.folder;
+        let url = self.download_fn_url.deref()().map_err(|e| {
+            format!(
+                "Unable to find where to download {tool} from: {e}. The site it comes from may \
+                 have changed - `cpclib-runner`'s `download_audit` test shows what each tool \
+                 resolves to."
+            )
+        })?;
         o.emit_stdout(&format!(">> Download file {url}\n"));
-        network::download(&url)
+        network::download(&url).map_err(|e| {
+            format!(
+                "Unable to download {tool} from {url}: {e}. If this address is gone (a 404), \
+                 the tool has probably been republished elsewhere."
+            )
+        })
     }
 }
 

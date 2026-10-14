@@ -94,6 +94,10 @@ fn ensure_embedded_rom_written(dst: &Utf8Path, embedded_name: &str) -> Result<()
     }
     let src = format!("roms://{embedded_name}");
     let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
+    // the emulator may not have been installed yet: its ROM folder is not there
+    if let Some(folder) = dst.parent() {
+        fs_err::create_dir_all(folder).map_err(|e| format!("cannot create {folder}: {e}"))?;
+    }
     fs_err::write(dst, data.data).map_err(|e| format!("cannot write {dst}: {e}"))
 }
 
@@ -4501,14 +4505,36 @@ mod tests {
     /// running these tests can never leave real shared state behind.
     struct CleanUpEmulatorCacheOnDrop {
         paths: Vec<Utf8PathBuf>,
-        restore: Option<(Utf8PathBuf, Option<String>)>
+        restore: Option<(Utf8PathBuf, Option<String>)>,
+        /// The folders these tests have to create because the emulator was
+        /// never installed: left behind, even empty, they make the emulator
+        /// look installed (a folder is all `is_cached` checks) and it would
+        /// never be downloaded.
+        created_folders: Vec<Utf8PathBuf>
     }
 
     impl CleanUpEmulatorCacheOnDrop {
         fn new(paths: Vec<Utf8PathBuf>) -> Self {
+            // the highest folder above each path that does not exist yet
+            let mut created_folders = Vec::new();
+            for path in &paths {
+                let mut highest_missing = None;
+                for ancestor in path.ancestors().skip(1) {
+                    if ancestor.as_str().is_empty() || ancestor.exists() {
+                        break;
+                    }
+                    highest_missing = Some(ancestor.to_owned());
+                }
+                if let Some(folder) = highest_missing
+                    && !created_folders.contains(&folder)
+                {
+                    created_folders.push(folder);
+                }
+            }
             Self {
                 paths,
-                restore: None
+                restore: None,
+                created_folders
             }
         }
 
@@ -4523,6 +4549,9 @@ mod tests {
         fn drop(&mut self) {
             for path in &self.paths {
                 let _ = fs_err::remove_file(path);
+            }
+            for folder in &self.created_folders {
+                let _ = fs_err::remove_dir_all(folder);
             }
             if let Some((path, original)) = &self.restore {
                 match original {
