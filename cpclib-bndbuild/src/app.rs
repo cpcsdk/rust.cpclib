@@ -1281,14 +1281,42 @@ impl BndBuilderApp {
 fn serialize_direct_args<'a>(
     args: impl IntoIterator<Item = &'a str>
 ) -> Result<String, BndBuilderError> {
-    shlex::try_join(args).map_err(|e| {
-        BndBuilderError::AnyError(format!("Could not serialize direct command arguments: {e}"))
-    })
+    // The pipeline/redirection operators are control tokens of the task
+    // syntax (`task.rs` only recognises them unquoted): quoting them would turn
+    // a pipeline into plain arguments. Every other argument is quoted.
+    const CONTROL_TOKENS: [&str; 4] = ["|", "<", ">", ">>"];
+    let mut serialized = Vec::new();
+    for arg in args {
+        if CONTROL_TOKENS.contains(&arg) {
+            serialized.push(arg.to_owned());
+        }
+        else {
+            serialized.push(shlex::try_quote(arg).map_err(|e| {
+                BndBuilderError::AnyError(format!(
+                    "Could not serialize direct command arguments: {e}"
+                ))
+            })?.into_owned());
+        }
+    }
+    Ok(serialized.join(" "))
 }
 
 #[cfg(test)]
 mod direct_args_tests {
     use super::serialize_direct_args;
+
+    #[test]
+    fn direct_args_keep_pipeline_and_redirection_operators_unquoted() {
+        let args = ["extern", "producer", "|", "extern", "consumer", ">", "out file.txt"];
+        let serialized = serialize_direct_args(args).unwrap();
+        assert_eq!(serialized, "extern producer | extern consumer > 'out file.txt'");
+
+        let args = ["extern", "tool", "<", "in.txt", ">>", "log.txt"];
+        assert_eq!(
+            serialize_direct_args(args).unwrap(),
+            "extern tool < in.txt >> log.txt"
+        );
+    }
 
     #[test]
     fn direct_args_preserve_windows_paths_when_split_again() {
