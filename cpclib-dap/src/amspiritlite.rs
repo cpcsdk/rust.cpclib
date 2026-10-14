@@ -1303,6 +1303,13 @@ pub struct AmspiritLitePeer {
     /// Shared for the same reason: the poller takes a temporary breakpoint back
     /// out again when the step over it belongs to arrives.
     breakpoints: std::sync::Arc<std::sync::Mutex<Breakpoints>>,
+    /// The emulator is bemu, whose extensions are used: breakpoints with a
+    /// condition, hit count or log message, data breakpoints that stop, and
+    /// watches (`/api/breakpoints`).
+    extensions: bool,
+    /// What this session armed through `/api/breakpoints`; shared with the
+    /// event stream, which reports watches and log points from it.
+    advanced: std::sync::Arc<std::sync::Mutex<crate::advanced_breakpoints::Advanced>>,
     /// How long a resume is given to become visible; `RESUME_CONFIRMATION`
     /// unless a caller says otherwise.
     resume_confirmation: std::time::Duration,
@@ -1440,7 +1447,13 @@ impl AmspiritLitePeer {
         let stepping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stepping_over = std::sync::Arc::new(std::sync::Mutex::new(None));
         let breakpoints = std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()));
+        let advanced = std::sync::Arc::new(std::sync::Mutex::new(crate::advanced_breakpoints::Advanced::default()));
         let seq = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
+        // bemu says so in its ping; its extensions are used then.
+        let extensions = perform(endpoint, &Call::get("/api/ping"))
+            .ok()
+            .and_then(|body| serde_json::from_str::<Value>(&body).ok())
+            .is_some_and(|ping| ping.get("frontend").and_then(Value::as_str) == Some("bemu"));
         let watching = Stops {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             out: outgoing.clone(),
@@ -1449,7 +1462,9 @@ impl AmspiritLitePeer {
             told: told.clone(),
             stepping: stepping.clone(),
             stepping_over: stepping_over.clone(),
-            breakpoints: breakpoints.clone()
+            breakpoints: breakpoints.clone(),
+            advanced: advanced.clone(),
+            stop_reason: Default::default()
         };
         // Both threads report stops through the same `Stops`, so a stop seen
         // by both is told once, settled the same way whichever is first.
@@ -1469,6 +1484,8 @@ impl AmspiritLitePeer {
             stepping,
             stepping_over,
             breakpoints,
+            extensions,
+            advanced,
             held_at_start: false,
             resume_confirmation: Self::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,
@@ -1486,6 +1503,14 @@ impl AmspiritLitePeer {
         self
     }
 
+    /// Clear the advanced breakpoints the emulator holds (bemu's, from the
+    /// snapshot it loaded), for this session's to be the only ones.
+    pub fn forget_emulator_breakpoints(&self) {
+        if self.extensions {
+            let _ = perform(&self.endpoint, &Call::delete("/api/breakpoints"));
+        }
+    }
+
     /// Take ownership of an emulator this session started, so it is closed
     /// with the session.
     pub fn owning(mut self, child: std::process::Child) -> Self {
@@ -1495,6 +1520,25 @@ impl AmspiritLitePeer {
 
     fn next_seq(&self) -> i64 {
         next_seq(&self.seq)
+    }
+
+    /// Change the advanced breakpoints armed here and write them to bemu,
+    /// telling the Debug Console about any it refused.
+    fn with_advanced(&self, change: impl FnOnce(&mut crate::advanced_breakpoints::Advanced)) -> std::io::Result<()> {
+        let refused = {
+            let mut set = self.advanced.lock().unwrap_or_else(|held| held.into_inner());
+            change(&mut set);
+            set.push(&self.endpoint)?
+        };
+        for problem in refused {
+            let seq = self.next_seq();
+            let _ = self.outgoing.send(crate::protocol::event(
+                "output",
+                json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                seq
+            ));
+        }
+        Ok(())
     }
 
     /// Wait for the machine to say it is running again, briefly.
@@ -2024,10 +2068,18 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         // Answered from here too, so a step over in flight cannot be disarmed
         // by the editor changing a red dot.
         if command == "setInstructionBreakpoints" {
-            let editors: Vec<u16> = message
+            let entries: Vec<Value> = message
                 .get("arguments")
                 .and_then(|a| a.get("breakpoints"))
                 .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            // On bemu, one with a condition, hit count or log message is an
+            // advanced breakpoint: on `/api/z80_bp` it would stop every time.
+            let (advanced, plain): (Vec<Value>, Vec<Value>) = entries
+                .into_iter()
+                .partition(|entry| self.extensions && crate::advanced_breakpoints::is_advanced(entry));
+            let editors: Vec<u16> = Some(&plain)
                 .map(|list| {
                     list.iter()
                         .filter_map(|entry| {
@@ -2048,10 +2100,39 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 set.editors = editors;
                 push_breakpoints(&self.endpoint, &set)?;
             }
+            if self.extensions {
+                self.with_advanced(|set| set.exec = advanced)?;
+            }
             let seq = self.next_seq();
             let _ = self
                 .outgoing
                 .send(crate::protocol::response(&message, json!({}), seq));
+            return Ok(());
+        }
+
+        // bemu stops on memory accesses, and reports them without stopping.
+        if self.extensions && matches!(command.as_str(), "cpclib/setDataBreakpoints" | "cpclib/setWatches") {
+            let list = |key: &str| {
+                message
+                    .get("arguments")
+                    .and_then(|a| a.get(key))
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+            };
+            let body = if command == "cpclib/setWatches" {
+                let watches = list("watches");
+                let labels: Vec<Value> = watches.iter().filter_map(|w| w.get("label").cloned()).collect();
+                self.with_advanced(|set| set.watches = watches)?;
+                json!({ "applied": labels, "rejected": [] })
+            }
+            else {
+                let data = list("breakpoints");
+                self.with_advanced(|set| set.data = data)?;
+                json!({})
+            };
+            let seq = self.next_seq();
+            let _ = self.outgoing.send(crate::protocol::response(&message, body, seq));
             return Ok(());
         }
 
@@ -2200,7 +2281,11 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "cpclib/psg"
                 | "cpclib/fdc"
                 | "cpclib/history"
-        )
+        ) || (self.extensions
+            && matches!(
+                command,
+                "cpclib/conditionalBreakpoints" | "cpclib/setDataBreakpoints" | "cpclib/setWatches"
+            ))
     }
 }
 
@@ -2234,7 +2319,13 @@ pub(crate) struct Stops {
     /// See `AmspiritLitePeer::stepping`.
     pub(crate) stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub(crate) stepping_over: std::sync::Arc<std::sync::Mutex<Option<StepTarget>>>,
-    pub(crate) breakpoints: std::sync::Arc<std::sync::Mutex<Breakpoints>>
+    pub(crate) breakpoints: std::sync::Arc<std::sync::Mutex<Breakpoints>>,
+    /// bemu's advanced breakpoints this session armed, see
+    /// `AmspiritLitePeer::advanced`.
+    pub(crate) advanced: std::sync::Arc<std::sync::Mutex<crate::advanced_breakpoints::Advanced>>,
+    /// The reason and description the next stop is told with, when the
+    /// event stream knows better than "breakpoint" (a data breakpoint).
+    pub(crate) stop_reason: std::sync::Arc<std::sync::Mutex<Option<(&'static str, String)>>>
 }
 
 /// Ask the emulator whether it is running, and report every change.
@@ -2397,14 +2488,18 @@ impl Stops {
                 return false;
             }
         }
+        let told_by_the_stream = self.stop_reason.lock().ok().and_then(|mut reason| reason.take());
+        let (reason, description) = match (notice, told_by_the_stream) {
+            (Some(notice), _) => (notice.reason, "Execution stopped".to_owned()),
+            (None, Some((reason, description))) if !single_step => (reason, description),
+            (None, _) => (if single_step { "step" } else { "breakpoint" }, "Execution stopped".to_owned())
+        };
         *seq += 1;
         let stopped = crate::protocol::event(
             "stopped",
             json!({
-                "reason": notice
-                    .map(|notice| notice.reason)
-                    .unwrap_or(if single_step { "step" } else { "breakpoint" }),
-                "description": "Execution stopped",
+                "reason": reason,
+                "description": description,
                 "threadId": 1,
                 "allThreadsStopped": true
             }),
@@ -2551,7 +2646,8 @@ fn read_events(host: &str, stops: &Stops) {
         // possible to tell "the emulator never said basic_bp" apart from
         // "it said basic_bp and something after that dropped it" from a
         // `[dap] log` transcript alone, without a second logging channel.
-        if name != "frame" {
+        // A watch or log point is told in its own words below.
+        if name != "frame" && name != "watch" {
             seq += 1;
             let _ = out.send(crate::protocol::event(
                 "output",
@@ -2600,9 +2696,33 @@ fn read_events(host: &str, stops: &Stops) {
                     // `frame`'s `paused` for this either, it reacts to these
                     // named events directly. Treat the event itself as
                     // authoritative rather than depending on `paused` agreeing.
+                    "watch" => {
+                        let line = stops.advanced.lock().ok().and_then(|set| set.report(&payload));
+                        line.map(|line| {
+                            crate::protocol::event("output", json!({ "category": "console", "output": line }), seq)
+                        })
+                    },
                     "basic_bp" | "z80_bp" if running => {
                         running = false;
-                        if !stops.announce_stop(&mut seq) {
+                        if let Some(stop) = stops.advanced.lock().ok().and_then(|set| set.stop(&payload))
+                            && let Ok(mut reason) = stops.stop_reason.lock()
+                        {
+                            seq += 1;
+                            // Said in the console too: the poll may tell this
+                            // stop first, as a plain breakpoint.
+                            let _ = out.send(crate::protocol::event(
+                                "output",
+                                json!({ "category": "console", "output": format!("Stopped: {}\n", stop.1) }),
+                                seq
+                            ));
+                            *reason = Some(stop);
+                        }
+                        let told = stops.announce_stop(&mut seq);
+                        // Not left for the next stop when the poll told this one.
+                        if let Ok(mut reason) = stops.stop_reason.lock() {
+                            reason.take();
+                        }
+                        if !told {
                             return;
                         }
                         None
@@ -2864,7 +2984,9 @@ mod tests {
             told: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
-            breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()))
+            breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
+            advanced: Default::default(),
+            stop_reason: Default::default()
         }
     }
 
@@ -4486,6 +4608,8 @@ mod tests {
             stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
+            extensions: false,
+            advanced: Default::default(),
             held_at_start: false,
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,

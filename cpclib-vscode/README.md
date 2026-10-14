@@ -107,6 +107,15 @@ code, and steps through your *source* rather than through addresses.
   `label,w` for a word. **Break When Value Changes** on a label arms one of the
   emulator's write-watch channels - as do `BREAKPOINT ... TYPE=MEM ACCESS=W`
   directives and the `watchLabels` launch attribute.
+- **Conditions, hit counts, log points and data breakpoints that stop**, when
+  debugging through bemu (`"emulator": "bemu"`). A condition is bemu's
+  expression syntax (`A == #12 && peek(HL) <> 0`); a hit count `N` (or `>=N`)
+  stops from the Nth pass on, `>N` after it; a log point prints its message
+  with `{A}`, `{HL}`... replaced by the registers, and goes on. **Break When
+  Value Changes / Is Read / Is Accessed** stops on the access, the stop naming
+  it (`screen: write of #04 at #C000`), with a condition and a hit count too.
+  Another emulator applies none of these: the breakpoint says so in its hover,
+  and a log point is not placed rather than turned into a stop.
 - **Debug console commands**: `-mv 0xC000 0x40` (or `-mv animation_state`)
   opens a memory view in its own tab, with your labels marked in the dump. It
   **re-reads itself on every stop and highlights the bytes that moved**, which
