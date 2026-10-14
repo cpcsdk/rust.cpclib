@@ -370,7 +370,14 @@ impl ParserOptions {
         file: P
     ) -> Result<(), AssemblerError> {
         let file = file.into();
-        let path = file.fs_err_canonicalize();
+        let path = file.fs_err_canonicalize().or_else(|err| {
+            // the file may only exist with another case
+            file.to_str()
+                .and_then(|f| find_case_insensitive(Utf8Path::new("."), Utf8Path::new(f)))
+                .map(|found| found.into_std_path_buf())
+                .ok_or(err)
+                .and_then(|found| found.fs_err_canonicalize())
+        });
 
         match path {
             Ok(path) => {
@@ -397,7 +404,6 @@ impl ParserOptions {
         fname: &str,
         env: Option<&Env>
     ) -> Result<Utf8PathBuf, either::Either<AssemblerError, Vec<String>>> {
-        use globset::*;
         let mut does_not_exists = Vec::new();
         static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
 
@@ -470,6 +476,9 @@ impl ParserOptions {
             if current_path.is_file() {
                 return Ok(current_path);
             }
+            else if let Some(found) = find_case_insensitive(search, fname) {
+                return Ok(found);
+            }
             else {
                 does_not_exists.push(current_path.to_string());
             }
@@ -485,26 +494,10 @@ impl ParserOptions {
                 if current_path.is_file() {
                     return Ok(current_path);
                 }
+                else if let Some(found) = find_case_insensitive(search, fname) {
+                    return Ok(found);
+                }
                 else {
-                    let glob = GlobBuilder::new(current_path.as_path().as_str())
-                        .case_insensitive(true)
-                        .literal_separator(true)
-                        .build()
-                        .map_err(|e| {
-                            Either::Left(AssemblerError::AssemblingError {
-                                msg: format!("Error while searching the file. {e}")
-                            })
-                        })?;
-                    let matcher = glob.compile_matcher();
-
-                    for entry in fs_err::read_dir(search).unwrap() {
-                        let entry = entry.unwrap();
-                        let path = entry.path();
-                        if matcher.is_match(&path) {
-                            return Ok(path.try_into().unwrap());
-                        }
-                    }
-
                     does_not_exists.push(current_path.as_str().to_owned());
                 }
             }
@@ -839,4 +832,39 @@ mod expansion_column_tests {
         // Offset 12 is on a line that began at 10, inside the argument.
         assert_eq!(map.source_columns(12, 3, 2), None);
     }
+}
+
+/// Look for `fname` below `base`, ignoring the case of every path component
+/// (the files come from Windows-era projects, built on case sensitive systems).
+/// Exact matches are preferred at each level. Returns None when nothing, or
+/// something ambiguous, matches.
+fn find_case_insensitive(base: &Utf8Path, fname: &Utf8Path) -> Option<Utf8PathBuf> {
+    let mut current = base.to_path_buf();
+    for component in fname.components() {
+        let name = match component {
+            cpclib_common::camino::Utf8Component::Normal(name) => name,
+            cpclib_common::camino::Utf8Component::CurDir => continue,
+            cpclib_common::camino::Utf8Component::RootDir => {
+                current = Utf8PathBuf::from("/");
+                continue;
+            },
+            _ => return None
+        };
+        let exact = current.join(name);
+        if exact.exists() {
+            current = exact;
+            continue;
+        }
+        let mut candidates = fs_err::read_dir(&current)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|n| n.eq_ignore_ascii_case(name));
+        let found = candidates.next()?;
+        if candidates.next().is_some() {
+            return None;
+        }
+        current = current.join(found);
+    }
+    current.is_file().then_some(current)
 }
