@@ -236,6 +236,14 @@ pub trait DapPeer: Send {
     /// asks each peer what it does with this.
     fn note_line_at_pc(&mut self, line: LineAtPc);
 
+    /// The session is configured (`configurationDone`): an emulator started
+    /// paused, so the breakpoints could be armed first, is let go - or, with
+    /// `hold` (the launch asked to stop on entry, and the machine is there),
+    /// left where it is and the stop told. A no-op for an emulator that was
+    /// already running. Required for the same reason as
+    /// [`Self::note_line_at_pc`].
+    fn release(&mut self, hold: bool) -> std::io::Result<()>;
+
     /// Whether this peer implements `command`.
     ///
     /// Consulted before anything is forwarded, because a peer with
@@ -367,6 +375,10 @@ impl DapPeer for RecordingPeer {
 
     fn note_line_at_pc(&mut self, line: LineAtPc) {
         self.lines_at_pc.push(line);
+    }
+
+    fn release(&mut self, _hold: bool) -> std::io::Result<()> {
+        Ok(())
     }
 
     fn supports(&self, command: &str) -> bool {
