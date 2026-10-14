@@ -762,6 +762,11 @@ fn start_session(
     let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite") && !attaches;
     let wants_sugarbox_early = early_chosen_emulator.eq_ignore_ascii_case("sugarbox");
     let wants_ace_early = early_chosen_emulator.eq_ignore_ascii_case("ace");
+    // 1984js is what a session uses when it names no other debuggable
+    // emulator: an attached AMSpiriT Lite, or bemu, never needs it downloaded.
+    let wants_1984js_early = !["amspiritlite", "bemu", "sugarbox", "ace"]
+        .iter()
+        .any(|name| early_chosen_emulator.eq_ignore_ascii_case(name));
     let install_check = std::thread::spawn(move || {
         if wants_lite_early {
             use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
@@ -787,7 +792,7 @@ fn start_session(
                 let _ = configuration.install(&cpclib_common::event::DiscardObserver);
             }
         }
-        else {
+        else if wants_1984js_early {
             let _ = crate::js1984_bridge::install();
         }
     });
