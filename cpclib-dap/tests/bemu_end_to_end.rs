@@ -537,3 +537,46 @@ fn a_breakpoint_made_in_the_manager_stops_the_program() {
     assert_eq!((counted["label"].as_str(), counted["hits"].as_u64()), (Some("1"), Some(1)), "{held}");
     adapter.finish();
 }
+
+/// A raster breakpoint made in the manager stops when the beam reaches it.
+#[test]
+fn a_raster_breakpoint_stops_at_its_line_and_nop() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("cpclib/managerSet", json!({ "breakpoint": { "kind": "raster", "line": "100", "nop": "10", "name": "split" } }));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    let description = stop["body"]["description"].as_str().unwrap();
+    assert!(description.starts_with("split: beam at line 100, NOP 1"), "{stop}");
+    adapter.finish();
+}
+
+/// The extension passes the manager's saved breakpoints to the launch: they
+/// are armed before the program runs - here the Gate Array ink preset,
+/// with a condition.
+#[test]
+fn saved_manager_breakpoints_are_armed_at_launch() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld bc,#7f10\n\tld a,#54\nloop\n\tout (c),c\n\tout (c),a\n\tinc a\n\tand #5f\n\tor #40\n\tjr loop\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({ "managerBreakpoints": [
+        { "kind": "io", "address": "&4000", "mask": "&C000", "access": "w", "value": "&40", "valmask": "&C0",
+          "condition": "A = &55", "name": "Gate Array: ink" }
+    ] }));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert!(stop["body"]["description"].as_str().unwrap().contains("Gate Array: ink: write of #55"), "{stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 0x55, "the second pass: armed before the first");
+    adapter.finish();
+}

@@ -2209,7 +2209,11 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             }
             else if command == "cpclib/setManagerBreakpoints" {
                 let manager = list("breakpoints");
-                self.with_advanced(|set| set.manager = manager)?;
+                let rasters = manager.iter().any(|e| e.get("kind").and_then(Value::as_str) == Some("raster"));
+                self.with_advanced(|set| {
+                    set.manager = manager;
+                    set.raster_armed |= rasters;
+                })?;
                 json!({})
             }
             else if command == "cpclib/setProgramBreakpoints" {

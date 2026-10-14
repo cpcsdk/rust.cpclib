@@ -5445,8 +5445,33 @@ impl<P: DapPeer> Session<P> {
         Ok(())
     }
 
+    /// The manager's breakpoints of a previous session, as the launch
+    /// configuration's `managerBreakpoints` carries them (the extension saves
+    /// them per program). Armed with the rest when the emulator attaches;
+    /// returns what could not be read again (a label gone from the program).
+    pub fn restore_manager_breakpoints(&mut self, forms: &[Value]) -> Vec<String> {
+        let mut problems = Vec::new();
+        for form in forms {
+            let id = self.next_manager_id;
+            let map = &self.map;
+            match crate::breakpoint_manager::ManagerBreakpoint::from_form(form, id, |name| map.address_of_symbol(name)) {
+                Ok(brk) => {
+                    self.next_manager_id += 1;
+                    self.manager.push(brk);
+                },
+                Err(problem) => problems.push(format!("a saved breakpoint of the manager is not restored: {problem}"))
+            }
+        }
+        problems
+    }
+
     /// How a manager breakpoint is named: its name, its label, its address.
     fn manager_label(&self, bp: &crate::breakpoint_manager::ManagerBreakpoint) -> String {
+        if bp.kind == crate::breakpoint_manager::ManagerKind::Raster {
+            return bp.name.clone().unwrap_or_else(|| {
+                if bp.every_line() { format!("every line, NOP {}", bp.nop) } else { format!("line {}, NOP {}", bp.address, bp.nop) }
+            });
+        }
         bp.name
             .clone()
             .or_else(|| self.map.symbol_at(bp.address).map(str::to_owned))
@@ -5507,7 +5532,7 @@ impl<P: DapPeer> Session<P> {
         let whole = self.peer_mut().supports("cpclib/setManagerBreakpoints");
         let options_applied = self.peer_mut().supports("cpclib/conditionalBreakpoints");
         let mut tabs: std::collections::BTreeMap<&str, Vec<Value>> =
-            [("exec", Vec::new()), ("mem", Vec::new()), ("io", Vec::new())].into_iter().collect();
+            [("exec", Vec::new()), ("mem", Vec::new()), ("io", Vec::new()), ("raster", Vec::new())].into_iter().collect();
         let hex = |address: u32| format!("&{address:04X}");
         let symbol = |address: u32| self.map.symbol_at(address).unwrap_or("").to_owned();
         let row = |origin: &str, key: String, address: u32| {
@@ -5590,6 +5615,19 @@ impl<P: DapPeer> Session<P> {
             tabs.get_mut("mem").unwrap().push(item);
         }
         for bp in &self.manager {
+            if bp.kind == crate::breakpoint_manager::ManagerKind::Raster {
+                let mut item = json!({
+                    "origin": "manager", "key": format!("manager:{}", bp.id), "editable": true, "id": bp.id,
+                    "rasterLine": if bp.every_line() { json!(null) } else { json!(bp.address) },
+                    "nop": bp.nop, "name": bp.name.clone().unwrap_or_default(), "mode": "stop", "step": 0, "status": "armed"
+                });
+                if !whole {
+                    item["status"] = json!("inactive");
+                    item["note"] = json!("raster breakpoints need bemu");
+                }
+                tabs.get_mut("raster").unwrap().push(item);
+                continue;
+            }
             let mut item = row("manager", format!("manager:{}", bp.id), bp.address);
             item["editable"] = json!(true);
             item["id"] = json!(bp.id);
@@ -5615,7 +5653,9 @@ impl<P: DapPeer> Session<P> {
             "tabs": tabs,
             "whole": whole,
             "conditions": options_applied,
-            "symbols": self.map.symbols().map(|(name, _)| name.to_owned()).take(5000).collect::<Vec<_>>()
+            "symbols": self.map.symbols().map(|(name, _)| name.to_owned()).take(5000).collect::<Vec<_>>(),
+            // What the extension saves, for the next session's launch.
+            "saved": self.manager.iter().map(|bp| bp.form()).collect::<Vec<_>>()
         })
     }
 

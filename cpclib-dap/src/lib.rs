@@ -1022,6 +1022,10 @@ fn start_session(
     // is reported rather than quietly placing breakpoints at stale addresses.
     session.record_source_state();
     let mut notices = session.adopt_program_breakpoints(&program_breakpoints);
+    // The breakpoint manager's, saved by the extension from the last session.
+    if let Some(saved) = arguments.get("managerBreakpoints").and_then(Value::as_array) {
+        notices.extend(session.restore_manager_breakpoints(saved));
+    }
     notices.splice(0..0, early_notices);
     // Said before the program runs, because after it has run it is too late:
     // an unexplained stop is the thing being prevented.

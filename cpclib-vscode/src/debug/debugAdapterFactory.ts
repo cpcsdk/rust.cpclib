@@ -1,3 +1,4 @@
+import { savedManagerBreakpoints } from './webviews/breakpointManager';
 import * as vscode from 'vscode';
 import { DEBUG_TYPE } from './launch';
 
@@ -40,6 +41,15 @@ export function registerDebugConfigurationProvider(context: vscode.ExtensionCont
                             program: editor.document.fileName,
                         };
                     }
+                }
+                return config;
+            },
+            // The breakpoint manager's of the last session of this program,
+            // re-armed by the adapter before the program runs.
+            resolveDebugConfigurationWithSubstitutedVariables(_folder, config) {
+                if (config.managerBreakpoints === undefined && typeof config.program === 'string') {
+                    const saved = savedManagerBreakpoints(context, config.program);
+                    if (saved.length > 0) { config.managerBreakpoints = saved; }
                 }
                 return config;
             },

@@ -35,7 +35,10 @@ pub(crate) struct Advanced {
     pub program: Vec<Value>,
     /// `cpclib/setManagerBreakpoints` entries: the breakpoint manager's,
     /// whole, with their `id` and `label`.
-    pub manager: Vec<Value>
+    pub manager: Vec<Value>,
+    /// Raster breakpoints were armed here: `/api/raster_bp` is cleared when
+    /// the set changes (it keeps no names), and only then.
+    pub raster_armed: bool
 }
 
 /// Whether a `setInstructionBreakpoints` entry needs more than `/api/z80_bp`.
@@ -124,7 +127,7 @@ impl Advanced {
             let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
             requests.push((format!("BREAKPOINT directive at {label}"), whole(entry, program_name(index))));
         }
-        for entry in &self.manager {
+        for entry in self.manager.iter().filter(|e| !is_raster(e)) {
             let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
             let id = entry.get("id").and_then(Value::as_u64).unwrap_or(0);
             requests.push((format!("breakpoint {label}"), whole(entry, format!("{OURS}manager:{id}"))));
@@ -143,9 +146,25 @@ impl Advanced {
         self.program.get(index)?.get("label").and_then(Value::as_str)
     }
 
+    /// The manager's raster breakpoints: the query of each
+    /// `POST /api/raster_bp` (`add=1`, so none replaces another).
+    fn raster_queries(&self) -> Vec<Vec<(&'static str, u64)>> {
+        self.manager
+            .iter()
+            .filter(|e| is_raster(e))
+            .map(|entry| {
+                let mut query = vec![("add", 1), ("nop", entry.get("nop").and_then(Value::as_u64).unwrap_or(0))];
+                if let Some(line) = entry.get("line").and_then(Value::as_u64) {
+                    query.push(("line", line));
+                }
+                query
+            })
+            .collect()
+    }
+
     /// Replace the breakpoints armed here by the current set. Returns the
     /// refusals (a condition bemu does not understand, say), described.
-    pub(crate) fn push(&self, endpoint: &str) -> std::io::Result<Vec<String>> {
+    pub(crate) fn push(&mut self, endpoint: &str) -> std::io::Result<Vec<String>> {
         // Ours out, highest index first: each removal renumbers the ones
         // after it.
         let listed = perform(endpoint, &Call::get("/api/breakpoints"))?;
@@ -165,6 +184,18 @@ impl Advanced {
             perform(endpoint, &Call::delete("/api/breakpoints").query("index", index))?;
         }
         let mut refused = Vec::new();
+        let rasters = self.raster_queries();
+        if self.raster_armed || !rasters.is_empty() {
+            perform(endpoint, &Call::post("/api/raster_bp").query("enable", 0))?;
+            self.raster_armed = !rasters.is_empty();
+            for query in rasters {
+                let call = query.into_iter().fold(Call::post("/api/raster_bp"), |call, (key, value)| call.query(key, value));
+                let answer: Value = serde_json::from_str(&perform(endpoint, &call)?).unwrap_or(Value::Null);
+                if let Some(error) = answer.get("error").and_then(Value::as_str) {
+                    refused.push(format!("bemu refused the raster breakpoint: {error}"));
+                }
+            }
+        }
         for (what, body) in self.requests() {
             let answer = perform(endpoint, &Call::post("/api/breakpoints").body(body.to_string()))?;
             let answer: Value = serde_json::from_str(&answer).unwrap_or(Value::Null);
@@ -197,6 +228,22 @@ impl Advanced {
     /// The `stopped` reason and description for a stop on a breakpoint
     /// armed here: a data breakpoint, told as one, with the access.
     pub(crate) fn stop(&self, event: &Value) -> Option<(&'static str, String)> {
+        // A raster breakpoint: no name, the beam says which.
+        if event.get("kind").and_then(Value::as_str) == Some("raster") {
+            let beam = event.get("beam")?;
+            let (line, nop) = (beam.get("line")?.as_u64()?, beam.get("nop")?.as_u64()?);
+            let label = self
+                .manager
+                .iter()
+                .filter(|e| is_raster(e))
+                .find(|e| {
+                    e.get("nop").and_then(Value::as_u64) == Some(nop)
+                        && e.get("line").and_then(Value::as_u64).is_none_or(|l| l == line)
+                })
+                .and_then(|e| e.get("label").and_then(Value::as_str))
+                .unwrap_or("raster");
+            return Some(("breakpoint", format!("{label}: beam at line {line}, NOP {nop}")));
+        }
         let name = event.get("name").and_then(Value::as_str)?;
         if let Some(label) = self.program_label(name) {
             // A memory or I/O directive; an execution one is a breakpoint stop.
@@ -264,6 +311,10 @@ impl Advanced {
         described["label"] = json!(label);
         described
     }
+}
+
+fn is_raster(entry: &Value) -> bool {
+    entry.get("kind").and_then(Value::as_str) == Some("raster")
 }
 
 fn copy_options(from: &Value, to: &mut Value) {
@@ -337,7 +388,8 @@ mod tests {
             manager: vec![json!({
                 "id": 3, "label": "TrackDone", "kind": "exec", "access": "rw", "run": "stop", "addr": 0xc03c,
                 "mask": 0xffff, "size": 1, "value": 0, "valmask": 0, "condition": "BC=7 AND FlagC"
-            })]
+            })],
+            raster_armed: false
         }
     }
 
@@ -358,6 +410,12 @@ mod tests {
                 "value": 0, "valmask": 0, "condition": "BC=7 AND FlagC", "name": "cpclib:manager:3"
             }),
         ]);
+        let mut rasters = set();
+        rasters.manager.push(json!({ "id": 4, "label": "split", "kind": "raster", "line": 100, "nop": 10 }));
+        assert_eq!(rasters.requests().len(), set().requests().len(), "a raster one is not an advanced breakpoint");
+        assert_eq!(rasters.raster_queries(), vec![vec![("add", 1), ("nop", 10), ("line", 100)]]);
+        let stop = json!({ "kind": "raster", "beam": { "line": 100, "nop": 10, "x": 160, "y": 100 } });
+        assert_eq!(rasters.stop(&stop).unwrap(), ("breakpoint", "split: beam at line 100, NOP 10".to_owned()));
         // A manager watch reports under its label.
         let watch = json!({ "name": "cpclib:manager:3", "pc": "0xc03c" });
         assert_eq!(set().report(&watch).unwrap(), "TrackDone (PC #C03C)\n");

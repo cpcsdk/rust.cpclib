@@ -136,6 +136,14 @@ code, and steps through your *source* rather than through addresses.
   language, stop or watch, a pass count and a name. *Pass* shows hits / passes
   let through. bemu applies them whole; another emulator keeps the plain
   execution ones and says why it cannot take the others.
+  A fourth tab, **Raster**, stops when the beam reaches a line and a NOP (or
+  a NOP of every line). **Predefined** fills the form with a ready-made one,
+  as ACE's *Points d'arrêt prédéfinis*: the IM 1 interrupt, firmware calls,
+  AMSDOS's BIOS READ SECTOR, screen or jumpblock writes, Gate Array pen /
+  ink / mode / RAM banking, CRTC select / write, ROM select, PPI and FDC
+  ports (with the masks the CPC's partial decoding needs), frame start and
+  per-line raster positions. The manager's breakpoints are **saved per
+  program** and armed again at the next launch, before the program runs.
 - **Debug console commands**: `-mv 0xC000 0x40` (or `-mv animation_state`)
   opens a memory view in its own tab, with your labels marked in the dump. It
   **re-reads itself on every stop and highlights the bytes that moved**, which
