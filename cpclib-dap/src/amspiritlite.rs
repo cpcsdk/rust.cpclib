@@ -815,7 +815,15 @@ pub fn response_for(request: &Value, state: &Value, seq: i64) -> Value {
                 }]
             })
         },
-        "variables" => json!({ "variables": registers_of(state) }),
+        // With the emulator's NOP counter (`emu.ticks`), for the session's
+        // timers: exact between any two stops, not only across a step.
+        "variables" => {
+            let mut body = json!({ "variables": registers_of(state) });
+            if let Some(ticks) = state.get("emu").and_then(|emu| emu.get("ticks")).and_then(Value::as_u64) {
+                body["cpclib/ticks"] = json!(ticks);
+            }
+            body
+        },
         "readMemory" => {
             // `{addr, len, hex}` - the bytes arrive as a hex string, and DAP
             // asks for base64.

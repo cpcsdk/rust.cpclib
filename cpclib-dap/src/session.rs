@@ -728,6 +728,11 @@ pub struct Session<P: DapPeer> {
     machine_state: Option<Box<cpclib_sna::Snapshot>>,
     /// Stopwatches, in NOPs.
     timers: Vec<Timer>,
+    /// The emulator's NOP count at the last stop, from an emulator that
+    /// reports one (AMSpiriT Lite's API, bemu): the timers are then charged
+    /// with its difference - exact across any run - instead of being priced
+    /// step by step.
+    last_ticks: Option<u64>,
     /// The register values from the last stop, by upper-case name.
     ///
     /// The editor fetches the whole set on every stop, so typing `hl` in the
@@ -788,6 +793,7 @@ impl<P: DapPeer> Session<P> {
             call_target_names: std::collections::HashMap::new(),
             last_pc: None,
             timers: Vec::new(),
+            last_ticks: None,
             last_registers: HashMap::new(),
             configured: false,
             internal_pause: false,
@@ -1211,6 +1217,19 @@ impl<P: DapPeer> Session<P> {
                 self.peer_mut().send(message.clone())?;
                 Ok(Vec::new())
             },
+            // A free run: with no NOP count from the emulator, what it costs
+            // is unknown - even if it comes back to the very same address
+            // (a loop to its own breakpoint), which the program counter alone
+            // cannot tell from not having run at all.
+            "continue" => {
+                if self.last_ticks.is_none() {
+                    for timer in &mut self.timers {
+                        timer.exact = false;
+                    }
+                }
+                self.peer_mut().send(message.clone())?;
+                Ok(Vec::new())
+            },
             // Noted *and* forwarded: the emulator wants it too, and this is
             // where the program is finally allowed to run.
             "configurationDone" => {
@@ -1429,6 +1448,15 @@ impl<P: DapPeer> Session<P> {
                 // `AF` is one hex word; the flags inside it are what gets read
                 // while stepping.
                 "variables" => {
+                    // The emulator's own NOP count, when it gives one: what
+                    // the timers are charged with (see `note_ticks`).
+                    if let Some(ticks) = message
+                        .get("body")
+                        .and_then(|b| b.get("cpclib/ticks"))
+                        .and_then(Value::as_u64)
+                    {
+                        self.note_ticks(ticks);
+                    }
                     let mut annotated = message.clone();
                     if let Some(variables) = annotated
                         .get_mut("body")
@@ -4152,7 +4180,8 @@ impl<P: DapPeer> Session<P> {
     /// amount of arithmetic here can recover it; the timers are marked
     /// inexact instead of being fed a guess.
     fn charge_timers(&mut self, previous: u16, now: u16) {
-        if self.timers.is_empty() {
+        // Charged from the emulator's own count instead (`note_ticks`).
+        if self.timers.is_empty() || self.last_ticks.is_some() {
             return;
         }
         match self.step_cost(previous, now) {
@@ -4167,6 +4196,20 @@ impl<P: DapPeer> Session<P> {
                 }
             },
         }
+    }
+
+    /// The emulator's NOP count at this stop: every timer gets what ran since
+    /// the last one, however it ran - a step, a continue to a breakpoint, a
+    /// pause. A count that went back (a reset) starts over.
+    fn note_ticks(&mut self, ticks: u64) {
+        if let Some(previous) = self.last_ticks
+            && ticks >= previous
+        {
+            for timer in &mut self.timers {
+                timer.nops += ticks - previous;
+            }
+        }
+        self.last_ticks = Some(ticks);
     }
 
     /// The NOP cost of the instruction at `previous`, if the program simply
