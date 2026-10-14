@@ -29,7 +29,10 @@ pub(crate) struct Advanced {
     /// `condition`, `after`).
     pub data: Vec<Value>,
     /// `cpclib/setWatches` entries (`label`, `address`, `read`, `write`).
-    pub watches: Vec<Value>
+    pub watches: Vec<Value>,
+    /// `cpclib/setProgramBreakpoints` entries: the program's `BREAKPOINT`
+    /// directives, whole (`/api/breakpoints` fields and a `label`).
+    pub program: Vec<Value>
 }
 
 /// Whether a `setInstructionBreakpoints` entry needs more than `/api/z80_bp`.
@@ -47,6 +50,10 @@ fn data_name(label: &str) -> String {
 
 fn watch_name(label: &str) -> String {
     format!("{OURS}watch:{label}")
+}
+
+fn program_name(index: usize) -> String {
+    format!("{OURS}program:{index}")
 }
 
 impl Advanced {
@@ -101,7 +108,22 @@ impl Advanced {
                 })
             ));
         }
+        for (index, entry) in self.program.iter().enumerate() {
+            let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
+            let mut body = entry.clone();
+            if let Some(fields) = body.as_object_mut() {
+                fields.remove("label");
+            }
+            body["name"] = json!(program_name(index));
+            requests.push((format!("BREAKPOINT directive at {label}"), body));
+        }
         requests
+    }
+
+    /// The label of a program breakpoint by its name.
+    fn program_label(&self, name: &str) -> Option<&str> {
+        let index = name.strip_prefix(&format!("{OURS}program:"))?.parse::<usize>().ok()?;
+        self.program.get(index)?.get("label").and_then(Value::as_str)
     }
 
     /// Replace the breakpoints armed here by the current set. Returns the
@@ -145,6 +167,12 @@ impl Advanced {
             let message = entry.get("logMessage").and_then(Value::as_str)?;
             return Some(format!("{}\n", interpolate(message, event)));
         }
+        if let Some(label) = self.program_label(name) {
+            return Some(match describe_access(event) {
+                Some(access) => format!("{label}: {access} (PC {})\n", hex16(event.get("pc"))),
+                None => format!("{label} (PC {})\n", hex16(event.get("pc")))
+            });
+        }
         let label = name.strip_prefix(&format!("{OURS}watch:"))?;
         Some(format!("{label}: {} (PC {})\n", describe_access(event)?, hex16(event.get("pc"))))
     }
@@ -153,6 +181,12 @@ impl Advanced {
     /// armed here: a data breakpoint, told as one, with the access.
     pub(crate) fn stop(&self, event: &Value) -> Option<(&'static str, String)> {
         let name = event.get("name").and_then(Value::as_str)?;
+        if let Some(label) = self.program_label(name) {
+            // A memory or I/O directive; an execution one is a breakpoint stop.
+            let access = describe_access(event)?;
+            let reason = if event.get("kind").and_then(Value::as_str) == Some("io") { "breakpoint" } else { "data breakpoint" };
+            return Some((reason, format!("{label}: {access}")));
+        }
         let label = name.strip_prefix(&format!("{OURS}data:"))?;
         Some(("data breakpoint", format!("{label}: {}", describe_access(event)?)))
     }
@@ -221,7 +255,11 @@ mod tests {
                 json!({ "instructionReference": "0x4004", "logMessage": "A={A} HL={hl} at {PC} {nope}" }),
             ],
             data: vec![json!({ "label": "screen", "address": 0xC000, "access": "rw", "condition": "value == 2" })],
-            watches: vec![json!({ "label": "count", "address": 0x8000, "read": false, "write": true })]
+            watches: vec![json!({ "label": "count", "address": 0x8000, "read": false, "write": true })],
+            program: vec![json!({
+                "kind": "io", "access": "w", "run": "stop", "addr": 0x7f00, "mask": 0xff00, "size": 1,
+                "value": 0x40, "valmask": 0xc0, "condition": "A = &55", "label": "ink"
+            })]
         }
     }
 
@@ -233,6 +271,10 @@ mod tests {
             json!({ "kind": "exec", "addr": 0x4004, "run": "watch", "name": "cpclib:exec:1" }),
             json!({ "kind": "mem", "access": "rw", "addr": 0xC000, "run": "stop", "name": "cpclib:data:screen", "condition": "value == 2" }),
             json!({ "kind": "mem", "access": "w", "addr": 0x8000, "run": "watch", "name": "cpclib:watch:count" }),
+            json!({
+                "kind": "io", "access": "w", "run": "stop", "addr": 0x7f00, "mask": 0xff00, "size": 1,
+                "value": 0x40, "valmask": 0xc0, "condition": "A = &55", "name": "cpclib:program:0"
+            }),
         ]);
     }
 
@@ -255,5 +297,7 @@ mod tests {
         let stop = json!({ "name": "cpclib:data:screen", "access": { "type": "read", "addr": "0xc000", "value": 2 } });
         assert_eq!(set.stop(&stop).unwrap(), ("data breakpoint", "screen: read of #02 at #C000".to_owned()));
         assert_eq!(set.stop(&json!({ "name": "cpclib:exec:0" })), None, "a breakpoint stop");
+        let out = json!({ "name": "cpclib:program:0", "kind": "io", "access": { "type": "write", "addr": "0x7f00", "value": 0x55 } });
+        assert_eq!(set.stop(&out).unwrap(), ("breakpoint", "ink: write of #55 at #7F00".to_owned()));
     }
 }

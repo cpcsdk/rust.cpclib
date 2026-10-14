@@ -108,8 +108,10 @@ code, and steps through your *source* rather than through addresses.
   emulator's write-watch channels - as do `BREAKPOINT ... TYPE=MEM ACCESS=W`
   directives and the `watchLabels` launch attribute.
 - **Conditions, hit counts, log points and data breakpoints that stop**, when
-  debugging through bemu (`"emulator": "bemu"`). A condition is bemu's
-  expression syntax (`A == #12 && peek(HL) <> 0`); a hit count `N` (or `>=N`)
+  debugging through bemu (`"emulator": "bemu"`). A condition is written in
+  [ACE's language](https://roudoudou.com/ACE-DL/breakpoints.html), the one
+  `BREAKPOINT ... CONDITION=` takes (`A = &12 AND NOT FlagZ`, `LineCount > 100`,
+  `CrtcR12 = &30`), or with C's operators; a hit count `N` (or `>=N`)
   stops from the Nth pass on, `>N` after it; a log point prints its message
   with `{A}`, `{HL}`... replaced by the registers, and goes on. **Break When
   Value Changes / Is Read / Is Accessed** stops on the access, the stop naming
@@ -169,7 +171,9 @@ code, and steps through your *source* rather than through addresses.
 Rather than looking as though it worked, the Debug Console says so at the start:
 
 - A `BREAKPOINT` carrying `CONDITION=`, `MASK=` or `SIZE=` becomes a plain
-  address breakpoint, and the attribute that was dropped is named.
+  address breakpoint, and the attribute that was dropped is named. (bemu
+  applies the whole directive - condition, mask, size, value, run mode and
+  `TYPE=IO` - so nothing is dropped there but a `STEP=` count.)
 - `TYPE=IO` has no equivalent in this emulator at all.
 - A watchpoint **reports** writes in the Debug Console; the emulator's watch
   channels cannot stop the program on one. VS Code is told this in the text it

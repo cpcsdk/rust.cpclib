@@ -5,7 +5,7 @@ use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 use cpclib_sna::{
     AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint,
-    RemuBreakPointAccessMode, RemuBreakPointType, WabpAnyBreakpoint, WinapeBreakPoint
+    RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, WabpAnyBreakpoint, WinapeBreakPoint
 };
 
 use super::report::SavedFile;
@@ -408,6 +408,10 @@ pub struct AssembledBreakpoint {
     /// the user what an emulator could not honour.
     pub extra: Option<String>,
     pub name: Option<String>,
+    /// Every attribute of an advanced directive, for an emulator that
+    /// applies them (`None` for a plain address).
+    #[serde(default)]
+    pub details: Option<BreakpointDetails>,
     /// Where the directive is written, when the assembler knew.
     ///
     /// Only interesting when it differs from the line the program stops on,
@@ -416,6 +420,24 @@ pub struct AssembledBreakpoint {
     /// macro was *used*.
     #[serde(default)]
     pub written_at: Option<BreakpointSource>
+}
+
+/// An advanced `BREAKPOINT`'s attributes, as rasm/ACE define them: what a
+/// debugger hands an emulator that implements them (bemu's
+/// `/api/breakpoints` takes these fields).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BreakpointDetails {
+    /// `r`, `w` or `rw`.
+    pub access: String,
+    /// Reported without stopping (`WATCH`) rather than stopping (`STOP`).
+    pub watch: bool,
+    pub mask: u16,
+    pub size: u16,
+    pub value: u8,
+    pub value_mask: u8,
+    /// In ACE's condition language.
+    pub condition: Option<String>,
+    pub step: Option<u16>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -440,6 +462,7 @@ impl BreakpointCommand {
                     kind: AssembledBreakpointKind::Execution,
                     extra: None,
                     name: None,
+                    details: None,
                     written_at: self.written_at.clone()
                 }
             },
@@ -489,6 +512,21 @@ impl BreakpointCommand {
                         .name
                         .as_ref()
                         .map(|n| AsRef::<str>::as_ref(n).to_string()),
+                    details: Some(BreakpointDetails {
+                        access: match brk.access_mode {
+                            RemuBreakPointAccessMode::Read => "r",
+                            RemuBreakPointAccessMode::Write => "w",
+                            RemuBreakPointAccessMode::ReadWrite => "rw"
+                        }
+                        .to_owned(),
+                        watch: matches!(brk.run_mode, RemuBreakPointRunMode::Watch),
+                        mask: brk.mask,
+                        size: brk.size,
+                        value: brk.value,
+                        value_mask: brk.val_mask,
+                        condition: brk.condition.as_ref().map(|c| AsRef::<str>::as_ref(c).to_string()),
+                        step: brk.step
+                    }),
                     written_at: self.written_at.clone()
                 }
             }

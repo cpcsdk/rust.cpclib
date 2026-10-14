@@ -6,7 +6,7 @@
 //! looking as though a conditional watchpoint was honoured when only its
 //! address was.
 
-use cpclib_asm::assembler::delayed_command::{AssembledBreakpoint, AssembledBreakpointKind};
+use cpclib_asm::assembler::delayed_command::{AssembledBreakpoint, AssembledBreakpointKind, BreakpointDetails};
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 use cpclib_dap::peer::RecordingPeer;
 use cpclib_dap::session::Session;
@@ -47,6 +47,7 @@ fn execution(address: u16) -> AssembledBreakpoint {
         kind: AssembledBreakpointKind::Execution,
         extra: None,
         name: None,
+        details: None,
         written_at: None
     }
 }
@@ -161,6 +162,7 @@ fn a_condition_is_reported_as_unsupported() {
         kind: AssembledBreakpointKind::Execution,
         extra: Some("condition A==3".to_string()),
         name: None,
+        details: None,
         written_at: None
     }]);
 
@@ -191,6 +193,7 @@ fn a_memory_watchpoint_becomes_a_watch_not_a_breakpoint() {
         },
         extra: None,
         name: Some("animation_state".to_string()),
+        details: None,
         written_at: None
     }]);
 
@@ -217,6 +220,7 @@ fn an_io_breakpoint_is_reported_as_impossible() {
         kind: AssembledBreakpointKind::Io,
         extra: None,
         name: None,
+        details: None,
         written_at: None
     }]);
     assert_eq!(notices.len(), 1);
@@ -238,6 +242,7 @@ fn watches_are_armed_when_the_emulator_attaches() {
         },
         extra: None,
         name: Some("animation_state".to_string()),
+        details: None,
         written_at: None
     }]);
     session.on_attached().unwrap();
@@ -308,6 +313,7 @@ fn a_watch_that_did_not_fit_is_reported() {
         },
         extra: None,
         name: Some("animation_state".to_string()),
+        details: None,
         written_at: None
     }]);
     session.on_attached().unwrap();
@@ -726,6 +732,7 @@ fn from_a_macro(address: u16, file: &str, line: u32) -> AssembledBreakpoint {
         kind: AssembledBreakpointKind::Execution,
         extra: None,
         name: None,
+        details: None,
         written_at: Some(cpclib_asm::assembler::delayed_command::BreakpointSource {
             file: file.to_string(),
             line,
@@ -898,4 +905,53 @@ fn a_known_relative_file_becomes_the_path_the_editor_can_open() {
         .unwrap_or_else(|| panic!("{out:#?}"));
     let text = note["body"]["output"].as_str().unwrap();
     assert!(text.contains("/somewhere/src/macros.asm:5:2"), "{text}");
+}
+
+/// On an emulator that applies them (bemu), a directive's condition, mask,
+/// value and I/O kind are kept: it is sent whole, nothing is said lost, and
+/// clearing its red dot still takes it away.
+#[test]
+fn an_emulator_that_applies_directives_gets_them_whole() {
+    let peer = RecordingPeer::new().also_supporting(&["cpclib/setProgramBreakpoints"]);
+    let mut session = Session::new(peer, map());
+    let ink = AssembledBreakpoint {
+        address: 0x4000,
+        page: 0,
+        kind: AssembledBreakpointKind::Io,
+        extra: Some("condition A = &55, mask 0xFF00".to_owned()),
+        name: Some("ink".to_owned()),
+        details: Some(BreakpointDetails {
+            access: "w".to_owned(),
+            watch: false,
+            mask: 0xff00,
+            size: 1,
+            value: 0x40,
+            value_mask: 0xc0,
+            condition: Some("A = &55".to_owned()),
+            step: None
+        }),
+        written_at: None
+    };
+    let notices = session.adopt_program_breakpoints(&[ink, execution(0x8000)]);
+    assert!(notices.is_empty(), "nothing lost: {notices:?}");
+    session.on_attached().unwrap();
+
+    let whole = session.peer().last("cpclib/setProgramBreakpoints").unwrap();
+    assert_eq!(
+        whole["arguments"]["breakpoints"],
+        json!([{
+            "kind": "io", "access": "w", "run": "stop", "addr": 0x4000, "mask": 0xff00, "size": 1,
+            "value": 0x40, "valmask": 0xc0, "condition": "A = &55", "label": "ink"
+        }])
+    );
+    // The plain one stays an address; the whole one is not doubled as one.
+    let addresses = session.peer().last("setInstructionBreakpoints").unwrap();
+    assert_eq!(addresses["arguments"]["breakpoints"], json!([{ "instructionReference": "0x8000" }]));
+
+    // Its red dot cleared (line 10 is 0x4000): it goes.
+    let request = json!({ "seq": 1, "type": "request", "command": "setBreakpoints",
+        "arguments": { "source": { "path": "main.asm" }, "breakpoints": [] } });
+    session.on_editor_message(&request).unwrap();
+    let whole = session.peer().last("cpclib/setProgramBreakpoints").unwrap();
+    assert_eq!(whole["arguments"]["breakpoints"], json!([]));
 }

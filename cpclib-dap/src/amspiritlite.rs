@@ -2173,7 +2173,12 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         }
 
         // bemu stops on memory accesses, and reports them without stopping.
-        if self.extensions && matches!(command.as_str(), "cpclib/setDataBreakpoints" | "cpclib/setWatches") {
+        if self.extensions
+            && matches!(
+                command.as_str(),
+                "cpclib/setDataBreakpoints" | "cpclib/setWatches" | "cpclib/setProgramBreakpoints"
+            )
+        {
             let list = |key: &str| {
                 message
                     .get("arguments")
@@ -2187,6 +2192,11 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 let labels: Vec<Value> = watches.iter().filter_map(|w| w.get("label").cloned()).collect();
                 self.with_advanced(|set| set.watches = watches)?;
                 json!({ "applied": labels, "rejected": [] })
+            }
+            else if command == "cpclib/setProgramBreakpoints" {
+                let program = list("breakpoints");
+                self.with_advanced(|set| set.program = program)?;
+                json!({})
             }
             else {
                 let data = list("breakpoints");
@@ -2358,7 +2368,10 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         ) || (self.extensions
             && matches!(
                 command,
-                "cpclib/conditionalBreakpoints" | "cpclib/setDataBreakpoints" | "cpclib/setWatches"
+                "cpclib/conditionalBreakpoints"
+                    | "cpclib/setDataBreakpoints"
+                    | "cpclib/setWatches"
+                    | "cpclib/setProgramBreakpoints"
             ))
     }
 }
