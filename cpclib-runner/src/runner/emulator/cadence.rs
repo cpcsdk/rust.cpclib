@@ -297,9 +297,8 @@ pub(super) fn install_macos_dmg_release(
     }
 
     if target_app.exists() {
-        fs_err::remove_dir_all(&target_app).map_err(|e| {
-            format!("Failed to remove previous {bundle} {target_app}: {e}")
-        })?;
+        fs_err::remove_dir_all(&target_app)
+            .map_err(|e| format!("Failed to remove previous {bundle} {target_app}: {e}"))?;
     }
 
     let copy = Command::new("cp")

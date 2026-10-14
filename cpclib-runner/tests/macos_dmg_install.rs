@@ -47,7 +47,11 @@ fn assert_nothing_mounted() {
 fn amspirit_lite_installs() {
     for version in [AmspiritLiteVersion::V1_16_0] {
         let exec = install_twice(Emulator::AmspiritLite(version.clone()));
-        assert!(exec.to_string_lossy().contains(".app/Contents/MacOS/"), "{version:?}: {}", exec.display());
+        assert!(
+            exec.to_string_lossy().contains(".app/Contents/MacOS/"),
+            "{version:?}: {}",
+            exec.display()
+        );
         assert_executable(&exec);
         assert_nothing_mounted();
     }
