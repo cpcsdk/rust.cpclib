@@ -118,3 +118,18 @@ rom_cases! {
     fraction: "10 PRINT 12.5" =>
         [0x0d, 0x00, 0x0a, 0x00, 0xbf, 0x20, 0x1f, 0x00, 0x00, 0x00, 0x48, 0x84, 0x00, 0x00, 0x00];
 }
+
+/// Values below 2^-33 used to send the float conversion into an endless loop.
+#[test]
+fn tiny_floats_convert_and_round_trip() {
+    use cpclib_basic::tokens::BasicFloat;
+
+    for value in [1e-10, 3.5e-12, 1e-30, 1e-38] {
+        let float = BasicFloat::try_from(value).unwrap();
+        let back = float.to_f64();
+        assert!(
+            ((back - value) / value).abs() < 1e-8,
+            "{value} came back as {back}"
+        );
+    }
+}

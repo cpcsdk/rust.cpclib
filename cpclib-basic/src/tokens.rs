@@ -1075,15 +1075,12 @@ impl TryFrom<f64> for BasicFloat {
                 exp = -128;
             }
             else {
-                mantissa = (nb * 4294967296.0 + 0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
-                if (mantissa & 0xFF00000000) != 0 {
-                    mantissa = 0xFFFFFFFF;
-                }
-
-                mask = 0x80000000;
-                // find first significant bit of fraction part
-                while (mantissa & mask) == 0 {
-                    mask /= 2;
+                // the exponent is found by doubling (exact in f64) until the
+                // value is in [0.5, 1): a rounded 32-bit intermediate is zero
+                // for anything below 2^-33 (`1E-10`) and has no first bit to find
+                let mut scaled = nb;
+                while scaled < 0.5 && exp > -1100 {
+                    scaled *= 2.0;
                     exp -= 1;
                 }
 
