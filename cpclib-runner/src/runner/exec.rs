@@ -378,7 +378,8 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         // deadlock (the reader thread never saw EOF once the child exited,
         // e.g. with ConPTY or when a grandchild kept the slave open).
         #[cfg(feature = "transparent-x11")]
-        let use_plain_pipes = !self.transparent;
+        // (a redirection outranks "transparent": that path ignores both streams)
+        let use_plain_pipes = !self.transparent || stdin.is_some() || stdout.is_some();
         #[cfg(not(feature = "transparent-x11"))]
         let use_plain_pipes = true;
         if use_plain_pipes {
