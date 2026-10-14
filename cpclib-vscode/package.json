@@ -537,6 +537,12 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.refreshBreakpoints",
+        "title": "Refresh",
+        "category": "CPClib",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "cpclib.openFrameView",
         "title": "Open the emulator's frame, with the beam",
         "category": "CPClib"
@@ -792,6 +798,13 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "cpclib.refreshBreakpoints",
+          "when": "view == cpclib.breakpoints",
+          "group": "navigation"
+        }
+      ],
       "editor/context": [
         {
           "command": "cpclib.assembleThisFile",
@@ -1622,6 +1635,20 @@
             }
           }
         ]
+      }
+    ],
+    "views": {
+      "debug": [
+        {
+          "id": "cpclib.breakpoints",
+          "name": "CPC Breakpoints"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "cpclib.breakpoints",
+        "contents": "Every kind of breakpoint a CPC debug session holds, while one runs:\n- **Source breakpoints**: the red dots, with a condition (ACE's language), a hit count or a log message.\n- **BREAKPOINT directives**: written in the source, on execution, memory or I/O.\n- **Data breakpoints**: Break When Value Changes / Is Read / Is Accessed, from the Variables or Watch pane.\n- **Watches**: memory accesses reported without stopping (watchLabels).\n- **Stop on entry**: once, at the program's start.\n- **In the emulator** (bemu): what it has armed, with hit counts, and raster breakpoints.\nEach says whether this emulator applies it whole."
       }
     ],
     "breakpoints": [

@@ -192,6 +192,60 @@ impl Advanced {
     }
 }
 
+impl Advanced {
+    /// bemu's own list (`GET /api/breakpoints`, `GET /api/raster_bp`), each
+    /// breakpoint said by what armed it: `owner` source, directive, data,
+    /// watch, or emulator (the snapshot's, another tool's), with its hits.
+    pub(crate) fn emulator_list(&self, endpoint: &str) -> std::io::Result<Value> {
+        let read = |path: &'static str| -> std::io::Result<Value> {
+            Ok(serde_json::from_str(&perform(endpoint, &Call::get(path))?).unwrap_or(Value::Null))
+        };
+        let listed = read("/api/breakpoints")?;
+        let raster = read("/api/raster_bp")?;
+        let advanced: Vec<Value> = listed
+            .get("advanced")
+            .and_then(Value::as_array)
+            .map(|list| list.iter().map(|b| self.described(b)).collect())
+            .unwrap_or_default();
+        Ok(json!({
+            "advanced": advanced,
+            "addresses": listed.get("z80_bp").cloned().unwrap_or(json!([])),
+            "raster": raster.get("breakpoints").cloned().unwrap_or(json!([]))
+        }))
+    }
+
+    /// One of bemu's advanced breakpoints, with its owner and a label.
+    fn described(&self, brk: &Value) -> Value {
+        let name = brk.get("name").and_then(Value::as_str).unwrap_or_default();
+        let rest = |prefix: &str| name.strip_prefix(&format!("{OURS}{prefix}:"));
+        let (owner, label) = if let Some(index) = rest("exec") {
+            let entry = index.parse::<usize>().ok().and_then(|i| self.exec.get(i));
+            let label = entry
+                .and_then(|e| e.get("instructionReference"))
+                .and_then(Value::as_str)
+                .unwrap_or(index)
+                .to_owned();
+            (if entry.is_some_and(|e| e.get("logMessage").is_some()) { "log point" } else { "source" }, label)
+        }
+        else if let Some(label) = self.program_label(name) {
+            ("directive", label.to_owned())
+        }
+        else if let Some(label) = rest("data") {
+            ("data", label.to_owned())
+        }
+        else if let Some(label) = rest("watch") {
+            ("watch", label.to_owned())
+        }
+        else {
+            ("emulator", if name.is_empty() { "(unnamed)".to_owned() } else { name.to_owned() })
+        };
+        let mut described = brk.clone();
+        described["owner"] = json!(owner);
+        described["label"] = json!(label);
+        described
+    }
+}
+
 fn copy_options(from: &Value, to: &mut Value) {
     for key in ["condition", "after"] {
         if let Some(value) = from.get(key) {

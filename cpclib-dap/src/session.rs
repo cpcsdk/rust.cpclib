@@ -194,6 +194,10 @@ struct ProgramBreakpoint {
     /// `/api/breakpoints`, sent by `cpclib/setProgramBreakpoints` rather than
     /// as an address or a watch.
     advanced: Option<Value>,
+    /// Its name, or where it is in the source, for the breakpoints view.
+    label: String,
+    /// What the emulator could not apply of it, as the notice said.
+    lost: Option<String>,
     /// Where the `BREAKPOINT` directive is written, when the assembler knew.
     ///
     /// Not the same place as `address`: a directive arms the instruction that
@@ -1092,6 +1096,8 @@ impl<P: DapPeer> Session<P> {
                     watch: None,
                     one_shot: false,
                     advanced: Some(body),
+                    label: where_.clone(),
+                    lost: details.step.map(|step| format!("step {step}")),
                     written_at: breakpoint.written_at.clone()
                 });
                 continue;
@@ -1135,6 +1141,8 @@ impl<P: DapPeer> Session<P> {
                 watch,
                 one_shot: false,
                 advanced: None,
+                label: where_.clone(),
+                lost: unsupported.clone(),
                 written_at: breakpoint.written_at.clone()
             });
         }
@@ -1430,6 +1438,16 @@ impl<P: DapPeer> Session<P> {
             "setVariable" => self.set_variable(message),
             "dataBreakpointInfo" => self.data_breakpoint_info(message),
             "setDataBreakpoints" => self.set_data_breakpoints(message),
+            "cpclib/breakpoints" => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, self.breakpoint_overview(), seq)])
+            },
+            // What the emulator itself holds, hits included: only a peer that
+            // can say (bemu) is asked.
+            "cpclib/emulatorBreakpoints" if !self.peer_mut().supports(command) => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::failure(message, "this emulator does not list its breakpoints", seq)])
+            },
             // Answered here rather than forwarded: the editor asks for threads
             // the moment it is told the program stopped, and an emulator that
             // has not finished attaching would refuse - leaving a stop with no
@@ -2578,6 +2596,192 @@ impl<P: DapPeer> Session<P> {
             }),
             seq
         )])
+    }
+
+    /// Every breakpoint of the session, by kind, each kind explained - for the
+    /// extension's breakpoints view, where the editor's own pane shows the red
+    /// dots alone (`cpclib/breakpoints`).
+    ///
+    /// An entry's `status`: `armed` (applied as asked), `partial` (armed, but
+    /// part of what it asks for is not applied - `note` says what), or
+    /// `inactive` (not armed - `note` says why).
+    fn breakpoint_overview(&mut self) -> Value {
+        let options_applied = self.peer_mut().supports("cpclib/conditionalBreakpoints");
+        let data_stops = self.peer_mut().supports("cpclib/setDataBreakpoints");
+        let directives_whole = self.peer_mut().supports("cpclib/setProgramBreakpoints");
+        let entry = |label: String, detail: String, address: Option<u32>, status: &str, note: Option<String>| {
+            let mut entry = json!({ "label": label, "detail": detail, "status": status });
+            if let Some(address) = address {
+                entry["address"] = json!(address_reference(address));
+            }
+            if let Some(note) = note {
+                entry["note"] = json!(note);
+            }
+            entry
+        };
+        let describe_options = |options: &BreakOptions| {
+            let mut parts = Vec::new();
+            if let Some(condition) = &options.condition {
+                parts.push(format!("if {condition}"));
+            }
+            if let Some(after) = options.after {
+                parts.push(format!("from hit {}", after + 1));
+            }
+            if let Some(log) = &options.log_message {
+                parts.push(format!("logs \"{log}\""));
+            }
+            parts.join(", ")
+        };
+
+        // The editor's red dots, by file and line.
+        let mut files: Vec<_> = self.breakpoints.iter().collect();
+        files.sort_by(|a, b| a.0.cmp(b.0));
+        let mut source = Vec::new();
+        for (path, placed) in files {
+            for bp in placed {
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let mut detail = bp.address.map(address_reference).unwrap_or_default();
+                let options = describe_options(&bp.options);
+                if !options.is_empty() {
+                    detail = format!("{detail} {options}");
+                }
+                let status = match (bp.address, &bp.message) {
+                    (None, _) => "inactive",
+                    (Some(_), Some(_)) => "partial",
+                    (Some(_), None) => "armed"
+                };
+                let mut item = entry(format!("{name}:{}", bp.line), detail, bp.address, status, bp.message.clone());
+                item["path"] = json!(path);
+                item["line"] = json!(bp.line);
+                if bp.options.log_message.is_some() {
+                    item["log"] = json!(true);
+                }
+                else if !bp.options.is_plain() {
+                    item["conditional"] = json!(true);
+                }
+                source.push(item);
+            }
+        }
+
+        let mut directives = Vec::new();
+        let mut entry_stops = Vec::new();
+        for bp in &self.program_breakpoints {
+            let what = match (&bp.advanced, &bp.watch) {
+                (Some(body), _) => {
+                    let kind = match body.get("kind").and_then(Value::as_str) {
+                        Some("mem") => "memory",
+                        Some("io") => "I/O",
+                        _ => "execution"
+                    };
+                    let run = if body.get("run").and_then(Value::as_str) == Some("watch") { ", reported" } else { "" };
+                    let condition = body
+                        .get("condition")
+                        .and_then(Value::as_str)
+                        .map(|c| format!(", if {c}"))
+                        .unwrap_or_default();
+                    let access = body.get("access").and_then(Value::as_str).unwrap_or("rw");
+                    if kind == "execution" { format!("execution{run}{condition}") } else { format!("{kind} {access}{run}{condition}") }
+                },
+                (None, Some(watch)) => format!("memory watch ({})", if watch.read && watch.write { "rw" } else if watch.read { "r" } else { "w" }),
+                (None, None) => "execution".to_owned()
+            };
+            let detail = format!("{} {what}", address_reference(bp.address));
+            if bp.one_shot {
+                entry_stops.push(entry(bp.label.clone(), detail, Some(bp.address), "armed", None));
+                continue;
+            }
+            let (status, note) = if self.suppressed.contains(&bp.address) {
+                ("inactive", Some("its red dot was cleared in the editor".to_owned()))
+            }
+            else if let Some(lost) = &bp.lost {
+                ("partial", Some(format!("not applied by this emulator: {lost}")))
+            }
+            else {
+                ("armed", None)
+            };
+            let mut item = entry(bp.label.clone(), detail, Some(bp.address), status, note);
+            if let Some(source) = &bp.written_at {
+                item["path"] = json!(source.file);
+                item["line"] = json!(source.line);
+            }
+            directives.push(item);
+        }
+
+        let data: Vec<Value> = self
+            .data_breakpoints
+            .iter()
+            .map(|bp| {
+                let options = describe_options(&bp.options);
+                let detail = format!("{} {}{}", address_reference(bp.address), bp.access, if options.is_empty() { String::new() } else { format!(" {options}") });
+                entry(bp.label.clone(), detail, Some(bp.address), "armed", None)
+            })
+            .collect();
+        let watches: Vec<Value> = self
+            .watch_requests()
+            .into_iter()
+            .map(|watch| {
+                let access = if watch.read && watch.write { "rw" } else if watch.read { "r" } else { "w" };
+                entry(watch.label.clone(), format!("{} {access}", address_reference(watch.address)), Some(watch.address), "armed", None)
+            })
+            .collect();
+
+        let applied = |yes: bool, what: &str| if yes { format!("This emulator applies {what}.") } else { format!("This emulator does not apply {what}.") };
+        json!({
+            "kinds": [
+                {
+                    "id": "source",
+                    "title": "Source breakpoints",
+                    "description": format!(
+                        "The red dots of the editor's gutter: the program stops before the first instruction \
+                         assembled from the line. One can carry a condition (ACE's language: A = &12 AND NOT FlagZ), \
+                         a hit count (stop from the Nth pass on) or a log message (print, do not stop). {}",
+                        applied(options_applied, "conditions, hit counts and log messages: elsewhere a conditional breakpoint stops every time and a log point is not placed")
+                    ),
+                    "entries": source
+                },
+                {
+                    "id": "directive",
+                    "title": "BREAKPOINT directives",
+                    "description": format!(
+                        "Written in the source with basm's BREAKPOINT directive and assembled into the program: \
+                         execution, memory (TYPE=MEM) or I/O (TYPE=IO), with an optional condition, mask, size, \
+                         value and run mode (stop or watch). Setting and clearing a red dot on the directive's line \
+                         disarms it. {}",
+                        if directives_whole {
+                            "This emulator applies them whole."
+                        } else {
+                            "This emulator keeps the address of an execution one and turns a memory one into a write watch; what is lost is said."
+                        }
+                    ),
+                    "entries": directives
+                },
+                {
+                    "id": "data",
+                    "title": "Data breakpoints",
+                    "description": format!(
+                        "Set on a label from the Variables or Watch pane (Break When Value Changes / Is Read / \
+                         Is Accessed): the program stops on the access, with an optional condition and hit count. {}",
+                        if data_stops { "This emulator stops on them." } else { "This emulator cannot stop on a memory access: they are watches, listed below." }
+                    ),
+                    "entries": data
+                },
+                {
+                    "id": "watch",
+                    "title": "Watches",
+                    "description": "Memory accesses reported in the Debug Console without stopping: the launch \
+                         configuration's watchLabels, and the TYPE=MEM directives and data breakpoints an emulator \
+                         that cannot stop on them turns into watches.",
+                    "entries": watches
+                },
+                {
+                    "id": "entry",
+                    "title": "Stop on entry",
+                    "description": "stopOnEntry in the launch configuration: the program stops once, before its first \
+                         instruction, then this breakpoint is gone.",
+                    "entries": entry_stops
+                }
+            ]
+        })
     }
 
     /// `setDataBreakpoints` on an emulator that stops on memory accesses:
@@ -5263,6 +5467,8 @@ impl<P: DapPeer> Session<P> {
             watch: None,
             one_shot: true,
             advanced: None,
+            label: "the program's start".to_owned(),
+            lost: None,
             // No directive to point at: this one is the launch configuration's.
             written_at: None
         });

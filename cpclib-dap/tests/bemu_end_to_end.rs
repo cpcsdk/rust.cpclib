@@ -463,3 +463,41 @@ fn a_directive_breakpoint_is_applied_whole() {
     );
     adapter.finish();
 }
+
+/// What the breakpoints view shows: the session's kinds, and what bemu
+/// itself holds, each said by what armed it, hits counted.
+#[test]
+fn the_breakpoints_view_lists_what_bemu_holds() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld bc,#7f10\n\tld a,#54\nloop\n\tout (c),c\n\tout (c),a\n\tinc a\n\tand #5f\n\tor #40\n\tjr loop\n\
+         \tbreakpoint #7f00, type=io, access=write, runmode=stop, mask=#ff00, value=#40, valmask=#c0, condition=\"A = &55\", name=\"ink\"\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    // `inc a`, line 9, from its second pass on.
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": 9, "hitCondition": "2" }] }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+
+    let overview = adapter.request("cpclib/breakpoints", json!({}));
+    let kinds = overview["body"]["kinds"].as_array().unwrap();
+    let entries = |id: &str| kinds.iter().find(|k| k["id"] == id).unwrap()["entries"].as_array().unwrap().clone();
+    assert_eq!(entries("source")[0]["detail"], "0x4009 from hit 2", "{overview}");
+    assert_eq!(entries("directive")[0]["label"], "ink");
+    assert_eq!(entries("directive")[0]["status"], "armed");
+
+    let held = adapter.request("cpclib/emulatorBreakpoints", json!({}));
+    let advanced = held["body"]["advanced"].as_array().unwrap();
+    let by_owner = |owner: &str| advanced.iter().find(|b| b["owner"] == owner).unwrap_or_else(|| panic!("no {owner}: {held}"));
+    let directive = by_owner("directive");
+    assert_eq!((directive["label"].as_str(), directive["kind"].as_str()), (Some("ink"), Some("io")));
+    let counted = by_owner("source");
+    assert_eq!(counted["label"], "0x4009");
+    assert!(counted["hits"].as_u64().unwrap() >= 1, "hits counted: {counted}");
+    adapter.finish();
+}
