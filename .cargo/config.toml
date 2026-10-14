@@ -1,6 +1,5 @@
 [build]
 #rustc-wrapper = '/home/rgiot/.cargo/bin/sccache'
-jobs=2
 
 [target.wasm32-wasip1]
 runner = "wasmtime run --dir ."

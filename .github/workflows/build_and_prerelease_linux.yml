@@ -6,6 +6,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # the Linux runner is small: a job limit here, not in the shared .cargo/config.toml
+  CARGO_BUILD_JOBS: 2
 
 jobs:
   build-linux:
