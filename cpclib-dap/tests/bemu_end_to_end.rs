@@ -501,3 +501,39 @@ fn the_breakpoints_view_lists_what_bemu_holds() {
     assert!(counted["hits"].as_u64().unwrap() >= 1, "hits counted: {counted}");
     adapter.finish();
 }
+
+/// The breakpoint manager, as ACE's window: a port breakpoint made by hand,
+/// with a mask, a value and an ACE condition, stops the program; the manager
+/// lists it with its hits.
+#[test]
+fn a_breakpoint_made_in_the_manager_stops_the_program() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld bc,#7f10\n\tld a,#54\nloop\n\tout (c),c\n\tout (c),a\n\tinc a\n\tand #5f\n\tor #40\n\tjr loop\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    let made = adapter.request(
+        "cpclib/managerSet",
+        json!({ "breakpoint": { "kind": "io", "address": "&7F00", "mask": "&FF00", "access": "w", "value": "&40", "valmask": "&C0",
+                                "condition": "A = &56", "name": "third ink" } })
+    );
+    assert_eq!(made["body"]["id"], 1);
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert!(stop["body"]["description"].as_str().unwrap().contains("third ink: write of #56"), "{stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 0x56, "the third pass");
+
+    let listed = adapter.request("cpclib/breakpointManager", json!({}));
+    let port = &listed["body"]["tabs"]["io"][0];
+    assert_eq!((port["origin"].as_str(), port["key"].as_str()), (Some("manager"), Some("manager:1")), "{listed}");
+    let held = adapter.request("cpclib/emulatorBreakpoints", json!({}));
+    let counted = held["body"]["advanced"].as_array().unwrap().iter().find(|b| b["owner"] == "manager").unwrap().clone();
+    assert_eq!((counted["label"].as_str(), counted["hits"].as_u64()), (Some("1"), Some(1)), "{held}");
+    adapter.finish();
+}

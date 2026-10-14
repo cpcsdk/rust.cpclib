@@ -2187,7 +2187,10 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         if self.extensions
             && matches!(
                 command.as_str(),
-                "cpclib/setDataBreakpoints" | "cpclib/setWatches" | "cpclib/setProgramBreakpoints"
+                "cpclib/setDataBreakpoints"
+                    | "cpclib/setWatches"
+                    | "cpclib/setProgramBreakpoints"
+                    | "cpclib/setManagerBreakpoints"
             )
         {
             let list = |key: &str| {
@@ -2203,6 +2206,11 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 let labels: Vec<Value> = watches.iter().filter_map(|w| w.get("label").cloned()).collect();
                 self.with_advanced(|set| set.watches = watches)?;
                 json!({ "applied": labels, "rejected": [] })
+            }
+            else if command == "cpclib/setManagerBreakpoints" {
+                let manager = list("breakpoints");
+                self.with_advanced(|set| set.manager = manager)?;
+                json!({})
             }
             else if command == "cpclib/setProgramBreakpoints" {
                 let program = list("breakpoints");
@@ -2383,6 +2391,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                     | "cpclib/setDataBreakpoints"
                     | "cpclib/setWatches"
                     | "cpclib/setProgramBreakpoints"
+                    | "cpclib/setManagerBreakpoints"
                     | "cpclib/emulatorBreakpoints"
             ))
     }

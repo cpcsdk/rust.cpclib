@@ -196,6 +196,8 @@ struct ProgramBreakpoint {
     advanced: Option<Value>,
     /// Its name, or where it is in the source, for the breakpoints view.
     label: String,
+    /// What it breaks on, as the directive says: `exec`, `mem` or `io`.
+    kind: &'static str,
     /// What the emulator could not apply of it, as the notice said.
     lost: Option<String>,
     /// Where the `BREAKPOINT` directive is written, when the assembler knew.
@@ -204,6 +206,15 @@ struct ProgramBreakpoint {
     /// follows it, so one written inside a macro body stops the program
     /// wherever the macro was *used*.
     written_at: Option<cpclib_asm::assembler::delayed_command::BreakpointSource>
+}
+
+fn directive_kind(kind: cpclib_asm::assembler::delayed_command::AssembledBreakpointKind) -> &'static str {
+    use cpclib_asm::assembler::delayed_command::AssembledBreakpointKind as Kind;
+    match kind {
+        Kind::Execution => "exec",
+        Kind::Memory { .. } => "mem",
+        Kind::Io => "io"
+    }
 }
 
 /// A memory watch, in the form the emulator's watch slots take.
@@ -866,6 +877,9 @@ pub struct Session<P: DapPeer> {
     /// The editor's data breakpoints, on an emulator that stops on memory
     /// accesses (`cpclib/setDataBreakpoints`); elsewhere they are watches.
     data_breakpoints: Vec<DataBreakpoint>,
+    /// The breakpoint manager's (see `crate::breakpoint_manager`).
+    manager: Vec<crate::breakpoint_manager::ManagerBreakpoint>,
+    next_manager_id: u32,
     /// Source files, read once and kept: the register pane asks for the line
     /// at `PC` on every stop, and stepping is a lot of stops.
     source_cache: HashMap<PathBuf, Vec<String>>,
@@ -932,6 +946,8 @@ impl<P: DapPeer> Session<P> {
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
             data_breakpoints: Vec::new(),
+            manager: Vec::new(),
+            next_manager_id: 1,
             source_cache: HashMap::new(),
             built_from: HashMap::new(),
             banking_explained: false
@@ -1097,6 +1113,7 @@ impl<P: DapPeer> Session<P> {
                     one_shot: false,
                     advanced: Some(body),
                     label: where_.clone(),
+                    kind: directive_kind(breakpoint.kind),
                     lost: details.step.map(|step| format!("step {step}")),
                     written_at: breakpoint.written_at.clone()
                 });
@@ -1142,6 +1159,7 @@ impl<P: DapPeer> Session<P> {
                 one_shot: false,
                 advanced: None,
                 label: where_.clone(),
+                kind: directive_kind(breakpoint.kind),
                 lost: unsupported.clone(),
                 written_at: breakpoint.written_at.clone()
             });
@@ -1438,6 +1456,11 @@ impl<P: DapPeer> Session<P> {
             "setVariable" => self.set_variable(message),
             "dataBreakpointInfo" => self.data_breakpoint_info(message),
             "setDataBreakpoints" => self.set_data_breakpoints(message),
+            "cpclib/breakpointManager" => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, self.manager_tabs(), seq)])
+            },
+            "cpclib/managerSet" | "cpclib/managerRemove" | "cpclib/managerClear" => self.manager_command(message, command),
             "cpclib/breakpoints" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(message, self.breakpoint_overview(), seq)])
@@ -5355,6 +5378,7 @@ impl<P: DapPeer> Session<P> {
         if !self.attached {
             return Ok(());
         }
+        let manager_whole = self.peer_mut().supports("cpclib/setManagerBreakpoints");
         // Every distinct set of options per address: a condition and a log
         // point on the same address both have to run.
         let mut set: std::collections::BTreeMap<u32, Vec<BreakOptions>> =
@@ -5386,6 +5410,13 @@ impl<P: DapPeer> Session<P> {
                 add(bp.address, &BreakOptions::default());
             }
         }
+        // The manager's, on an emulator that cannot take them whole: the plain
+        // execution ones still stop on their address.
+        if !manager_whole {
+            for bp in self.manager.iter().filter(|bp| bp.is_plain_exec()) {
+                add(bp.address, &BreakOptions::default());
+            }
+        }
         // The one under our feet, while stepping off it.
         if let Some(stepped_off) = self.stepped_off {
             set.remove(&stepped_off);
@@ -5406,7 +5437,186 @@ impl<P: DapPeer> Session<P> {
             "setInstructionBreakpoints",
             json!({ "breakpoints": references })
         )?;
-        self.push_program_breakpoints()
+        self.push_program_breakpoints()?;
+        if manager_whole {
+            let bodies: Vec<Value> = self.manager.iter().map(|bp| bp.body(&self.manager_label(bp))).collect();
+            self.send_own_request("cpclib/setManagerBreakpoints", json!({ "breakpoints": bodies }))?;
+        }
+        Ok(())
+    }
+
+    /// How a manager breakpoint is named: its name, its label, its address.
+    fn manager_label(&self, bp: &crate::breakpoint_manager::ManagerBreakpoint) -> String {
+        bp.name
+            .clone()
+            .or_else(|| self.map.symbol_at(bp.address).map(str::to_owned))
+            .unwrap_or_else(|| format!("&{:04X}", bp.address))
+    }
+
+    /// `cpclib/managerSet {breakpoint}` (a new one, or the one its `id`
+    /// names), `cpclib/managerRemove {id}`, `cpclib/managerClear {kind}`.
+    fn manager_command(&mut self, message: &Value, command: &str) -> std::io::Result<Vec<Value>> {
+        use crate::breakpoint_manager::{ManagerBreakpoint, ManagerKind};
+        let arguments = message.get("arguments").cloned().unwrap_or(json!({}));
+        let result: Result<Value, String> = match command {
+            "cpclib/managerSet" => {
+                let form = arguments.get("breakpoint").cloned().unwrap_or(json!({}));
+                let id = form.get("id").and_then(Value::as_u64).map(|id| id as u32).filter(|id| *id > 0);
+                let id = id.unwrap_or_else(|| {
+                    let id = self.next_manager_id;
+                    self.next_manager_id += 1;
+                    id
+                });
+                let map = &self.map;
+                ManagerBreakpoint::from_form(&form, id, |name| map.address_of_symbol(name)).map(|brk| {
+                    match self.manager.iter_mut().find(|known| known.id == id) {
+                        Some(known) => *known = brk,
+                        None => self.manager.push(brk)
+                    }
+                    json!({ "id": id })
+                })
+            },
+            "cpclib/managerRemove" => {
+                let id = arguments.get("id").and_then(Value::as_u64).unwrap_or(0) as u32;
+                let before = self.manager.len();
+                self.manager.retain(|bp| bp.id != id);
+                if before == self.manager.len() { Err(format!("no breakpoint {id} in the manager")) } else { Ok(json!({})) }
+            },
+            _ => {
+                let kind = arguments.get("kind").and_then(Value::as_str).and_then(ManagerKind::parse);
+                self.manager.retain(|bp| kind.is_some_and(|kind| bp.kind != kind));
+                Ok(json!({}))
+            }
+        };
+        let seq = self.next_seq();
+        match result {
+            Ok(body) => {
+                self.push_breakpoints()?;
+                Ok(vec![protocol::response(message, body, seq)])
+            },
+            Err(problem) => Ok(vec![protocol::failure(message, &problem, seq)])
+        }
+    }
+
+    /// `cpclib/breakpointManager`: every breakpoint by tab - execution,
+    /// memory, ports - as ACE's breakpoint window lists them, the manager's
+    /// editable, the others (red dots, directives, data breakpoints,
+    /// watches, the stop on entry) shown with where they come from. A row's
+    /// `key` matches `cpclib/emulatorBreakpoints`' owner:label, for its hits.
+    fn manager_tabs(&mut self) -> Value {
+        let whole = self.peer_mut().supports("cpclib/setManagerBreakpoints");
+        let options_applied = self.peer_mut().supports("cpclib/conditionalBreakpoints");
+        let mut tabs: std::collections::BTreeMap<&str, Vec<Value>> =
+            [("exec", Vec::new()), ("mem", Vec::new()), ("io", Vec::new())].into_iter().collect();
+        let hex = |address: u32| format!("&{address:04X}");
+        let symbol = |address: u32| self.map.symbol_at(address).unwrap_or("").to_owned();
+        let row = |origin: &str, key: String, address: u32| {
+            json!({
+                "origin": origin, "key": key, "editable": false, "symbol": symbol(address), "address": hex(address),
+                "mask": "&FFFF", "size": 1, "access": "rw", "value": "&00", "valmask": "&00", "condition": "",
+                "mode": "stop", "step": 0, "name": "", "status": "armed"
+            })
+        };
+
+        for (path, placed) in &self.breakpoints {
+            for bp in placed {
+                let Some(address) = bp.address else { continue };
+                let mut item = row("source", format!("source:{}", address_reference(address)), address);
+                item["condition"] = json!(bp.options.condition.clone().unwrap_or_default());
+                item["step"] = json!(bp.options.after.unwrap_or(0));
+                if let Some(log) = &bp.options.log_message {
+                    item["mode"] = json!("log");
+                    item["name"] = json!(log);
+                }
+                if bp.message.is_some() {
+                    item["status"] = json!("partial");
+                    item["note"] = json!(bp.message);
+                }
+                item["path"] = json!(path);
+                item["line"] = json!(bp.line);
+                tabs.get_mut("exec").unwrap().push(item);
+            }
+        }
+        for bp in &self.program_breakpoints {
+            let origin = if bp.one_shot { "entry" } else { "directive" };
+            let mut item = row(origin, format!("directive:{}", bp.label), bp.address);
+            item["name"] = json!(bp.label);
+            if let Some(body) = &bp.advanced {
+                for key in ["access", "condition"] {
+                    if let Some(value) = body.get(key) {
+                        item[key] = value.clone();
+                    }
+                }
+                let field = |key: &str| body.get(key).and_then(Value::as_u64).unwrap_or(0);
+                item["mask"] = json!(format!("&{:04X}", field("mask")));
+                item["size"] = json!(field("size").max(1));
+                item["value"] = json!(format!("&{:02X}", field("value")));
+                item["valmask"] = json!(format!("&{:02X}", field("valmask")));
+                if body.get("run").and_then(Value::as_str) == Some("watch") {
+                    item["mode"] = json!("watch");
+                }
+            }
+            if let Some(watch) = &bp.watch {
+                item["access"] = json!(if watch.read && watch.write { "rw" } else if watch.read { "r" } else { "w" });
+                item["mode"] = json!("watch");
+            }
+            if self.suppressed.contains(&bp.address) && !bp.one_shot {
+                item["status"] = json!("inactive");
+                item["note"] = json!("its red dot was cleared in the editor");
+            }
+            else if let Some(lost) = &bp.lost {
+                item["status"] = json!("partial");
+                item["note"] = json!(format!("not applied by this emulator: {lost}"));
+            }
+            if let Some(source) = &bp.written_at {
+                item["path"] = json!(source.file);
+                item["line"] = json!(source.line);
+            }
+            tabs.get_mut(bp.kind).unwrap().push(item);
+        }
+        for bp in &self.data_breakpoints {
+            let mut item = row("data", format!("data:{}", bp.label), bp.address);
+            item["access"] = json!(bp.access);
+            item["name"] = json!(bp.label);
+            item["condition"] = json!(bp.options.condition.clone().unwrap_or_default());
+            item["step"] = json!(bp.options.after.unwrap_or(0));
+            tabs.get_mut("mem").unwrap().push(item);
+        }
+        for watch in &self.extra_watches {
+            let mut item = row("watch", format!("watch:{}", watch.label), watch.address);
+            item["access"] = json!(if watch.read && watch.write { "rw" } else if watch.read { "r" } else { "w" });
+            item["mode"] = json!("watch");
+            item["name"] = json!(watch.label);
+            tabs.get_mut("mem").unwrap().push(item);
+        }
+        for bp in &self.manager {
+            let mut item = row("manager", format!("manager:{}", bp.id), bp.address);
+            item["editable"] = json!(true);
+            item["id"] = json!(bp.id);
+            item["mask"] = json!(format!("&{:04X}", bp.mask));
+            item["size"] = json!(bp.size);
+            item["access"] = json!(bp.access);
+            item["value"] = json!(format!("&{:02X}", bp.value));
+            item["valmask"] = json!(format!("&{:02X}", bp.value_mask));
+            item["condition"] = json!(bp.condition.clone().unwrap_or_default());
+            item["mode"] = json!(if bp.watch { "watch" } else { "stop" });
+            item["step"] = json!(bp.step);
+            item["name"] = json!(bp.name.clone().unwrap_or_default());
+            if !whole && !bp.is_plain_exec() {
+                item["status"] = json!("inactive");
+                item["note"] = json!(
+                    "this emulator only takes plain execution breakpoints: a condition, pass count, watch mode, \
+                     memory or port breakpoint needs bemu"
+                );
+            }
+            tabs.get_mut(bp.kind.name()).unwrap().push(item);
+        }
+        json!({
+            "tabs": tabs,
+            "whole": whole,
+            "conditions": options_applied,
+            "symbols": self.map.symbols().map(|(name, _)| name.to_owned()).take(5000).collect::<Vec<_>>()
+        })
     }
 
     /// The directives sent whole (see `ProgramBreakpoint::advanced`), less
@@ -5468,6 +5678,7 @@ impl<P: DapPeer> Session<P> {
             one_shot: true,
             advanced: None,
             label: "the program's start".to_owned(),
+            kind: "exec",
             lost: None,
             // No directive to point at: this one is the launch configuration's.
             written_at: None
@@ -7231,7 +7442,7 @@ fn same_file(left: &Path, right: &Path) -> bool {
 /// instead of this session's own narrower one, which used to only know
 /// about hex/decimal - see `basic_session::parse_address`, which already
 /// made this switch and is a strict superset of what this used to accept.
-fn parse_number(text: &str) -> Option<u32> {
+pub(crate) fn parse_number(text: &str) -> Option<u32> {
     use cpclib_common::winnow::Parser;
     use cpclib_common::winnow::error::ContextError;
     use cpclib_common::winnow::stream::AsBStr;
