@@ -211,9 +211,13 @@ impl Drop for Adapter {
     }
 }
 
-/// A program in a fresh directory.
+/// A program in a fresh directory of its own: the adapter keeps a source map
+/// beside a program it built, and another test's program at the same path
+/// would be taken for this one.
 fn program(name: &str, source: &str) -> PathBuf {
-    let directory = std::env::temp_dir().join(format!("cpclib-dap-bemu-e2e-{}-{name}", std::process::id()));
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let directory = std::env::temp_dir().join(format!("cpclib-dap-bemu-e2e-{}-{unique}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join(name);
@@ -427,5 +431,35 @@ fn the_frame_view_shows_the_emulators_picture_and_beam() {
     let refused = adapter.send("evaluate", json!({ "expression": "-frame sideways", "context": "repl" }));
     let answer = adapter.wait("refusal", |m| m["type"] == "response" && m["request_seq"] == refused);
     assert_eq!(answer["success"], false, "{answer}");
+    adapter.finish();
+}
+
+/// A `BREAKPOINT` directive carrying an ACE condition, a mask and a value,
+/// on an I/O port: applied whole by bemu, it stops on the write it describes.
+#[test]
+fn a_directive_breakpoint_is_applied_whole() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld bc,#7f10\n\tld a,#54\nloop\n\tout (c),c\n\tout (c),a\n\tinc a\n\tand #5f\n\tor #40\n\tjr loop\n\
+         \tbreakpoint #7f00, type=io, access=write, runmode=stop, mask=#ff00, value=#40, valmask=#c0, condition=\"A = &55 AND NOT FlagZ\", name=\"ink\"\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    let description = stop["body"]["description"].as_str().unwrap();
+    assert!(description.contains("ink: write of #55 at #7F10"), "{description}");
+    assert_eq!(hex_value(&adapter.register("A")), 0x55, "the second pass, not the first (A = #54)");
+    // Nothing reported lost.
+    assert!(
+        !adapter.seen.iter().any(|m| m["body"]["output"].as_str().is_some_and(|t| t.contains("not applied"))),
+        "{}",
+        adapter.transcript()
+    );
     adapter.finish();
 }

@@ -189,6 +189,11 @@ struct ProgramBreakpoint {
     /// time a main loop came back past the entry address, and it would hold one
     /// of the emulator's scarce breakpoint channels for the whole session.
     one_shot: bool,
+    /// The whole directive, for an emulator that applies conditions, masks,
+    /// sizes, values and I/O breakpoints itself (bemu): the fields of its
+    /// `/api/breakpoints`, sent by `cpclib/setProgramBreakpoints` rather than
+    /// as an address or a watch.
+    advanced: Option<Value>,
     /// Where the `BREAKPOINT` directive is written, when the assembler knew.
     ///
     /// Not the same place as `address`: a directive arms the instruction that
@@ -1050,11 +1055,47 @@ impl<P: DapPeer> Session<P> {
         use cpclib_asm::assembler::delayed_command::AssembledBreakpointKind as Kind;
 
         let mut notices = Vec::new();
+        let applied_whole = self.peer_mut().supports("cpclib/setProgramBreakpoints");
         for breakpoint in breakpoints {
             let where_ = breakpoint
                 .name
                 .clone()
                 .unwrap_or_else(|| self.address_in_source(breakpoint.address as u32));
+
+            // An emulator that applies the whole directive gets it whole.
+            if applied_whole && let Some(details) = &breakpoint.details {
+                let mut body = json!({
+                    "kind": match breakpoint.kind {
+                        Kind::Execution => "exec",
+                        Kind::Memory { .. } => "mem",
+                        Kind::Io => "io"
+                    },
+                    "access": details.access,
+                    "run": if details.watch { "watch" } else { "stop" },
+                    "addr": breakpoint.address,
+                    "mask": details.mask,
+                    "size": details.size,
+                    "value": details.value,
+                    "valmask": details.value_mask,
+                    "label": where_
+                });
+                if let Some(condition) = &details.condition {
+                    body["condition"] = json!(condition);
+                }
+                if let Some(step) = details.step {
+                    notices.push(format!(
+                        "{where_} asks for step {step}; this emulator has no step count, so that part is not applied."
+                    ));
+                }
+                self.program_breakpoints.push(ProgramBreakpoint {
+                    address: breakpoint.address as u32,
+                    watch: None,
+                    one_shot: false,
+                    advanced: Some(body),
+                    written_at: breakpoint.written_at.clone()
+                });
+                continue;
+            }
 
             let (watch, unsupported) = match breakpoint.kind {
                 Kind::Execution => (None, breakpoint.extra.clone()),
@@ -1093,6 +1134,7 @@ impl<P: DapPeer> Session<P> {
                 address: breakpoint.address as u32,
                 watch,
                 one_shot: false,
+                advanced: None,
                 written_at: breakpoint.written_at.clone()
             });
         }
@@ -5136,7 +5178,7 @@ impl<P: DapPeer> Session<P> {
         // not something the editor knows about, so it would otherwise be wiped
         // by the next red-dot change.
         for bp in &self.program_breakpoints {
-            if bp.watch.is_none() && !self.suppressed.contains(&bp.address) {
+            if bp.watch.is_none() && bp.advanced.is_none() && !self.suppressed.contains(&bp.address) {
                 add(bp.address, &BreakOptions::default());
             }
         }
@@ -5159,7 +5201,23 @@ impl<P: DapPeer> Session<P> {
         self.send_own_request(
             "setInstructionBreakpoints",
             json!({ "breakpoints": references })
-        )
+        )?;
+        self.push_program_breakpoints()
+    }
+
+    /// The directives sent whole (see `ProgramBreakpoint::advanced`), less
+    /// the ones whose red dot was taken away.
+    fn push_program_breakpoints(&mut self) -> std::io::Result<()> {
+        let whole: Vec<Value> = self
+            .program_breakpoints
+            .iter()
+            .filter(|bp| !self.suppressed.contains(&bp.address))
+            .filter_map(|bp| bp.advanced.clone())
+            .collect();
+        if whole.is_empty() && !self.program_breakpoints.iter().any(|bp| bp.advanced.is_some()) {
+            return Ok(());
+        }
+        self.send_own_request("cpclib/setProgramBreakpoints", json!({ "breakpoints": whole }))
     }
 
     /// Watch labels the launch configuration asked for, on top of the ones the
@@ -5204,6 +5262,7 @@ impl<P: DapPeer> Session<P> {
             address: address as u32,
             watch: None,
             one_shot: true,
+            advanced: None,
             // No directive to point at: this one is the launch configuration's.
             written_at: None
         });
