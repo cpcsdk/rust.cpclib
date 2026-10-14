@@ -2500,6 +2500,24 @@ fn a_timer_is_exact_across_a_run_when_the_emulator_counts() {
     assert_eq!(timer_command(&mut session, "-timer"), "frame: 6 NOPs");
 }
 
+/// The emulator's own count going back (a machine reset) leaves the totals as
+/// they were and starts counting again from the new baseline.
+#[test]
+fn a_tick_count_that_goes_back_restarts_the_count() {
+    let mut session = timed_session();
+    report_pc_at(&mut session, 0x4000, 1_000);
+    timer_command(&mut session, "-timer add frame");
+    report_pc_at(&mut session, 0x9000, 1_000 + 19_968);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 19968 NOPs");
+
+    // Reset: the count is lower than at the previous stop.
+    report_pc_at(&mut session, 0x4000, 500);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 19968 NOPs");
+    // Counting resumes from the new baseline.
+    report_pc_at(&mut session, 0x4001, 510);
+    assert_eq!(timer_command(&mut session, "-timer"), "frame: 19978 NOPs");
+}
+
 /// A continue back to the same breakpoint (a loop) ran, even though the
 /// program counter is where it was: without a count from the emulator the
 /// timer is a floor, not an unchanged exact total.

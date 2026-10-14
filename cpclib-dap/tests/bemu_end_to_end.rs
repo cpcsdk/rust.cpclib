@@ -153,7 +153,10 @@ impl Adapter {
     }
 
     fn variable(&mut self, name: &str, scope_name: &str) -> String {
-        let scopes = self.request("scopes", json!({ "frameId": 0 }));
+        // the frame a real client asks about: the top one of the stack trace
+        let trace = self.request("stackTrace", json!({ "threadId": 1 }));
+        let frame = trace["body"]["stackFrames"][0]["id"].clone();
+        let scopes = self.request("scopes", json!({ "frameId": frame }));
         let scope = scopes["body"]["scopes"]
             .as_array()
             .unwrap()
