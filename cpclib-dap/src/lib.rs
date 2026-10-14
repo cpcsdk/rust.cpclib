@@ -20,6 +20,7 @@
 //! assembler during its listing pass.
 
 pub mod ace;
+mod advanced_breakpoints;
 pub mod amspiritlite;
 pub mod bemu;
 pub mod basic;
@@ -1241,6 +1242,10 @@ fn connect_backend(
             if held {
                 peer = peer.held_at_start();
             }
+            // The snapshot's breakpoints are the program's `BREAKPOINT`
+            // directives, which the session arms itself from the source map:
+            // bemu's copies would double them and outlive a red dot removed.
+            peer.forget_emulator_breakpoints();
         }
         (Backend::AmspiritLite(peer), String::new())
     }
