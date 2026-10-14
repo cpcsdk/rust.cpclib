@@ -1282,6 +1282,9 @@ pub struct AmspiritLitePeer {
     told: std::sync::Arc<std::sync::atomic::AtomicU64>,
     /// The stop owed is the end of a single step.
     stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Started paused (bemu's `--debug-paused`): let go at
+    /// `configurationDone`, see [`crate::peer::DapPeer::release`].
+    held_at_start: bool,
     /// The emulator this session started, if it started one.
     ///
     /// Closed when the session ends: an emulator left behind keeps its port,
@@ -1466,6 +1469,7 @@ impl AmspiritLitePeer {
             stepping,
             stepping_over,
             breakpoints,
+            held_at_start: false,
             resume_confirmation: Self::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
@@ -1473,6 +1477,13 @@ impl AmspiritLitePeer {
             outgoing,
             seq
         })
+    }
+
+    /// The emulator was started paused, for the breakpoints to be armed
+    /// before anything runs: the session lets it go once configured.
+    pub fn held_at_start(mut self) -> Self {
+        self.held_at_start = true;
+        self
     }
 
     /// Take ownership of an emulator this session started, so it is closed
@@ -1919,6 +1930,39 @@ pub(crate) fn returns_to_the_next_instruction(bytes: &[u8]) -> bool {
 impl crate::peer::DapPeer for AmspiritLitePeer {
     fn note_line_at_pc(&mut self, line: crate::peer::LineAtPc) {
         self.line_at_pc = line;
+    }
+
+    fn release(&mut self, hold: bool) -> std::io::Result<()> {
+        if !std::mem::take(&mut self.held_at_start) {
+            return Ok(());
+        }
+        if hold {
+            // Stopped on entry already: the machine has not moved, and this
+            // is the stop the launch asked for.
+            self.begin_run(false);
+            let seq = self.next_seq();
+            let _ = self.outgoing.send(crate::protocol::event(
+                "stopped",
+                json!({
+                    "reason": "entry",
+                    "description": "Stopped on entry",
+                    "threadId": 1,
+                    "allThreadsStopped": true
+                }),
+                seq
+            ));
+            self.told
+                .store(self.generation.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
+            return Ok(());
+        }
+        self.begin_run(false);
+        perform(
+            &self.endpoint,
+            &Call::post("/api/config").body(json!({ "paused": false }).to_string())
+        )?;
+        self.wait_until_it_is_really_running();
+        self.owe_a_stop();
+        Ok(())
     }
 
     fn send(&mut self, message: Value) -> std::io::Result<()> {
@@ -4442,6 +4486,7 @@ mod tests {
             stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
+            held_at_start: false,
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
