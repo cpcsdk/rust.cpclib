@@ -564,7 +564,103 @@ struct PlacedBreakpoint {
     line: u32,
     address: Option<u32>,
     /// Why it could not be placed, when it could not.
-    message: Option<String>
+    message: Option<String>,
+    /// Its condition, hit count and log message, when the emulator takes them.
+    options: BreakOptions
+}
+
+/// What a breakpoint carries beyond its address: a condition (in the
+/// emulator's syntax), hits to let pass, a message to log instead of
+/// stopping.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct BreakOptions {
+    condition: Option<String>,
+    /// Hits let pass before it acts (from the editor's hit count).
+    after: Option<u64>,
+    log_message: Option<String>
+}
+
+impl BreakOptions {
+    fn is_plain(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// As the internal `setInstructionBreakpoints`/`cpclib/setDataBreakpoints`
+    /// carry them, beside the address.
+    fn add_to(&self, entry: &mut Value) {
+        if let Some(condition) = &self.condition {
+            entry["condition"] = json!(condition);
+        }
+        if let Some(after) = self.after {
+            entry["after"] = json!(after);
+        }
+        if let Some(log_message) = &self.log_message {
+            entry["logMessage"] = json!(log_message);
+        }
+    }
+}
+
+/// An editor hit count as hits to let pass first: `N` or `>=N` acts from
+/// the Nth hit on, `>N` after it.
+fn hits_to_let_pass(text: &str) -> Result<u64, String> {
+    let text = text.trim();
+    let (number, after) = if let Some(rest) = text.strip_prefix(">=") {
+        (rest, false)
+    }
+    else if let Some(rest) = text.strip_prefix('>') {
+        (rest, true)
+    }
+    else {
+        (text, false)
+    };
+    let count: u64 = number
+        .trim()
+        .parse()
+        .map_err(|_| format!("hit count \"{text}\" is not understood: write N, >=N (from the Nth hit on) or >N"))?;
+    Ok(if after { count } else { count.saturating_sub(1) })
+}
+
+/// The condition, hit count and log message of an editor breakpoint, and
+/// what to tell the editor about them: a hit count not understood, or (when
+/// the emulator does not take them, `taken` false) that they are not
+/// applied.
+fn break_options(entry: &Value, taken: bool) -> (BreakOptions, Option<String>) {
+    let text = |name: &str| {
+        entry
+            .get(name)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned)
+    };
+    let mut options = BreakOptions { condition: text("condition"), after: None, log_message: text("logMessage") };
+    let mut problems = Vec::new();
+    if let Some(hits) = text("hitCondition") {
+        match hits_to_let_pass(&hits) {
+            Ok(after) => options.after = Some(after),
+            Err(problem) => problems.push(problem)
+        }
+    }
+    if !taken && !options.is_plain() {
+        problems.push(if options.log_message.is_some() {
+            "this emulator cannot log without stopping: the log point is not placed (bemu can)".to_owned()
+        }
+        else {
+            "this emulator stops on every pass: the condition and hit count are not applied (bemu applies them)"
+                .to_owned()
+        });
+    }
+    (options, (!problems.is_empty()).then(|| problems.join("; ")))
+}
+
+/// A data breakpoint, for an emulator that stops on memory accesses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DataBreakpoint {
+    label: String,
+    address: u32,
+    /// `r`, `w` or `rw`.
+    access: &'static str,
+    options: BreakOptions
 }
 
 /// The translating session.
@@ -746,6 +842,9 @@ pub struct Session<P: DapPeer> {
     synthetic_frames: Vec<crate::callstack::CallFrame>,
     /// Watches the launch configuration asked for, beside the program's own.
     extra_watches: Vec<WatchRequest>,
+    /// The editor's data breakpoints, on an emulator that stops on memory
+    /// accesses (`cpclib/setDataBreakpoints`); elsewhere they are watches.
+    data_breakpoints: Vec<DataBreakpoint>,
     /// Source files, read once and kept: the register pane asks for the line
     /// at `PC` on every stop, and stepping is a lot of stops.
     source_cache: HashMap<PathBuf, Vec<String>>,
@@ -810,6 +909,7 @@ impl<P: DapPeer> Session<P> {
             machine_state: None,
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
+            data_breakpoints: Vec::new(),
             source_cache: HashMap::new(),
             built_from: HashMap::new(),
             banking_explained: false
@@ -1177,6 +1277,13 @@ impl<P: DapPeer> Session<P> {
             // channels from the UI rather than from launch.json - but the
             // limitation is named where the user reads it, not hidden.
             "supportsDataBreakpoints": true,
+            // Conditions, hit counts and log points are applied by an emulator
+            // that evaluates them (bemu); `setBreakpoints` marks each one
+            // another emulator cannot honour, saying so, rather than letting
+            // a conditional breakpoint silently stop every time.
+            "supportsConditionalBreakpoints": true,
+            "supportsHitConditionalBreakpoints": true,
+            "supportsLogPoints": true,
             // Only `PC` is really settable, and only on an emulator that
             // offers it - but the capability is what puts an edit box on the
             // register pane at all, and a refusal that says *why* is worth
@@ -1878,29 +1985,49 @@ impl<P: DapPeer> Session<P> {
         let stale = self.is_stale(&path);
 
         let mut placed = Vec::new();
+        let options_taken = self.peer_mut().supports("cpclib/conditionalBreakpoints");
         for entry in &requested {
             let line = entry.get("line").and_then(Value::as_u64).unwrap_or(0) as u32;
             let id = self.next_breakpoint_id;
             self.next_breakpoint_id += 1;
+            let (options, problem) = break_options(entry, options_taken);
 
             match self.map.breakpoint_at(&path, line) {
+                // A log point an emulator cannot log is not placed: as a
+                // plain breakpoint it would stop where the user asked it not to.
+                Some(_) if options.log_message.is_some() && !options_taken => {
+                    placed.push(PlacedBreakpoint {
+                        id,
+                        requested_line: line,
+                        line,
+                        address: None,
+                        message: problem,
+                        options: BreakOptions::default()
+                    })
+                },
                 Some(placement) => {
+                    let stale_message = stale.then(|| {
+                        format!(
+                            "{} has changed since this program was built; this \
+                             breakpoint is at the address line {} had at build time. \
+                             Restart the session to place it where you mean.",
+                            path.file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| path.display().to_string()),
+                            placement.line
+                        )
+                    });
+                    let message = match (stale_message, problem) {
+                        (Some(stale), Some(problem)) => Some(format!("{problem} {stale}")),
+                        (stale, problem) => problem.or(stale)
+                    };
                     placed.push(PlacedBreakpoint {
                         id,
                         requested_line: line,
                         line: placement.line,
                         address: Some(placement.address),
-                        message: stale.then(|| {
-                            format!(
-                                "{} has changed since this program was built; this \
-                                 breakpoint is at the address line {} had at build time. \
-                                 Restart the session to place it where you mean.",
-                                path.file_name()
-                                    .map(|n| n.to_string_lossy().to_string())
-                                    .unwrap_or_else(|| path.display().to_string()),
-                                placement.line
-                            )
-                        })
+                        message,
+                        options: if options_taken { options } else { BreakOptions::default() }
                     })
                 },
                 None => {
@@ -1931,7 +2058,8 @@ impl<P: DapPeer> Session<P> {
                         requested_line: line,
                         line,
                         address: None,
-                        message: Some(message)
+                        message: Some(message),
+                        options: BreakOptions::default()
                     })
                 }
             }
@@ -2367,6 +2495,18 @@ impl<P: DapPeer> Session<P> {
             )]);
         };
 
+        if self.peer_mut().supports("cpclib/setDataBreakpoints") {
+            return Ok(vec![protocol::response(
+                request,
+                json!({
+                    "dataId": format!("{name}@{address}"),
+                    "description": format!("{name} ({}): stops the program on the access", address_reference(address)),
+                    "accessTypes": ["write", "read", "readWrite"],
+                    "canPersist": false
+                }),
+                seq
+            )]);
+        }
         Ok(vec![protocol::response(
             request,
             json!({
@@ -2383,6 +2523,53 @@ impl<P: DapPeer> Session<P> {
         )])
     }
 
+    /// `setDataBreakpoints` on an emulator that stops on memory accesses:
+    /// read, write or both, with the editor's condition and hit count.
+    fn set_stopping_data_breakpoints(&mut self, request: &Value, requested: &[Value]) -> std::io::Result<Vec<Value>> {
+        self.data_breakpoints.clear();
+        let mut answers = Vec::new();
+        for entry in requested {
+            let id = entry.get("dataId").and_then(Value::as_str).unwrap_or_default();
+            let Some((label, address)) = id
+                .rsplit_once('@')
+                .and_then(|(name, address)| address.parse::<u32>().ok().map(|address| (name, address)))
+            else {
+                answers.push(json!({ "verified": false, "message": format!("'{id}' cannot be watched") }));
+                continue;
+            };
+            let access = match entry.get("accessType").and_then(Value::as_str) {
+                Some("read") => "r",
+                Some("readWrite") => "rw",
+                _ => "w"
+            };
+            let (mut options, problem) = break_options(entry, true);
+            options.log_message = None;
+            self.data_breakpoints.push(DataBreakpoint { label: label.to_owned(), address, access, options });
+            let mut answer = json!({ "verified": true });
+            if let Some(problem) = problem {
+                answer["message"] = json!(problem);
+            }
+            answers.push(answer);
+        }
+        self.push_data_breakpoints()?;
+        let seq = self.next_seq();
+        Ok(vec![protocol::response(request, json!({ "breakpoints": answers }), seq)])
+    }
+
+    /// Send the editor's data breakpoints, the whole set.
+    fn push_data_breakpoints(&mut self) -> std::io::Result<()> {
+        let breakpoints: Vec<Value> = self
+            .data_breakpoints
+            .iter()
+            .map(|bp| {
+                let mut entry = json!({ "label": bp.label, "address": bp.address, "access": bp.access });
+                bp.options.add_to(&mut entry);
+                entry
+            })
+            .collect();
+        self.send_own_request("cpclib/setDataBreakpoints", json!({ "breakpoints": breakpoints }))
+    }
+
     /// Replace the editor's watchpoints.
     ///
     /// Like `setInstructionBreakpoints`, this request carries the whole set
@@ -2396,6 +2583,9 @@ impl<P: DapPeer> Session<P> {
             .cloned()
             .unwrap_or_default();
 
+        if self.peer_mut().supports("cpclib/setDataBreakpoints") {
+            return self.set_stopping_data_breakpoints(request, &requested);
+        }
         self.extra_watches.clear();
         let mut answers = Vec::new();
         for entry in &requested {
@@ -4849,31 +5039,45 @@ impl<P: DapPeer> Session<P> {
         if !self.attached {
             return Ok(());
         }
-        // Sorted by address: the emulator sees a stable set whichever order
-        // the editor happened to send the files in, and the order is one a
-        // human reading the traffic can follow.
-        let mut addresses: Vec<u32> = self
-            .breakpoints
-            .values()
-            .flatten()
-            .filter_map(|bp| bp.address)
-            // Plus what the source itself asked for. A `BREAKPOINT` directive
-            // is not something the editor knows about, so it would otherwise be
-            // wiped by the next red-dot change.
-            .chain(
-                self.program_breakpoints
-                    .iter()
-                    .filter(|bp| bp.watch.is_none() && !self.suppressed.contains(&bp.address))
-                    .map(|bp| bp.address)
-            )
-            // The one under our feet, while stepping off it.
-            .filter(|address| Some(*address) != self.stepped_off)
-            .collect();
-        addresses.sort_unstable();
-        addresses.dedup();
-        let references: Vec<Value> = addresses
+        let mut set: std::collections::BTreeMap<u32, BreakOptions> = std::collections::BTreeMap::new();
+        let mut add = |address: u32, options: &BreakOptions| {
+            set.entry(address)
+                // A plain breakpoint wins: at an address that also carries a
+                // conditional one, it stops every time anyway.
+                .and_modify(|known| {
+                    if options.is_plain() {
+                        *known = BreakOptions::default()
+                    }
+                })
+                .or_insert_with(|| options.clone());
+        };
+        for bp in self.breakpoints.values().flatten() {
+            if let Some(address) = bp.address {
+                add(address, &bp.options);
+            }
+        }
+        // Plus what the source itself asked for. A `BREAKPOINT` directive is
+        // not something the editor knows about, so it would otherwise be wiped
+        // by the next red-dot change.
+        for bp in &self.program_breakpoints {
+            if bp.watch.is_none() && !self.suppressed.contains(&bp.address) {
+                add(bp.address, &BreakOptions::default());
+            }
+        }
+        // The one under our feet, while stepping off it.
+        if let Some(stepped_off) = self.stepped_off {
+            set.remove(&stepped_off);
+        }
+        // Sorted by address (the map's order): the emulator sees a stable set
+        // whichever order the editor happened to send the files in, and the
+        // order is one a human reading the traffic can follow.
+        let references: Vec<Value> = set
             .into_iter()
-            .map(|address| json!({ "instructionReference": address_reference(address) }))
+            .map(|(address, options)| {
+                let mut entry = json!({ "instructionReference": address_reference(address) });
+                options.add_to(&mut entry);
+                entry
+            })
             .collect();
         self.send_own_request(
             "setInstructionBreakpoints",

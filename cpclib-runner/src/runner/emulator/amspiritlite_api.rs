@@ -45,7 +45,8 @@ pub struct Call {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
     Get,
-    Post
+    Post,
+    Delete
 }
 
 impl Call {
@@ -61,6 +62,15 @@ impl Call {
     pub fn post(path: &'static str) -> Self {
         Self {
             method: Method::Post,
+            path,
+            query: Vec::new(),
+            body: None
+        }
+    }
+
+    pub fn delete(path: &'static str) -> Self {
+        Self {
+            method: Method::Delete,
             path,
             query: Vec::new(),
             body: None
@@ -96,6 +106,10 @@ impl Call {
         match (&self.method, &self.body) {
             (Method::Get, _) => {
                 format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")
+                    .into_bytes()
+            },
+            (Method::Delete, _) => {
+                format!("DELETE {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")
                     .into_bytes()
             },
             (Method::Post, body) => {

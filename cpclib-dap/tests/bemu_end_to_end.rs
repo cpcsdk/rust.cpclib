@@ -307,3 +307,84 @@ fn a_basic_program_stops_on_its_line_with_its_variables() {
     assert!(a.starts_with("2 "), "A on the second pass: {a}");
     adapter.finish();
 }
+
+/// Launched, with source breakpoints, configured.
+fn started(adapter: &mut Adapter, bemu: &str, source: &Path, breakpoints: Value) {
+    adapter.launch(source, bemu, json!({}));
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": breakpoints }));
+}
+
+#[test]
+fn a_conditional_breakpoint_stops_when_its_condition_holds() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    started(&mut adapter, &bemu, &source, json!([{ "line": LINE_INC_A, "condition": "A == 5" }]));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(adapter.line(), LINE_INC_A);
+    assert_eq!(hex_value(&adapter.register("A")), 5);
+    adapter.finish();
+}
+
+#[test]
+fn a_hit_count_and_a_log_point() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    started(
+        &mut adapter,
+        &bemu,
+        &source,
+        json!([
+            { "line": LINE_INC_A, "hitCondition": "4" },
+            { "line": LINE_LD_C000, "logMessage": "A={A}" }
+        ])
+    );
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 4, "the fourth pass");
+    // The log point reported each pass before it, and never stopped.
+    let logged: Vec<String> = adapter
+        .seen
+        .iter()
+        .filter(|m| m["event"] == "output")
+        .filter_map(|m| m["body"]["output"].as_str())
+        .filter(|text| text.starts_with("A="))
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(logged, vec!["A=#02\n", "A=#03\n", "A=#04\n"], "{}", adapter.transcript());
+    adapter.finish();
+}
+
+#[test]
+fn a_data_breakpoint_stops_on_the_write() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    started(&mut adapter, &bemu, &source, json!([]));
+    let info = adapter.request("dataBreakpointInfo", json!({ "name": "0xC000" }));
+    assert!(info["body"]["accessTypes"].as_array().unwrap().contains(&json!("readWrite")), "{info}");
+    adapter.request(
+        "setDataBreakpoints",
+        json!({ "breakpoints": [{ "dataId": info["body"]["dataId"], "accessType": "write", "condition": "value == 4" }] })
+    );
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "data breakpoint", "{stop}");
+    let description = stop["body"]["description"].as_str().unwrap();
+    assert!(description.contains("write of #04 at #C000"), "{description}");
+    assert_eq!(hex_value(&adapter.register("A")), 4);
+    adapter.finish();
+}

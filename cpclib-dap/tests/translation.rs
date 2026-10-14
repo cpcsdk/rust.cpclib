@@ -411,14 +411,16 @@ fn advertised_capabilities_match_what_the_emulator_supports() {
     // register beats a pane that looks read-only for no stated reason.
     assert_eq!(capabilities.get("supportsSetVariable"), Some(&json!(true)));
 
+    // Claimed: applied by an emulator that evaluates them (bemu), and each
+    // breakpoint another emulator cannot honour says so (see
+    // tests/breakpoint_options.rs) rather than stopping every time unasked.
+    for flag in ["supportsConditionalBreakpoints", "supportsHitConditionalBreakpoints", "supportsLogPoints"] {
+        assert_eq!(capabilities[flag], json!(true), "{flag}");
+    }
+
     // Still not claimed: nothing here implements them, and claiming one would
     // put a button in the UI that answers with a protocol error.
-    for absent in [
-        "supportsRestartRequest",
-        "supportsConditionalBreakpoints",
-        "supportsHitConditionalBreakpoints",
-        "supportsFunctionBreakpoints"
-    ] {
+    for absent in ["supportsRestartRequest", "supportsFunctionBreakpoints"] {
         assert!(capabilities.get(absent).is_none(), "{absent}");
     }
 }
