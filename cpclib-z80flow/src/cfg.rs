@@ -39,8 +39,10 @@ pub(crate) fn mnemonic_of<T: ListingElement>(token: &T) -> Option<Mnemonic> {
     token.mnemonic().copied()
 }
 
-/// What a jump/branch/loop instruction's own target resolves to.
+/// What a jump/branch/loop instruction's own target resolves to. The labels
+/// are kept for diagnostics only, hence the `dead_code` allowance.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) enum Successor {
     /// A real, forward, in-selection block.
     Block(usize),
@@ -111,37 +113,35 @@ impl Cfg {
         }
     }
 
-    /// `Err` with a human-readable reason (reproducing this module's
-    /// pre-refactor error text exactly) the first time any terminator's
-    /// target is a `Successor::Loop`/`Escapes` - `Ok(())` once every jump
-    /// target is confirmed to be a real, forward, in-selection block.
-    /// `branch_balance::balance_branches` calls this right after
-    /// `build_cfg`, since balancing needs a fully resolved CFG;
-    /// `cost_range` never calls this at all.
-    pub(crate) fn validate_forward_only(&self) -> Result<(), String> {
-        for term in &self.terms {
-            let maybe_successor = match term {
-                Terminator::Jump(s) => Some(s),
-                Terminator::Branch { taken, .. } => Some(taken),
-                Terminator::Fallthrough(_) => None
-            };
-            if let Some(s) = maybe_successor {
-                match s {
-                    Successor::Loop { label } => {
-                        return Err(format!(
-                            "backward jump to \"{label}\" (a loop) isn't supported"
-                        ));
-                    },
-                    Successor::Escapes { label } => {
-                        return Err(format!(
-                            "jump target \"{label}\" is not defined in the selection"
-                        ));
-                    },
-                    Successor::Block(_) => {}
-                }
+    /// Rewrites every terminator whose target is a `Successor::Loop`/
+    /// `Escapes` (a back-edge, or a label outside the tokens) so the graph
+    /// is fully resolved, and returns the set of blocks that were rewritten.
+    ///
+    /// Such a jump leaves the region being analysed: a conditional one is
+    /// replaced by a plain fall-through to its not-taken side, an
+    /// unconditional one by a jump to the virtual exit. Either way the path
+    /// that leaves has no cost this region could compare against another, so
+    /// the returned blocks are *opaque* - a caller balancing branches must
+    /// not try to equalize any branch with one of them on an arm, but every
+    /// other, self-contained branch in the same region stays balanceable.
+    pub(crate) fn detach_opaque(&mut self) -> std::collections::HashSet<usize> {
+        let exit = self.exit();
+        let mut opaque = std::collections::HashSet::new();
+        for (idx, term) in self.terms.iter_mut().enumerate() {
+            let leaves = |s: &Successor| !matches!(s, Successor::Block(_));
+            match term {
+                Terminator::Jump(s) if leaves(s) => {
+                    *term = Terminator::Jump(Successor::Block(exit));
+                    opaque.insert(idx);
+                },
+                Terminator::Branch { taken, not_taken } if leaves(taken) => {
+                    *term = Terminator::Fallthrough(*not_taken);
+                    opaque.insert(idx);
+                },
+                _ => {}
             }
         }
-        Ok(())
+        opaque
     }
 }
 

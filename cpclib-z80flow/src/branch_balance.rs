@@ -38,7 +38,12 @@
 //! - Loops (any jump target at or before its own index - a back-edge). A
 //!   loop's whole point is a variable iteration count; there is no single
 //!   "path cost" to equalize in the same sense a straight branch-and-merge
-//!   has.
+//!   has. A loop (or any jump leaving the selection) is no longer a reason to
+//!   refuse the whole selection though: such a jump is *opaque* (see
+//!   `Cfg::detach_opaque`), and every self-contained branch-and-merge
+//!   elsewhere in the same selection - typically a diamond inside the loop
+//!   body - is still balanced. Only a branch with an opaque jump on one of
+//!   its arms is left alone.
 //! - `DJNZ`/`CALL` (conditional or not, unlike `RET`). Their "taken" arm
 //!   isn't a self-contained, in-selection instruction sequence the way
 //!   `RET`'s "leaves to the exit" cheat can express: `DJNZ`'s taken arm is
@@ -50,7 +55,7 @@
 //!   construct - the assembler emits exactly one arm's bytes), so it's
 //!   simply invisible here, not specially rejected.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cpclib_tokens::{ListingElement, Mnemonic};
 
@@ -82,6 +87,25 @@ pub enum StabilizeEdit {
     RewriteConditionalRetAndPad {
         ret_token_index: usize,
         nop_count: u32
+    },
+    /// `tokens[branch_token_index]` is a `JR`/`JP cc` whose *taken* arm is the
+    /// cheaper one **and is empty**: it jumps straight to the merge point, so
+    /// there is no code of its own to pad. Padding "before the merge point"
+    /// would be wrong - the other arm falls through that very spot and would
+    /// pay for it too, widening the gap instead of closing it.
+    ///
+    /// The caller must redirect the branch to a fresh label and place a pad
+    /// block (`<fresh label>` / `nop_count` worth of padding) right before
+    /// `tokens[insert_before_index]` (the merge point's first token), so only
+    /// the taken path runs it. If `guard_jump` is set, the other arm falls
+    /// into that spot and needs an unconditional `JR` over the pad block
+    /// first. `nop_count` already includes that jump's cost, so it is the
+    /// number of padding units to emit, not the raw difference.
+    PadEmptyTakenArm {
+        branch_token_index: usize,
+        insert_before_index: usize,
+        nop_count: u32,
+        guard_jump: bool
     }
 }
 
@@ -97,7 +121,11 @@ impl StabilizeEdit {
             } => insert_before_index,
             StabilizeEdit::RewriteConditionalRetAndPad {
                 ret_token_index, ..
-            } => ret_token_index
+            } => ret_token_index,
+            StabilizeEdit::PadEmptyTakenArm {
+                insert_before_index,
+                ..
+            } => insert_before_index
         }
     }
 }
@@ -120,8 +148,22 @@ impl StabilizeEdit {
 /// itself doesn't treat `DJNZ` specially (it's permissive, shared with
 /// `cost_range`, which *does* want to model it), so this module's own
 /// rejection has to be an explicit, separate scan.
-fn reject_djnz<T: ListingElement>(tokens: &[&T]) -> Result<(), String> {
+fn reject_djnz<T: ListingElement>(
+    tokens: &[&T],
+    cfg: &Cfg,
+    opaque: &HashSet<usize>
+) -> Result<(), String> {
     for (i, token) in tokens.iter().enumerate() {
+        // A `DJNZ` that loops back (or leaves the selection) is just an
+        // opaque exit: it is excluded from balancing, not a reason to give up.
+        let in_opaque_block = cfg
+            .blocks
+            .iter()
+            .position(|b| b.end == i)
+            .is_some_and(|b| opaque.contains(&b));
+        if in_opaque_block {
+            continue;
+        }
         if let Some(m @ Mnemonic::Djnz) = mnemonic_of(*token) {
             return Err(format!(
                 "{m:?} at token index {i} isn't supported (only JR/JP/RET are balanced)"
@@ -189,6 +231,7 @@ fn balance<T: ListingElement>(
     postdom: &[usize],
     tokens: &[&T],
     labels: &HashMap<String, usize>,
+    opaque: &HashSet<usize>,
     cost: &impl CostModel<T>
 ) -> Result<Vec<StabilizeEdit>, String> {
     let mut edits = Vec::new();
@@ -225,12 +268,23 @@ fn balance<T: ListingElement>(
         };
         let merge = postdom[b];
 
-        let taken_cost =
-            cost_taken + arm_cost(cfg, &resolved, postdom, tokens, labels, cost, taken, merge)?;
-        let not_taken_cost = cost_not_taken
-            + arm_cost(
-                cfg, &resolved, postdom, tokens, labels, cost, not_taken, merge
-            )?;
+        // An arm holding a loop or an escaping jump has no single cost to
+        // compare: leave this branch (and so any branch enclosing it) alone
+        // rather than give up on the whole selection.
+        let Some(taken_arm) = arm_cost(
+            cfg, &resolved, opaque, postdom, tokens, labels, cost, taken, merge
+        )?
+        else {
+            continue;
+        };
+        let Some(not_taken_arm) = arm_cost(
+            cfg, &resolved, opaque, postdom, tokens, labels, cost, not_taken, merge
+        )?
+        else {
+            continue;
+        };
+        let taken_cost = cost_taken + taken_arm;
+        let not_taken_cost = cost_not_taken + not_taken_arm;
 
         if taken_cost != not_taken_cost {
             let padding_taken_arm = taken_cost < not_taken_cost;
@@ -251,6 +305,21 @@ fn balance<T: ListingElement>(
             // still has a well-defined, correct insertion point via
             // `arm_padding_index`'s own "end == exit" fallback - only the
             // taken side needs the rewrite treatment.
+            if padding_taken_arm && taken == merge && taken != cfg.exit() {
+                // The cost of the unconditional `JR` that carries the
+                // fall-through arm over the pad block: a `JR`'s taken cost,
+                // which is the branch instruction's own taken cost.
+                let guard_jump = !matches!(cfg.terms[merge - 1], Terminator::Jump(_));
+                let guard_cost = if guard_jump { cost_taken } else { 0 };
+                edits.push(StabilizeEdit::PadEmptyTakenArm {
+                    branch_token_index: cfg.blocks[b].end,
+                    insert_before_index: cfg.blocks[merge].start,
+                    nop_count: delta + guard_cost,
+                    guard_jump
+                });
+                resolved.insert(b, not_taken_cost + guard_cost);
+                continue;
+            }
             if padding_taken_arm && cheaper_arm_start == cfg.exit() {
                 edits.push(StabilizeEdit::RewriteConditionalRetAndPad {
                     ret_token_index: cfg.blocks[b].end,
@@ -287,22 +356,30 @@ fn balance<T: ListingElement>(
 fn arm_cost<T: ListingElement>(
     cfg: &Cfg,
     resolved: &HashMap<usize, u32>,
+    opaque: &HashSet<usize>,
     postdom: &[usize],
     tokens: &[&T],
     labels: &HashMap<String, usize>,
     cost: &impl CostModel<T>,
     start: usize,
     end: usize
-) -> Result<u32, String> {
+) -> Result<Option<u32>, String> {
     let mut total = 0u32;
     let mut cur = start;
     while cur != end {
         if cur == cfg.exit() {
             return Err("branch arm never reaches its expected merge point".to_string());
         }
+        if opaque.contains(&cur) {
+            return Ok(None);
+        }
         if let Some(&c) = resolved.get(&cur) {
             total += c;
             cur = postdom[cur];
+        }
+        else if matches!(cfg.terms[cur], Terminator::Branch { .. }) {
+            // A nested branch that was itself left alone (see `balance`).
+            return Ok(None);
         }
         else {
             let block = cfg.blocks[cur];
@@ -310,15 +387,11 @@ fn arm_cost<T: ListingElement>(
             cur = match &cfg.terms[cur] {
                 Terminator::Fallthrough(t) => *t,
                 Terminator::Jump(s) => expect_block(s),
-                Terminator::Branch { .. } => {
-                    unreachable!(
-                        "branch blocks are always inserted into `resolved` before being walked past"
-                    )
-                }
+                Terminator::Branch { .. } => unreachable!("handled above")
             };
         }
     }
-    Ok(total)
+    Ok(Some(total))
 }
 
 /// The 0-based index *before which* to insert this arm's padding NOPs, so
@@ -380,10 +453,10 @@ pub fn balance_branches<T: ListingElement>(
     if tokens.is_empty() {
         return Ok(Vec::new());
     }
-    reject_djnz(tokens)?;
-    let cfg = build_cfg(tokens)?;
+    let mut cfg = build_cfg(tokens)?;
     let labels = crate::cfg::label_indices(tokens);
-    cfg.validate_forward_only()?;
+    let opaque = cfg.detach_opaque();
+    reject_djnz(tokens, &cfg, &opaque)?;
     if !cfg
         .terms
         .iter()
@@ -392,7 +465,7 @@ pub fn balance_branches<T: ListingElement>(
         return Ok(Vec::new());
     }
     let postdom = compute_postdominators(&cfg);
-    let mut edits = balance(&cfg, &postdom, tokens, &labels, &cost)?;
+    let mut edits = balance(&cfg, &postdom, tokens, &labels, &opaque, &cost)?;
     edits.sort_unstable_by_key(|a| std::cmp::Reverse(a.anchor_index()));
     Ok(edits)
 }

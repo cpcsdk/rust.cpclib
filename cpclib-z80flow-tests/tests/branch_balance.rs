@@ -121,7 +121,11 @@ nop
                 } => *insert_before_index <= 11,
                 StabilizeEdit::RewriteConditionalRetAndPad {
                     ret_token_index, ..
-                } => *ret_token_index <= 11
+                } => *ret_token_index <= 11,
+                StabilizeEdit::PadEmptyTakenArm {
+                    insert_before_index,
+                    ..
+                } => *insert_before_index <= 11
             }
         }),
         "{edits:?}"
@@ -163,9 +167,42 @@ nop
 }
 
 #[test]
-fn a_backward_jump_is_rejected_as_a_loop() {
+fn a_lone_loop_has_nothing_to_balance() {
+    // The back-edge is opaque, not an error: there is simply no
+    // branch-and-merge in here to equalize.
     let code = ".loop\n    nop\n    jr nz,.loop\n";
-    assert!(balance(code).is_err());
+    assert!(balance(code).unwrap().is_empty());
+}
+
+/// The reason loops stopped being a hard rejection: a routine that is itself
+/// a loop (`jp .loop` at the bottom, a `djnz` inside) still contains ordinary
+/// branch-and-merge diamonds, and those must still be balanced. Taken
+/// `jr nz` = 3, not-taken = 2 + two `ld` = 4, so the taken side is one nop
+/// short. The taken arm is empty (`jr nz` goes straight to `.skip`), so the
+/// pad cannot go inline before `.skip` - the fall-through would pay for it
+/// too. It is a redirect: 1 + 3 for the guard `jr` over the pad block.
+#[test]
+fn a_diamond_inside_a_loop_is_still_balanced() {
+    let code = ".loop\n    nop\n    jr nz,.skip\n    ld a,b\n    ld c,d\n.skip\n    nop\n    jr nz,.loop\n";
+    let edits = balance(code).unwrap();
+    assert_eq!(
+        edits,
+        vec![StabilizeEdit::PadEmptyTakenArm {
+            branch_token_index: 2,
+            insert_before_index: 5,
+            nop_count: 4,
+            guard_jump: true
+        }],
+        "{edits:?}"
+    );
+}
+
+/// A branch with the loop *on one of its arms* has no single cost to
+/// compare, so it is left alone - but that must not fail the selection.
+#[test]
+fn a_branch_whose_arm_loops_is_left_alone() {
+    let code = "    jr nz,.out\n.again\n    nop\n    jr nz,.again\n.out\n    nop\n";
+    assert!(balance(code).unwrap().is_empty());
 }
 
 #[test]
@@ -307,13 +344,51 @@ fn ret_cc_already_balanced_needs_no_edits() {
 }
 
 #[test]
-fn a_jump_target_outside_the_tokens_is_rejected() {
+fn a_jump_target_outside_the_tokens_is_left_alone() {
     let code = "    jr nz,.elsewhere\n    nop\n";
-    assert!(balance(code).is_err());
+    assert!(balance(code).unwrap().is_empty());
 }
 
 #[test]
 fn a_selection_with_no_branch_at_all_yields_no_edits() {
     let code = "    ld a,b\n    ld c,d\n    nop\n";
     assert!(balance(code).unwrap().is_empty());
+}
+
+/// `jr nz` straight to the merge label: the taken arm is empty, so padding
+/// "before the merge label" would also be executed by the fall-through arm.
+/// The engine must ask for a redirect-to-pad-block instead. Costs (this
+/// file's table): taken `jr nz` 3; not-taken `jr nz` 2 + `ld` 1 = 3 - so use
+/// two `ld`s to make the taken arm the cheaper one (3 vs 4, delta 1). The
+/// fall-through arm runs into the merge point, so it needs a guard `jr`
+/// (3), and the pad becomes 1 + 3 = 4.
+#[test]
+fn an_empty_taken_arm_is_padded_through_a_redirect_not_inline() {
+    let code = "    jr nz,.m\n    ld a,b\n    ld c,d\n.m\n    nop\n";
+    assert_eq!(
+        balance(code).unwrap(),
+        vec![StabilizeEdit::PadEmptyTakenArm {
+            branch_token_index: 0,
+            insert_before_index: 3,
+            nop_count: 4,
+            guard_jump: true
+        }]
+    );
+}
+
+/// When the fall-through arm already ends in an unconditional jump, nothing
+/// falls into the pad block, so no guard `jr` is needed and the pad is just
+/// the raw difference. Taken 3; not-taken 2 + 1 + 1 + 3 (`jr`) = 7: delta 4.
+#[test]
+fn an_empty_taken_arm_whose_other_arm_jumps_needs_no_guard_jump() {
+    let code = "    jr nz,.m\n    ld a,b\n    ld c,d\n    jr .m\n.m\n    nop\n";
+    assert_eq!(
+        balance(code).unwrap(),
+        vec![StabilizeEdit::PadEmptyTakenArm {
+            branch_token_index: 0,
+            insert_before_index: 4,
+            nop_count: 4,
+            guard_jump: false
+        }]
+    );
 }
