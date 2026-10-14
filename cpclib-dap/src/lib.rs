@@ -1249,13 +1249,23 @@ fn connect_backend(
             }
         };
         let held = matches!(&started, Some((_, true)));
-        let mut peer = if held {
+        let connected = if held {
             amspiritlite::AmspiritLitePeer::connect_held(&endpoint)
         }
         else {
             amspiritlite::AmspiritLitePeer::connect(&endpoint)
-        }
-        .map_err(|e| format!("cannot reach bemu at {endpoint}: {e}"))?;
+        };
+        let mut peer = match connected {
+            Ok(peer) => peer,
+            Err(e) => {
+                // a bemu this session started must not outlive its failure
+                if let Some((mut child, _)) = started {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+                return Err(format!("cannot reach bemu at {endpoint}: {e}").into());
+            }
+        };
         if let Some((child, _)) = started {
             peer = peer.owning(child);
             // The snapshot's breakpoints are the program's `BREAKPOINT`
