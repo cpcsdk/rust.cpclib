@@ -1662,6 +1662,11 @@ impl AmspiritLitePeer {
 
     /// Arm the address to come back to and let the machine run to it.
     fn run_to(&mut self, target: u16) -> std::io::Result<()> {
+        // A new run, claimed before anything is asked of the emulator (a
+        // failure included): a fast step over can hit its temporary
+        // breakpoint before any watcher samples the machine running, and its
+        // stop must not be taken for the old run's.
+        self.begin_run(false);
         // A breakpoint the user put there is theirs: it stays afterwards, and
         // stopping on it is a breakpoint stop rather than the end of a step.
         let was_the_editors = {
@@ -1744,6 +1749,15 @@ impl AmspiritLitePeer {
     /// poller has no transition to notice, and an editor left believing the
     /// program is running has a dead toolbar and no way back.
     fn announce_a_stop_anyway(&self) {
+        use std::sync::atomic::Ordering::SeqCst;
+        // Takes part in the same claim as the watchers: a stop they told
+        // already is not told twice, and the step marker does not outlive a
+        // step that never happened (a later run would be mislabelled).
+        self.stepping.store(false, SeqCst);
+        let run = self.generation.load(SeqCst);
+        if self.told.fetch_max(run, SeqCst) >= run {
+            return;
+        }
         let seq = self.next_seq();
         let _ = self.outgoing.send(crate::protocol::event(
             "stopped",
@@ -2532,7 +2546,9 @@ impl Stops {
         use std::sync::atomic::Ordering::SeqCst;
         // This run's stop was told already, by the other thread.
         let run = self.generation.load(SeqCst);
-        if self.told.swap(run, SeqCst) == run {
+        // A monotonic claim: an observer that was preempted while a newer run
+        // was claimed must not move `told` back, nor tell its stale stop.
+        if self.told.fetch_max(run, SeqCst) >= run {
             return true;
         }
         let notice = self.settle(self.stopped_at());
@@ -3048,6 +3064,21 @@ mod tests {
             advanced: Default::default(),
             stop_reason: Default::default()
         }
+    }
+
+    /// An observer preempted between reading the generation and claiming it
+    /// must not move `told` back to the run it saw (and tell that stale stop).
+    #[test]
+    fn a_stale_observer_cannot_regress_told() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let stops = test_stops(sender);
+        stops.generation.store(3, SeqCst);
+        stops.told.store(4, SeqCst); // a newer run was claimed meanwhile
+        let mut seq = 0;
+        assert!(stops.announce_stop(&mut seq));
+        assert_eq!(stops.told.load(SeqCst), 4);
+        assert_eq!(receiver.try_iter().count(), 0, "a stale stop was told");
     }
 
     /// One stop, one `stopped`: the poll and the event stream both see a
