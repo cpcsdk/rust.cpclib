@@ -103,6 +103,25 @@ fn a_plain_breakpoint_wins_over_a_conditional_one_at_its_address() {
     assert_eq!(sent["arguments"]["breakpoints"], json!([{ "instructionReference": "0x4000" }]));
 }
 
+/// A condition and a log point at one address are two breakpoints: neither may
+/// be dropped in favour of the other.
+#[test]
+fn two_different_advanced_breakpoints_at_one_address_both_reach_the_emulator() {
+    let mut session = session(RecordingPeer::new().also_supporting(BEMU));
+    set_breakpoints(
+        &mut session,
+        json!([{ "line": 9, "condition": "A == 1" }, { "line": 10, "logMessage": "hit" }])
+    );
+    let sent = session.peer().last("setInstructionBreakpoints").unwrap();
+    assert_eq!(
+        sent["arguments"]["breakpoints"],
+        json!([
+            { "instructionReference": "0x4000", "condition": "A == 1" },
+            { "instructionReference": "0x4000", "logMessage": "hit" }
+        ])
+    );
+}
+
 #[test]
 fn an_emulator_that_cannot_apply_them_says_so() {
     let mut session = session(RecordingPeer::new());

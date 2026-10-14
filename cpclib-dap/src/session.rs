@@ -5109,17 +5109,23 @@ impl<P: DapPeer> Session<P> {
         if !self.attached {
             return Ok(());
         }
-        let mut set: std::collections::BTreeMap<u32, BreakOptions> = std::collections::BTreeMap::new();
+        // Every distinct set of options per address: a condition and a log
+        // point on the same address both have to run.
+        let mut set: std::collections::BTreeMap<u32, Vec<BreakOptions>> =
+            std::collections::BTreeMap::new();
         let mut add = |address: u32, options: &BreakOptions| {
-            set.entry(address)
-                // A plain breakpoint wins: at an address that also carries a
-                // conditional one, it stops every time anyway.
-                .and_modify(|known| {
-                    if options.is_plain() {
-                        *known = BreakOptions::default()
-                    }
-                })
-                .or_insert_with(|| options.clone());
+            let known = set.entry(address).or_default();
+            // A plain breakpoint wins: at an address that also carries
+            // conditional ones, it stops every time anyway.
+            if known.iter().any(BreakOptions::is_plain) {
+                return;
+            }
+            if options.is_plain() {
+                *known = vec![BreakOptions::default()];
+            }
+            else if !known.contains(options) {
+                known.push(options.clone());
+            }
         };
         for bp in self.breakpoints.values().flatten() {
             if let Some(address) = bp.address {
@@ -5143,6 +5149,7 @@ impl<P: DapPeer> Session<P> {
         // order is one a human reading the traffic can follow.
         let references: Vec<Value> = set
             .into_iter()
+            .flat_map(|(address, all)| all.into_iter().map(move |options| (address, options)))
             .map(|(address, options)| {
                 let mut entry = json!({ "instructionReference": address_reference(address) });
                 options.add_to(&mut entry);
@@ -6549,7 +6556,7 @@ impl<P: DapPeer> Session<P> {
         let stopped_at_one = self
             .last_stop_reason
             .as_deref()
-            .is_some_and(|reason| reason.contains("breakpoint"));
+            .is_some_and(|reason| reason == "breakpoint");
         let Some(address) = address.filter(|_| stopped_at_one)
         else {
             return Vec::new();
