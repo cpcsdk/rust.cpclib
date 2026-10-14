@@ -118,6 +118,14 @@ code, and steps through your *source* rather than through addresses.
   it (`screen: write of #04 at #C000`), with a condition and a hit count too.
   Another emulator applies none of these: the breakpoint says so in its hover,
   and a log point is not placed rather than turned into a stop.
+- **CPC Breakpoints view** (Run and Debug sidebar): the editor's Breakpoints
+  pane shows the red dots alone; this one lists every kind a session holds,
+  each explained in its tooltip - source breakpoints (with their condition,
+  hit count or log message), the program's `BREAKPOINT` directives
+  (execution, memory, I/O), data breakpoints, watches, the stop on entry -
+  marking what this emulator does not apply in full, and why. With bemu it
+  adds **what the emulator itself has armed**, whoever armed it, with **hit
+  counts**, and its raster breakpoints. Clicking an entry opens its line.
 - **Debug console commands**: `-mv 0xC000 0x40` (or `-mv animation_state`)
   opens a memory view in its own tab, with your labels marked in the dump. It
   **re-reads itself on every stop and highlights the bytes that moved**, which

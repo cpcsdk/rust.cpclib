@@ -29,6 +29,7 @@ import { showPpi } from './webviews/ppi';
 import { showTape } from './webviews/tape';
 import { showScreen, disposeScreen } from './webviews/screen';
 import { showFrame, disposeFrame } from './webviews/frame';
+import { registerBreakpointsView } from './breakpointsView';
 import { showBasicListing, registerBasicListingDoc, disposeBasicListing } from './basicListingDoc';
 import { showDisassembly, registerDisassemblyDoc, disposeDisassemblyDoc } from './disassemblyDoc';
 import { StopLocation } from './types';
@@ -108,6 +109,7 @@ export function registerDebugging(
     context: vscode.ExtensionContext,
     resolveAdapterPath: () => string,
 ): void {
+    registerBreakpointsView(context);
     context.subscriptions.push(
         vscode.commands.registerCommand('cpclib.debugThisFile', debugActiveFile),
         vscode.commands.registerCommand('cpclib.debugAssembly', (fileName?: string) =>

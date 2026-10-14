@@ -2172,6 +2172,17 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             return Ok(());
         }
 
+        if self.extensions && command == "cpclib/emulatorBreakpoints" {
+            let listed = self.advanced.lock().unwrap_or_else(|held| held.into_inner()).emulator_list(&self.endpoint);
+            let seq = self.next_seq();
+            let response = match listed {
+                Ok(body) => crate::protocol::response(&message, body, seq),
+                Err(problem) => crate::protocol::failure(&message, &format!("bemu did not list its breakpoints: {problem}"), seq)
+            };
+            let _ = self.outgoing.send(response);
+            return Ok(());
+        }
+
         // bemu stops on memory accesses, and reports them without stopping.
         if self.extensions
             && matches!(
@@ -2372,6 +2383,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                     | "cpclib/setDataBreakpoints"
                     | "cpclib/setWatches"
                     | "cpclib/setProgramBreakpoints"
+                    | "cpclib/emulatorBreakpoints"
             ))
     }
 }
