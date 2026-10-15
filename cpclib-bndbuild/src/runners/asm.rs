@@ -33,15 +33,11 @@ pub enum AsmChoice {
 }
 
 impl AsmChoice {
-    fn name(&self) -> &'static str {
-        match self {
-            Self::Basm => "basm",
-            Self::Fantams => "fantams",
-            Self::Rasm => "rasm",
-            Self::Sjasmplus => "sjasmplus",
-            Self::Uz80 => "uz80",
-            Self::Vasm => "vasm"
-        }
+    fn name(&self) -> String {
+        self.to_possible_value()
+            .expect("every assembler has a name")
+            .get_name()
+            .to_owned()
     }
 
     fn extern_assembler(&self) -> Option<ExternAssembler> {
@@ -63,8 +59,8 @@ impl AsmChoice {
     name = "asm",
     no_binary_name = true,
     disable_version_flag = true,
-    after_help = "Options an assembler has no equivalent for are refused. \
-                  Arguments after -- are given to the assembler as they are."
+    after_help = "Options an assembler has no equivalent for are refused: give its own \
+                  options after --, they are passed to it as they are."
 )]
 pub struct AsmCli {
     /// The assembler to use
@@ -117,10 +113,7 @@ impl AsmCli {
     }
 
     fn unsupported(&self, what: &str) -> String {
-        format!(
-            "{} has no equivalent for {what}; pass its own option after -- instead",
-            self.assembler.name()
-        )
+        format!("{} has no equivalent for {what}", self.assembler.name())
     }
 
     /// The command line of the chosen assembler.
