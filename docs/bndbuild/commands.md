@@ -312,9 +312,9 @@ Z80 assembler and linker by sikorama, with a preprocessor, objects, link scripts
 
 For complete documentation, see <https://z00m128.github.io/sjasmplus/documentation.html>.
 
-### Assembler: UZ80AS (uz80)
+### Assembler: UZ80 (uz80)
 
-Universal Z80 assembler. For complete documentation, see <http://cngsoft.no-ip.org/uz80.htm>.
+Z80 assembler by CNGSoft, the author of CPCEC and CHIPNSFX (not Jorge Giner's `uz80as`). It runs through wine outside Windows. For complete documentation, see <http://cngsoft.no-ip.org/uz80.htm>.
 
 ### Assembler: Vasm z80 oldstyle (vasm)
 
