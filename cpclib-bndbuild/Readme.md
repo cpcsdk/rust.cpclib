@@ -68,4 +68,6 @@ They are:
 - `xfer` to transfer to the CPC with the M4 card
 - `cpcemu` to launch the CPCemu emulator
 - `retrovm` to launch Retro Virtual Machine
+- `cpcse` to launch CPCSyntaxError
+- `koncepcja` to launch konCePCja
 - `extern` to launch any command available on the machine

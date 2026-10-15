@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-basmdoc` add a new crate to handle documetnation of z80 projects
 - `cpclib-bndbuild` add support fof Z80Profiler by Targhan/Arkos
 - `cpclib-bndbuild` add support of the catalog command
+- `cpclib-bndbuild`, `cpclib-runner` add the CPCSyntaxError (`cpcse`) and konCePCja (`koncepcja`) emulators
 - `cpclib-bndbuild` add support to the hxcfe (inner) command
 - `cpclib-bndbuild` add support to the csl command
 - `cpclib-bndbuild` add `archive` command for creating, listing, and extracting .zip and .tar.gz archives

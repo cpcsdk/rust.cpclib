@@ -9,9 +9,11 @@ pub mod caprice_forever;
 pub mod cpcec;
 pub mod cpcemu;
 pub mod cpcemupower;
+pub mod cpcsyntaxerror;
 pub mod emulator1984;
 #[cfg(feature = "screenshot")]
 pub mod js1984_robot_api;
+pub mod koncepcja;
 #[cfg(all(feature = "screenshot", unix))]
 pub mod native1984_monitor;
 pub mod retrovm;
@@ -32,7 +34,9 @@ use cpcemu::{CPCEMU_CMD, CpcEmuVersion};
 use cpcemupower::{CPCEMUPOWER_CMD, CpcEmuPowerVersion};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
+use cpcsyntaxerror::{CPCSYNTAXERROR_CMD, CpcSyntaxErrorVersion};
 use emulator1984::{EMULATOR_1984_CMD, Emulator1984Version};
+use koncepcja::{KONCEPCJA_CMD, KoncepcjaVersion};
 use retrovm::{RETROVM_CMD, RetroVmVersion};
 pub use sugarbox::*;
 pub use winape::*;
@@ -52,7 +56,9 @@ pub enum Emulator {
     CpcEmu(CpcEmuVersion),
     Cpcec(CpcecVersion),
     CpcEmuPower(CpcEmuPowerVersion),
+    CpcSyntaxError(CpcSyntaxErrorVersion),
     Emulator1984(Emulator1984Version),
+    Koncepcja(KoncepcjaVersion),
     RetroVm(RetroVmVersion),
     Winape(WinapeVersion),
     SugarBoxV2(SugarBoxV2Version)
@@ -108,7 +114,9 @@ impl Emulator {
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
             Emulator::CpcEmuPower(_cpc_emu_power_version) => CPCEMUPOWER_CMD,
+            Emulator::CpcSyntaxError(_) => CPCSYNTAXERROR_CMD,
             Emulator::Emulator1984(_) => EMULATOR_1984_CMD,
+            Emulator::Koncepcja(_) => KONCEPCJA_CMD,
             Emulator::RetroVm(_) => RETROVM_CMD
         }
     }
@@ -131,7 +139,10 @@ impl Emulator {
             Emulator::CapriceForever(_caprice_forever_version) => {
                 window_name.starts_with("CaPriCe Forever")
             },
+            Emulator::CpcSyntaxError(_) => window_name.starts_with("CPCSyntaxError"),
             Emulator::Emulator1984(_) => window_name.starts_with("1984"),
+            // "konCePCja 6.4.2"
+            Emulator::Koncepcja(_) => window_name.starts_with("konCePCja"),
             Emulator::RetroVm(_) => window_name.starts_with("Retro Virtual Machine")
         }
     }
@@ -172,10 +183,27 @@ impl Emulator {
         }
     }
 
+    /// A file name to give on the command line of an emulator that runs in
+    /// its own folder (`RunInDir::AppDir`): absolute, and seen through wine
+    /// when its Windows build is the one that runs.
+    pub fn launch_fname(&self, p: &Utf8Path) -> Result<Utf8PathBuf, String> {
+        let exec_fname = self.configuration::<()>().exec_fname;
+        if cfg!(target_os = "linux") && exec_fname.to_lowercase().ends_with(".exe") {
+            self.wine_compatible_fname(p)
+        }
+        else {
+            let abspath = absolute(p).map_err(|e| e.to_string())?;
+            Utf8PathBuf::from_path_buf(abspath).map_err(|_e| "File error".to_owned())
+        }
+    }
+
     pub fn accept_hfe(&self) -> bool {
         matches!(
             self,
-            Emulator::Ace(_) | Emulator::SugarBoxV2(_) | Emulator::Amspirit(_)
+            Emulator::Ace(_)
+                | Emulator::SugarBoxV2(_)
+                | Emulator::Amspirit(_)
+                | Emulator::CpcSyntaxError(_)
         )
     }
 
@@ -203,6 +231,8 @@ impl Emulator {
             Emulator::AmspiritLite(v) => v.configuration(),
             Emulator::Cadence(v) => v.configuration(),
             Emulator::Emulator1984(v) => v.configuration(),
+            Emulator::CpcSyntaxError(v) => v.configuration(),
+            Emulator::Koncepcja(v) => v.configuration(),
             Emulator::SugarBoxV2(v) => v.configuration(),
             Emulator::CpcEmuPower(v) => v.configuration(),
             Emulator::CapriceForever(v) => v.configuration(),
@@ -283,12 +313,23 @@ mod test {
                 .accept_csl()
         );
         assert!(!Emulator::RetroVm(RetroVmVersion::default()).accept_csl());
+        // CPCSyntaxError's `--csl` is a windowless player, not a launch option
+        assert!(!Emulator::CpcSyntaxError(super::CpcSyntaxErrorVersion::default()).accept_csl());
+        assert!(!Emulator::Koncepcja(super::KoncepcjaVersion::default()).accept_csl());
         assert!(!Emulator::Winape(WinapeVersion::default()).accept_csl());
     }
 
     #[test]
     fn test_download_retrovm() {
         let urls = RetroVmVersion::default().static_download_urls();
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn test_download_cpcsyntaxerror() {
+        let urls = super::CpcSyntaxErrorVersion::default().static_download_urls();
         assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
         assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());

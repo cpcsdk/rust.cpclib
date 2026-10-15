@@ -15,7 +15,9 @@ use cpclib_runner::runner::emulator::cadence::CadenceVersion;
 use cpclib_runner::runner::emulator::caprice_forever::CapriceForeverVersion;
 use cpclib_runner::runner::emulator::cpcemu::CpcEmuVersion;
 use cpclib_runner::runner::emulator::cpcemupower::CpcEmuPowerVersion;
+use cpclib_runner::runner::emulator::cpcsyntaxerror::CpcSyntaxErrorVersion;
 use cpclib_runner::runner::emulator::emulator1984::Emulator1984Version;
+use cpclib_runner::runner::emulator::koncepcja::KoncepcjaVersion;
 use cpclib_runner::runner::emulator::retrovm::RetroVmVersion;
 use cpclib_runner::runner::emulator::{
     AceVersion, AmspiritLiteVersion, AmspiritVersion, CpcecVersion, Emulator, SugarBoxV2Version,
@@ -39,15 +41,17 @@ pub(crate) fn parse_emulator(name: &str) -> Result<(Emulator, String), ToolError
         "cpcemu" => Emulator::CpcEmu(CpcEmuVersion::default()),
         "cpcec" => Emulator::Cpcec(CpcecVersion::default()),
         "cpcemupower" => Emulator::CpcEmuPower(CpcEmuPowerVersion::default()),
+        "cpcse" | "cpcsyntaxerror" => Emulator::CpcSyntaxError(CpcSyntaxErrorVersion::default()),
         "emulator1984" => Emulator::Emulator1984(Emulator1984Version::default()),
+        "koncepcja" => Emulator::Koncepcja(KoncepcjaVersion::default()),
         "retrovm" => Emulator::RetroVm(RetroVmVersion::default()),
         "winape" => Emulator::Winape(WinapeVersion::default()),
         "sugarbox" | "sugarboxv2" => Emulator::SugarBoxV2(SugarBoxV2Version::default()),
         other => {
             return Err(ToolError::invalid_input(format!(
                 "unknown emulator '{other}' - expected one of: ace, amspirit, amspiritlite, \
-                 cadence, capriceforever, cpcemu, cpcec, cpcemupower, emulator1984, retrovm, \
-                 winape, sugarbox"
+                 cadence, capriceforever, cpcemu, cpcec, cpcemupower, cpcse, emulator1984, \
+                 koncepcja, retrovm, winape, sugarbox"
             )));
         }
     };
@@ -57,7 +61,8 @@ pub(crate) fn parse_emulator(name: &str) -> Result<(Emulator, String), ToolError
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct StartEmulatorInput {
     /// One of: ace, amspirit, amspiritlite, cadence, capriceforever,
-    /// cpcemu, cpcec, cpcemupower, emulator1984, retrovm, winape, sugarbox.
+    /// cpcemu, cpcec, cpcemupower, cpcse, emulator1984, koncepcja, retrovm,
+    /// winape, sugarbox.
     /// Window-capture-backed backends (everything except sugarbox/
     /// amspiritlite/ace, which have native debug/web APIs - plain
     /// `amspirit`, the full wine-based build, does not) need a real
@@ -295,7 +300,8 @@ pub(crate) async fn screenshot(
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct HeadlessScreenshotInput {
     /// One of: ace, amspirit, amspiritlite, cadence, capriceforever,
-    /// cpcemu, cpcec, cpcemupower, emulator1984, retrovm, winape, sugarbox.
+    /// cpcemu, cpcec, cpcemupower, cpcse, emulator1984, koncepcja, retrovm,
+    /// winape, sugarbox.
     pub emulator: String,
     /// `.sna` snapshot to launch with.
     pub snapshot: Option<String>,

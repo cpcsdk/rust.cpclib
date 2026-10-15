@@ -728,7 +728,14 @@ impl EmulatorConf {
                 },
                 Emulator::Emulator1984(_) => {
                     args.push(format!("--disk-a={drive_a}"));
-                }
+                },
+                Emulator::CpcSyntaxError(_) => {
+                    args.push("--load".to_owned());
+                    args.push(emu.launch_fname(drive_a)?.to_string());
+                },
+                // `koncepcja [options] <slotfile(s)>`: the first .dsk goes in
+                // drive A, the second one in drive B.
+                Emulator::Koncepcja(_) => args.push(emu.launch_fname(drive_a)?.to_string())
             }
         }
 
@@ -747,7 +754,17 @@ impl EmulatorConf {
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}")),
                 Emulator::RetroVm(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Cadence(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::Emulator1984(_) => args.push(format!("--disk-b={drive_b}"))
+                Emulator::Emulator1984(_) => args.push(format!("--disk-b={drive_b}")),
+                Emulator::CpcSyntaxError(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Koncepcja(_) => {
+                    if drive_a.is_none() {
+                        return Err(
+                            "konCePCja puts its first disc in drive A: drive B needs drive A"
+                                .to_owned()
+                        );
+                    }
+                    args.push(emu.launch_fname(drive_b)?.to_string())
+                }
             }
         }
 
@@ -778,7 +795,13 @@ impl EmulatorConf {
                 Emulator::Cadence(_) => args.push(sna.to_string()),
                 Emulator::Emulator1984(_) => {
                     o.emit_stderr("snapshot loading is currently ignored for 1984\n");
-                }
+                },
+                // Only the last `--load` is kept, so the snapshot wins over a disc.
+                Emulator::CpcSyntaxError(_) => {
+                    args.push("--load".to_owned());
+                    args.push(emu.launch_fname(sna)?.to_string());
+                },
+                Emulator::Koncepcja(_) => args.push(emu.launch_fname(sna)?.to_string())
             }
         }
 
@@ -889,7 +912,9 @@ impl EmulatorConf {
                 | Emulator::CpcEmuPower(_)
                 | Emulator::CapriceForever(_)
                 | Emulator::RetroVm(_)
-                | Emulator::Cadence(_) => {
+                | Emulator::Cadence(_)
+                | Emulator::CpcSyntaxError(_)
+                | Emulator::Koncepcja(_) => {
                     return Err(format!(
                         "ROM configuration is not yet supported for {emu:?}"
                     ));
@@ -988,6 +1013,21 @@ impl EmulatorConf {
                     let text = text.replace('\n', "\\n");
                     args.push(format!("--paste={text}"));
                 },
+                // Typed after the medium is loaded; `\n` is Enter.
+                Emulator::CpcSyntaxError(_) if drive_a.is_some() || self.snapshot.is_some() => {
+                    let text = fs_err::read_to_string(ftype)
+                        .map_err(|e| format!("Failed to read auto-type file `{ftype}`: {e}"))?;
+                    args.push("--command".to_owned());
+                    args.push(text.replace("\r\n", "\n").replace('\n', "\\n"));
+                },
+                // One `--autocmd` per line: each one ends with Enter.
+                Emulator::Koncepcja(_) => {
+                    let text = fs_err::read_to_string(ftype)
+                        .map_err(|e| format!("Failed to read auto-type file `{ftype}`: {e}"))?;
+                    for line in text.lines() {
+                        args.push(format!("--autocmd={line}"));
+                    }
+                },
                 _ => {
                     o.emit_stderr(&format!(
                         "Auto type file is currently ignored for this emulator {:?}\n",
@@ -1035,7 +1075,20 @@ impl EmulatorConf {
                 },
                 Emulator::Emulator1984(_) => {
                     args.push(format!("--autostart={run}"));
-                }
+                },
+                // `--command` is typed once the medium given with `--load` is in.
+                Emulator::CpcSyntaxError(_) => {
+                    if drive_a.is_some() || self.snapshot.is_some() {
+                        args.push("--command".to_owned());
+                        args.push(format!("RUN\"{run}\\n"));
+                    }
+                    else {
+                        o.emit_stderr(
+                            "auto_run is ignored for CPCSyntaxError when no disc is loaded\n"
+                        );
+                    }
+                },
+                Emulator::Koncepcja(_) => args.push(format!("--autocmd=RUN\"{run}"))
             }
         }
 
@@ -1482,6 +1535,8 @@ pub(crate) struct RetroVmUsedEmulator {}
 pub(crate) struct CapriceForeverUsedEmulator {}
 pub(crate) struct CadenceUsedEmulator {}
 pub(crate) struct Emulator1984UsedEmulator {}
+pub(crate) struct CpcSyntaxErrorUsedEmulator {}
+pub(crate) struct KoncepcjaUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -2404,6 +2459,8 @@ pub(crate) enum Robot {
     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>),
     Cadence(RobotImpl<CadenceUsedEmulator>),
     Emulator1984(RobotImpl<Emulator1984UsedEmulator>),
+    CpcSyntaxError(RobotImpl<CpcSyntaxErrorUsedEmulator>),
+    Koncepcja(RobotImpl<KoncepcjaUsedEmulator>),
     #[cfg(feature = "screenshot")]
     Js1984(Js1984Robot),
     #[cfg(all(feature = "screenshot", unix))]
@@ -2450,6 +2507,8 @@ used_emulators! {
     CapriceForeverUsedEmulator => CapriceForever,
     CadenceUsedEmulator => Cadence,
     Emulator1984UsedEmulator => Emulator1984,
+    CpcSyntaxErrorUsedEmulator => CpcSyntaxError,
+    KoncepcjaUsedEmulator => Koncepcja,
 }
 
 impl<E: UsedEmulator> From<(Option<EmuWindow>, WindowEventsManager, &Emulator)> for RobotImpl<E> {
@@ -2581,6 +2640,8 @@ impl Robot {
             Robot::CapriceForever(r) => r,
             Robot::Cadence(r) => r,
             Robot::Emulator1984(r) => r,
+            Robot::CpcSyntaxError(r) => r,
+            Robot::Koncepcja(r) => r,
             #[cfg(feature = "screenshot")]
             Robot::Js1984(r) => r,
             #[cfg(all(feature = "screenshot", unix))]
@@ -2655,6 +2716,12 @@ impl Robot {
             },
             Emulator::Emulator1984(_) => {
                 RobotImpl::<Emulator1984UsedEmulator>::from((window, events_manager, emu)).into()
+            },
+            Emulator::CpcSyntaxError(_) => {
+                RobotImpl::<CpcSyntaxErrorUsedEmulator>::from((window, events_manager, emu)).into()
+            },
+            Emulator::Koncepcja(_) => {
+                RobotImpl::<KoncepcjaUsedEmulator>::from((window, events_manager, emu)).into()
             },
         }
     }
@@ -3435,6 +3502,9 @@ pub enum Emu {
     Cpcemu,
     Caprice,
     Cadence,
+    #[value(alias = "cpcsyntaxerror")]
+    Cpcse,
+    Koncepcja,
     #[value(alias = "1984")]
     Emulator1984,
     /// The emscripten build of 1984, served in a browser rather than spawned.
@@ -3575,6 +3645,24 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             debuggable: false,
             debugger_launch_id: None,
             installed: Emulator::Cadence(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Cpcse),
+            label: "CPCSyntaxError",
+            debuggable: false,
+            debugger_launch_id: None,
+            installed: Emulator::CpcSyntaxError(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Koncepcja),
+            label: "konCePCja",
+            debuggable: false,
+            debugger_launch_id: None,
+            installed: Emulator::Koncepcja(Default::default())
                 .configuration::<()>()
                 .is_cached()
         },
@@ -3794,6 +3882,8 @@ fn emulator_from_choice(choice: Emu) -> Result<Emulator, String> {
         Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
         Emu::Cadence => Emulator::Cadence(Default::default()),
+        Emu::Cpcse => Emulator::CpcSyntaxError(Default::default()),
+        Emu::Koncepcja => Emulator::Koncepcja(Default::default()),
         Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
         Emu::Emulator1984Js => {
             return Err(
@@ -4421,7 +4511,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use cpclib_common::camino::Utf8PathBuf;
+    use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
     use super::*;
 
@@ -4913,6 +5003,74 @@ mod tests {
     }
 
     #[test]
+    fn cpcsyntaxerror_loads_its_medium_and_types_the_run_command() {
+        let emu = Emulator::CpcSyntaxError(Default::default());
+        let conf = EmulatorConf::builder()
+            .transparent(false)
+            .break_on_bad_hbl(false)
+            .break_on_bad_vbl(false)
+            .drive_a("game.dsk".into())
+            .auto_run("GAME".to_owned())
+            .build();
+
+        let args = conf
+            .args_for_emu(&emu, &cpclib_common::event::DiscardObserver)
+            .expect("args");
+
+        assert_eq!(args.len(), 4, "{args:?}");
+        assert_eq!(args[0], "--load");
+        assert!(
+            Utf8Path::new(&args[1]).is_absolute() && args[1].ends_with("game.dsk"),
+            "it runs in its own folder, so the disc must be absolute: {args:?}"
+        );
+        assert_eq!(args[2], "--command");
+        assert_eq!(args[3], "RUN\"GAME\\n");
+    }
+
+    #[test]
+    fn koncepcja_takes_its_discs_in_order_and_types_the_run_command() {
+        let emu = Emulator::Koncepcja(Default::default());
+        let conf = EmulatorConf::builder()
+            .transparent(false)
+            .break_on_bad_hbl(false)
+            .break_on_bad_vbl(false)
+            .drive_a("a.dsk".into())
+            .drive_b("b.dsk".into())
+            .auto_run("GAME".to_owned())
+            .build();
+
+        let args = conf
+            .args_for_emu(&emu, &cpclib_common::event::DiscardObserver)
+            .expect("args");
+
+        assert_eq!(args.len(), 3, "{args:?}");
+        assert!(args[0].ends_with("a.dsk"), "{args:?}");
+        assert!(args[1].ends_with("b.dsk"), "{args:?}");
+        assert_eq!(args[2], "--autocmd=RUN\"GAME");
+        #[cfg(target_os = "linux")]
+        assert!(
+            args[0].starts_with("Z:/"),
+            "the Windows build runs under wine: {args:?}"
+        );
+    }
+
+    #[test]
+    fn koncepcja_needs_drive_a_for_drive_b() {
+        let emu = Emulator::Koncepcja(Default::default());
+        let conf = EmulatorConf::builder()
+            .transparent(false)
+            .break_on_bad_hbl(false)
+            .break_on_bad_vbl(false)
+            .drive_b("b.dsk".into())
+            .build();
+
+        assert!(
+            conf.args_for_emu(&emu, &cpclib_common::event::DiscardObserver)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn emulator_from_choice_rejects_only_1984js() {
         assert!(emulator_from_choice(Emu::Emulator1984Js).is_err());
         for choice in [
@@ -4926,6 +5084,8 @@ mod tests {
             Emu::Cpcemupower,
             Emu::Cpcemu,
             Emu::Cadence,
+            Emu::Cpcse,
+            Emu::Koncepcja,
             Emu::Emulator1984,
             Emu::Rvm
         ] {
