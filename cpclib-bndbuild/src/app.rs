@@ -19,6 +19,7 @@ use crate::env::create_template_env;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
 };
+use crate::runners::asm::AsmFacadeRunner;
 use crate::runners::assembler::{BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::disc::DiscManagerRunner;
@@ -539,6 +540,9 @@ impl BndBuilderCommand {
     fn execute_help<O: BndBuilderObserver + 'static>(runner: &str, observers: &Arc<O>) {
         let help = if is_emuctrl_cmd(runner) {
             EmulatorFacadeRunner::<()>::render_help()
+        }
+        else if crate::task::is_asm_cmd(runner) {
+            AsmFacadeRunner::<()>::render_help()
         }
         else if is_basm_cmd(runner) {
             BasmRunner::<()>::render_help()

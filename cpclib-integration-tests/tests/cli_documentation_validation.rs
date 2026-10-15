@@ -290,6 +290,7 @@ fn test_bndbuild_commands_documented() {
     let command_groups: Vec<(&[&str], &str)> = vec![
         (ACE_CMDS, "ace"),
         (AMSPIRIT_CMDS, "amspirit"),
+        (ASM_CMDS, "asm"),
         (AT_CMDS, "at"),
         (AYT_CMDS, "ayt"),
         (BASM_CMDS, "basm"),
@@ -313,6 +314,7 @@ fn test_bndbuild_commands_documented() {
         (ECHO_CMDS, "echo"),
         (EMUCTRL_CMDS, "cpc"),
         (EXTERN_CMDS, "extern"),
+        (FANTAMS_CMDS, "fantams"),
         (GRAFX2_CMDS, "grafx2"),
         (HIDEUR_CMDS, "hideur"),
         (HSPC_CMDS, "hspc"),

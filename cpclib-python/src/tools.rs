@@ -32,6 +32,8 @@ const ALL_COMMANDS: &[&[&str]] = &[
     task::KONCEPCJA_CMDS,
     task::EMULATOR_1984_CMDS,
     task::RETROVM_CMDS,
+    task::ASM_CMDS,
+    task::FANTAMS_CMDS,
     task::ASMFMT_CMDS,
     task::BASMOPT_CMDS,
     task::BASM_CMDS,

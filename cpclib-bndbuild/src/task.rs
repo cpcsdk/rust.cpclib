@@ -8,7 +8,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap::ArgMatches;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
-use cpclib_runner::runner::assembler::{RASM_CMD, RasmVersion, SJASMPLUS_CMD, VASM_CMD};
+use cpclib_runner::runner::assembler::{
+    FANTAMS_CMD, RASM_CMD, RasmVersion, SJASMPLUS_CMD, VASM_CMD
+};
 #[cfg(feature = "fap")]
 use cpclib_runner::runner::ay::fap::FAP_CMD;
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
@@ -233,7 +235,9 @@ pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
 
 pub const ASMFMT_CMDS: &[&str] = &["asmfmt", "basm-fmt"];
 pub const BASMOPT_CMDS: &[&str] = &["basmopt"];
-pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
+pub const ASM_CMDS: &[&str] = &["asm", "assemble"];
+pub const BASM_CMDS: &[&str] = &["basm"];
+pub const FANTAMS_CMDS: &[&str] = &[FANTAMS_CMD];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
@@ -374,14 +378,14 @@ macro_rules! is_some_cmd {
 
 #[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit, amspiritlite, asmfmt, at, ayt, archive,
+    ace, amspirit, amspiritlite, asm, asmfmt, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
     basmopt,
     catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
     cadence, cpcsyntaxerror, emulator_1984,
     disark, disc,
     echo, emuctrl, r#extern,
-    fade,
+    fade, fantams,
     grafx2,
     hideur,hspc,hxcfe,
     img2cpc, impdisc,
@@ -847,6 +851,9 @@ impl InnerTask {
         else if is_emuctrl_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_facade(), std))
         }
+        else if is_asm_cmd(code) {
+            Ok(Self::with_assembler(Assembler::Facade, std))
+        }
         else if is_basm_cmd(code) {
             Ok(Self::with_assembler(Assembler::Basm, std))
         }
@@ -890,6 +897,14 @@ impl InnerTask {
             Ok(Self::with_assembler(
                 Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
                     RasmVersion::default()
+                )),
+                std
+            ))
+        }
+        else if is_fantams_cmd(code) {
+            Ok(Self::with_assembler(
+                Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Fantams(
+                    Default::default()
                 )),
                 std
             ))
@@ -1232,6 +1247,8 @@ impl InnerTask {
 
             // Delegated tasks - external programs that need to be installed
             InnerTask::Assembler(Assembler::Extern(_), _) => TaskKind::Delegated,
+            // like the emulator facade: the assembler it picks may need installing
+            InnerTask::Assembler(Assembler::Facade, _) => TaskKind::Delegated,
             InnerTask::Convgeneric(_) => TaskKind::Delegated,
             InnerTask::Disassembler(Disassembler::Extern(_), _) => TaskKind::Delegated,
             InnerTask::Emulator(..) => TaskKind::Delegated,
