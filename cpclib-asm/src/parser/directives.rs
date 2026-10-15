@@ -968,49 +968,31 @@ pub fn parse_crunched_section(
     let crunched_start_span = *input;
     let kind = alt((
         alt((
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZEXO").value(CrunchType::LZEXO),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZ4").value(CrunchType::LZ4),
             parse_directive_word(b"LZ48").value(CrunchType::LZ48),
             parse_directive_word(b"LZ49").value(CrunchType::LZ49),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZUPKR").value(CrunchType::Upkr),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX7").value(CrunchType::LZX7),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX0_BACKWARD").value(CrunchType::BackwardZx0),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX0").value(CrunchType::Zx0)
         )),
         alt((
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZPUCRUNCH").value(CrunchType::Pucrunch),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"PUCRUNCH").value(CrunchType::Pucrunch),
             parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
             parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
         )),
         alt((
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZLZM_BACKWARD").value(CrunchType::BackwardBzLzm),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZLZM").value(CrunchType::BzLzm),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZEF8_BACKWARD").value(CrunchType::BackwardBzEf8),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZEF8").value(CrunchType::BzEf8),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZBX0_BACKWARD").value(CrunchType::BackwardBzBx0),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZBX0").value(CrunchType::BzBx0),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZBX2_BACKWARD").value(CrunchType::BackwardBzBx2),
-            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZBX2").value(CrunchType::BzBx2)
         ))
     ))

@@ -1250,40 +1250,24 @@ impl fmt::Display for Token {
                             match crunch {
                                 CrunchType::LZ48 =>"INCL48",
                                 CrunchType::LZ49 => "INCL49",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZ4 =>"INCLZ4",
                                 CrunchType::LZX7 =>"INCZX7",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Zx0 => "INCZX0",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BackwardZx0 => "INCZX0_BCKWARD",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZEXO => "INCEXO",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZAPU => "INCAPU",
                                 CrunchType::LZSA1 => "INCLZSA1",
                                 CrunchType::LZSA2 => "INCLZSA2",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Shrinkler => "INCSHRINKLER",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Pucrunch => "INCPUC",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Upkr => "INCUPKR",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BzLzm => "INCLZM",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BackwardBzLzm => "INCLZM_BACKWARD",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BzEf8 => "INCEF8",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BackwardBzEf8 => "INCEF8_BACKWARD",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BzBx0 => "INCBX0",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BackwardBzBx0 => "INCBX0_BACKWARD",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BzBx2 => "INCBX2",
-                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::BackwardBzBx2 => "INCBX2_BACKWARD",
                             }
                         }
