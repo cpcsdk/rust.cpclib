@@ -20,6 +20,7 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 
 use crate::event::BndBuilderObserver;
 use crate::runners::archive::ArchiveRunner;
+use crate::runners::asm::AsmFacadeRunner;
 use crate::runners::asmfmt::AsmFmtRunner;
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::ay::YmCruncher;
@@ -177,6 +178,9 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
         },
         InnerTask::Assembler(a, _) => {
             match a {
+                Assembler::Facade => {
+                    AsmFacadeRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+                },
                 Assembler::Basm => {
                     BasmRunner::default().run_redirected(task.args(), observer, stdin, stdout)
                 },

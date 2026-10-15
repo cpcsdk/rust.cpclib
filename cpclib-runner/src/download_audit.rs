@@ -18,7 +18,7 @@ use crate::delegated::{
     InternetStaticCompiledApplication
 };
 use crate::runner::assembler::uz80::Uz80Version;
-use crate::runner::assembler::{RasmVersion, SjasmplusVersion, VasmVersion};
+use crate::runner::assembler::{FantamsVersion, RasmVersion, SjasmplusVersion, VasmVersion};
 use crate::runner::ay::ayt::AytVersion;
 use crate::runner::ay::fap::FAPVersion;
 use crate::runner::ay::minimiser::MinimiserVersion;
@@ -77,6 +77,7 @@ fn resolved_downloads() -> Vec<(&'static str, Result<String, String>)> {
         "retrovm" => RetroVmVersion::default();
         "sugarbox" => SugarBoxV2Version::default();
         "emulator1984" => Emulator1984Version::default();
+        "fantams" => FantamsVersion::default();
         "rasm" => RasmVersion::default();
         "sjasmplus" => SjasmplusVersion::default();
         "vasm" => VasmVersion::default();

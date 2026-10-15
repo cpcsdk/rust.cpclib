@@ -14,10 +14,12 @@ use cpclib_runner::runner::exec::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
-use crate::task::{BASM_CMDS, ORGAMS_CMDS};
+use crate::task::{ASM_CMDS, BASM_CMDS, ORGAMS_CMDS};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Assembler {
+    /// `asm`: the same command line for every assembler (see `runners::asm`)
+    Facade,
     Basm,
     Orgams,
     Extern(ExternAssembler)
@@ -26,6 +28,7 @@ pub enum Assembler {
 impl Assembler {
     pub fn get_command(&self) -> &str {
         match self {
+            Assembler::Facade => ASM_CMDS[0],
             Assembler::Basm => BASM_CMDS[0],
             Assembler::Orgams => ORGAMS_CMDS[0],
             Assembler::Extern(a) => a.get_command()
@@ -39,7 +42,9 @@ impl Assembler {
 
     /// Returns all assembler variants including external ones
     pub fn all() -> impl Iterator<Item = Self> {
-        Self::all_embedded().chain(ExternAssembler::all().map(Self::Extern))
+        Self::all_embedded()
+            .chain(std::iter::once(Self::Facade))
+            .chain(ExternAssembler::all().map(Self::Extern))
     }
 }
 

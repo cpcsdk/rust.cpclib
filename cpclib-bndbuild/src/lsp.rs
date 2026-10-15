@@ -66,6 +66,12 @@ pub struct TaskType {
 pub const TASK_TYPES: &[TaskType] = &[
     // Assemblers
     TaskType {
+        names: ASM_CMDS,
+        description: "Assemble with any supported assembler (basm, fantams, rasm, sjasmplus, uz80, vasm) using the same options",
+        synopsis: "asm [-a ASSEMBLER] INPUT [-o OUTPUT] [-I DIR]... [-D NAME[=VALUE]]... [--sym FILE] [--lst FILE] [--snapshot|--amsdos] [-- ASSEMBLER ARGS...]",
+        example: "asm -a rasm main.asm -o main.bin -D DEBUG --sym main.sym"
+    },
+    TaskType {
         names: BASM_CMDS,
         description: "Assemble Z80 source code using basm (built-in assembler)",
         synopsis: "basm [OPTIONS] [INPUT]",
@@ -115,8 +121,14 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: FANTAMS_CMDS,
+        description: "Assemble using fantams (built from its sources on first use)",
+        synopsis: "fantams (file.asm | file.fo...) [-o out] [--sym[=file]] ...",
+        example: "fantams main.asm -o main.sna --sym=main.sym"
+    },
+    TaskType {
         names: UZ80_CMDS,
-        description: "Disassemble using uz80",
+        description: "Assemble using uz80",
         synopsis: "TODO",
         example: "uz80 -q CHIPNSFZ.S80 -o$@"
     },

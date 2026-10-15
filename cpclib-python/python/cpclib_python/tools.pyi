@@ -13,6 +13,20 @@ def run(
     capture: bool = False,
 ) -> dict[str, str] | None: ...
 
+def asm(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Assemble with any supported assembler (basm, fantams, rasm, sjasmplus, uz80, vasm) using the same options."""
+
+def assemble(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Assemble with any supported assembler (basm, fantams, rasm, sjasmplus, uz80, vasm) using the same options."""
+
 def basm(
     *args: str,
     on_output: OutputCallback | None = None,
@@ -20,12 +34,12 @@ def basm(
 ) -> dict[str, str] | None:
     """Assemble Z80 source code using basm (built-in assembler)."""
 
-def assemble(
+def fantams(
     *args: str,
     on_output: OutputCallback | None = None,
     capture: bool = False,
 ) -> dict[str, str] | None:
-    """Assemble Z80 source code using basm (built-in assembler)."""
+    """Assemble using fantams (built from its sources on first use)."""
 
 def orgams(
     *args: str,

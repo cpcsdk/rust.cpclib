@@ -268,7 +268,28 @@ For complete documentation and download, see <https://github.com/jeromelesaux/ds
 
 ## Assemblers
 
-### Assembler: BASM (basm,assemble)
+### Assembler: Assembler-agnostic assembling (asm,assemble)
+
+One command line for every assembler below except Orgams, so a project can change assembler without rewriting its rules - the counterpart of `cpc`/`emu` for emulators. `-a/--assembler` picks it (`basm` by default), and the common options are translated into its own:
+
+| `asm` | basm | rasm | sjasmplus | vasm | uz80 | fantams |
+|---|---|---|---|---|---|---|
+| `-o FILE` | `-o FILE` | `-ob FILE` | `--raw=FILE` | `-Fbin -o FILE` | `-oFILE` (required) | `-o FILE` |
+| `-I DIR` | `-I DIR` | `-IDIR` | `--inc=DIR` | `-IDIR` | `-IDIR` (only one) | - |
+| `-D NAME[=VALUE]` | `-D NAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | - |
+| `--sym FILE` | `--sym FILE` | `-s -os FILE` | `--sym=FILE` | - | - | `--sym=FILE` |
+| `--lst FILE` | `--lst FILE` | - | `--lst=FILE` | `-L FILE` | - | - |
+| `--snapshot` | `--snapshot` | - | - | - | - | `-o` must end with `.sna` |
+| `--amsdos` | `--binary` | - | - | - | - | - |
+
+An option the chosen assembler has no equivalent for (`-`) is refused. Anything after `--` is given to the assembler as it is.
+
+```
+asm -a rasm main.asm -o main.bin -I src -D DEBUG --sym main.sym
+asm main.asm -o main.sna --snapshot -- --case-insensitive
+```
+
+### Assembler: BASM (basm)
 
 **Standalone:** Available as `basm` binary. For complete documentation, see [BASM Documentation](../../basm).
 
@@ -283,13 +304,19 @@ For complete documentation, see <http://rasm.wikidot.com/>.
 Orgams is a native assembler. So, an emulator is used to assemble source.
 WARNING: it currently does not work properly under windows.
 
+### Assembler: fantams (fantams)
+
+Z80 assembler and linker by sikorama, with a preprocessor, objects, link scripts and snapshot, CPR and CRO outputs. It publishes no binary: its sources are downloaded and built with `make` on first use, so a C++17 compiler and `make` are needed. For complete documentation, see <https://github.com/sikorama/fantams>.
+
 ### Assembler: Sjasmplus (sjasmplus)
 
 For complete documentation, see <https://z00m128.github.io/sjasmplus/documentation.html>.
 
-### Assembler: UZ80AS (uz80)
+### Assembler: UZ80 (uz80)
 
-Universal Z80 assembler. For complete documentation, see <http://cngsoft.no-ip.org/uz80.htm>.
+Z80 assembler by CNGSoft, the author of CPCEC and CHIPNSFX (not Jorge Giner's `uz80as`). It runs through wine outside Windows.
+
+`UZ80 [-q|-v] [-D[label[=value]]] [-Ipath] source [-o]target`: `-q` shows only fatal errors, `-v` (or `-vv`) more messages, `-Dlabel` defines `label` as 1 and a bare `-D` defines `DEBUG`, `-Ipath` sets the include path, and the source must be followed by the target. For complete documentation, see <http://cngsoft.no-ip.org/uz80.htm>.
 
 ### Assembler: Vasm z80 oldstyle (vasm)
 

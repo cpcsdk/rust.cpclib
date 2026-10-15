@@ -1,9 +1,11 @@
+pub mod fantams;
 pub mod rasm;
 pub mod sjasmplus;
 pub mod uz80;
 pub mod vasm;
 
 use cpclib_common::event::EventObserver;
+pub use fantams::{FANTAMS_CMD, FantamsVersion};
 pub use rasm::{RASM_CMD, RasmVersion};
 pub use sjasmplus::{SJASMPLUS_CMD, SjasmplusVersion};
 use uz80::{UZ80_CMD, Uz80Version};
@@ -15,6 +17,7 @@ use crate::delegated::{
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ExternAssembler {
+    Fantams(FantamsVersion),
     Rasm(RasmVersion),
     Sjasmplus(SjasmplusVersion),
     Uz80(Uz80Version),
@@ -24,6 +27,7 @@ pub enum ExternAssembler {
 impl ExternAssembler {
     pub fn get_command(&self) -> &str {
         match self {
+            ExternAssembler::Fantams(_) => FANTAMS_CMD,
             ExternAssembler::Rasm(_) => RASM_CMD,
             ExternAssembler::Vasm(_) => VASM_CMD,
             ExternAssembler::Uz80(_) => UZ80_CMD,
@@ -33,6 +37,7 @@ impl ExternAssembler {
 
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
+            ExternAssembler::Fantams(f) => f.configuration(),
             ExternAssembler::Rasm(r) => r.configuration(),
             ExternAssembler::Sjasmplus(r) => r.configuration(),
             ExternAssembler::Uz80(u) => u.configuration(),
@@ -43,6 +48,7 @@ impl ExternAssembler {
     /// Returns all ExternAssembler variants for testing
     pub fn all() -> impl Iterator<Item = Self> {
         [
+            Self::Fantams(Default::default()),
             Self::Rasm(Default::default()),
             Self::Sjasmplus(Default::default()),
             Self::Uz80(Default::default()),
