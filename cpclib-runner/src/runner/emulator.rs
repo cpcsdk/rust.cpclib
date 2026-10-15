@@ -329,8 +329,19 @@ mod test {
 
     #[test]
     fn test_download_cpcsyntaxerror() {
-        let urls = super::CpcSyntaxErrorVersion::default().static_download_urls();
+        let urls = super::CpcSyntaxErrorVersion::default()
+            .github_download_urls()
+            .unwrap();
         assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn test_download_koncepcja() {
+        let urls = super::KoncepcjaVersion::default()
+            .github_download_urls()
+            .unwrap();
         assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
         assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());
     }

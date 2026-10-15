@@ -1,4 +1,8 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, UrlGenerator};
+use std::fmt::Display;
+
+use crate::delegated::{
+    ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, GithubInformation
+};
 use crate::event::EventObserver;
 use crate::runner::exec::RunInDir;
 
@@ -9,19 +13,62 @@ use crate::runner::exec::RunInDir;
 /// typed once the CPC has booted (each one ends with Enter).
 pub const KONCEPCJA_CMD: &str = "koncepcja";
 
-#[cfg(not(target_os = "macos"))]
-const DOWNLOAD_URL_V6_4_2_WINDOWS: &str =
-    "https://github.com/ikari-pl/konCePCja/releases/download/v6.4.2/koncepcja-windows-x64.zip";
-/// The macOS zip holds a bare executable that expects SDL3 to be installed;
-/// the dmg holds the self-contained app bundle.
-#[cfg(target_os = "macos")]
-const DOWNLOAD_URL_V6_4_2_MACOS: &str =
-    "https://github.com/ikari-pl/konCePCja/releases/download/v6.4.2/konCePCja.dmg";
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum KoncepcjaVersion {
     #[default]
     V6_4_2
+}
+
+impl Display for KoncepcjaVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "konCePCja {}", self.version_name())
+    }
+}
+
+impl GithubInformation for KoncepcjaVersion {
+    fn project(&self) -> &'static str {
+        "konCePCja"
+    }
+
+    fn owner(&self) -> &'static str {
+        "ikari-pl"
+    }
+
+    fn version_name(&self) -> &'static str {
+        match self {
+            Self::V6_4_2 => "v6.4.2"
+        }
+    }
+
+    // There is no Linux build in the releases (only the sources), so Linux
+    // runs the Windows one through wine.
+    fn linux_key(&self) -> Option<&'static str> {
+        self.windows_key()
+    }
+
+    fn windows_key(&self) -> Option<&'static str> {
+        match self {
+            Self::V6_4_2 => Some("koncepcja-windows-x64.zip")
+        }
+    }
+
+    // koncepcja-macos.zip holds a bare executable that expects SDL3 to be
+    // installed; the dmg holds the self-contained app bundle.
+    fn macos_key(&self) -> Option<&'static str> {
+        match self {
+            Self::V6_4_2 => Some("konCePCja.dmg")
+        }
+    }
+}
+
+impl DownloadableInformation for KoncepcjaVersion {
+    fn target_os_archive_format(&self) -> ArchiveFormat {
+        // The dmg is mounted by the post-install step, not extracted.
+        #[cfg(target_os = "macos")]
+        return ArchiveFormat::Raw;
+        #[cfg(not(target_os = "macos"))]
+        return ArchiveFormat::Zip;
+    }
 }
 
 impl KoncepcjaVersion {
@@ -31,24 +78,6 @@ impl KoncepcjaVersion {
         }
     }
 
-    // There is no Linux build in the releases (only the sources), so Linux
-    // runs the Windows one through wine.
-    #[cfg(not(target_os = "macos"))]
-    fn target_url_generator(&self) -> UrlGenerator {
-        match self {
-            Self::V6_4_2 => DOWNLOAD_URL_V6_4_2_WINDOWS
-        }
-        .into()
-    }
-
-    #[cfg(target_os = "macos")]
-    fn target_url_generator(&self) -> UrlGenerator {
-        match self {
-            Self::V6_4_2 => DOWNLOAD_URL_V6_4_2_MACOS
-        }
-        .into()
-    }
-
     fn target_exec_fname(&self) -> &'static str {
         #[cfg(target_os = "macos")]
         return "konCePCja.app/Contents/MacOS/koncepcja";
@@ -56,19 +85,11 @@ impl KoncepcjaVersion {
         return "koncepcja.exe";
     }
 
-    fn target_archive_format(&self) -> ArchiveFormat {
-        // The dmg is mounted by the post-install step, not extracted.
-        #[cfg(target_os = "macos")]
-        return ArchiveFormat::Raw;
-        #[cfg(not(target_os = "macos"))]
-        return ArchiveFormat::Zip;
-    }
-
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         let builder = DelegateApplicationDescription::builder()
-            .download_fn_url(self.target_url_generator())
+            .download_fn_url(self)
             .folder(self.target_folder())
-            .archive_format(self.target_archive_format())
+            .archive_format(self.target_os_archive_format())
             .exec_fname(self.target_exec_fname())
             // koncepcja.cfg points at rom/ and resources/ beside the executable
             .in_dir(RunInDir::AppDir);
@@ -102,13 +123,10 @@ mod test {
     use super::*;
 
     #[test]
-    #[cfg(not(target_os = "macos"))]
-    fn the_windows_build_is_the_one_run_outside_macos() {
-        assert!(DOWNLOAD_URL_V6_4_2_WINDOWS.ends_with("koncepcja-windows-x64.zip"));
-        assert!(
-            KoncepcjaVersion::default()
-                .target_exec_fname()
-                .ends_with(".exe")
-        );
+    fn linux_runs_the_windows_build() {
+        let version = KoncepcjaVersion::default();
+        assert_eq!(version.linux_key(), version.windows_key());
+        #[cfg(not(target_os = "macos"))]
+        assert!(version.target_exec_fname().ends_with(".exe"));
     }
 }

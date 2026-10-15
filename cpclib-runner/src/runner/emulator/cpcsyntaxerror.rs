@@ -1,8 +1,8 @@
-use std::sync::OnceLock;
+use std::fmt::Display;
 
 use crate::delegated::{
-    ArchiveFormat, DownloadableInformation, ExecutableInformation,
-    InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
+    ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication,
+    GithubInformation
 };
 use crate::event::EventObserver;
 use crate::runner::exec::RunInDir;
@@ -21,7 +21,13 @@ pub enum CpcSyntaxErrorVersion {
     V0_6_2
 }
 
-impl InternetStaticCompiledApplication for CpcSyntaxErrorVersion {}
+impl Display for CpcSyntaxErrorVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CPCSyntaxError {}", self.version_name())
+    }
+}
+
+impl GithubCompiledApplication for CpcSyntaxErrorVersion {}
 
 impl ExecutableInformation for CpcSyntaxErrorVersion {
     fn target_os_folder(&self) -> &'static str {
@@ -50,19 +56,36 @@ impl ExecutableInformation for CpcSyntaxErrorVersion {
     }
 }
 
-impl StaticInformation for CpcSyntaxErrorVersion {
-    fn static_download_urls(&self) -> &'static MutiplatformUrls {
+impl GithubInformation for CpcSyntaxErrorVersion {
+    fn project(&self) -> &'static str {
+        "CPCSyntaxError"
+    }
+
+    fn owner(&self) -> &'static str {
+        "WacKEDmaN"
+    }
+
+    fn version_name(&self) -> &'static str {
         match self {
-            Self::V0_6_2 => {
-                static URLS: OnceLock<MutiplatformUrls> = OnceLock::new();
-                URLS.get_or_init(|| {
-                    MutiplatformUrls::builder()
-                        .windows("https://github.com/WacKEDmaN/CPCSyntaxError/releases/download/v0.6.2/CPCSyntaxError-win64-v0.6.2.zip")
-                        .linux("https://github.com/WacKEDmaN/CPCSyntaxError/releases/download/v0.6.2/CPCSyntaxError-linux-x86_64-v0.6.2.tar.gz")
-                        .macos("https://github.com/WacKEDmaN/CPCSyntaxError/releases/download/v0.6.2/CPCSyntaxError-macos-universal-v0.6.2.zip")
-                        .build()
-                })
-            }
+            Self::V0_6_2 => "v0.6.2"
+        }
+    }
+
+    fn linux_key(&self) -> Option<&'static str> {
+        match self {
+            Self::V0_6_2 => Some("CPCSyntaxError-linux-x86_64-v0.6.2.tar.gz")
+        }
+    }
+
+    fn windows_key(&self) -> Option<&'static str> {
+        match self {
+            Self::V0_6_2 => Some("CPCSyntaxError-win64-v0.6.2.zip")
+        }
+    }
+
+    fn macos_key(&self) -> Option<&'static str> {
+        match self {
+            Self::V0_6_2 => Some("CPCSyntaxError-macos-universal-v0.6.2.zip")
         }
     }
 }
