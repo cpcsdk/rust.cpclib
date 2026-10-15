@@ -237,13 +237,12 @@ impl AsmCli {
                 args.push(input);
             },
 
-            // Only the options this project already relies on are used.
+            // UZ80 [-q|-v] [-D[label[=value]]] [-Ipath] source [-o]target
+            // Its options come before the source, which must be followed by
+            // the target, and it has a single include path.
             AsmChoice::Uz80 => {
-                if !self.includes.is_empty() {
-                    return Err(self.unsupported("-I"));
-                }
-                if !self.defines.is_empty() {
-                    return Err(self.unsupported("-D"));
+                if self.includes.len() > 1 {
+                    return Err("uz80 takes a single include path".to_owned());
                 }
                 if self.sym.is_some() {
                     return Err(self.unsupported("--sym"));
@@ -257,10 +256,20 @@ impl AsmCli {
                 if self.amsdos {
                     return Err(self.unsupported("--amsdos"));
                 }
-                args.push(input);
-                if let Some(output) = &self.output {
-                    args.push(format!("-o{output}"));
+                let output = self
+                    .output
+                    .as_ref()
+                    .ok_or_else(|| "uz80 needs the target file: -o FILE".to_owned())?;
+                for (name, value) in self.definitions() {
+                    args.push(format!("-D{name}={value}"));
                 }
+                if let Some(dir) = self.includes.first() {
+                    args.push(format!("-I{dir}"));
+                }
+                args.extend(self.extra.iter().cloned());
+                args.push(input);
+                args.push(format!("-o{output}"));
+                return Ok(args);
             },
 
             // The extension of -o selects what fantams writes.
@@ -460,12 +469,22 @@ mod test {
     }
 
     #[test]
-    fn uz80_only_takes_the_output() {
+    fn uz80() {
         assert_eq!(
-            translate("-a uz80 main.asm -o out.bin").unwrap(),
-            ["main.asm", "-oout.bin"]
+            translate(&format!("-a uz80 {COMMON} -- -q")).unwrap(),
+            [
+                "-DDEBUG=1",
+                "-DSPEED=3",
+                "-Iinc",
+                "-q",
+                "main.asm",
+                "-oout.bin"
+            ]
         );
-        assert!(translate("-a uz80 main.asm -I inc").is_err());
+        // the target is mandatory, and there is one include path
+        assert!(translate("-a uz80 main.asm").is_err());
+        assert!(translate("-a uz80 main.asm -o out.bin -I a -I b").is_err());
+        assert!(translate("-a uz80 main.asm -o out.bin --sym out.sym").is_err());
     }
 
     #[test]

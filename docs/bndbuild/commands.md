@@ -274,9 +274,9 @@ One command line for every assembler below except Orgams, so a project can chang
 
 | `asm` | basm | rasm | sjasmplus | vasm | uz80 | fantams |
 |---|---|---|---|---|---|---|
-| `-o FILE` | `-o FILE` | `-ob FILE` | `--raw=FILE` | `-Fbin -o FILE` | `-oFILE` | `-o FILE` |
-| `-I DIR` | `-I DIR` | `-IDIR` | `--inc=DIR` | `-IDIR` | - | - |
-| `-D NAME[=VALUE]` | `-D NAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | - | - |
+| `-o FILE` | `-o FILE` | `-ob FILE` | `--raw=FILE` | `-Fbin -o FILE` | `-oFILE` (required) | `-o FILE` |
+| `-I DIR` | `-I DIR` | `-IDIR` | `--inc=DIR` | `-IDIR` | `-IDIR` (only one) | - |
+| `-D NAME[=VALUE]` | `-D NAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | `-DNAME=VALUE` | - |
 | `--sym FILE` | `--sym FILE` | `-s -os FILE` | `--sym=FILE` | - | - | `--sym=FILE` |
 | `--lst FILE` | `--lst FILE` | - | `--lst=FILE` | `-L FILE` | - | - |
 | `--snapshot` | `--snapshot` | - | - | - | - | `-o` must end with `.sna` |
@@ -314,7 +314,9 @@ For complete documentation, see <https://z00m128.github.io/sjasmplus/documentati
 
 ### Assembler: UZ80 (uz80)
 
-Z80 assembler by CNGSoft, the author of CPCEC and CHIPNSFX (not Jorge Giner's `uz80as`). It runs through wine outside Windows. For complete documentation, see <http://cngsoft.no-ip.org/uz80.htm>.
+Z80 assembler by CNGSoft, the author of CPCEC and CHIPNSFX (not Jorge Giner's `uz80as`). It runs through wine outside Windows.
+
+`UZ80 [-q|-v] [-D[label[=value]]] [-Ipath] source [-o]target`: `-q` shows only fatal errors, `-v` (or `-vv`) more messages, `-Dlabel` defines `label` as 1 and a bare `-D` defines `DEBUG`, `-Ipath` sets the include path, and the source must be followed by the target. For complete documentation, see <http://cngsoft.no-ip.org/uz80.htm>.
 
 ### Assembler: Vasm z80 oldstyle (vasm)
 
