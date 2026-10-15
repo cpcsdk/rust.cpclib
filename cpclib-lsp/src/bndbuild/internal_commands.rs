@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
+use cpclib_bndbuild::runners::asm::AsmFacadeRunner;
 use cpclib_bndbuild::runners::assembler::{BasmRunner, OrgamsRunner};
 use cpclib_bndbuild::runners::disassembler::BdasmRunner;
 use cpclib_bndbuild::runners::disc::{CatalogRunner, DiscManagerRunner};
@@ -48,6 +49,13 @@ type CommandBuilder = fn() -> Command;
 static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = LazyLock::new(|| {
     let mut m: HashMap<&'static str, CommandBuilder> = HashMap::new();
 
+    m.insert("asm", || {
+        normalized(
+            AsmFacadeRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
+    });
     m.insert("basm", || {
         normalized(
             BasmRunner::<CapturingObserver>::default()
@@ -317,6 +325,21 @@ mod tests {
             first.get_arguments().count(),
             second.get_arguments().count()
         );
+    }
+
+    #[test]
+    fn asm_offers_its_assembler_choice() {
+        let cmd = get_command_for("asm").expect("asm should be a known internal command");
+        let assembler = cmd
+            .get_arguments()
+            .find(|a| a.get_id() == "assembler")
+            .expect("asm has an --assembler option");
+        let values = assembler
+            .get_possible_values()
+            .iter()
+            .map(|v| v.get_name().to_owned())
+            .collect::<Vec<_>>();
+        assert!(values.contains(&"fantams".to_owned()), "{values:?}");
     }
 
     #[test]
