@@ -11,6 +11,7 @@ All notable changes to the CPClib VS Code extension are documented here.
 - Music: `.ym` songs, and three YM-based players (FAP, AYT, MinYMiser) that play any song
   (converted to YM first), chosen with `[music] player` or the "with a specific player" commands
 - Generated music players print the song's title, author and comment, and which player is used
+- "Run with..." and "Run CSL with..." offer the CPCSyntaxError and konCePCja emulators
 
 ## [0.0.1] - Initial release
 

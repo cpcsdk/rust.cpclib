@@ -331,6 +331,14 @@ Advanced CPC emulator with debugging features. For complete documentation, see <
 
 For complete documentation, see <http://cngsoft.no-ip.org/cpcec.htm>.
 
+### Emulator: CPCSyntaxError (cpcse,cpcsyntaxerror)
+
+Cycle-level emulator of the CPC 464/664/6128, Plus and GX4000, for Windows, Linux and macOS. `--load <file>` loads a disc, snapshot, cartridge or tape and `--command <text>` types after it. For complete documentation, see <https://github.com/WacKEDmaN/CPCSyntaxError>.
+
+### Emulator: konCePCja (koncepcja)
+
+Amstrad CPC emulator. The media files are positional arguments and `--autocmd=<text>` is typed after the boot. Only Windows and macOS builds are published: on Linux, the Windows build runs through wine. For complete documentation, see <https://github.com/ikari-pl/konCePCja>.
+
 ### Emulator: SugarboxV2 (sugarbox)
 
 For complete documentation and download, see <https://github.com/Tom1975/SugarboxV2>.

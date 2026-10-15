@@ -216,6 +216,20 @@ def cadence(
 ) -> dict[str, str] | None:
     """Run in Cadence emulator."""
 
+def cpcse(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in CPCSyntaxError emulator."""
+
+def koncepcja(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in konCePCja emulator."""
+
 def dsk(
     *args: str,
     on_output: OutputCallback | None = None,

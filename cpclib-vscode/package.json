@@ -393,6 +393,30 @@
         "icon": "$(warning)"
       },
       {
+        "command": "cpclib.runCslWith.cpcse",
+        "title": "CPCSyntaxError (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.cpcse.needsInstall",
+        "title": "CPCSyntaxError (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.koncepcja",
+        "title": "konCePCja (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.koncepcja.needsInstall",
+        "title": "konCePCja (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
         "command": "cpclib.runCslWith.emulator1984",
         "title": "1984 (native) (via CSL interpreter)",
         "category": "CPClib",
@@ -685,6 +709,30 @@
       {
         "command": "cpclib.runWith.cadence.needsInstall",
         "title": "Cadence (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.cpcse",
+        "title": "CPCSyntaxError",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.cpcse.needsInstall",
+        "title": "CPCSyntaxError (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.koncepcja",
+        "title": "konCePCja",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.koncepcja.needsInstall",
+        "title": "konCePCja (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
@@ -1106,6 +1154,26 @@
           "group": "1_installed"
         },
         {
+          "command": "cpclib.runWith.cpcse",
+          "when": "cpclib.emu.cpcse.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcse.needsInstall",
+          "when": "!cpclib.emu.cpcse.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.koncepcja",
+          "when": "cpclib.emu.koncepcja.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.koncepcja.needsInstall",
+          "when": "!cpclib.emu.koncepcja.installed",
+          "group": "1_installed"
+        },
+        {
           "command": "cpclib.runWith.emulator1984",
           "when": "cpclib.emu.emulator1984.installed",
           "group": "1_installed"
@@ -1235,6 +1303,26 @@
         {
           "command": "cpclib.runCslWith.cadence.needsInstall",
           "when": "!cpclib.emu.cadence.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcse",
+          "when": "cpclib.emu.cpcse.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcse.needsInstall",
+          "when": "!cpclib.emu.cpcse.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.koncepcja",
+          "when": "cpclib.emu.koncepcja.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.koncepcja.needsInstall",
+          "when": "!cpclib.emu.koncepcja.installed",
           "group": "1_installed"
         },
         {
@@ -1377,6 +1465,22 @@
           "when": "false"
         },
         {
+          "command": "cpclib.runWith.cpcse",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcse.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.koncepcja",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.koncepcja.needsInstall",
+          "when": "false"
+        },
+        {
           "command": "cpclib.runWith.emulator1984",
           "when": "false"
         },
@@ -1478,6 +1582,22 @@
         },
         {
           "command": "cpclib.runCslWith.cadence.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcse",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.cpcse.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.koncepcja",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.koncepcja.needsInstall",
           "when": "false"
         },
         {

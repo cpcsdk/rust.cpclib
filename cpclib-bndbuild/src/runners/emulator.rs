@@ -46,6 +46,18 @@ impl Emulator {
         ))
     }
 
+    pub fn new_cpcsyntaxerror_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CpcSyntaxError(
+            Default::default()
+        ))
+    }
+
+    pub fn new_koncepcja_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Koncepcja(
+            Default::default()
+        ))
+    }
+
     pub fn new_1984_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Emulator1984(
             Default::default()
@@ -105,6 +117,8 @@ impl Emulator {
             Self::new_cpcemu_default(),
             Self::new_capriceforever_default(),
             Self::new_cadence_default(),
+            Self::new_cpcsyntaxerror_default(),
+            Self::new_koncepcja_default(),
             Self::new_1984_default(),
             Self::new_retrovm_default(),
             Self::new_facade()

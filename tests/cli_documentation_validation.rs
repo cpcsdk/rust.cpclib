@@ -289,6 +289,8 @@ fn test_bndbuild_commands_documented() {
         (CPCEC_CMDS, "cpcec"),
         (CPCEMUPOWER_CMDS, "cpcemupower"),
         (CAPRICEFOREVER_CMDS, "capriceforever"),
+        (CPCSYNTAXERROR_CMDS, "cpcsyntaxerror"),
+        (KONCEPCJA_CMDS, "koncepcja"),
         (DISC_CMDS, "dsk"),
         (DISARK_CMDS, "disark"),
         (ECHO_CMDS, "echo"),

@@ -195,6 +195,18 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: CPCSYNTAXERROR_CMDS,
+        description: "Run in CPCSyntaxError emulator",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: KONCEPCJA_CMDS,
+        description: "Run in konCePCja emulator",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
         names: EMULATOR_1984_CMDS,
         description: "Run in 1984 emulator",
         synopsis: "TODO",

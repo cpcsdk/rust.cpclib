@@ -28,9 +28,10 @@ use crate::runners::hideur::HideurRunner;
 use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcemu_cmd, is_disc_cmd, is_echo_cmd,
-    is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_retrovm_cmd,
-    is_rm_cmd, is_two_cdt_cmd, is_winape_cmd, is_xfer_cmd
+    Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcemu_cmd, is_cpcsyntaxerror_cmd,
+    is_disc_cmd, is_echo_cmd, is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd,
+    is_koncepcja_cmd, is_orgams_cmd, is_retrovm_cmd, is_rm_cmd, is_two_cdt_cmd, is_winape_cmd,
+    is_xfer_cmd
 };
 use crate::{
     ALL_APPLICATIONS, BndBuilder, BndBuilderError, EXPECTED_FILENAMES, execute, init_project
@@ -645,6 +646,52 @@ Usage: retrovm [file]
 Arguments:
   [file]
       Optional snapshot (.sna) or disc image (.dsk) to open"
+                .to_owned()
+        }
+        else if is_cpcsyntaxerror_cmd(runner) {
+            r#"CPCSyntaxError can be started from the command line.
+
+Usage: cpcse [options]
+
+Options:
+  --load <file[@addr]>
+      Load a .dsk, .sna, .cpr, tape or .bin once the firmware has started
+  --command <text>
+      Typed after loading; \n is Enter. For example RUN"GAME\n
+  --run <entry|addr>
+      Start a loaded .bin
+  --gdb, --api
+      Start the GDB server (DeZog) or the command API
+  --csl <script>
+      Run a CSL script without a window
+
+Examples:
+  cpcse --load game.dsk --command "RUN\"GAME\n"
+  cpcse --load build/game.bin@0x4000 --run entry"#
+                .to_owned()
+        }
+        else if is_koncepcja_cmd(runner) {
+            r#"konCePCja can be started from the command line.
+
+Usage: koncepcja [options] <slotfile(s)>
+
+Options:
+  -a, --autocmd=<command>
+      Type a command after the CPC boots (repeatable)
+  -c, --cfg_file=<file>
+      Use another configuration file
+  -O, --override=<option>
+      Override an option of the configuration (example: -O system.model=3)
+  -s, --sym_file=<file>
+      Symbols for the developers' tools
+
+Arguments:
+  <slotfile(s)>
+      .dsk (the first in drive A, the second in drive B), .sna, .cpr, .cdt, ...
+
+Examples:
+  koncepcja sorcery.dsk
+  koncepcja game.dsk --autocmd="RUN\"GAME""#
                 .to_owned()
         }
         else if is_rm_cmd(runner) {

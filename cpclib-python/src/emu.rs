@@ -29,7 +29,9 @@ use cpclib_runner::runner::emulator::cadence::CadenceVersion;
 use cpclib_runner::runner::emulator::caprice_forever::CapriceForeverVersion;
 use cpclib_runner::runner::emulator::cpcemu::CpcEmuVersion;
 use cpclib_runner::runner::emulator::cpcemupower::CpcEmuPowerVersion;
+use cpclib_runner::runner::emulator::cpcsyntaxerror::CpcSyntaxErrorVersion;
 use cpclib_runner::runner::emulator::emulator1984::Emulator1984Version;
+use cpclib_runner::runner::emulator::koncepcja::KoncepcjaVersion;
 use cpclib_runner::runner::emulator::retrovm::RetroVmVersion;
 use cpclib_runner::runner::emulator::{
     AceVersion, AmspiritLiteVersion, AmspiritVersion, CpcecVersion, Emulator, SugarBoxV2Version,
@@ -63,7 +65,9 @@ const EMULATORS: &[&str] = &[
     "cpcemu",
     "cpcec",
     "cpcemupower",
+    "cpcse",
     "emulator1984",
+    "koncepcja",
     "retrovm",
     "winape",
     "sugarbox"
@@ -83,7 +87,9 @@ fn parse_emulator(name: &str) -> PyResult<Emulator> {
         "cpcemu" => Emulator::CpcEmu(CpcEmuVersion::default()),
         "cpcec" => Emulator::Cpcec(CpcecVersion::default()),
         "cpcemupower" => Emulator::CpcEmuPower(CpcEmuPowerVersion::default()),
+        "cpcse" | "cpcsyntaxerror" => Emulator::CpcSyntaxError(CpcSyntaxErrorVersion::default()),
         "emulator1984" => Emulator::Emulator1984(Emulator1984Version::default()),
+        "koncepcja" => Emulator::Koncepcja(KoncepcjaVersion::default()),
         "retrovm" => Emulator::RetroVm(RetroVmVersion::default()),
         "winape" => Emulator::Winape(WinapeVersion::default()),
         "sugarbox" | "sugarboxv2" => Emulator::SugarBoxV2(SugarBoxV2Version::default()),

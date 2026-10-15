@@ -39,6 +39,8 @@ CPC Runner is available as a standalone `cpcrunner` binary but can also be used 
 - **CPCEC** - Cross-platform, high compatibility
 - **AMSpiriT** - Windows, hardware-accurate
 - **SugarboxV2** - Cross-platform, modern
+- **CPCSyntaxError** - Cross-platform, cycle-level
+- **konCePCja** - Windows and macOS (wine on Linux)
 
 ## Common Use Cases
 

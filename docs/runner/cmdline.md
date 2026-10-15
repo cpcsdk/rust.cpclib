@@ -41,6 +41,8 @@ Available emulators:
 - `cpcec` - CPCEC (cross-platform)
 - `amspirit` - AMSpiriT (Windows)
 - `sugarbox` - SugarboxV2 (cross-platform)
+- `cpcse` - CPCSyntaxError (cross-platform)
+- `koncepcja` - konCePCja (Windows, macOS; wine on Linux)
 
 ### `-m, --memory <MEMORY>`
 Set CPC memory configuration (in KB).
