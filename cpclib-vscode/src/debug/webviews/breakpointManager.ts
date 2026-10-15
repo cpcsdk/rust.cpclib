@@ -16,6 +16,24 @@ import * as vscode from 'vscode';
 
 let panel: vscode.WebviewPanel | undefined;
 
+/** Where the manager's breakpoints of a program are kept between sessions. */
+function savedKey(program: string): string {
+    return `cpclib.managerBreakpoints:${program}`;
+}
+
+/** The manager's breakpoints saved for `program`, as the launch passes them. */
+export function savedManagerBreakpoints(context: vscode.ExtensionContext, program: string): unknown[] {
+    return context.workspaceState.get<unknown[]>(savedKey(program)) ?? [];
+}
+
+/** Keep the session's manager breakpoints for the next launch of its program. */
+async function save(context: vscode.ExtensionContext, session: vscode.DebugSession): Promise<void> {
+    const program = session.configuration.program;
+    if (typeof program !== 'string') { return; }
+    const manager = await session.customRequest('cpclib/breakpointManager');
+    await context.workspaceState.update(savedKey(program), manager?.saved ?? []);
+}
+
 async function snapshot(session: vscode.DebugSession): Promise<unknown> {
     const manager = await session.customRequest('cpclib/breakpointManager');
     let hits: Record<string, number> = {};
@@ -77,6 +95,7 @@ export function openBreakpointManager(context: vscode.ExtensionContext): void {
         if (!command) { return; }
         try {
             const answer = await session.customRequest(command, message.arguments ?? {});
+            await save(context, session);
             void panel?.webview.postMessage({ type: 'done', id: answer?.id });
         } catch (error) {
             void panel?.webview.postMessage({ type: 'error', text: String(error).replace(/^Error: /, '') });
@@ -162,6 +181,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   <button data-tab="exec" class="active">Execution<span class="count" id="count-exec"></span></button>
   <button data-tab="mem">Memory<span class="count" id="count-mem"></span></button>
   <button data-tab="io">Ports<span class="count" id="count-io"></span></button>
+  <button data-tab="raster">Raster<span class="count" id="count-raster"></span></button>
 </div>
 <div id="nosession" class="empty hidden">Start a CPC debug session to manage its breakpoints.</div>
 <div class="layout" id="main">
@@ -175,17 +195,20 @@ button:disabled { opacity: 0.5; cursor: default; }
   </div>
   <form id="form" autocomplete="off">
     <h3 id="formTitle">Breakpoint</h3>
-    <div class="field"><label for="address" id="addressLabel">Address</label>
+    <div class="field"><label for="preset">Predefined</label><select id="preset"></select></div>
+    <div class="field raster-only"><label for="rasterLine">Line</label><input id="rasterLine" type="number" min="0" max="311" placeholder="every line"></div>
+    <div class="field raster-only"><label for="nop">NOP</label><input id="nop" type="number" min="0" max="63" value="0"></div>
+    <div class="field not-raster"><label for="address" id="addressLabel">Address</label>
       <div class="pair"><input id="address" list="symbols" placeholder="&C03C or a label"><input id="mask" class="io-mem" placeholder="mask &FFFF"></div></div>
     <div class="field io-mem"><label for="access">Access</label>
       <select id="access"><option value="rw">Read and write</option><option value="r">Read only</option><option value="w">Write only</option></select></div>
     <div class="field mem-only"><label for="size">Size</label><input id="size" type="number" min="1" max="65535" value="1"></div>
     <div class="field io-mem"><label for="value">Value</label>
       <div class="pair"><input id="value" placeholder="&00"><input id="valmask" placeholder="mask &00 (any)"></div></div>
-    <div class="field"><label for="condition">Condition</label><input id="condition" placeholder="BC=7 AND FlagC"></div>
-    <div class="field"><label for="mode">Mode</label>
+    <div class="field not-raster"><label for="condition">Condition</label><input id="condition" placeholder="BC=7 AND FlagC"></div>
+    <div class="field not-raster"><label for="mode">Mode</label>
       <select id="mode"><option value="stop">Stop</option><option value="watch">Watch (report, go on)</option></select></div>
-    <div class="field"><label for="step">Pass</label><input id="step" type="number" min="0" value="0" title="Passes let through before it acts"></div>
+    <div class="field not-raster"><label for="step">Pass</label><input id="step" type="number" min="0" value="0" title="Passes let through before it acts"></div>
     <div class="field"><label for="name">Name</label><input id="name"></div>
     <div class="buttons">
       <button type="submit" class="action" id="add">Add</button>
@@ -210,6 +233,48 @@ const COLUMNS = {
   exec: [['symbol', 'Symbol'], ['address', 'Address'], ['condition', 'Condition'], ['pass', 'Pass'], ['mode', 'Mode'], ['name', 'Name'], ['origin', 'From']],
   mem: [['symbol', 'Symbol'], ['address', 'Address'], ['mask', '[mask]'], ['size', 'Size'], ['access', 'Access'], ['value', 'Value'], ['valmask', '[mask]'], ['condition', 'Condition'], ['pass', 'Pass'], ['mode', 'Mode'], ['name', 'Name'], ['origin', 'From']],
   io: [['address', 'Port'], ['mask', '[mask]'], ['access', 'Access'], ['value', 'Value'], ['valmask', '[mask]'], ['condition', 'Condition'], ['pass', 'Pass'], ['mode', 'Mode'], ['name', 'Name'], ['origin', 'From']],
+  raster: [['rasterLine', 'Line'], ['nop', 'NOP'], ['name', 'Name'], ['origin', 'From']],
+};
+
+// Ready-made breakpoints, as ACE's "Points d'arrêt prédéfinis": the CPC's
+// I/O ports decode a few address lines only, hence the masks.
+const PRESETS = {
+  exec: [
+    ['Interrupt (IM 1 handler, &0038)', { address: '&0038' }],
+    ['Firmware: TXT OUTPUT (&BB5A)', { address: '&BB5A' }],
+    ['Firmware: KM WAIT KEY (&BB18)', { address: '&BB18' }],
+    ['Firmware: SCR SET MODE (&BC0E)', { address: '&BC0E' }],
+    ['Firmware: MC WAIT FLYBACK (&BD19)', { address: '&BD19' }],
+    ['Firmware: CAS IN OPEN (&BC77)', { address: '&BC77' }],
+    ['AMSDOS: BIOS READ SECTOR (&C03C, ROM 7)', { address: '&C03C', condition: 'UpperROMOn AND UpperROMNum = 7', name: 'BIOS READ SECTOR' }],
+  ],
+  mem: [
+    ['Screen memory written (&C000-&FFFF)', { address: '&C000', size: 16384, access: 'w' }],
+    ['Firmware jumpblock written (&BB00-&BDFF)', { address: '&BB00', size: 768, access: 'w' }],
+    ['Restarts written (&0000-&003F)', { address: '&0000', size: 64, access: 'w' }],
+  ],
+  io: [
+    ['Gate Array: any write', { address: '&4000', mask: '&C000', access: 'w' }],
+    ['Gate Array: pen select', { address: '&4000', mask: '&C000', access: 'w', value: '&00', valmask: '&C0' }],
+    ['Gate Array: ink (colour)', { address: '&4000', mask: '&C000', access: 'w', value: '&40', valmask: '&C0' }],
+    ['Gate Array: mode and ROMs (RMR)', { address: '&4000', mask: '&C000', access: 'w', value: '&80', valmask: '&C0' }],
+    ['RAM banking (MMR)', { address: '&4000', mask: '&C000', access: 'w', value: '&C0', valmask: '&C0' }],
+    ['CRTC: register select', { address: '&0000', mask: '&4300', access: 'w' }],
+    ['CRTC: register write', { address: '&0100', mask: '&4300', access: 'w' }],
+    ['Upper ROM select', { address: '&0000', mask: '&2000', access: 'w' }],
+    ['PPI port A (PSG data)', { address: '&0000', mask: '&0B00' }],
+    ['PPI port C (PSG control, keyboard line)', { address: '&0200', mask: '&0B00', access: 'w' }],
+    ['PPI control', { address: '&0300', mask: '&0B00', access: 'w' }],
+    ['FDC: data register', { address: '&0101', mask: '&0581' }],
+    ['FDC: status read', { address: '&0100', mask: '&0581', access: 'r' }],
+    ['FDC: motor', { address: '&0000', mask: '&0581', access: 'w' }],
+  ],
+  raster: [
+    ['Frame start (line 0, NOP 0)', { rasterLine: 0, nop: 0 }],
+    ['Middle of the frame (line 156)', { rasterLine: 156, nop: 0 }],
+    ['Every line, NOP 0', { rasterLine: '', nop: 0 }],
+    ['Every line, NOP 40 (right border)', { rasterLine: '', nop: 40 }],
+  ],
 };
 
 function text(value) { return value === undefined || value === null ? '' : String(value); }
@@ -231,6 +296,7 @@ function cell(row, key) {
     return td;
   }
   if (key === 'access') { td.textContent = ACCESS[row.access] || text(row.access); return td; }
+  if (key === 'rasterLine' && (row.rasterLine === null || row.rasterLine === undefined)) { td.textContent = 'every line'; return td; }
   if (key === 'mode') { td.textContent = { stop: 'Stop', watch: 'Watch', log: 'Log' }[row.mode] || text(row.mode); return td; }
   td.textContent = text(row[key]);
   return td;
@@ -240,7 +306,7 @@ function render() {
   const has = !!state;
   $('nosession').classList.toggle('hidden', has);
   $('main').classList.toggle('hidden', !has);
-  for (const id of ['exec', 'mem', 'io']) {
+  for (const id of ['exec', 'mem', 'io', 'raster']) {
     $('count-' + id).textContent = has ? '(' + state.tabs[id].length + ')' : '';
   }
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -272,12 +338,22 @@ function render() {
     body.appendChild(line);
   }
   // The form's fields for this tab.
-  document.querySelectorAll('.io-mem').forEach(e => e.classList.toggle('hidden', tab === 'exec'));
+  document.querySelectorAll('.io-mem').forEach(e => e.classList.toggle('hidden', tab === 'exec' || tab === 'raster'));
+  document.querySelectorAll('.raster-only').forEach(e => e.classList.toggle('hidden', tab !== 'raster'));
+  document.querySelectorAll('.not-raster').forEach(e => e.classList.toggle('hidden', tab === 'raster'));
+  const preset = $('preset');
+  if (preset.dataset.tab !== tab) {
+    preset.dataset.tab = tab;
+    preset.innerHTML = '';
+    const none = document.createElement('option'); none.value = ''; none.textContent = 'Choose one to fill the form…'; preset.appendChild(none);
+    PRESETS[tab].forEach(([title], index) => { const option = document.createElement('option'); option.value = String(index); option.textContent = title; preset.appendChild(option); });
+  }
   document.querySelectorAll('.mem-only').forEach(e => e.classList.toggle('hidden', tab !== 'mem'));
   $('addressLabel').textContent = tab === 'io' ? 'Port' : 'Address';
   $('emulatorNote').textContent = state.whole
     ? (state.emulatorCounts ? 'Pass shows hits / passes let through, as the emulator counts them.' : '')
-    : 'This emulator only takes plain execution breakpoints from the manager: conditions, passes, watch mode, memory and port breakpoints need bemu.';
+    : 'This emulator only takes plain execution breakpoints from the manager: conditions, passes, watch mode, memory, port and raster breakpoints need bemu.';
+  if (tab === 'raster') { $('emulatorNote').textContent += ' Raster: stops when the beam reaches the line and NOP (a blank line: every line).'; }
   const list = $('symbols');
   if (list.childElementCount !== state.symbols.length) {
     list.innerHTML = '';
@@ -287,7 +363,7 @@ function render() {
 
 function select(row) {
   selected = row.key;
-  for (const key of ['address', 'mask', 'size', 'access', 'value', 'valmask', 'condition', 'step', 'name']) {
+  for (const key of ['address', 'mask', 'size', 'access', 'value', 'valmask', 'condition', 'step', 'name', 'rasterLine', 'nop']) {
     $(key).value = text(row[key]);
   }
   $('mode').value = row.mode === 'watch' ? 'watch' : 'stop';
@@ -302,6 +378,7 @@ function clearForm() {
   selected = null;
   for (const key of ['address', 'value', 'condition', 'name']) { $(key).value = ''; }
   $('mask').value = ''; $('valmask').value = ''; $('size').value = '1'; $('step').value = '0';
+  $('rasterLine').value = ''; $('nop').value = '0'; $('preset').value = '';
   $('access').value = 'rw'; $('mode').value = 'stop';
   $('update').disabled = true; $('remove').disabled = true;
   $('formTitle').textContent = 'Breakpoint'; $('rowNote').textContent = '';
@@ -309,6 +386,9 @@ function clearForm() {
 }
 
 function form() {
+  if (tab === 'raster') {
+    return { kind: 'raster', line: $('rasterLine').value, nop: $('nop').value, name: $('name').value };
+  }
   const breakpoint = { kind: tab };
   for (const key of ['address', 'mask', 'size', 'access', 'value', 'valmask', 'condition', 'mode', 'step', 'name']) {
     breakpoint[key] = $(key).value;
@@ -332,6 +412,16 @@ $('remove').addEventListener('click', () => {
   if (row) { vscode.postMessage({ type: 'remove', arguments: { id: row.id } }); clearForm(); }
 });
 $('new').addEventListener('click', clearForm);
+$('preset').addEventListener('change', () => {
+  const chosen = PRESETS[tab][Number($('preset').value)];
+  if (!$('preset').value || !chosen) { return; }
+  const [title, fields] = chosen;
+  const keep = $('preset').value;
+  clearForm();
+  $('preset').value = keep;
+  for (const [key, value] of Object.entries(fields)) { $(key).value = String(value); }
+  if (!fields.name) { $('name').value = title.replace(/ \\(.*\\)$/, ''); }
+});
 $('clear').addEventListener('click', () => vscode.postMessage({ type: 'clear', arguments: { kind: tab } }));
 window.addEventListener('message', event => {
   const message = event.data;

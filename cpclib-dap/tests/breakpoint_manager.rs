@@ -101,3 +101,40 @@ fn an_emulator_without_them_keeps_what_it_can() {
     assert_eq!(tabs["mem"][0]["status"], "inactive");
     assert!(tabs["mem"][0]["note"].as_str().unwrap().contains("bemu"));
 }
+
+/// Raster breakpoints have a tab of their own and travel whole.
+#[test]
+fn raster_breakpoints_are_listed_and_sent() {
+    let mut session = session(RecordingPeer::new().also_supporting(BEMU));
+    set(&mut session, json!({ "kind": "raster", "line": "100", "nop": "10", "name": "split" }));
+    set(&mut session, json!({ "kind": "raster", "nop": "40" }));
+    let listed = tabs(&mut session);
+    assert_eq!(listed["raster"][0]["rasterLine"], 100);
+    assert_eq!(listed["raster"][1]["rasterLine"], Value::Null, "every line");
+    let sent = session.peer().last("cpclib/setManagerBreakpoints").unwrap();
+    assert_eq!(sent["arguments"]["breakpoints"], json!([
+        { "id": 1, "label": "split", "kind": "raster", "line": 100, "nop": 10 },
+        { "id": 2, "label": "every line, NOP 40", "kind": "raster", "nop": 40 }
+    ]));
+}
+
+/// What the extension saves, and the next launch restores before anything
+/// runs.
+#[test]
+fn saved_breakpoints_are_restored() {
+    let mut first = session(RecordingPeer::new().also_supporting(BEMU));
+    set(&mut first, json!({ "kind": "exec", "address": "&4003", "condition": "A = 1", "name": "TrackDone" }));
+    set(&mut first, json!({ "kind": "raster", "line": "0", "nop": "0" }));
+    let saved = request(&mut first, "cpclib/breakpointManager", json!({}))["body"]["saved"].clone();
+    assert_eq!(saved.as_array().unwrap().len(), 2, "{saved}");
+
+    let mut next = Session::new(RecordingPeer::new().also_supporting(BEMU), map());
+    let mut forms = saved.as_array().unwrap().clone();
+    forms.push(json!({ "kind": "exec", "address": "gone_label" }));
+    let problems = next.restore_manager_breakpoints(&forms);
+    assert_eq!(problems.len(), 1, "a label no longer in the program is said: {problems:?}");
+    next.on_attached().unwrap();
+    let sent = next.peer().last("cpclib/setManagerBreakpoints").unwrap();
+    assert_eq!(sent["arguments"]["breakpoints"].as_array().unwrap().len(), 2);
+    assert_eq!(sent["arguments"]["breakpoints"][0]["condition"], "A = 1");
+}

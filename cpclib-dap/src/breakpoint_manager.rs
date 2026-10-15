@@ -3,6 +3,10 @@
 //! direction, a value, a condition, a run mode (stop or watch), a pass count
 //! and a name - rather than from a source line.
 //!
+//! A fourth kind has no address: a raster breakpoint stops when the beam
+//! reaches a line and a NOP of the frame (or a NOP of every line), bemu's
+//! `/api/raster_bp`.
+//!
 //! Applied whole by an emulator that takes `cpclib/setManagerBreakpoints`
 //! (bemu); elsewhere a plain execution one still becomes an address
 //! breakpoint and the others are listed as not armed.
@@ -14,7 +18,9 @@ use serde_json::{Value, json};
 pub enum ManagerKind {
     Exec,
     Memory,
-    Io
+    Io,
+    /// The beam at a position of the frame.
+    Raster
 }
 
 impl ManagerKind {
@@ -23,6 +29,7 @@ impl ManagerKind {
             "exec" | "execution" => Some(Self::Exec),
             "mem" | "memory" => Some(Self::Memory),
             "io" | "port" | "ports" => Some(Self::Io),
+            "raster" | "beam" => Some(Self::Raster),
             _ => None
         }
     }
@@ -32,7 +39,8 @@ impl ManagerKind {
         match self {
             Self::Exec => "exec",
             Self::Memory => "mem",
-            Self::Io => "io"
+            Self::Io => "io",
+            Self::Raster => "raster"
         }
     }
 }
@@ -42,7 +50,11 @@ impl ManagerKind {
 pub struct ManagerBreakpoint {
     pub id: u32,
     pub kind: ManagerKind,
+    /// The address or port; for a raster breakpoint, the line (`u32::MAX`:
+    /// every line).
     pub address: u32,
+    /// For a raster breakpoint, the NOP in the line (0-63).
+    pub nop: u32,
     pub mask: u16,
     /// Bytes covered from `address` (memory).
     pub size: u16,
@@ -79,6 +91,25 @@ impl ManagerBreakpoint {
             }
         };
         let kind = text("kind").and_then(ManagerKind::parse).ok_or("kind must be exec, mem or io")?;
+        if kind == ManagerKind::Raster {
+            let line = number("line", 311)?.map_or(u32::MAX, |line| line as u32);
+            let nop = number("nop", 63)?.unwrap_or(0) as u32;
+            return Ok(Self {
+                id,
+                kind,
+                address: line,
+                nop,
+                mask: 0xffff,
+                size: 1,
+                access: "rw".to_owned(),
+                value: 0,
+                value_mask: 0,
+                condition: None,
+                watch: false,
+                step: 0,
+                name: text("name").map(str::to_owned)
+            });
+        }
         let typed = text("address").ok_or("an address (or a label) is needed")?;
         let address = crate::session::parse_number(typed)
             .or_else(|| resolve(typed))
@@ -99,6 +130,7 @@ impl ManagerBreakpoint {
             id,
             kind,
             address,
+            nop: 0,
             mask: number("mask", 0xffff)?.unwrap_or(0xffff) as u16,
             size: number("size", 0xffff)?.unwrap_or(1).max(1) as u16,
             access: access.to_owned(),
@@ -119,7 +151,47 @@ impl ManagerBreakpoint {
 
     /// What the peer posts to bemu's `/api/breakpoints`, with its `id` and
     /// `label` (see `advanced_breakpoints`).
+    /// Back to the form it was made from: what the extension saves, and what
+    /// `from_form` reads again in the next session.
+    pub fn form(&self) -> Value {
+        let mut form = json!({ "kind": self.kind.name() });
+        if let Some(name) = &self.name {
+            form["name"] = json!(name);
+        }
+        if self.kind == ManagerKind::Raster {
+            form["nop"] = json!(self.nop);
+            if !self.every_line() {
+                form["line"] = json!(self.address);
+            }
+            return form;
+        }
+        form["address"] = json!(format!("&{:04X}", self.address));
+        form["mask"] = json!(format!("&{:04X}", self.mask));
+        form["size"] = json!(self.size);
+        form["access"] = json!(self.access);
+        form["value"] = json!(format!("&{:02X}", self.value));
+        form["valmask"] = json!(format!("&{:02X}", self.value_mask));
+        form["mode"] = json!(if self.watch { "watch" } else { "stop" });
+        form["step"] = json!(self.step);
+        if let Some(condition) = &self.condition {
+            form["condition"] = json!(condition);
+        }
+        form
+    }
+
+    /// Whether it is a raster breakpoint on every line.
+    pub fn every_line(&self) -> bool {
+        self.kind == ManagerKind::Raster && self.address == u32::MAX
+    }
+
     pub fn body(&self, label: &str) -> Value {
+        if self.kind == ManagerKind::Raster {
+            let mut body = json!({ "id": self.id, "label": label, "kind": "raster", "nop": self.nop });
+            if !self.every_line() {
+                body["line"] = json!(self.address);
+            }
+            return body;
+        }
         let mut body = json!({
             "id": self.id,
             "label": label,
@@ -165,6 +237,30 @@ mod tests {
 
         let plain = ManagerBreakpoint::from_form(&json!({ "kind": "exec", "address": "0x0506" }), 3, resolve).unwrap();
         assert!(plain.is_plain_exec());
+    }
+
+    #[test]
+    fn a_form_reads_back_the_same() {
+        for form in [
+            json!({ "kind": "exec", "address": "BIOS_READ_SECTOR", "condition": "BC=7 AND FlagC", "name": "TrackDone" }),
+            json!({ "kind": "io", "address": "&FB01", "mask": "&FF81", "mode": "watch", "step": 2 }),
+            json!({ "kind": "mem", "address": "&C000", "size": 16, "access": "w", "value": "&40", "valmask": "&C0" }),
+            json!({ "kind": "raster", "line": 100, "nop": 10 }),
+            json!({ "kind": "raster", "nop": 32, "name": "mid" }),
+        ] {
+            let made = ManagerBreakpoint::from_form(&form, 1, resolve).unwrap();
+            assert_eq!(ManagerBreakpoint::from_form(&made.form(), 1, resolve).unwrap(), made, "{form}");
+        }
+    }
+
+    #[test]
+    fn raster_breakpoints() {
+        let brk = ManagerBreakpoint::from_form(&json!({ "kind": "raster", "line": "100", "nop": "10" }), 4, resolve).unwrap();
+        assert_eq!(brk.body("beam"), json!({ "id": 4, "label": "beam", "kind": "raster", "line": 100, "nop": 10 }));
+        let every = ManagerBreakpoint::from_form(&json!({ "kind": "raster", "nop": "32" }), 5, resolve).unwrap();
+        assert!(every.every_line());
+        assert_eq!(every.body("mid"), json!({ "id": 5, "label": "mid", "kind": "raster", "nop": 32 }));
+        assert!(ManagerBreakpoint::from_form(&json!({ "kind": "raster", "nop": "64" }), 6, resolve).is_err());
     }
 
     #[test]
