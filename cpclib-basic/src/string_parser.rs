@@ -196,6 +196,9 @@ pub fn parse_basic_program(
 
 /// Parse a line
 pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
+    // tolerate indentation before the line number (e.g. embedded in assembly source)
+    let _ = take_while(0.., |c| c == ' ' || c == '\t').parse_next(input)?;
+
     // get the number
     let line_number = dec_u16_inner
         .context(StrContext::Label("Wrong line number"))
@@ -1317,22 +1320,39 @@ keyword_expr_parser!(
 );
 
 /// INK pen, color1 [, color2]
+/// Numeric argument of a command that the ROM accepts as any numeric expression
+/// (variables, functions, operators...). A bare integer literal keeps the strict
+/// `Integer` tokenisation; anything more complex falls back to the general form.
+fn parse_command_numeric_argument<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let checkpoint = input.checkpoint();
+    if let Ok(tokens) = terminated(
+        parse_numeric_expression(NumericExpressionConstraint::Integer),
+        peek(alt((one_of([',', ' ', '\t', ':', '\r', '\n']).void(), eof.void())))
+    )
+    .parse_next(input)
+    {
+        return Ok(tokens);
+    }
+    input.reset(&checkpoint);
+    parse_numeric_expression(NumericExpressionConstraint::None).parse_next(input)
+}
+
 pub fn parse_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let (_, space_a, pen, comma1, color1, opt_color2) = (
         Caseless("INK"),
         parse_basic_space1,
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
+            parse_command_numeric_argument
                 .context(StrContext::Label("Pen number expected"))
         ),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
+            parse_command_numeric_argument
                 .context(StrContext::Label("Color expected"))
         ),
         opt((
             parse_comma,
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
+            parse_command_numeric_argument
         ))
     )
         .parse_next(input)?;
@@ -2649,7 +2669,7 @@ pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(Caseless("GOSUB").context(StrContext::Label("GOSUB expected"))),
         parse_basic_space1,
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
+            parse_line_number_expression
                 .context(StrContext::Label("Line number expected"))
         )
     )
@@ -2706,7 +2726,7 @@ pub fn parse_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(Caseless("GOSUB").context(StrContext::Label("GOSUB expected"))),
         parse_basic_space1,
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
+            parse_line_number_expression
                 .context(StrContext::Label("Line number expected"))
         )
     )
