@@ -6728,6 +6728,70 @@ impl Env {
         self.output_bytes(&bytes)
     }
 
+    /// Replace every remaining `{expression}` of a BASIC source by the value of the
+    /// assembler expression (integers are written in hexadecimal to ensure a
+    /// consistent 2 bytes representation)
+    fn expand_basic_expressions(&mut self, code: &str) -> Result<String, Box<AssemblerError>> {
+        let mut result = String::with_capacity(code.len());
+        let mut rest = code;
+
+        while let Some(start) = rest.find('{') {
+            result.push_str(&rest[..start]);
+            let after = &rest[start + 1..];
+
+            // find the matching closing brace
+            let mut depth = 1usize;
+            let mut end = None;
+            for (idx, c) in after.char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = Some(idx);
+                            break;
+                        }
+                    },
+                    _ => {}
+                }
+            }
+            let Some(end) = end else {
+                // unbalanced: keep the text as is and let the basic parser complain
+                result.push_str(&rest[start..]);
+                return Ok(result);
+            };
+
+            let expr_src = after[..end].trim();
+            let listing = crate::parser::parse_z80_str(format!(" db {expr_src}"))?;
+            let expr = listing
+                .as_listing()
+                .iter()
+                .find_map(|t| {
+                    match t {
+                        Token::Defb(exprs) => exprs.first().cloned(),
+                        _ => None
+                    }
+                })
+                .ok_or_else(|| {
+                    Box::new(AssemblerError::AssemblingError {
+                        msg: format!("BASIC: `{expr_src}` is not a valid expression")
+                    })
+                })?;
+
+            let value = self.resolve_expr_may_fail_in_first_pass(&expr)?;
+            match value {
+                ExprResult::Value(v) => result.push_str(&format!("&{v:X}")),
+                ExprResult::String(s) => result.push_str(s.as_str()),
+                other => result.push_str(&other.to_string())
+            }
+
+            rest = &after[end + 1..];
+        }
+
+        result.push_str(rest);
+        Ok(result)
+    }
+
     pub fn assemble_basic<S: SourceString, S2: SourceString, E: ExprEvaluationExt>(
         &mut self,
         variables: Option<&[S]>,
@@ -6763,7 +6827,7 @@ impl Env {
                     basic = basic.replace(&key, &value);
                 }
             }
-            basic
+            self.expand_basic_expressions(&basic)?
         };
 
         // build the basic tokens
