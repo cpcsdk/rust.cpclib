@@ -1388,7 +1388,7 @@ pub struct ExprWarning {
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
-    Char(u8),
+    Char(char),
     Bool(bool),
     String(SmolStr),
     List(std::sync::Arc<Vec<ExprResult>>),
@@ -1567,7 +1567,7 @@ impl ExprResult {
                     Self::String(s) => {
                         s.chars()
                             .nth(i)
-                            .map(|c| Self::Char(c as u8))
+                            .map(|c| Self::Char(c))
                             .ok_or_else(|| {
                                 ExpressionTypeError(format!(
                                     "Subscript index {i} out of range (length {})",
@@ -1628,6 +1628,12 @@ impl From<String> for ExprResult {
 impl From<&SmolStr> for ExprResult {
     fn from(f: &SmolStr) -> Self {
         ExprResult::String(f.clone())
+    }
+}
+
+impl From<&str> for ExprResult {
+    fn from(f: &str) -> Self {
+        ExprResult::String(f.into())
     }
 }
 
@@ -1833,7 +1839,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.into_inner()),
             ExprResult::Value(i) => Ok(*i as f64),
-            ExprResult::Char(i) => Ok(*i as f64),
+            ExprResult::Char(i) => Ok(*i as u32 as f64),
             ExprResult::Bool(b) => Ok(if *b { 1_f64 } else { 0 as f64 }),
             _ => {
                 Err(ExpressionTypeError(format!(
@@ -1879,7 +1885,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(*f != 0.),
             ExprResult::Value(i) => Ok(*i != 0),
-            ExprResult::Char(i) => Ok(*i != 0),
+            ExprResult::Char(i) => Ok(*i as u32 != 0),
             ExprResult::Bool(b) => Ok(*b),
             _ => {
                 Err(ExpressionTypeError(format!(
@@ -2257,14 +2263,14 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             // wrapping a value that doesn't fit is the expected behavior
             // here, not a bug to guard against with an error.
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok(v1.wrapping_add(*v2).into()),
-            (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok(v1.wrapping_add(*v2).into()),
+            (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok((v1.to_string() + &v2.to_string()).into()),
             (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok(v1.wrapping_add(*v2 as i32).into()),
             (ExprResult::Char(v1), ExprResult::Value(v2)) => {
                 Ok((*v2).wrapping_add(v1 as i32).into())
             },
 
             (ExprResult::String(s), _) if s.len() == 1 => {
-                ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
+                ExprResult::Char(s.chars().next().unwrap()) + rhs.clone()
             },
 
             (ExprResult::String(s), _) => {
@@ -2276,7 +2282,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             (ExprResult::Char(c), _) => ExprResult::Value(c as _) + rhs.clone(),
 
             (any, ExprResult::String(s)) if s.len() == 1 => {
-                any + ExprResult::Char(s.chars().next().unwrap() as u8)
+                any + ExprResult::Char(s.chars().next().unwrap() )
             },
 
             (any, ExprResult::String(s)) => {
@@ -2326,12 +2332,12 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok(v1.wrapping_sub(*v2).into()),
 
             (ExprResult::String(s), _) if s.len() == 1 => {
-                ExprResult::Char(s.chars().next().unwrap() as u8) - rhs.clone()
+                ExprResult::Char(s.chars().next().unwrap()) - rhs.clone()
             },
             (ExprResult::Char(c), any) => ExprResult::Value(c as _) - any,
 
             (any, ExprResult::String(s)) if s.len() == 1 => {
-                any - ExprResult::Char(s.chars().next().unwrap() as u8)
+                any - ExprResult::Char(s.chars().next().unwrap())
             },
             (any, ExprResult::Char(c)) => any - ExprResult::Value(*c as _),
 
@@ -2735,7 +2741,7 @@ impl std::fmt::LowerHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{v:x}"),
-            ExprResult::Char(v) => write!(f, "{v:x}"),
+            ExprResult::Char(v) => write!(f, "{}", v.escape_unicode()),
             ExprResult::Bool(v) => write!(f, "{:x}", *v as u8),
             ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
@@ -2769,7 +2775,7 @@ impl std::fmt::UpperHex for ExprResult {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
             ExprResult::Value(v) => write!(f, "{v:X}"),
-            ExprResult::Char(v) => write!(f, "{:X}", *v),
+            ExprResult::Char(v) => write!(f, "{}",  v.escape_unicode() ),
             ExprResult::Bool(v) => write!(f, "{:X}", *v as u8),
             ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
@@ -3201,7 +3207,22 @@ mod range_and_broadcast_tests {
         let s = ExprResult::String("hello".into());
         assert_eq!(
             s.subscript(&[ExprResult::Value(1)]).unwrap(),
-            ExprResult::Char(b'e')
+            ExprResult::Char('e')
+        );
+    }
+
+
+    #[test]
+    fn subscript_single_index_on_a_string_returns_a_char2() {
+        let s = ExprResult::String("héllo".into());
+        assert_eq!(
+            s.subscript(&[ExprResult::Value(1)]).unwrap(),
+            ExprResult::Char('é')
+        );
+
+        assert_eq!(
+            s.subscript(&[ExprResult::Value(2)]).unwrap(),
+            ExprResult::Char('l')
         );
     }
 
@@ -3327,7 +3348,7 @@ mod wrapping_arithmetic_tests {
             ExprResult::Value(0)
         );
     }
-
+/*  deactivated as char are nreally chars
     #[test]
     fn char_add_wraps_at_u8_max() {
         assert_eq!(
@@ -3335,4 +3356,5 @@ mod wrapping_arithmetic_tests {
             ExprResult::Char(0)
         );
     }
+    */
 }

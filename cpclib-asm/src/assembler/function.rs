@@ -281,6 +281,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
 
         "load": Function::HardCoded(HardCodedFunction::Load),
+        "load_utf8": Function::HardCoded(HardCodedFunction::LoadUtf8),
 
         "section_start": Function::HardCoded(HardCodedFunction::SectionStart),
         "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
@@ -394,7 +395,8 @@ pub enum HardCodedFunction {
     StringFilter,
     StringUpperCase,
 
-    Load,
+    Load, // Load a binary file
+    LoadUtf8, // Load a UTF-8 text file
     Assemble,
 
     BinaryTransform,
@@ -575,6 +577,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListSublist => ExpectedNbArgs::Variable(&[2, 3]),
             HardCodedFunction::ListSplitByValue => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::LoadUtf8 => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixHeight => ExpectedNbArgs::Fixed(1),
@@ -926,6 +929,22 @@ impl HardCodedFunction {
                     file::load_file((fname, env.as_ref()), env.options().parse_options())?;
                 let data = Vec::from(data);
                 Ok(ExprResult::from(data.as_slice()))
+            },
+            HardCodedFunction::LoadUtf8 => {
+                let fname = params[0].as_ref().string()?;
+                // `env` is `&mut Env` here; `Fname` only has a `From` impl for
+                // `(&str, &Env)`, so this `.as_ref()` is the mut->shared
+                // downgrade the `Into<Fname>` bound actually needs - not a
+                // no-op, despite clippy's heuristic (it misses that case).
+                #[allow(clippy::useless_asref)]
+                let (data, _) =
+                    file::load_file((fname, env.as_ref()), env.options().parse_options())?;
+                let data = String::from_utf8(data.into()).map_err(|e| {
+                    Box::new(AssemblerError::AssemblingError {
+                        msg: format!("File {fname} is not valid UTF-8: {e}")
+                    })
+                })?;
+                Ok(ExprResult::from(data))
             },
             HardCodedFunction::SectionStart => section_start(params[0].as_ref().string()?, env),
             HardCodedFunction::SectionStop => section_stop(params[0].as_ref().string()?, env),

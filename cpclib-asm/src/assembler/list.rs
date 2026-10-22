@@ -151,12 +151,19 @@ pub fn list_position_predicate(
 pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::String(s) => {
+            // TODO use a length in CHARS!
             if index >= s.len() {
                 return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), index)
                 )));
             }
-            Ok(ExprResult::Char(s.chars().nth(index).unwrap() as _))
+
+            let c = s.chars().nth(index)
+                .ok_or_else(||Box::new(AssemblerError::ExpressionError(
+                    ExpressionError::InvalidSize(s.len(), index)
+                )))?;
+
+            Ok(ExprResult::Char(c))
         },
         ExprResult::List(_) => {
             if index >= list.list_len() {
@@ -218,6 +225,12 @@ pub fn list_split_by_value(
             }
             Ok(ExprResult::List(result.into()))
         },
+        ExprResult::String(s) => {
+            let mut current = String::new();
+            let separator = value.char()?;
+            let items = s.split(separator).map(|s| ExprResult::from(s)).collect_vec();
+            Ok(ExprResult::List(items.into()))
+        }
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -427,7 +440,7 @@ pub fn range_step_by(range: &ExprResult, step: i32) -> Result<ExprResult, Box<As
 pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => Ok(l.len().into()),
-        ExprResult::String(s) => Ok(s.len().into()),
+        ExprResult::String(s) => Ok(s.chars().count().into()),
         ExprResult::Char(_) => Ok(1.into()),
         // O(1), no materialization.
         ExprResult::Range {
