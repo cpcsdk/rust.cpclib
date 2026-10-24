@@ -711,12 +711,22 @@ pub fn song_metadata(song_path: &Utf8Path) -> SongMetadata {
         Err(_) => return meta
     }
 
-    let mut reader = quick_xml::Reader::from_str(&xml);
+    aks_metadata_from_xml(&xml)
+}
+
+/// Reads the song's title/author/composer/comment from the XML of an `.aks`.
+/// Character and entity references (`&#94;`, `&amp;`...) are delivered by
+/// quick-xml as events of their own, apart from the surrounding text.
+fn aks_metadata_from_xml(xml: &str) -> SongMetadata {
+    use quick_xml::events::Event;
+
+    let mut meta = SongMetadata::default();
+    let mut reader = quick_xml::Reader::from_str(xml);
     let mut depth = 0usize;
     let mut current: Option<&'static str> = None;
     while let Ok(event) = reader.read_event() {
-        match event {
-            quick_xml::events::Event::Start(tag) => {
+        let text = match event {
+            Event::Start(tag) => {
                 depth += 1;
                 if depth == 2 {
                     let name = tag.name();
@@ -729,28 +739,38 @@ pub fn song_metadata(song_path: &Utf8Path) -> SongMetadata {
                         _ => None
                     };
                 }
+                continue;
             },
-            quick_xml::events::Event::Text(text) if depth == 2 => {
-                if let Some(field) = current {
-                    let raw: &str = &text;
-                    let text = quick_xml::escape::unescape(raw)
-                        .map_or_else(|_| raw.to_string(), |t| t.into_owned());
-                    match field {
-                        "title" => meta.title.push_str(&text),
-                        "author" => meta.author.push_str(&text),
-                        "composer" => meta.composer.push_str(&text),
-                        _ => meta.comment.push_str(&text)
-                    }
+            Event::Text(text) if depth == 2 => text.into_inner().to_string(),
+            Event::CData(data) if depth == 2 => data.into_inner().to_string(),
+            Event::GeneralRef(reference) if depth == 2 => {
+                match reference.resolve_char_ref() {
+                    Ok(Some(c)) => c.to_string(),
+                    Ok(None) => {
+                        quick_xml::escape::resolve_predefined_entity(&reference)
+                            .map(str::to_owned)
+                            .unwrap_or_default()
+                    },
+                    Err(_) => String::new()
                 }
             },
-            quick_xml::events::Event::End(_) => {
+            Event::End(_) => {
                 depth = depth.saturating_sub(1);
                 if depth < 2 {
                     current = None;
                 }
+                continue;
             },
-            quick_xml::events::Event::Eof => break,
-            _ => {}
+            Event::Eof => break,
+            _ => continue
+        };
+
+        match current {
+            Some("title") => meta.title.push_str(&text),
+            Some("author") => meta.author.push_str(&text),
+            Some("composer") => meta.composer.push_str(&text),
+            Some(_) => meta.comment.push_str(&text),
+            None => {}
         }
     }
     meta
@@ -973,5 +993,42 @@ mod tests {
     fn sanitize_amsdos_stem_falls_back_to_prog_when_nothing_survives() {
         assert_eq!(sanitize_amsdos_stem("..."), "PROG");
         assert_eq!(sanitize_amsdos_stem(""), "PROG");
+    }
+}
+
+#[cfg(test)]
+mod aks_metadata_tests {
+    use super::aks_metadata_from_xml;
+
+    fn author(xml_author: &str) -> String {
+        let xml = format!(
+            "<?xml version=\"1.0\"?><song><title>T</title><author>{xml_author}</author>\
+             <instruments><instrument><title>NOT THE SONG</title></instrument></instruments></song>"
+        );
+        aks_metadata_from_xml(&xml).author
+    }
+
+    #[test]
+    fn decimal_char_reference_is_kept() {
+        assert_eq!(author("Warlord &#94; Benediction"), "Warlord ^ Benediction");
+    }
+
+    #[test]
+    fn hexadecimal_char_reference_is_kept() {
+        assert_eq!(author("Warlord &#x5E; Benediction"), "Warlord ^ Benediction");
+    }
+
+    #[test]
+    fn predefined_entities_are_kept() {
+        assert_eq!(author("A &amp; B &lt;C&gt; &quot;D&quot;"), "A & B <C> \"D\"");
+    }
+
+    #[test]
+    fn only_the_song_fields_are_read() {
+        let meta = aks_metadata_from_xml(
+            "<song><title>Song</title><composer>Me</composer><instruments><title>X</title></instruments></song>"
+        );
+        assert_eq!(meta.title, "Song");
+        assert_eq!(meta.composer, "Me");
     }
 }
