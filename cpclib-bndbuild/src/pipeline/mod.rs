@@ -12,6 +12,7 @@ pub mod basic_run;
 pub mod csl_run;
 pub mod debug;
 pub mod music_run;
+pub mod zik2cpc;
 
 use std::sync::Arc;
 

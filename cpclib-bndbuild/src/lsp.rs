@@ -423,6 +423,12 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: ZIK2CPC_CMDS,
+        description: "Convert, pack and play CPC music",
+        synopsis: "zik2cpc <convert|build|play|compare|players|info> [OPTIONS] <SONG>",
+        example: "zik2cpc convert song.aks song.akg --to akg"
+    },
+    TaskType {
         names: BNDBUILD_CMDS,
         description: "Run another bndbuild project",
         synopsis: "bndbuilder [OPTIONS] [TARGET]...",

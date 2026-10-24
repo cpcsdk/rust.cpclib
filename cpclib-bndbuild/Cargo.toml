@@ -92,6 +92,10 @@ predicates.workspace = true
 name = "bndbuild"
 path = "src/main.rs"
 
+[[bin]]
+name = "zik2cpc"
+path = "src/bin/zik2cpc.rs"
+
 [features]
 
 default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "screenshot", "archive-7z", "hfe",

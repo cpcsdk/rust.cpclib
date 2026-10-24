@@ -69,6 +69,6 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: false
-          artifacts: "target/release/basm, target/release/bdasm, target/release/bndbuild-gui, target/release/bndbuild, target/release/cpclib-bndbuild-ratatui, target/release/catalog,  target/release/cpc2img, target/release/cpclib-visual-bndbuild, target/release/visual-basm,  target/release/hideur, target/release/imgconverter, target/release/snapshot, target/release/cpclib-cslcli"
+          artifacts: "target/release/basm, target/release/bdasm, target/release/bndbuild-gui, target/release/bndbuild, target/release/cpclib-bndbuild-ratatui, target/release/catalog,  target/release/cpc2img, target/release/cpclib-visual-bndbuild, target/release/visual-basm,  target/release/hideur, target/release/imgconverter, target/release/snapshot, target/release/cpclib-cslcli, target/release/zik2cpc"
     - name: "cleanup after build"
       run: "cargo +nightly clean"

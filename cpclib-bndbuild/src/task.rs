@@ -77,6 +77,7 @@ pub enum InnerTask {
     CpcToImg(StandardTaskArguments),
     Cpr(StandardTaskArguments),
     Csl(StandardTaskArguments),
+    Zik2Cpc(StandardTaskArguments),
     Crunch(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
@@ -285,6 +286,7 @@ pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
 pub const CPR_CMDS: &[&str] = &["cpr"];
 pub const CSL_CMDS: &[&str] = &["csl"];
+pub const ZIK2CPC_CMDS: &[&str] = &["zik2cpc"];
 
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
@@ -325,6 +327,7 @@ impl Display for InnerTask {
             Self::CpcToImg(s) => (CPC2IMG_CMDS[0], s),
             Self::Cpr(s) => (CPR_CMDS[0], s),
             Self::Csl(s) => (CSL_CMDS[0], s),
+            Self::Zik2Cpc(s) => (ZIK2CPC_CMDS[0], s),
             Self::Crunch(s) => (CRUNCH_CMDS[0], s),
             Self::Disassembler(d, s) => (d.get_command(), s),
             Self::Disc(s) => (DISC_CMDS[0], s),
@@ -381,7 +384,7 @@ is_some_cmd!(
     ace, amspirit, amspiritlite, asm, asmfmt, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
     basmopt,
-    catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
+    catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, zik2cpc, crunch, cp, cpcec, cpcemupower, cpc2img,
     cadence, cpcsyntaxerror, emulator_1984,
     disark, disc,
     echo, emuctrl, r#extern,
@@ -600,6 +603,10 @@ impl InnerTask {
 
     pub fn with_csl(std: StandardTaskArguments) -> Self {
         Self::Csl(std)
+    }
+
+    pub fn with_zik2cpc(std: StandardTaskArguments) -> Self {
+        Self::Zik2Cpc(std)
     }
 
     pub fn with_crunch(std: StandardTaskArguments) -> Self {
@@ -969,6 +976,9 @@ impl InnerTask {
         else if is_csl_cmd(code) {
             Ok(Self::with_csl(std))
         }
+        else if is_zik2cpc_cmd(code) {
+            Ok(Self::with_zik2cpc(std))
+        }
         else if is_impdisc_cmd(code) {
             Ok(Self::with_impdsk(std))
         }
@@ -1080,6 +1090,7 @@ impl InnerTask {
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
             | InnerTask::Csl(t)
+            | InnerTask::Zik2Cpc(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::AsmFmt(t)
             | InnerTask::BasmOpt(t)
@@ -1136,7 +1147,8 @@ impl InnerTask {
             | InnerTask::Vlink(t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
-            | InnerTask::Csl(t) => t,
+            | InnerTask::Csl(t)
+            | InnerTask::Zik2Cpc(t) => t,
 
             #[cfg(feature = "tape")]
             InnerTask::Cdt(_, t) => t,
@@ -1214,6 +1226,7 @@ impl InnerTask {
             InnerTask::AsmFmt(_) => false,
             InnerTask::BasmOpt(_) => false,
             InnerTask::Csl(_) => false,
+            InnerTask::Zik2Cpc(_) => false,
             InnerTask::Pipe(p) => p.stages.iter().all(|s| s.is_phony())
         }
     }
@@ -1229,6 +1242,7 @@ impl InnerTask {
             InnerTask::CpcToImg(_) => TaskKind::Embedded,
             InnerTask::Cpr(_) => TaskKind::Embedded,
             InnerTask::Csl(_) => TaskKind::Embedded,
+            InnerTask::Zik2Cpc(_) => TaskKind::Embedded,
             InnerTask::Crunch(_) => TaskKind::Embedded,
             InnerTask::Disassembler(Disassembler::Bdasm, _) => TaskKind::Embedded,
             InnerTask::Disc(_) => TaskKind::Embedded,
@@ -1335,6 +1349,7 @@ impl InnerTask {
             Self::CpcToImg(empty_args.clone()),
             Self::Cpr(empty_args.clone()),
             Self::Csl(empty_args.clone()),
+            Self::Zik2Cpc(empty_args.clone()),
             Self::Crunch(empty_args.clone()),
             Self::Disc(empty_args.clone()),
             Self::Echo(empty_args.clone()),

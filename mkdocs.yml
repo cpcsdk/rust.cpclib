@@ -97,6 +97,8 @@ nav:
       - Command Line: 'cslcli/cmdline.md'
       - Language Reference: 'cslcli/language.md'
       - Examples: 'cslcli/examples.md'
+    - 'ZIK2CPC (Music Converter)':
+      - Overview: 'zik2cpc/index.md'
 site_name: "Amstrad RUST cpcdemotools"
 markdown_extensions:
   - pymdownx.highlight:

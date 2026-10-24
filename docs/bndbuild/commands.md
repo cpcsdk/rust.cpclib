@@ -204,6 +204,12 @@ The archive format is automatically detected from the file extension:
 
 **Standalone:** Available as `snapshot` binary. Create and manipulate snapshot files. For complete documentation, see [Snapshot Documentation](../../snapshot).
 
+## Music
+
+### Music conversion and players (zik2cpc)
+
+**Standalone:** Available as `zik2cpc` binary. For complete documentation, see [zik2cpc Documentation](../../zik2cpc).
+
 ## Image Processing
 
 ### Image management: Benediction transfer tool (img2cpc,imgconverter)

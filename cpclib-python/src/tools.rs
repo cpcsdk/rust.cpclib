@@ -75,6 +75,7 @@ const ALL_COMMANDS: &[&[&str]] = &[
     task::XFER_CMDS,
     task::CPR_CMDS,
     task::CSL_CMDS,
+    task::ZIK2CPC_CMDS,
     task::CRUNCH_CMDS,
     task::RTZX_CMDS,
     task::TWO_CDT_CMDS,

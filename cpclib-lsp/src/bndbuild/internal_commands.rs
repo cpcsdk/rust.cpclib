@@ -24,7 +24,7 @@ use cpclib_bndbuild::runners::fs::mv::MvRunner;
 use cpclib_bndbuild::runners::fs::rm::RmRunner;
 use cpclib_bndbuild::runners::xfer::XferRunner;
 use cpclib_bndbuild::runners::{
-    archive, asmfmt, basmdoc, bndbuild, cpc2img, cprcli, crunch, csl, fade, hideur, hxcfe, img2cpc,
+    archive, asmfmt, basmdoc, bndbuild, cpc2img, cprcli, crunch, csl, zik2cpc, fade, hideur, hxcfe, img2cpc,
     locomotive, snapshot
 };
 use cpclib_common::clap::Command;
@@ -143,6 +143,13 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
     m.insert("cpr", || {
         normalized(
             cprcli::CprCliRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
+    });
+    m.insert("zik2cpc", || {
+        normalized(
+            zik2cpc::Zik2CpcRunner::<CapturingObserver>::default()
                 .get_clap_command()
                 .clone()
         )

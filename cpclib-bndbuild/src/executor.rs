@@ -32,6 +32,7 @@ use crate::runners::cpc2img::CpcToImgRunner;
 use crate::runners::cprcli::CprCliRunner;
 use crate::runners::crunch::CrunchRunner;
 use crate::runners::csl::CslRunner;
+use crate::runners::zik2cpc::Zik2CpcRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
@@ -358,6 +359,9 @@ pub(crate) fn execute_redirected<E: BndBuilderObserver + 'static>(
         },
         InnerTask::Csl(_) => {
             CslRunner::default().run_redirected(task.args(), observer, stdin, stdout)
+        },
+        InnerTask::Zik2Cpc(_) => {
+            Zik2CpcRunner::default().run_redirected(task.args(), observer, stdin, stdout)
         },
         InnerTask::Vlink(_) => {
             DelegatedRunner::<E>::new(

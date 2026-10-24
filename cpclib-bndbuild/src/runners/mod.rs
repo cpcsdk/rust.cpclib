@@ -19,6 +19,7 @@ pub mod cpc2img;
 pub mod cprcli;
 pub mod crunch;
 pub mod csl;
+pub mod zik2cpc;
 pub mod disassembler;
 pub mod disc;
 pub mod echo;
