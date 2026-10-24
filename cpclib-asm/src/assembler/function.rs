@@ -34,6 +34,29 @@ use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan,
 use crate::section::*;
 use crate::{Compressor, Visited, maths};
 
+/// Number of NOPs (the CPC time unit) taken by the code assembled from `start` (included) to `stop` (excluded):
+/// the bytes are disassembled and the duration of each instruction is summed.
+/// Like `Token::estimated_duration`, the result is an estimation for conditional instructions.
+fn countnops(
+    start: &ExprResult,
+    stop: &ExprResult,
+    env: &Env
+) -> Result<ExprResult, Box<AssemblerError>> {
+    use crate::implementation::listing::ListingExt;
+
+    let start = start.int_value()?;
+    let stop = stop.int_value()?;
+    if !(0..=0xFFFF).contains(&start) || !(0..=0xFFFF).contains(&stop) || stop < start {
+        return Err(Box::new(AssemblerError::AssemblingError {
+            msg: format!("countnops: invalid range 0x{start:X}..0x{stop:X}")
+        }));
+    }
+
+    let bytes = env.get_memory(start as u16, (stop - start) as u16);
+    let duration = crate::disass::disassemble(&bytes).estimated_duration()?;
+    Ok(ExprResult::from(duration as i32))
+}
+
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
     type Expr: ExprEvaluationExt;
@@ -283,6 +306,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "load": Function::HardCoded(HardCodedFunction::Load),
         "load_utf8": Function::HardCoded(HardCodedFunction::LoadUtf8),
 
+        "countnops": Function::HardCoded(HardCodedFunction::CountNops),
         "section_start": Function::HardCoded(HardCodedFunction::SectionStart),
         "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
         "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
@@ -378,6 +402,7 @@ pub enum HardCodedFunction {
     MatrixWidth,
     MatrixHeight,
 
+    CountNops,
     SectionStart,
     SectionStop,
     SectionLength,
@@ -600,6 +625,7 @@ impl HardCodedFunction {
             HardCodedFunction::PensToMode2Byte => ExpectedNbArgs::Fixed(8),
             HardCodedFunction::SectionLength => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::CountNops => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::SectionStart => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStop => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionUsed => ExpectedNbArgs::Fixed(1),
@@ -946,6 +972,7 @@ impl HardCodedFunction {
                 })?;
                 Ok(ExprResult::from(data))
             },
+            HardCodedFunction::CountNops => countnops(params[0].as_ref(), params[1].as_ref(), env),
             HardCodedFunction::SectionStart => section_start(params[0].as_ref().string()?, env),
             HardCodedFunction::SectionStop => section_stop(params[0].as_ref().string()?, env),
             HardCodedFunction::SectionLength => section_length(params[0].as_ref().string()?, env),

@@ -194,3 +194,21 @@ compressed = binary_transform(data, "LZ48")
 - **`section_used("section_name")`** - Get number of bytes actually used in section
 - **`section_mmr("section_name")`** - Get memory mapper register value for section
 
+
+## Timing Functions
+
+- **`countnops(start_label, stop_label)`** - Number of NOPs (the CPC time unit) taken by the code
+  between two labels (`stop_label` excluded). The assembled bytes are disassembled and the duration of each
+  instruction is summed. As for every duration estimation, the result may be wrong for instructions having several
+  durations (conditional jumps...). Equivalent of rasm's `countnops`.
+
+Example:
+
+```z80
+start
+    ld a, b
+    push bc
+    pop bc
+end
+    assert countnops(start, end) == 8
+```
