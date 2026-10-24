@@ -93,7 +93,7 @@ SCR_INK_ENCODE equ #BC2C
 SCR_INK_DECODE equ #BC2F
 
 ; Action: Sets the colours of a PEN - if the two values supplied are different then the colours will alternate (flash)
-; Entry: contains the PEN number, B contains the first colour, and C holds the second colour
+; Entry: A contains the PEN number, B contains the first colour, and C holds the second colour
 ; Exit: AF, BC, DE and HL are corrupt, and all others are preserved
 SCR_SET_INK equ #BC32
 
