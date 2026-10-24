@@ -1,0 +1,7 @@
+	org 0x4000
+	RELOCATE_START
+a: nop
+b: nop
+	dw a + b
+	RELOCATE_END
+	RELOCATE_TABLE

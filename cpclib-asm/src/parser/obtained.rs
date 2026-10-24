@@ -29,7 +29,7 @@ use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryOperation, CharsetFormat,
     CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr,
     IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
-    Mnemonic, Register8, Register16, SaveType, SmcOffset, StableTickerAction, TestKind,
+    Mnemonic, RelocateEntrySize, Register8, Register16, SaveType, SmcOffset, StableTickerAction, TestKind,
     TestKindElement, ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation,
     data_access_impl_most_methods, data_access_is_any_indexregister8,
     data_access_is_any_indexregister16, data_access_is_any_register8,
@@ -1216,6 +1216,9 @@ pub enum LocatedTokenInner {
         source: Z80Span,
         expr: Option<LocatedExpr>
     },
+    RelocateStart,
+    RelocateEnd,
+    RelocateTable(RelocateEntrySize, Option<LocatedExpr>),
     Skip(LocatedExpr),
     SnaInit(LocatedExpr),
     SnaSet(SnapshotFlag, FlagValue),

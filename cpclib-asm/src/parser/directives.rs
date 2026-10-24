@@ -24,7 +24,7 @@ use cpclib_sna::{
     RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
 };
 use cpclib_tokens::macro_segment::tokenize_macro_body;
-use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
+use cpclib_tokens::{Expr, ExprFormat, FormattedExpr, RelocateEntrySize};
 
 use super::common::{
     inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0,
@@ -1997,6 +1997,7 @@ fn parse_directive_of_size_8(
             parse_export(ExportKind::NoExport).parse_next(input)
         },
         h if hashed_choice!(h, word, b"WAITNOPS") => parse_waitnops.parse_next(input),
+        h if hashed_choice!(h, word, b"RELOCATE") => parse_relocate.parse_next(input),
         h if hashed_choice!(h, word, b"SNAPINIT") => parse_snainit.parse_next(input),
 
         _ => {
@@ -2855,6 +2856,39 @@ pub fn parse_assembler_control_print_parse(
             )
         })
         .parse_next(input)
+}
+
+/// `RELOCATE_START`, `RELOCATE_END` or `RELOCATE_TABLE [byte|word] [base_address]`
+/// (the leading `RELOCATE` word has already been consumed: `_` is not part of the directive words)
+pub fn parse_relocate(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    alt((
+        Caseless("_START").map(|_| LocatedTokenInner::RelocateStart),
+        Caseless("_END").map(|_| LocatedTokenInner::RelocateEnd),
+        preceded(Caseless("_TABLE"), parse_relocate_table_arguments)
+    ))
+    .parse_next(input)
+}
+
+fn parse_relocate_table_arguments(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    my_space0.parse_next(input)?;
+    let size = opt(terminated(
+        alt((
+            terminated(Caseless("byte"), not(one_of(|c: u8| c.is_ascii_alphanumeric() || c == b'_')))
+                .map(|_| RelocateEntrySize::Byte),
+            terminated(Caseless("word"), not(one_of(|c: u8| c.is_ascii_alphanumeric() || c == b'_')))
+                .map(|_| RelocateEntrySize::Word)
+        )),
+        my_space0
+    ))
+    .parse_next(input)?
+    .unwrap_or_default();
+    let base = opt(located_expr).parse_next(input)?;
+
+    Ok(LocatedTokenInner::RelocateTable(size, base))
 }
 
 pub fn parse_stable_ticker(

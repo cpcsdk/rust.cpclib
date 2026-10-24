@@ -138,6 +138,31 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_phase.asm"
 ```
 
+### RELOCATE_START, RELOCATE_END, RELOCATE_TABLE
+
+WinAPE-like directives to generate a relocation table (also available in rasm).
+
+Synopsis:
+
+```
+RELOCATE_START
+...
+RELOCATE_END
+RELOCATE_TABLE [byte|word] [base_address]
+```
+
+- Every label defined between `RELOCATE_START` and `RELOCATE_END` is *relocatable*.
+- `RELOCATE_TABLE` generates, in the order of the code, one entry per 16 bits value (operand of `LD rr,nn`, `LD (nn),r`, `LD r,(nn)`, `JP nn`, `CALL nn`... or `DW`) whose expression is one relocatable address
+  (`label`, `label+5`, `$`...). The entry is the position of the value, minus `base_address` (0 by default). Entries are words, or bytes with `byte`.
+- Differences of relocatable labels (`end-start`) are not relocated as they do not depend on the address of the code. Sums of relocatable labels cannot be relocated and raise an error.
+- `relocate_count` is the number of entries of the last table and `relocate_size` its size in bytes. They can be used before the table.
+
+Example:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_relocate.asm"
+```
+
 ### RORG
 
 Synopsis:

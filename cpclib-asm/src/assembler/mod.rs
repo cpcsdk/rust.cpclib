@@ -24,6 +24,7 @@ pub mod maths;
 pub mod matrix;
 pub mod page_info;
 pub mod processed_token;
+pub mod relocate;
 pub mod report;
 pub mod save_command;
 pub mod section;
@@ -561,6 +562,9 @@ pub struct Env {
     /// Stable counter of nops
     stable_counters: StableTickerCounters,
 
+    /// RELOCATE_START/END/TABLE handling
+    relocation: relocate::RelocationState,
+
     /// gate array configuration
     ga_mmr: u8,
     /// duplicate of the output address to be sure to select the appropriate page info
@@ -810,6 +814,7 @@ impl Clone for Env {
             crunched_sections: Vec::new(),
             crunched_sections_pass: None,
             stable_counters: self.stable_counters.clone(),
+            relocation: self.relocation.clone(),
             ga_mmr: self.ga_mmr,
             output_address: self.output_address,
             active_page_index_cache: std::sync::Mutex::new(
@@ -1509,6 +1514,7 @@ impl Env {
             self.current_pass_discarded_errors.clear();
 
             self.stable_counters.new_pass();
+            self.relocation.new_pass();
             self.run_options = None;
             self.pending_smc_label = None;
 
@@ -3182,6 +3188,12 @@ impl Env {
                         Some(SmcOffset::Literal(n)) => value.wrapping_add(n),
                         _ => value
                     };
+                    if self.relocation.block_active
+                        && let Ok(resolved) = self.symbols().extend_local_and_patterns_for_symbol(label)
+                    {
+                        self.relocation
+                            .add_relocatable_label(resolved.value().to_owned());
+                    }
                     let addr = self.logical_to_physical_address(value);
                     self.add_symbol_to_symbol_table(
                         label,
@@ -4565,6 +4577,7 @@ impl Env {
             pass: AssemblingPass::Uninitialized,
             options: EnvOptions::default(),
             stable_counters: StableTickerCounters::default(),
+            relocation: relocate::RelocationState::default(),
             ga_mmr: 0xC0, // standard memory configuration
 
             macro_seed: 0,
@@ -5184,6 +5197,9 @@ macro_rules! visit_token_impl {
                 )
             },
             $cls::Section(name) => $env.visit_section(name),
+            $cls::RelocateStart => $env.visit_relocate_start(),
+            $cls::RelocateEnd => $env.visit_relocate_end(),
+            $cls::RelocateTable(size, base) => $env.visit_relocate_table(*size, base.as_ref()),
             $cls::Skip(amount) => $env.visit_skip(amount),
             $cls::SnaInit(fname) => $env.visit_snainit(fname),
             $cls::SnaSet(flag, value) => $env.visit_snaset(flag, value),
@@ -6584,6 +6600,10 @@ impl Env {
 
         let backup_address = env.logical_output_address();
         for exp in exprs.iter() {
+            if env.relocation.tracking && mask == 0xFFFF {
+                let address = env.logical_output_address();
+                env.track_relocation(address, exp);
+            }
             let exp = env.resolve_expr_may_fail_in_first_pass(exp)?;
             env.output_expr_result_masked(&exp, delta, mask)?;
             env.update_dollar();
@@ -6985,6 +7005,166 @@ impl Env {
     }
 }
 
+/// RELOCATE_START, RELOCATE_END and RELOCATE_TABLE
+impl Env {
+    pub fn visit_relocate_start(&mut self) -> Result<(), Box<AssemblerError>> {
+        if self.relocation.block_active {
+            return Err(Box::new(AssemblerError::AssemblingError {
+                msg: "RELOCATE_START: a relocation block is already open".to_owned()
+            }));
+        }
+        self.relocation.block_active = true;
+        self.relocation.tracking = true;
+        Ok(())
+    }
+
+    pub fn visit_relocate_end(&mut self) -> Result<(), Box<AssemblerError>> {
+        if !self.relocation.block_active {
+            return Err(Box::new(AssemblerError::AssemblingError {
+                msg: "RELOCATE_END: no RELOCATE_START block is open".to_owned()
+            }));
+        }
+        self.relocation.block_active = false;
+        Ok(())
+    }
+
+    pub fn visit_relocate_table<E: ExprEvaluationExt>(
+        &mut self,
+        size: RelocateEntrySize,
+        base: Option<&E>
+    ) -> Result<(), Box<AssemblerError>> {
+        if self.relocation.block_active {
+            return Err(Box::new(AssemblerError::AssemblingError {
+                msg: "RELOCATE_TABLE: a RELOCATE_START block is still open (missing RELOCATE_END)"
+                    .to_owned()
+            }));
+        }
+
+        let base = match base {
+            Some(base) => {
+                let base = self.resolve_expr_must_never_fail(base)?;
+                self.int_forward(&base)?
+            },
+            None => 0
+        };
+
+        let addresses = self
+            .relocation
+            .addresses_to_relocate()
+            .map_err(|msg| Box::new(AssemblerError::AssemblingError { msg }))?;
+
+        for address in &addresses {
+            let offset = i32::from(*address) - base;
+            match size {
+                RelocateEntrySize::Word => {
+                    let word = offset as u16;
+                    self.output_byte((word & 0xFF) as u8)?;
+                    self.output_byte((word >> 8) as u8)?;
+                },
+                RelocateEntrySize::Byte => {
+                    let byte = u8::try_from(offset).map_err(|_| {
+                        Box::new(AssemblerError::AssemblingError {
+                            msg: format!(
+                                "RELOCATE_TABLE byte: offset {offset} of address 0x{address:X} does not fit in a byte"
+                            )
+                        })
+                    })?;
+                    self.output_byte(byte)?;
+                }
+            }
+        }
+
+        let count = addresses.len();
+        let entry_size = match size {
+            RelocateEntrySize::Word => 2,
+            RelocateEntrySize::Byte => 1
+        };
+        // the count may change from a pass to the next one if code before the block uses
+        // some relocatable labels
+        if !self.pass.is_first_pass() && self.relocation.previous_count != Some(count) {
+            *self.request_additional_pass.write().unwrap() = true;
+        }
+        self.relocation.previous_count = Some(count);
+
+        self.symbols_mut()
+            .set_symbol_to_value("RELOCATE_COUNT", Value::from(count))?;
+        self.symbols_mut()
+            .set_symbol_to_value("RELOCATE_SIZE", Value::from(count * entry_size))?;
+        Ok(())
+    }
+
+    /// Remember a 16 bits value, to know later if it has to be relocated
+    fn track_relocation<E: ExprElement>(&mut self, address: u16, expr: &E) {
+        let expr = expr.to_expr().into_owned();
+        let mut atoms = Vec::new();
+        let linear = {
+            let symbols = self.symbols();
+            let resolve = |label: &str| {
+                symbols
+                    .extend_local_and_patterns_for_symbol(label)
+                    .map(|s| s.value().to_owned())
+                    .unwrap_or_else(|_| label.to_uppercase())
+            };
+            relocate::collect_atoms(&expr, 1, self.relocation.block_active, &resolve, &mut atoms)
+        };
+        if !atoms.is_empty() {
+            self.relocation.add_candidate(relocate::RelocationCandidate {
+                address,
+                expr,
+                atoms,
+                linear
+            });
+        }
+    }
+
+    /// An opcode that ends with a 16 bits address (`LD rr,nn`, `LD (nn),r`, `JP nn`, `CALL nn`...)
+    fn track_opcode_relocation<D: DataAccessElem>(
+        &mut self,
+        mnemonic: Mnemonic,
+        arg1: &Option<D>,
+        arg2: &Option<D>,
+        nb_bytes: usize
+    ) where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprElement
+    {
+        if nb_bytes < 3 {
+            return;
+        }
+
+        let is_16bits = match mnemonic {
+            Mnemonic::Jp | Mnemonic::Call => true,
+            Mnemonic::Ld => {
+                match (arg1, arg2) {
+                    (Some(a1), Some(a2)) => {
+                        ((a1.is_register16() || a1.is_indexregister16()) && a2.is_expression())
+                            || a1.is_memory()
+                            || a2.is_memory()
+                    },
+                    _ => false
+                }
+            },
+            _ => false
+        };
+        if !is_16bits {
+            return;
+        }
+
+        // the address is the last operand that is an expression
+        let Some(expr) = arg2
+            .as_ref()
+            .and_then(DataAccessElem::get_expression)
+            .or_else(|| arg1.as_ref().and_then(DataAccessElem::get_expression))
+        else {
+            return;
+        };
+
+        let address = self
+            .logical_output_address()
+            .wrapping_add(nb_bytes as u16 - 2);
+        self.track_relocation(address, expr);
+    }
+}
+
 /// Assemble the opcode and inject in the environement
 impl Env {
     pub fn visit_opcode<D: DataAccessElem>(
@@ -6999,6 +7179,10 @@ impl Env {
     {
         // TODO update $ in the symbol table
         let bytes = self.assemble_opcode_impl(mnemonic, arg1, arg2, arg3)?;
+
+        if self.relocation.tracking {
+            self.track_opcode_relocation(mnemonic, arg1, arg2, bytes.len());
+        }
 
         if let Some(pending) = self.pending_smc_label.take() {
             let offset = crate::assembler::smc::smart_smc_offset(
