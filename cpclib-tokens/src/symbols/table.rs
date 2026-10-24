@@ -1118,6 +1118,10 @@ impl SymbolsTable {
         }
     }
 
+    pub fn current_seed(&self) -> Option<usize> {
+        self.seed_stack.last().copied()
+    }
+
     /// Add a new seed for the @ symbol name resolution (we enter in a repeat)
     pub fn push_seed(&mut self, seed: usize) {
         self.seed_stack.push(seed)

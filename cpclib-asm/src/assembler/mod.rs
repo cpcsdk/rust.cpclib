@@ -107,6 +107,23 @@ const MMR_PAGES_SELECTION: [u8; 9] = [
 #[allow(missing_docs)]
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 
+/// An expansion site (macro call or repeat iteration) within the seed that encloses it
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct SeedSite {
+    /// Seed of the enclosing macro/repeat (0 at top level)
+    parent_seed: usize,
+    /// Hash of the source location of the call and of the iteration number
+    site_hash: u64
+}
+
+/// Identifies one expansion: the n-th time a site is met during a pass
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct SeedKey {
+    site: SeedSite,
+    /// Number of expansions of the same site already met in this pass
+    occurrence: usize
+}
+
 #[derive(Clone, Debug)]
 pub struct EnvOptions {
     parse: ParserOptions,
@@ -578,6 +595,13 @@ pub struct Env {
     /// Counter for the unique labels within macros
     macro_seed: usize,
 
+    /// Seeds already allocated to a given expansion site, kept across passes
+    /// so that a hidden `@label` gets the same name in every pass even when
+    /// the number of previous expansions changes between passes.
+    seed_registry: HashMap<SeedKey, usize>,
+    /// Number of expansions met per site in the current pass
+    seed_occurrences: HashMap<SeedSite, usize>,
+
     /// Stack of the macro/struct expansions and `INCLUDE`d files currently
     /// being visited, innermost last, interleaved in true nesting order (an
     /// `INCLUDE` inside a macro body, or a macro called from an included
@@ -795,6 +819,8 @@ impl Clone for Env {
             sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
             macro_seed: self.macro_seed,
+            seed_registry: self.seed_registry.clone(),
+            seed_occurrences: self.seed_occurrences.clone(),
             active_frames: self.active_frames.clone(),
             macro_expansion_cache: self.macro_expansion_cache.clone(),
             symbol_definition_chains: self.symbol_definition_chains.clone(),
@@ -1186,6 +1212,14 @@ impl Env {
             },
             (false, AssemblingPass::SecondPass(_)) => {
                 // here we weaken the test to allow multipass stuff
+                // A hidden `@label` can legitimately appear for the first time in pass 2:
+                // its expansion only exists now (e.g. conditional code enabled by a
+                // symbol computed in pass 1). Another pass is needed to resolve its forward references.
+                if label.starts_with('@') || label.contains(".__hidden__") {
+                    *self.request_additional_pass.write().unwrap() = true;
+                    self.symbols_mut().set_symbol_to_value(label, value)?;
+                    return Ok(());
+                }
                 if !self.requested_additional_pass && !*self.request_additional_pass.read().unwrap()
                 {
                     Err(Box::new(AssemblerError::IncoherentCode {
@@ -1516,7 +1550,8 @@ impl Env {
             self.update_dollar();
 
             self.ga_mmr = 0xC0;
-            self.macro_seed = 0;
+            // seeds are NOT reset: they must stay stable from one pass to the next
+            self.seed_occurrences.clear();
             self.charset_encoding.reset();
             // self.sna = Default::default(); // We finally keep the snapshot for the memory function
             // self.sna_version = cpclib_sna::SnapshotVersion::V3; // why changing it ?
@@ -4445,6 +4480,7 @@ impl Env {
         *self.request_additional_pass.write().unwrap() = request_additional_pass;
 
         self.macro_seed = crunched_env.macro_seed;
+        self.seed_registry = crunched_env.seed_registry.clone();
 
         // Sections nested in this one first, then this one.
         if self.crunched_sections_pass != Some(self.pass) {
@@ -4532,6 +4568,8 @@ impl Env {
             ga_mmr: 0xC0, // standard memory configuration
 
             macro_seed: 0,
+            seed_registry: HashMap::new(),
+            seed_occurrences: HashMap::new(),
             active_frames: Vec::new(),
             macro_expansion_cache: Arc::new(RwLock::new(HashMap::new())),
             symbol_definition_chains: HashMap::new(),
@@ -5835,8 +5873,7 @@ impl Env {
     {
         // handle symbols unicity
         {
-            self.macro_seed += 1;
-            let seed = self.macro_seed;
+            let seed = self.alloc_seed(span, iteration as u64);
             self.symbols_mut().push_seed(seed);
         }
 
@@ -5971,6 +6008,40 @@ impl Env {
 
 /// Macro related code
 impl Env {
+    /// Provide the seed of a macro call / repeat iteration. It only depends on
+    /// the enclosing seed and the expansion site (and not on the number of
+    /// expansions previously done), so it is identical in every pass.
+    pub fn alloc_seed(&mut self, span: Option<&Z80Span>, discriminant: u64) -> usize {
+        use std::hash::{Hash, Hasher};
+
+        let parent = self.symbols().current_seed().unwrap_or(0);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        if let Some(span) = span {
+            span.filename().hash(&mut hasher);
+            span.offset_from_start().hash(&mut hasher);
+        }
+        discriminant.hash(&mut hasher);
+        let site = hasher.finish();
+
+        let site = SeedSite {
+            parent_seed: parent,
+            site_hash: site
+        };
+        let occurrence = self.seed_occurrences.entry(site).or_insert(0);
+        let key = SeedKey {
+            site,
+            occurrence: *occurrence
+        };
+        *occurrence += 1;
+
+        if let Some(seed) = self.seed_registry.get(&key) {
+            return *seed;
+        }
+        self.macro_seed += 1;
+        self.seed_registry.insert(key, self.macro_seed);
+        self.macro_seed
+    }
+
     pub fn inc_macro_seed(&mut self) {
         self.macro_seed += 1;
     }

@@ -1583,8 +1583,7 @@ where
                             .cloned();
 
                         // Increment macro seed for this macro invocation
-                        env.inc_macro_seed();
-                        let macro_seed = env.macro_seed();
+                        let macro_seed = env.alloc_seed(self.token.possible_span(), 0);
                         env.symbols_mut().push_seed(macro_seed);
 
                         // Keep this expansion's buffer alive, and remember
