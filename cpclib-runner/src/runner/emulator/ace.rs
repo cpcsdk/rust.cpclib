@@ -219,15 +219,17 @@ impl AceVersion {
         self.data_folder(&conf).join("media").join("albireo1")
     }
 
-    /// The folder that contains `media`, `export`...: next to the executable, which
-    /// is inside the application bundle on macOS.
+    /// The folder that contains `media`, `export`...: next to the executable, except on macOS
+    /// where ACE-DL uses `~/ACE-DL-Files` (it looks there for the ROMs: it says
+    /// "~/ACE-DL-Files/media/rom/unidos.rom is missing" otherwise).
     fn data_folder<E: crate::event::EventObserver>(
         &self,
         conf: &crate::delegated::DelegateApplicationDescription<E>
     ) -> Utf8PathBuf {
         let folder = conf.cache_folder();
         if cfg!(target_os = "macos") {
-            folder.join("AceDL.app").join("Contents").join("MacOS")
+            Utf8PathBuf::from_path_buf(BaseDirs::new().unwrap().home_dir().join("ACE-DL-Files"))
+                .unwrap()
         }
         else {
             folder

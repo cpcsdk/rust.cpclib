@@ -854,15 +854,36 @@ impl EmulatorConf {
         if !self.roms_configuration.is_empty() {
             match emu {
                 Emulator::Bemu(_) => {
-                    // `--rom SLOT=FILE`, the ROMs being written next to the executable
+                    // `--rom SLOT=FILE`, the ROMs being written in the install folder.
+                    // UniDOS needs its NVRAM (a Nova, kept in a file, else it runs "degraded"), the
+                    // Albireo ROM, and AMSDOS elsewhere than its own slot 7.
                     let roms_folder = emu.roms_folder();
+                    let mut slots: Vec<(&str, u8)> = Vec::new();
                     for rom in &self.roms_configuration {
-                        for (embedded_name, slot) in amstrad_rom_slot_files(*rom) {
-                            let dst = roms_folder.join(embedded_name);
-                            ensure_embedded_rom_written(&dst, embedded_name)?;
-                            args.push("--rom".to_owned());
-                            args.push(format!("{slot}={dst}"));
+                        match rom {
+                            AmstradRom::Unidos => {
+                                slots.extend([
+                                    ("nova.rom", 1),
+                                    ("unidos.rom", 7),
+                                    ("albireo.rom", 27)
+                                ]);
+                                let nvram = roms_folder.join("nova_nvram.bin");
+                                args.push("--nova".to_owned());
+                                args.push(nvram.to_string());
+                                let amsdos = roms_folder.join("amsdos.rom");
+                                if amsdos.exists() {
+                                    args.push("--rom".to_owned());
+                                    args.push(format!("10={amsdos}"));
+                                }
+                            },
+                            AmstradRom::Orgams => slots.extend(amstrad_rom_slot_files(*rom))
                         }
+                    }
+                    for (embedded_name, slot) in slots {
+                        let dst = roms_folder.join(embedded_name);
+                        ensure_embedded_rom_written(&dst, embedded_name)?;
+                        args.push("--rom".to_owned());
+                        args.push(format!("{slot}={dst}"));
                     }
                 },
                 Emulator::AmspiritLite(_) => {

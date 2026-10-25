@@ -117,6 +117,15 @@ fn install<E: EventObserver>(dest: &Utf8Path, o: &E) -> Result<(), String> {
 
     let built = src.join("target").join("release").join(exec_name());
     fs_err::copy(&built, &target).map_err(|e| format!("cannot copy {built}: {e}"))?;
+
+    // the AMSDOS ROM bemu is shipped with: UniDOS needs it in a slot of its own
+    let amsdos = src.join("roms").join("amsdos.rom");
+    if amsdos.exists() {
+        let roms = dest.join("roms");
+        fs_err::create_dir_all(&roms).map_err(|e| e.to_string())?;
+        fs_err::copy(&amsdos, roms.join("amsdos.rom"))
+            .map_err(|e| format!("cannot copy {amsdos}: {e}"))?;
+    }
     Ok(())
 }
 
