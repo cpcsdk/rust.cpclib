@@ -1394,7 +1394,10 @@ impl BasicToken {
 
             BasicToken::Rsx(_name) => {
                 let encoded_name = self.rsx_encoded_name().unwrap();
-                let mut data = vec![BasicTokenNoPrefix::Pipe.value(), encoded_name.len() as u8];
+                // The second byte is the position of the RSX in the table of the ROMs when it was known
+                // when the line has been tokenised, 0 otherwise (what a saved program has for the RSX of a
+                // ROM that is not there when the program is written): the name is then searched at run time.
+                let mut data = vec![BasicTokenNoPrefix::Pipe.value(), 0];
                 data.extend_from_slice(&encoded_name);
                 data
             },
@@ -1490,7 +1493,9 @@ impl BasicToken {
     /// Encode a string by setting the bit 7 of last char. Returns a vector of bytes.
     fn encode_string(name: &str) -> Vec<u8> {
         let mut copy = name.as_bytes().to_vec();
-        copy.pop(); // Remove \0
+        if copy.last() == Some(&0) {
+            copy.pop(); // Remove \0
+        }
         if let Some(c) = copy.last_mut() {
             *c += 0b1000_0000; // Set bit 7 to last char
         }

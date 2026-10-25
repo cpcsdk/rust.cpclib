@@ -207,6 +207,20 @@ pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextEr
                 tokens.push(token);
             },
 
+            // RSX call: `|`, an offset in the table of the RSX (0 when unknown) and the name (last char has bit 7 set)
+            BasicTokenNoPrefix::Pipe => {
+                let _offset = u8.parse_next(bytes)?;
+                let mut name_bytes = Vec::new();
+                loop {
+                    let byte = u8.parse_next(bytes)?;
+                    name_bytes.push(byte & 0x7F);
+                    if byte & 0x80 != 0 {
+                        break;
+                    }
+                }
+                tokens.push(BasicToken::Rsx(String::from_utf8_lossy(&name_bytes).to_string()));
+            },
+
             // Quoted string: token 0x22 + string content until closing quote or end of bytes
             BasicTokenNoPrefix::ValueQuotedString => {
                 let mut string_bytes = Vec::new();
@@ -346,5 +360,15 @@ mod tests {
             BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace)
         );
         assert_eq!(res[1], BasicToken::PrefixedToken(BasicTokenPrefixed::Abs));
+    }
+
+    #[test]
+    fn test_parse_rsx() {
+        // |ORGSET,"a"  (the offset is 0: the RSX was unknown when the program has been saved)
+        let data = [0x7C, 0x00, b'O', b'R', b'G', b'S', b'E', b'T' | 0x80, b',', 0x22, b'a', 0x22];
+        let mut input: &[u8] = &data;
+        let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+        assert_eq!(res[0], BasicToken::Rsx("ORGSET".to_owned()));
+        assert_eq!(res[0].as_bytes(), data[..8].to_vec());
     }
 }

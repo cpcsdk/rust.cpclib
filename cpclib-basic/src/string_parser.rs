@@ -442,7 +442,7 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
         )),
         // Assignment (LET is optional, but checked first since it's a keyword)
         // MID$ assignment is also checked before regular assignment as it's a special form
-        alt((parse_let, parse_mid_assign, parse_assign))
+        alt((parse_rsx, parse_let, parse_mid_assign, parse_assign))
     ))
     .context(StrContext::Label("Unable to parse an instruction"))
     .parse_next(input)?;
@@ -525,6 +525,40 @@ pub fn parse_rem<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
         list.as_bytes().to_vec(),
         false
     ))
+}
+
+/// `|NAME [, argument]*`: a call to a RSX (a ROM command). An argument is the address of a variable
+/// (`@var%`, the way a RSX gives a value back), a string or a numeric expression.
+pub fn parse_rsx<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    '|'.parse_next(input)?;
+    let name: &str = cut_err(
+        take_while(1.., |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+            .context(StrContext::Label("RSX name expected"))
+    )
+    .parse_next(input)?;
+
+    let mut res = vec![BasicToken::Rsx(name.to_ascii_uppercase())];
+    while let Some(mut comma) = opt(parse_comma).parse_next(input)? {
+        res.append(&mut comma);
+        let mut argument = cut_err(
+            alt((
+                (
+                    '@'.map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::CharAt)),
+                    parse_variable
+                )
+                    .map(|(at, mut variable)| {
+                        variable.insert(0, at);
+                        variable
+                    }),
+                parse_string_expression,
+                parse_numeric_expression(NumericExpressionConstraint::None)
+            ))
+            .context(StrContext::Label("RSX argument expected"))
+        )
+        .parse_next(input)?;
+        res.append(&mut argument);
+    }
+    Ok(res)
 }
 
 pub fn parse_basic_space<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
