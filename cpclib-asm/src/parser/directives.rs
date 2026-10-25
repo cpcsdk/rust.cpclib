@@ -24,7 +24,7 @@ use cpclib_sna::{
     RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
 };
 use cpclib_tokens::macro_segment::tokenize_macro_body;
-use cpclib_tokens::{Expr, ExprFormat, FormattedExpr, RelocateEntrySize};
+use cpclib_tokens::{BinaryOperation, Expr, ExprFormat, FormattedExpr, RelocateEntrySize};
 
 use super::common::{
     inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0,
@@ -391,6 +391,34 @@ pub fn parse_union(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
     }
 }
 
+/// `= start TO stop [STEP step]` or `= start UNTIL stop [STEP step]`.
+/// An excluded stop is turned into `stop - 1` as the loop includes its stop value.
+#[allow(clippy::type_complexity)]
+fn parse_for_keyword_form(
+    input: &mut InnerZ80Span
+) -> ModalResult<(LocatedExpr, LocatedExpr, Option<LocatedExpr>), Z80ParserError> {
+    let _ = (my_space0, '=', my_space0).parse_next(input)?;
+    let start = located_expr.parse_next(input)?;
+    let _ = my_space0.parse_next(input)?;
+    let excluded = alt((
+        (Caseless("TO"), my_space1).map(|_| false),
+        (Caseless("UNTIL"), my_space1).map(|_| true)
+    ))
+    .parse_next(input)?;
+    let stop = located_expr.parse_next(input)?;
+    let stop = if excluded {
+        let one = LocatedExpr::Value(1, stop.span().clone());
+        let span = stop.span().clone();
+        LocatedExpr::BinaryOperation(BinaryOperation::Sub, Box::new(stop), Box::new(one), span)
+    }
+    else {
+        stop
+    };
+    let step = opt(preceded((my_space0, Caseless("STEP"), my_space1), located_expr))
+        .parse_next(input)?;
+    Ok((start, stop, step))
+}
+
 pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
     let for_start = input.checkpoint();
@@ -404,25 +432,34 @@ pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Parse
         ERR_FOR_ERROR_IN_BLOCK
     )
     .parse_next(input)?;
-    let start = parse_block_error(
-        cut_err(
-            preceded(parse_comma, located_expr)
-                .context(StrContext::Label("FOR: error in start value"))
-        ),
-        for_start_span,
-        ERR_FOR_ERROR_IN_BLOCK
-    )
-    .parse_next(input)?;
-    let stop = parse_block_error(
-        cut_err(
-            preceded(parse_comma, located_expr)
-                .context(StrContext::Label("FOR: error in stop value"))
-        ),
-        for_start_span,
-        ERR_FOR_ERROR_IN_BLOCK
-    )
-    .parse_next(input)?;
-    let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
+    // `FOR counter = start TO stop [STEP step]` (stop included) or
+    // `FOR counter = start UNTIL stop [STEP step]` (stop excluded)
+    let keyword_form = opt(parse_for_keyword_form).parse_next(input)?;
+    let (start, stop, step) = if let Some(form) = keyword_form {
+        form
+    }
+    else {
+        let start = parse_block_error(
+            cut_err(
+                preceded(parse_comma, located_expr)
+                    .context(StrContext::Label("FOR: error in start value"))
+            ),
+            for_start_span,
+            ERR_FOR_ERROR_IN_BLOCK
+        )
+        .parse_next(input)?;
+        let stop = parse_block_error(
+            cut_err(
+                preceded(parse_comma, located_expr)
+                    .context(StrContext::Label("FOR: error in stop value"))
+            ),
+            for_start_span,
+            ERR_FOR_ERROR_IN_BLOCK
+        )
+        .parse_next(input)?;
+        let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
+        (start, stop, step)
+    };
 
     // Get loop content
     let inner = parse_block_error(

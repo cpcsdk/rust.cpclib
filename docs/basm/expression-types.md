@@ -200,7 +200,7 @@ Listed by precedence (highest to lowest). [Indexing/slicing](#indexing-and-slici
 binds tighter than any of these - it applies directly to the value it follows, before any operator
 below gets a chance to.
 
-1. **Multiplication/Division**: `*`, `/` (real division), `//` (integer division), `%` (modulo)
+1. **Multiplication/Division**: `*`, `/` (real division), `//` or `div` (integer division), `%` or `mod` (modulo)
 2. **Addition/Subtraction**: `+`, `-`
 3. **Bitwise Shift**: `<<`, `>>`
 4. **Relational**: `<`, `>`, `<=`, `>=`

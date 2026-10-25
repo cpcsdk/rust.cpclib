@@ -768,6 +768,7 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
             parse_oper(parse_factor_with_subscript, b"%", BinaryOperation::Mod),
             parse_oper(parse_factor_with_subscript, b"MOD", BinaryOperation::Mod),
             parse_oper(parse_factor_with_subscript, b"//", BinaryOperation::IntDiv),
+            parse_oper(parse_factor_with_subscript, b"DIV", BinaryOperation::IntDiv),
             parse_oper(parse_factor_with_subscript, b"/", BinaryOperation::Div)
         ))
     )
@@ -794,7 +795,12 @@ where
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
-        let _ = (my_space0, Caseless(pattern), my_space0).parse_next(input)?;
+        let _ = (my_space0, Caseless(pattern)).parse_next(input)?;
+        // `MOD`/`DIV` must not be the beginning of a longer name
+        if pattern.last().is_some_and(u8::is_ascii_alphabetic) {
+            not(one_of(|c: u8| c.is_ascii_alphanumeric() || c == b'_')).parse_next(input)?;
+        }
+        let _ = my_space0.parse_next(input)?;
 
         // for orgams we cannot accept * as being a multiplication if it is followed by another * as it represents a repetition
         if input.state.options().is_orgams() && pattern == b"*" {

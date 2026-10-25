@@ -307,6 +307,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "load_utf8": Function::HardCoded(HardCodedFunction::LoadUtf8),
 
         "countnops": Function::HardCoded(HardCodedFunction::CountNops),
+        "sizeof": Function::HardCoded(HardCodedFunction::SizeOf),
         "section_start": Function::HardCoded(HardCodedFunction::SectionStart),
         "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
         "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
@@ -403,6 +404,7 @@ pub enum HardCodedFunction {
     MatrixHeight,
 
     CountNops,
+    SizeOf,
     SectionStart,
     SectionStop,
     SectionLength,
@@ -626,6 +628,7 @@ impl HardCodedFunction {
             HardCodedFunction::SectionLength => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::CountNops => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::SizeOf => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStart => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStop => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionUsed => ExpectedNbArgs::Fixed(1),
@@ -972,6 +975,8 @@ impl HardCodedFunction {
                 })?;
                 Ok(ExprResult::from(data))
             },
+            // a structure name evaluates to its size in bytes: this is only a more explicit way to write it
+            HardCodedFunction::SizeOf => Ok(ExprResult::from(params[0].as_ref().int_value()?)),
             HardCodedFunction::CountNops => countnops(params[0].as_ref(), params[1].as_ref(), env),
             HardCodedFunction::SectionStart => section_start(params[0].as_ref().string()?, env),
             HardCodedFunction::SectionStop => section_stop(params[0].as_ref().string()?, env),

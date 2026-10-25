@@ -322,7 +322,7 @@ Output:
 
 The `cpclib-runner` crate manages external tools:
 
-- **Assemblers**: Rasm, Orgams, Sjasmplus, Vasm, uz80
+- **Assemblers**: Rasm, Orgams, Sjasmplus, Vasm, uz80, Fantams
 - **Emulators**: WinAPE, ACE, CPCEC, Sugarbox, AmSpirit, Caprice
 - **Trackers**: ArkosTracker 3, ChipNSFX
 - **Compression**: Exomizer, LZSA, DZ80

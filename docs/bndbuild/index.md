@@ -3,7 +3,7 @@
 ## Synopsis
 
 Crossdev tool tailored to build Amstrad CPC project although it can generalize to z80-related projects or even any buildable projects.
-It embeds the Benediction crossdev ecosystem such as `basm`, `m4`, `img2cpc` but can still execute external programs such as `sjasmplus`, `rasm`, `winape`, `ace` it is able to download and install or any command chosen by the user.
+It embeds the Benediction crossdev ecosystem such as `basm`, `m4`, `img2cpc` but can still execute external programs such as `sjasmplus`, `rasm`, `fantams`, `winape`, `ace` it is able to download and install or any command chosen by the user.
 
 It can be used  as a command launcher or a build system and is available as a command line and a graphical version.
 
@@ -203,7 +203,7 @@ For a complete reference of all available commands and their options, see [Comma
   - `impdsk` - Impact DSK manager  
 - **Assemblers**: 
   - [BASM](../basm/) - Benediction assembler
-  - `rasm`, [orgams/borgams](../borgams/), `sjasmplus`, `vasm`
+  - `rasm`, [orgams/borgams](../borgams/), `sjasmplus`, `vasm`, `fantams`
 - **Emulators**: 
   - `cpc/emu` - Emulator-agnostic interface
   - `ace`, `winape`, `cpcec`, `amspirit`, `sugarbox`

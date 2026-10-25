@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `basm` add the `div` integer division operator, the `sizeof(structure)` function and the `FOR var = a TO|UNTIL b [STEP s]` syntax (ideas from the fantams assembler, see #107)
+- `basm` add the `RELOCATE_START`, `RELOCATE_END` and `RELOCATE_TABLE` directives (#73)
+- `basm` add the `countnops(label1, label2)` function (#74)
+- `cpclib-bndbuild` add the `zik2cpc` command line tool and bndbuild command (#119)
 - GitHub Actions CI/CD workflows for automated testing and quality checks
 - CONTRIBUTING.md with development guidelines and setup instructions
 - Workspace-level version management for consistency across crates

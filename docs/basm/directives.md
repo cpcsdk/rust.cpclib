@@ -798,13 +798,16 @@ Example:
 Synopsis:
 
 ```
-FOR <variable>, EXPRESSION [, EXPRESSION]*
+FOR <variable>, START, STOP [, STEP]
+FOR <variable> = START TO STOP [STEP STEP]
+FOR <variable> = START UNTIL STOP [STEP STEP]
   ... LISTING ...
 ENDFOR|FEND
 ```
 
 Description:
 Iterate over a list of values, executing the block for each value. The variable takes on each value in the list.
+With `TO` (and the comma form), `STOP` is included in the loop. With `UNTIL` (fantams syntax), it is excluded.
 
 Example:
 
