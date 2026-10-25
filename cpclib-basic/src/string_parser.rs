@@ -2258,15 +2258,9 @@ pub fn parse_out<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     let (_, space_a, port, comma, value) = (
         Caseless("OUT"),
         parse_basic_space1,
-        cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
-                .context(StrContext::Label("Port expected"))
-        ),
+        cut_err(parse_command_numeric_argument.context(StrContext::Label("Port expected"))),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
-        cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
-                .context(StrContext::Label("Value expected"))
-        )
+        cut_err(parse_command_numeric_argument.context(StrContext::Label("Value expected")))
     )
         .parse_next(input)?;
 
