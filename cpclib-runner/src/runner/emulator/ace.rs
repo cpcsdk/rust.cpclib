@@ -198,19 +198,34 @@ impl AceVersion {
     pub fn screenshots_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration::<()>();
 
-        conf.cache_folder().join("export").join("screenshot")
+        self.data_folder(&conf).join("export").join("screenshot")
     }
 
     pub fn roms_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration::<()>();
 
-        conf.cache_folder().join("media").join("rom")
+        self.data_folder(&conf).join("media").join("rom")
     }
 
     pub fn albireo_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration::<()>();
 
-        conf.cache_folder().join("media").join("albireo1")
+        self.data_folder(&conf).join("media").join("albireo1")
+    }
+
+    /// The folder that contains `media`, `export`...: next to the executable, which
+    /// is inside the application bundle on macOS.
+    fn data_folder<E: crate::event::EventObserver>(
+        &self,
+        conf: &crate::delegated::DelegateApplicationDescription<E>
+    ) -> Utf8PathBuf {
+        let folder = conf.cache_folder();
+        if cfg!(target_os = "macos") {
+            folder.join("AceDL.app").join("Contents").join("MacOS")
+        }
+        else {
+            folder
+        }
     }
 }
 

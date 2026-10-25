@@ -591,7 +591,12 @@ pub struct EmulatorConf {
     pub crtc: Option<Crtc>,
 
     /// Do not display the window
-    pub transparent: bool
+    pub transparent: bool,
+
+    /// The emulator is driven by a `Robot`, which needs its remote API (not every build of the
+    /// emulator has it, so it must not be requested otherwise)
+    #[builder(default)]
+    pub robot_api: bool
 }
 
 impl EmulatorConf {
@@ -700,7 +705,9 @@ impl EmulatorConf {
         // existing `screenshot()` override and Orgams keystroke automation
         // both depend on a real, normally-decorated window.
         #[cfg(feature = "screenshot")]
-        if let Emulator::Ace(_) = emu {
+        if let Emulator::Ace(_) = emu
+            && self.robot_api
+        {
             args.push("-enable_webapi".to_owned());
             args.push("-web_port".to_owned());
             args.push(ACE_ROBOT_WEB_API_PORT.to_string());
@@ -1001,7 +1008,8 @@ impl EmulatorConf {
                     if let Some(ext) = ftype.extension()
                         && ext == "txt"
                     {
-                        args.push(ftype.as_str().to_string());
+                        // ACE runs in its own folder: a relative path would not be found
+                        args.push(emu.launch_fname(ftype)?.to_string());
                     }
                     else {
                         return Err(format!("`{ftype}` should end by .txt"));
@@ -2905,7 +2913,8 @@ impl RobotHandle {
         o: &E,
         headless_display: Option<HeadlessDisplay>
     ) -> Result<Self, String> {
-        let (t_emu, t_conf, t_o) = (emu.clone(), conf.clone(), o.clone());
+        let (t_emu, mut t_conf, t_o) = (emu.clone(), conf.clone(), o.clone());
+        t_conf.robot_api = true;
         std::thread::spawn(move || {
             if let Err(e) = start_emulator(&t_emu, &t_conf, &t_o) {
                 t_o.emit_stderr(&format!("emulator launch failed: {e}\n"));
@@ -4831,7 +4840,8 @@ mod tests {
             debug_files: Vec::new(),
             break_on_bad_vbl: false,
             break_on_bad_hbl: false,
-            transparent: false
+            transparent: false,
+            robot_api: false
         };
 
         let script = cpclib_csl::CslScript::from(conf);
