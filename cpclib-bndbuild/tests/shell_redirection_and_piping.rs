@@ -14,13 +14,25 @@ fn run(line: &str, observer: &Arc<CapturingObserver>) -> Result<(), String> {
     execute(&task, observer)
 }
 
+fn shell_quote(value: impl std::fmt::Display) -> String {
+    format!("'{}'", value.to_string().replace('\'', "'\\''"))
+}
+
+#[test]
+fn shell_quoting_preserves_windows_path_backslashes() {
+    let path = r"C:\Users\runneradmin\AppData\Local\Temp\out.txt";
+
+    assert_eq!(shlex::split(&shell_quote(path)).unwrap(), vec![path]);
+}
+
 #[test]
 fn stdout_redirection_truncates_the_target_file() {
     let dir = camino_tempfile::tempdir().unwrap();
     let out = dir.path().join("out.txt");
+    let out_arg = shell_quote(&out);
 
     let observer = Arc::new(CapturingObserver::new());
-    let result = run(&format!("echo hello > {out}"), &observer);
+    let result = run(&format!("echo hello > {out_arg}"), &observer);
 
     assert!(result.is_ok(), "{result:?}");
     let content = fs_err::read_to_string(&out).unwrap();
@@ -33,10 +45,11 @@ fn stdout_redirection_truncates_the_target_file() {
 fn stdout_redirection_append_adds_to_the_target_file() {
     let dir = camino_tempfile::tempdir().unwrap();
     let out = dir.path().join("out.txt");
+    let out_arg = shell_quote(&out);
     fs_err::write(&out, "line1\n").unwrap();
 
     let observer = Arc::new(CapturingObserver::new());
-    let result = run(&format!("echo line2 >> {out}"), &observer);
+    let result = run(&format!("echo line2 >> {out_arg}"), &observer);
 
     assert!(result.is_ok(), "{result:?}");
     let content = fs_err::read_to_string(&out).unwrap();
@@ -53,12 +66,13 @@ fn stdin_redirection_feeds_rm_a_file_list() {
 
     let filelist = dir.path().join("filelist.txt");
     fs_err::write(&filelist, format!("{victim1}\n{victim2}\n")).unwrap();
+    let filelist_arg = shell_quote(&filelist);
 
     assert!(victim1.exists());
     assert!(victim2.exists());
 
     let observer = Arc::new(CapturingObserver::new());
-    let result = run(&format!("rm < {filelist}"), &observer);
+    let result = run(&format!("rm < {filelist_arg}"), &observer);
 
     assert!(result.is_ok(), "{result:?}");
     assert!(!victim1.exists());
@@ -72,11 +86,17 @@ fn a_delegated_tasks_stdout_redirects_while_its_stderr_still_reaches_the_observe
     fs_err::write(&input, "delegated content\n").unwrap();
     let out = dir.path().join("out.txt");
     let missing = dir.path().join("does-not-exist.txt");
+    let input_arg = shell_quote(&input);
+    let missing_arg = shell_quote(&missing);
+    let out_arg = shell_quote(&out);
 
     let observer = Arc::new(CapturingObserver::new());
     // `cat` writes `input`'s content to stdout (redirected to `out`) and an
     // error about the missing file to stderr (never redirected/piped).
-    let result = run(&format!("extern cat {input} {missing} > {out}"), &observer);
+    let result = run(
+        &format!("extern cat {input_arg} {missing_arg} > {out_arg}"),
+        &observer
+    );
 
     assert!(result.is_err(), "cat should fail on the missing file");
     let content = fs_err::read_to_string(&out).unwrap();
@@ -111,11 +131,12 @@ fn a_three_stage_pipeline_mixes_embedded_and_delegated_stages_delegated_first() 
     let dir = camino_tempfile::tempdir().unwrap();
     let input = dir.path().join("input.txt");
     fs_err::write(&input, "hello-other-order\n").unwrap();
+    let input_arg = shell_quote(&input);
 
     let observer = Arc::new(CapturingObserver::new());
     // delegated (extern cat file) -> embedded (echo, reads stdin) -> delegated (extern cat, reads stdin)
     let result = run(
-        &format!("extern cat {input} | echo | extern cat"),
+        &format!("extern cat {input_arg} | echo | extern cat"),
         &observer
     );
 
@@ -142,10 +163,12 @@ fn binary_data_survives_a_delegated_to_delegated_pipe_byte_for_byte() {
     fs_err::write(&input, &content).unwrap();
 
     let output = dir.path().join("output.bin");
+    let input_arg = shell_quote(&input);
+    let output_arg = shell_quote(&output);
 
     let observer = Arc::new(CapturingObserver::new());
     let result = run(
-        &format!("extern cat {input} | extern cat > {output}"),
+        &format!("extern cat {input_arg} | extern cat > {output_arg}"),
         &observer
     );
 
