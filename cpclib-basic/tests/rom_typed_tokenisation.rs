@@ -147,3 +147,27 @@ fn niladic_function_as_right_operand_of_an_integer_expression() {
     );
     assert!(!bytes.contains(&0x0d), "RND read as a variable: {bytes:02X?}");
 }
+
+/// The `+` between two strings is the operator token (`F4`), not the character (`2B`): the ROM
+/// does not understand the latter, which made `|ORGPILOTED,"a"+"b"` a syntax error.
+#[test]
+fn string_concatenation_uses_the_addition_token() {
+    let bytes = cpclib_basic::BasicProgram::parse("10 a$=\"a\"+\"b\"\n")
+        .unwrap()
+        .as_bytes();
+    assert!(bytes.contains(&0xF4), "no addition token: {bytes:02X?}");
+    assert!(!bytes.contains(&0x2B), "a '+' character was written: {bytes:02X?}");
+}
+
+/// A RSX call keeps its whole name, with the offset byte at 0 and bit 7 on its last letter.
+#[test]
+fn rsx_call_is_encoded_like_a_saved_program() {
+    let bytes = cpclib_basic::BasicProgram::parse("10 |ORGSET,\"ayane\",1\n")
+        .unwrap()
+        .as_bytes();
+    let expected = [0x7C, 0x00, b'O', b'R', b'G', b'S', b'E', b'T' | 0x80, b','];
+    assert!(
+        bytes.windows(expected.len()).any(|w| w == expected),
+        "unexpected RSX encoding: {bytes:02X?}"
+    );
+}

@@ -4425,7 +4425,9 @@ pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralToken
             .map(|(mut space_before, plus, mut space_after, mut value)| {
                 let mut tokens = Vec::new();
                 tokens.append(&mut space_before);
-                tokens.push(BasicToken::SimpleToken(plus.into()));
+                let _ = plus;
+                // the operator token (&F4), not the character
+                tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Addition));
                 tokens.append(&mut space_after);
                 tokens.append(&mut value);
                 tokens
