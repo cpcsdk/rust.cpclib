@@ -4410,7 +4410,17 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
                     ("parados12.fixedanyslot.fixedname.quiet.rom", 10, None)
                 ]
             ),
-            (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15, None)])
+            // the 4 ROMs of the current Orgams (7.x): the |ORG... commands used by Ayane's tools do not exist in the
+            // 6.15 of `Orgams_FF240128.e0f` ("Unknown command")
+            (
+                AmstradRom::Orgams,
+                &[
+                    ("BRICBRAC.ROM", 12, None),
+                    ("MONOGAMS.ROM", 13, None),
+                    ("ORGEXT.ROM", 14, None),
+                    ("ORGAMS.ROM", 15, None)
+                ]
+            )
         ];
 
         // ensure we force unidos rom when using alibreo
