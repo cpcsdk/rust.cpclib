@@ -596,7 +596,10 @@ pub struct EmulatorConf {
     /// The emulator is driven by a `Robot`, which needs its remote API (not every build of the
     /// emulator has it, so it must not be requested otherwise)
     #[builder(default)]
-    pub robot_api: bool
+    pub robot_api: bool,
+
+    /// An Albireo (a folder, or an image) plugged in the emulator, when it can do it by itself
+    pub albireo: Option<Utf8PathBuf>
 }
 
 impl EmulatorConf {
@@ -713,8 +716,29 @@ impl EmulatorConf {
             args.push(ACE_ROBOT_WEB_API_PORT.to_string());
         }
 
+        // bemu: a window unless transparent; its HTTP API when a Robot (or a headless run) needs it
+        #[cfg(feature = "screenshot")]
+        if let Emulator::Bemu(_) = emu {
+            if !self.transparent {
+                args.push("--window".to_owned());
+            }
+            if self.robot_api || self.transparent {
+                args.push("--debug-server".to_owned());
+                args.push("--debug-port".to_owned());
+                args.push(BEMU_ROBOT_PORT.to_string());
+            }
+            if let Some(albireo) = &self.albireo {
+                args.push("--albireo".to_owned());
+                args.push(emu.launch_fname(albireo)?.to_string());
+            }
+        }
+
         if let Some(drive_a) = &drive_a {
             match emu {
+                Emulator::Bemu(_) => {
+                    args.push("--dsk".to_owned());
+                    args.push(emu.launch_fname(drive_a)?.to_string());
+                },
                 Emulator::Ace(_)
                 | Emulator::CpcEmu(_)
                 | Emulator::Cpcec(_)
@@ -748,6 +772,10 @@ impl EmulatorConf {
 
         if let Some(drive_b) = &drive_b {
             match emu {
+                Emulator::Bemu(_) => {
+                    args.push("--dsk-b".to_owned());
+                    args.push(emu.launch_fname(drive_b)?.to_string());
+                },
                 Emulator::Ace(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::CpcEmu(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
@@ -777,6 +805,10 @@ impl EmulatorConf {
 
         if let Some(sna) = &self.snapshot {
             match emu {
+                Emulator::Bemu(_) => {
+                    args.push("--sna".to_owned());
+                    args.push(emu.launch_fname(sna)?.to_string());
+                },
                 Emulator::Ace(_ace_version) => args.push(sna.to_string()),
                 Emulator::CpcEmu(_) => args.push(sna.to_string()),
                 Emulator::Cpcec(_cpcec_version) => args.push(sna.to_string()),
@@ -821,6 +853,18 @@ impl EmulatorConf {
         // is it really usefull ? seems it is really done by playing with the conf files
         if !self.roms_configuration.is_empty() {
             match emu {
+                Emulator::Bemu(_) => {
+                    // `--rom SLOT=FILE`, the ROMs being written next to the executable
+                    let roms_folder = emu.roms_folder();
+                    for rom in &self.roms_configuration {
+                        for (embedded_name, slot) in amstrad_rom_slot_files(*rom) {
+                            let dst = roms_folder.join(embedded_name);
+                            ensure_embedded_rom_written(&dst, embedded_name)?;
+                            args.push("--rom".to_owned());
+                            args.push(format!("{slot}={dst}"));
+                        }
+                    }
+                },
                 Emulator::AmspiritLite(_) => {
                     // `-R/--rom-path` points at a directory of ROMs rather than
                     // naming them one by one, so a per-slot configuration has
@@ -931,6 +975,12 @@ impl EmulatorConf {
 
         if !self.debug_files.is_empty() {
             match emu {
+                Emulator::Bemu(_) => {
+                    for file in &self.debug_files {
+                        args.push("--sym".to_owned());
+                        args.push(emu.launch_fname(file)?.to_string());
+                    }
+                },
                 Emulator::Ace(_) => {
                     let fname = merge_rasm_debug_to_tmp(&self.debug_files[..]).unwrap();
                     args.push(fname.to_string());
@@ -966,6 +1016,24 @@ impl EmulatorConf {
                 }
             }
         }
+
+        // `--ram KB`: 64, 128... up to 576
+        if let Some(memory) = &self.memory
+            && let Emulator::Bemu(_) = emu
+        {
+            args.push("--ram".to_owned());
+            args.push(memory.to_string());
+        }
+
+        if let Some(crtc) = &self.crtc
+            && let Emulator::Bemu(_) = emu
+        {
+            args.push("--crtc".to_owned());
+            args.push(crtc.to_string());
+        }
+
+        // bemu takes one `--type`: what the auto-type file and the auto-run request both type
+        let mut bemu_typed = String::new();
 
         if let Some(memory) = &self.memory
             && let Emulator::Cpcec(_) = emu
@@ -1004,6 +1072,16 @@ impl EmulatorConf {
 
         if let Some(ftype) = &self.auto_type {
             match emu {
+                Emulator::Bemu(_) => {
+                    bemu_typed.push_str(
+                        &fs_err::read_to_string(ftype)
+                            .map_err(|e| format!("Failed to read auto-type file `{ftype}`: {e}"))?
+                            .replace("\r\n", "\n")
+                    );
+                    if !bemu_typed.ends_with('\n') {
+                        bemu_typed.push('\n');
+                    }
+                },
                 Emulator::Ace(_) => {
                     if let Some(ext) = ftype.extension()
                         && ext == "txt"
@@ -1047,6 +1125,7 @@ impl EmulatorConf {
 
         if let Some(run) = &self.auto_run {
             match emu {
+                Emulator::Bemu(_) => bemu_typed.push_str(&format!("run\"{run}\n")),
                 Emulator::Ace(_) => {
                     args.push("-autoRunFile".to_owned());
                     args.push(run.clone())
@@ -1098,6 +1177,11 @@ impl EmulatorConf {
                 },
                 Emulator::Koncepcja(_) => args.push(format!("--autocmd=RUN\"{run}"))
             }
+        }
+
+        if !bemu_typed.is_empty() {
+            args.push("--type".to_owned());
+            args.push(bemu_typed.replace('\n', "\\n"));
         }
 
         Ok(args)
@@ -1323,6 +1407,24 @@ fn spawn_emulator_with_args<E: EventObserver>(
     runner.inner_run(args, o)
 }
 
+/// The window to drive. `None` for an emulator driven through its own API (bemu).
+#[cfg(feature = "screenshot")]
+fn find_window_to_drive(
+    emu: &Emulator,
+    conf: &EmulatorConf,
+    o: &dyn EventObserver
+) -> Result<Option<EmuWindow>, String> {
+    if matches!(emu, Emulator::Bemu(_)) {
+        return Ok(None);
+    }
+    get_emulator_window(emu, conf, o).map(Some).ok_or_else(|| {
+        format!(
+            "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
+            emu.get_command()
+        )
+    })
+}
+
 pub fn get_emulator_window(
     emu: &Emulator,
     _conf: &EmulatorConf,
@@ -1332,6 +1434,10 @@ pub fn get_emulator_window(
     )]
     o: &dyn EventObserver
 ) -> Option<EmuWindow> {
+    // bemu is driven through its HTTP API: no window to find
+    if matches!(emu, Emulator::Bemu(_)) {
+        return None;
+    }
     #[cfg(feature = "transparent-x11")]
     if conf.transparent {
         return Some(get_emulator_window_xvfb(emu, o));
@@ -1545,6 +1651,7 @@ pub(crate) struct CadenceUsedEmulator {}
 pub(crate) struct Emulator1984UsedEmulator {}
 pub(crate) struct CpcSyntaxErrorUsedEmulator {}
 pub(crate) struct KoncepcjaUsedEmulator {}
+pub(crate) struct BemuUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -1810,6 +1917,70 @@ fn amspiritlite_endpoint() -> &'static str {
     // leaked once rather than formatted on every single call.
     static ENDPOINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     ENDPOINT.get_or_init(|| format!("http://127.0.0.1:{AMSPIRIT_LITE_ROBOT_WEB_PORT}"))
+}
+
+/// The port `args_for_emu` gives to a Robot-launched bemu (`--debug-port`): its HTTP API is the
+/// one of AMSpiriT Lite, so `amspiritlite_api` talks to it as is. Next free number after ACE's.
+#[cfg(feature = "screenshot")]
+const BEMU_ROBOT_PORT: u16 = 8768;
+
+#[cfg(feature = "screenshot")]
+fn bemu_endpoint() -> &'static str {
+    static ENDPOINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ENDPOINT.get_or_init(|| format!("http://127.0.0.1:{BEMU_ROBOT_PORT}"))
+}
+
+impl UsedEmulator for BemuUsedEmulator {
+    #[cfg(feature = "screenshot")]
+    fn screenshot(_robot: &mut RobotImpl<Self>) -> Screenshot {
+        retry_native_api_call("bemu screenshot via its own HTTP API", || {
+            let png = amspiritlite_api::get_screenshot_png(bemu_endpoint())?;
+            xcap::image::load_from_memory(&png)
+                .map(|img| img.into_rgba8())
+                .map_err(|e| format!("Failed to decode bemu screenshot PNG: {e}"))
+        })
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn type_text(_robot: &mut RobotImpl<Self>, s: &str) {
+        retry_native_api_call("bemu keytype via its own HTTP API", || {
+            amspiritlite_api::keytype(bemu_endpoint(), s)
+        })
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn read_memory(
+        _robot: &mut RobotImpl<Self>,
+        address: u16,
+        count: u16
+    ) -> Result<Vec<u8>, String> {
+        Ok(retry_native_api_call("bemu readMemory via its own HTTP API", || {
+            amspiritlite_api::read_memory(bemu_endpoint(), address, count)
+        }))
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn write_memory(_robot: &mut RobotImpl<Self>, address: u16, data: &[u8]) -> Result<(), String> {
+        retry_native_api_call("bemu writeMemory via its own HTTP API", || {
+            amspiritlite_api::write_memory(bemu_endpoint(), address, data)
+        });
+        Ok(())
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn load_snapshot(_robot: &mut RobotImpl<Self>, path: &Utf8Path) -> Result<(), String> {
+        amspiritlite_api::load_snapshot(bemu_endpoint(), path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn load_disc(_robot: &mut RobotImpl<Self>, drive: u8, path: &Utf8Path) -> Result<(), String> {
+        amspiritlite_api::load_disc(bemu_endpoint(), drive, path)
+    }
+
+    #[cfg(feature = "screenshot")]
+    fn save_disc(_robot: &mut RobotImpl<Self>, drive: u8) -> Result<Vec<u8>, String> {
+        amspiritlite_api::save_disc(bemu_endpoint(), drive)
+    }
 }
 
 /// The port `args_for_emu_amspirit_with_csl` explicitly passes to a
@@ -2469,6 +2640,7 @@ pub(crate) enum Robot {
     Emulator1984(RobotImpl<Emulator1984UsedEmulator>),
     CpcSyntaxError(RobotImpl<CpcSyntaxErrorUsedEmulator>),
     Koncepcja(RobotImpl<KoncepcjaUsedEmulator>),
+    Bemu(RobotImpl<BemuUsedEmulator>),
     #[cfg(feature = "screenshot")]
     Js1984(Js1984Robot),
     #[cfg(all(feature = "screenshot", unix))]
@@ -2505,6 +2677,7 @@ used_emulators!(
     AceUsedEmulator => Ace,
     AmspiritUsedEmulator => Amspirit,
     SugarBoxV2UsedEmulator => SugarboxV2,
+    BemuUsedEmulator => Bemu,
 );
 used_emulators! {
     CpcecUsedEmulator => Cpcec,
@@ -2650,6 +2823,7 @@ impl Robot {
             Robot::Emulator1984(r) => r,
             Robot::CpcSyntaxError(r) => r,
             Robot::Koncepcja(r) => r,
+            Robot::Bemu(r) => r,
             #[cfg(feature = "screenshot")]
             Robot::Js1984(r) => r,
             #[cfg(all(feature = "screenshot", unix))]
@@ -2730,6 +2904,9 @@ impl Robot {
             },
             Emulator::Koncepcja(_) => {
                 RobotImpl::<KoncepcjaUsedEmulator>::from((window, events_manager, emu)).into()
+            },
+            Emulator::Bemu(_) => {
+                RobotImpl::<BemuUsedEmulator>::from((window, events_manager, emu)).into()
             },
         }
     }
@@ -3500,6 +3677,8 @@ pub struct EmuCli {
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Emu {
     Ace,
+    /// bemu (`amsrust`), built from its sources: `$CPCLIB_BEMU_SRC` is its checkout
+    Bemu,
     /// The portable AMSpiriT build - a different emulator from `Amspirit`,
     /// with its own releases and its own command line.
     Amspiritlite,
@@ -3573,6 +3752,15 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             debuggable: false,
             debugger_launch_id: None,
             installed: Emulator::Ace(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Bemu),
+            label: "bemu",
+            debuggable: true,
+            debugger_launch_id: Some("bemu"),
+            installed: Emulator::Bemu(Default::default())
                 .configuration::<()>()
                 .is_cached()
         },
@@ -3882,6 +4070,7 @@ impl Dispatch {
 fn emulator_from_choice(choice: Emu) -> Result<Emulator, String> {
     Ok(match choice {
         Emu::Ace => Emulator::Ace(Default::default()),
+        Emu::Bemu => Emulator::Bemu(Default::default()),
         Emu::Winape => Emulator::Winape(Default::default()),
         Emu::Cpcec => Emulator::Cpcec(Default::default()),
         Emu::Caprice => Emulator::CapriceForever(Default::default()),
@@ -4090,12 +4279,15 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     // `roms_configuration` handling, so it has to be threaded through here
     // instead - scoped to just those three, so every other emulator's
     // `--enable-rom` handling (or lack of it) is completely unchanged.
-    let slotted_rom_emu = matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec | Emu::Winape);
+    let slotted_rom_emu = matches!(
+        cli.emulator,
+        Emu::Emulator1984 | Emu::Cpcec | Emu::Winape | Emu::Bemu
+    );
     // CPCEC shares `EmulatorConf.memory` with the same 576KB-for-Orgams
     // reasoning as native 1984 (both turn it into a real launch arg below);
     // WinAPE's own RAM setting lives in its persistent INI instead, out of
     // scope here.
-    let memory_bump_emu = matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec);
+    let memory_bump_emu = matches!(cli.emulator, Emu::Emulator1984 | Emu::Cpcec | Emu::Bemu);
     let orgams_requested = slotted_rom_emu && cli.enable_rom.contains(&AmstradRom::Orgams);
     let builder = EmulatorConf::builder()
         .transparent(cli.transparent)
@@ -4103,6 +4295,12 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .maybe_drive_b(cli.drive_b.clone().map(|a| a.into()))
         .maybe_crtc(cli.crtc)
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
+        .maybe_albireo(if cli.emulator == Emu::Bemu {
+            cli.albireo.clone().map(|a| a.into())
+        }
+        else {
+            None
+        })
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
         .maybe_auto_type(cli.auto_type_file.clone())
@@ -4375,18 +4573,13 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
             orgamsa2orgamsb,
             orgamsb2orgamsa
         }) => {
-            let window = get_emulator_window(&emu, &conf, o).ok_or_else(|| {
-                format!(
-                    "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
-                    emu.get_command()
-                )
-            })?;
+            let window = find_window_to_drive(&emu, &conf, o)?;
             let enigo_settings = {
                 let mut settings = Settings {
                     linux_delay: 1000 / 10,
                     ..Default::default()
                 };
-                if let EmuWindow::Xvfb(display, _) = &window {
+                if let Some(EmuWindow::Xvfb(display, _)) = &window {
                     // The X11 DISPLAY convention is `:N` (see the identical
                     // `std::env::set_var("DISPLAY", ...)` call above) - a
                     // second, colon-less assignment used to immediately
@@ -4397,7 +4590,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
             };
             let enigo = Enigo::new(&enigo_settings).unwrap();
             let events = enigo.into();
-            let mut robot = Robot::new(&emu, Some(window), events);
+            let mut robot = Robot::new(&emu, window, events);
 
             #[cfg(windows)]
             std::thread::sleep(Duration::from_millis(1000 * 3));
@@ -4447,18 +4640,13 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
             cli.keepemulator = true;
 
             if let Some(text) = text {
-                let window = get_emulator_window(&emu, &conf, o).ok_or_else(|| {
-                    format!(
-                        "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
-                        emu.get_command()
-                    )
-                })?;
+                let window = find_window_to_drive(&emu, &conf, o)?;
                 let enigo_settings = {
                     let mut settings = Settings {
                         linux_delay: 1000 / 10,
                         ..Default::default()
                     };
-                    if let EmuWindow::Xvfb(display, _) = &window {
+                    if let Some(EmuWindow::Xvfb(display, _)) = &window {
                         // See the identical fix's comment in the other
                         // enigo_settings block above.
                         settings.x11_display = Some(format!(":{display}"));
@@ -4467,7 +4655,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
                 };
                 let enigo = Enigo::new(&enigo_settings).unwrap();
                 let events = enigo.into();
-                let mut robot = Robot::new(&emu, Some(window), events);
+                let mut robot = Robot::new(&emu, window, events);
                 robot.handle_raw_text(text);
             }
 
@@ -4841,7 +5029,8 @@ mod tests {
             break_on_bad_vbl: false,
             break_on_bad_hbl: false,
             transparent: false,
-            robot_api: false
+            robot_api: false,
+            albireo: None
         };
 
         let script = cpclib_csl::CslScript::from(conf);

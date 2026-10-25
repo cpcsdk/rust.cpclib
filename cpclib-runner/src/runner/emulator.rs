@@ -4,6 +4,7 @@ pub mod ace_api;
 pub mod amspirit;
 pub mod amspiritlite;
 pub mod amspiritlite_api;
+pub mod bemu;
 pub mod cadence;
 pub mod caprice_forever;
 pub mod cpcec;
@@ -27,6 +28,7 @@ use std::path::absolute;
 pub use ace::*;
 pub use amspirit::*;
 pub use amspiritlite::*;
+use bemu::{BEMU_CMD, BemuVersion};
 use cadence::{CADENCE_CMD, CadenceVersion};
 use caprice_forever::{CAPRICEFOREVER_CMD, CapriceForeverVersion};
 pub use cpcec::*;
@@ -51,6 +53,7 @@ pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
     AmspiritLite(AmspiritLiteVersion),
+    Bemu(BemuVersion),
     Cadence(CadenceVersion),
     CapriceForever(CapriceForeverVersion),
     CpcEmu(CpcEmuVersion),
@@ -107,6 +110,7 @@ impl Emulator {
             Emulator::Ace(_) => ACE_CMD,
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
             Emulator::AmspiritLite(_) => AMSPIRIT_LITE_CMD,
+            Emulator::Bemu(_) => BEMU_CMD,
             Emulator::Cadence(_) => CADENCE_CMD,
             Emulator::CapriceForever(_) => CAPRICEFOREVER_CMD,
             Emulator::CpcEmu(_) => CPCEMU_CMD,
@@ -133,6 +137,8 @@ impl Emulator {
             // the product name, so the full one distinguishes it from its
             // bigger sibling above.
             Emulator::AmspiritLite(_) => window_name.starts_with("AMSpiriT Lite"),
+            // minifb's window carries the name of the program
+            Emulator::Bemu(_) => window_name.to_lowercase().contains("bemu") || window_name.to_lowercase().contains("amsrust"),
             Emulator::Cadence(_) => window_name.starts_with("Cadence"),
             Emulator::SugarBoxV2(_) => unimplemented!(),
             Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower"),
@@ -160,6 +166,7 @@ impl Emulator {
             Emulator::Cpcec(v) => v.roms_folder(),
             Emulator::Winape(v) => v.roms_folder(),
             Emulator::Emulator1984(v) => v.roms_folder(),
+            Emulator::Bemu(v) => v.roms_folder(),
             _ => unimplemented!()
         }
     }
@@ -229,6 +236,7 @@ impl Emulator {
             Emulator::Winape(v) => v.configuration(),
             Emulator::Amspirit(v) => v.configuration(),
             Emulator::AmspiritLite(v) => v.configuration(),
+            Emulator::Bemu(v) => v.configuration(),
             Emulator::Cadence(v) => v.configuration(),
             Emulator::Emulator1984(v) => v.configuration(),
             Emulator::CpcSyntaxError(v) => v.configuration(),

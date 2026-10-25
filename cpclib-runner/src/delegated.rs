@@ -440,6 +440,10 @@ pub struct DelegateApplicationDescription<E: EventObserver> {
     pub compile: Option<Compiler<E>>,
     #[builder(into)]
     pub post_install: Option<PostInstall<E>>,
+    /// Replaces the whole download + unpack + compile: for a tool that cannot be downloaded (it is
+    /// built from a checkout). Called with the install folder, which it must fill, `exec_fname` included.
+    #[builder(into)]
+    pub custom_install: Option<Compiler<E>>,
     #[builder(default=RunInDir::CurrentDir)]
     pub in_dir: RunInDir
 }
@@ -496,6 +500,17 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     fn inner_install(&self, o: &E) -> Result<(), String> {
         // get the file
         let dest = self.cache_folder();
+
+        if let Some(install) = &self.custom_install {
+            fs_err::create_dir_all(&dest).map_err(|e| e.to_string())?;
+            install(&dest, o)?;
+            return if let Some(post_install) = &self.post_install {
+                post_install(self, o)
+            }
+            else {
+                Ok(())
+            };
+        }
 
         let mut input = self.download(o)?;
 
