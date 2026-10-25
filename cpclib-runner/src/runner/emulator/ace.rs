@@ -182,10 +182,16 @@ impl AceVersion {
     pub fn config_file(&self) -> Utf8PathBuf {
         let p = match self {
             Self::ZenSummer | Self::Bnd4 | Self::UnknownLastVersion => {
-                BaseDirs::new()
-                    .unwrap()
-                    .config_local_dir()
-                    .join("ACE-DL_futuristics/config.cfg")
+                let dirs = BaseDirs::new().unwrap();
+                // ACE-DL does not follow the macOS conventions: it reads `~/.config` there too
+                // (`~/Library/Application Support` is where `config_local_dir` points to)
+                let config_dir = if cfg!(target_os = "macos") {
+                    dirs.home_dir().join(".config")
+                }
+                else {
+                    dirs.config_local_dir().to_owned()
+                };
+                config_dir.join("ACE-DL_futuristics/config.cfg")
             },
             _ => unimplemented!()
         };
