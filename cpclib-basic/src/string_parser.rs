@@ -4979,42 +4979,52 @@ pub fn parse_instr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// BIN$(number[,width])
 /// Converts a number to its binary string representation with optional width
 fn parse_bin_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, open) = (
-        Caseless("BIN$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::BinDollar)),
-        parse_basic_space0,
-        '('
-    )
+    parse_number_to_string_with_width("BIN$", BasicTokenPrefixed::BinDollar).parse_next(input)
+}
+
+/// `name(number[,width])`: BIN$ and HEX$
+fn parse_number_to_string_with_width<'src>(
+    name: &'static str,
+    token: BasicTokenPrefixed
+) -> impl Fn(&mut &'src str) -> BasicSeveralTokensResult<'src> {
+    move |input: &mut &'src str| {
+        let (code, mut space_a, open) = (
+            Caseless(name).map(|_| BasicToken::PrefixedToken(token)),
+            parse_basic_space0,
+            '('
+        )
+            .parse_next(input)?;
+
+        let mut expr = cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::None)
+                .context(StrContext::Label("Number expected"))
+        )
         .parse_next(input)?;
 
-    let mut expr = cut_err(
-        parse_numeric_expression(NumericExpressionConstraint::None)
-            .context(StrContext::Label("Number expected"))
-    )
-    .parse_next(input)?;
+        // Optional second parameter: width
+        let opt_width = opt((
+            parse_comma,
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+        ))
+        .parse_next(input)?;
 
-    // Optional second parameter: width
-    let opt_width = opt((
-        parse_comma,
-        parse_numeric_expression(NumericExpressionConstraint::Integer)
-    ))
-    .parse_next(input)?;
+        let close = cut_err(')'.context(StrContext::Label("Missing ')'"))).parse_next(input)?;
 
-    let close = cut_err(')'.context(StrContext::Label("Missing ')'"))).parse_next(input)?;
+        let mut res = Vec::new();
+        res.push(code);
+        res.append(&mut space_a);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
+        res.append(&mut expr);
 
-    let mut res = Vec::new();
-    res.push(code);
-    res.append(&mut space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
-    res.append(&mut expr);
+        if let Some((mut comma, mut width)) = opt_width {
+            res.append(&mut comma);
+            res.append(&mut width);
+        }
 
-    if let Some((mut comma, mut width)) = opt_width {
-        res.append(&mut comma);
-        res.append(&mut width);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
+
+        Ok(res)
     }
-
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
-
-    Ok(res)
 }
 
 /// DEC$(number, format)
@@ -5028,15 +5038,10 @@ fn parse_dec_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     .parse_next(input)
 }
 
-/// HEX$(number)
-/// Converts a number to its hexadecimal string representation
+/// HEX$(number[,width])
+/// Converts a number to its hexadecimal string representation with optional width
 fn parse_hex_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    parse_any_numeric_function(
-        "HEX$",
-        BasicToken::PrefixedToken(BasicTokenPrefixed::HexDollar),
-        NumericExpressionConstraint::None
-    )
-    .parse_next(input)
+    parse_number_to_string_with_width("HEX$", BasicTokenPrefixed::HexDollar).parse_next(input)
 }
 
 /// STRING$(count, string)
@@ -5832,6 +5837,13 @@ mod test {
         check_line_tokenisation("10 DIM A(10)\n");
         check_line_tokenisation("10 POKE 16384,255\n");
         check_line_tokenisation("10 OUT 49152,0\n");
+        // a variable as OUT's value, alone or before another statement (bemu's Willy listings)
+        check_line_tokenisation("10 OUT &FEBC,r\n");
+        check_line_tokenisation("10 OUT &FEBC,r:OUT &FEBD,v\n");
+        check_line_tokenisation("10 OUT 1,r:PRINT 2\n");
+        check_line_tokenisation("10 a=r:OUT &FEBD,v\n");
+        check_line_tokenisation("10 PRINT HEX$(a,2)\n");
+        check_line_tokenisation("10 a=INP(&FEAD):OUT &FEAD,&3F:b=INP(&FEAD)\n");
         check_line_tokenisation("10 ERASE A\n");
         check_line_tokenisation("10 SWAP A,B\n");
 
@@ -6419,6 +6431,7 @@ mod test {
         check_roundtrip("100 a$=BIN$(255)\n");
         check_roundtrip("110 a$=DEC$(123)\n");
         check_roundtrip("120 a$=HEX$(255)\n");
+        check_roundtrip("121 a$=HEX$(255,4)\n");
         check_roundtrip("130 a$=STRING$(5,\"*\")\n");
         check_roundtrip("140 a$=INKEY$(50)\n");
     }
