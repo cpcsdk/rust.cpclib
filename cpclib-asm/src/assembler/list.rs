@@ -226,7 +226,6 @@ pub fn list_split_by_value(
             Ok(ExprResult::List(result.into()))
         },
         ExprResult::String(s) => {
-            let mut current = String::new();
             let separator = value.char()?;
             let items = s.split(separator).map(|s| ExprResult::from(s)).collect_vec();
             Ok(ExprResult::List(items.into()))
