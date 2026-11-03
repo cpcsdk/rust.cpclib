@@ -1036,9 +1036,73 @@ impl Default for ExtendedDsk {
     }
 }
 
+/// The signature of a standard DSK image ("MV - CPCEMU Disk-File\r\nDisk-Info\r\n"); only its
+/// first 8 bytes are characteristic: tools write their own text after them.
+const STANDARD_DSK_SIGNATURE: &[u8] = b"MV - CPC";
+
+/// A standard DSK image (CPCEMU's "MV - CPC" format) converted to an extended one, whose bytes
+/// [`ExtendedDsk::from_buffer`] reads.
+///
+/// A standard image gives one track size (header included, at &32-&33) for every track, where
+/// an extended one has a table of their sizes / 256 (at &34); and its sectors' "actual data
+/// length" (bytes 6-7 of a sector's information) are unused: a sector holds 128 << N bytes, N
+/// the track's sector size (at &14 of its Track-Info). Tracks missing from a short file are left
+/// unformatted.
+pub fn standard_dsk_to_extended(buffer: &[u8]) -> Result<Vec<u8>, String> {
+    if buffer.len() < 256 || !buffer[..STANDARD_DSK_SIGNATURE.len()].eq_ignore_ascii_case(STANDARD_DSK_SIGNATURE) {
+        return Err("Not a standard CPC DSK file".to_owned());
+    }
+    let number_of_tracks = usize::from(buffer[0x30]);
+    let number_of_heads = usize::from(buffer[0x31]);
+    let track_size = usize::from(u16::from_le_bytes([buffer[0x32], buffer[0x33]]));
+    let slots = number_of_tracks * number_of_heads;
+    if 0x34 + slots > 256 {
+        return Err(format!(
+            "A standard DSK of {number_of_tracks} tracks * {number_of_heads} heads does not fit the extended format's track table"
+        ));
+    }
+    if track_size < 256 || track_size % 256 != 0 || track_size / 256 > 255 {
+        return Err(format!("Invalid standard DSK track size {track_size}"));
+    }
+
+    let mut extended = buffer[..256].to_vec();
+    extended[..34].copy_from_slice(b"EXTENDED CPC DSK File\r\nDisk-Info\r\n");
+    extended[0x32] = 0;
+    extended[0x33] = 0;
+    let mut tracks = &buffer[256..];
+    for slot in 0..slots {
+        let Some(track) = tracks.get(..track_size)
+        else {
+            // a short file: the tracks it doesn't hold are unformatted
+            extended[0x34 + slot] = 0;
+            continue;
+        };
+        tracks = &tracks[track_size..];
+        extended[0x34 + slot] = (track_size / 256) as u8;
+        let start = extended.len();
+        extended.extend_from_slice(track);
+        let block = &mut extended[start..];
+        let sector_size = block[0x14];
+        let number_of_sectors = usize::from(block[0x15]);
+        // every sector of the track holds as much, within the track's data
+        let data = (track_size - 256) / number_of_sectors.max(1);
+        // 128 << N, which a protection's N 6 (and more) makes larger than the track holds
+        let length = if sector_size >= 8 { data } else { (128usize << sector_size).min(data) } as u16;
+        for sector in 0..number_of_sectors.min((256 - 0x18) / 8) {
+            let info = 0x18 + sector * 8;
+            block[info + 6..info + 8].copy_from_slice(&length.to_le_bytes());
+        }
+    }
+    Ok(extended)
+}
+
 #[allow(missing_docs)]
 impl ExtendedDsk {
+    /// An extended DSK image, or a standard one ("MV - CPC") converted to it.
     pub fn from_buffer(buffer: &[u8]) -> Result<Self, String> {
+        if buffer.len() >= STANDARD_DSK_SIGNATURE.len() && buffer[..STANDARD_DSK_SIGNATURE.len()].eq_ignore_ascii_case(STANDARD_DSK_SIGNATURE) {
+            return Self::from_buffer(&standard_dsk_to_extended(buffer)?);
+        }
         if buffer.len() < 256 {
             return Err(format!(
                 "DSK file is only {} bytes, too short to hold even the disc information block",

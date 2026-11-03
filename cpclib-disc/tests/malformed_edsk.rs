@@ -113,3 +113,64 @@ fn well_formed_minimal_dsk_is_accepted() {
     buffer.resize(256 + 256, 0); // pad the track to its declared 256-byte size
     assert!(ExtendedDsk::from_buffer(&buffer).is_ok());
 }
+
+/// A standard DSK ("MV - CPC") is read as the extended one it converts to: its track size for
+/// every track, its sectors 128 << N bytes.
+#[test]
+fn a_standard_dsk_is_read() {
+    use cpclib_disc::amsdos::AmsdosManagerNonMut;
+    use cpclib_disc::edsk::Head;
+
+    for path in ["../cpclib-basic/tests/TEST-CAT.DSK", "../cpclib-catalog/tests/discs/BLOCUS/SRC.DSK"] {
+        let bytes = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap();
+        assert!(bytes.starts_with(b"MV - CPC"), "{path}: a standard image");
+        let disc = ExtendedDsk::from_buffer(&bytes).unwrap_or_else(|e| panic!("{path}: {e}"));
+        let catalog = AmsdosManagerNonMut::new_from_disc(&disc, Head::A).catalog().unwrap().to_amsdos_catalog();
+        assert!(!catalog.is_empty(), "{path}: its files");
+        let first = catalog[0].file_name();
+        let file = AmsdosManagerNonMut::new_from_disc(&disc, Head::A).get_file(*first).unwrap();
+        assert!(file.is_some_and(|file| !file.header_and_content().is_empty()), "{path}: a file read");
+    }
+}
+
+/// A standard DSK's sectors, read through the conversion, are its bytes; the tracks missing
+/// from a short file are unformatted; garbage after the signature is refused, not a panic.
+#[test]
+fn a_standard_dsk_converts_to_the_same_sectors() {
+    // 2 tracks, 1 head, 9 sectors of 512 bytes (&C1-&C9) a track; the file holds track 0 only
+    let track_size = 256 + 9 * 512;
+    let mut bytes = vec![0u8; 256];
+    bytes[..34].copy_from_slice(b"MV - CPCEMU Disk-File\r\nDisk-Info\r\n");
+    bytes[0x30] = 2;
+    bytes[0x31] = 1;
+    bytes[0x32..0x34].copy_from_slice(&(track_size as u16).to_le_bytes());
+    let mut track = vec![0u8; 256];
+    track[..12].copy_from_slice(b"Track-Info\r\n");
+    track[0x14] = 2;
+    track[0x15] = 9;
+    track[0x16] = 0x4e;
+    track[0x17] = 0xe5;
+    for sector in 0..9u8 {
+        let info = 0x18 + usize::from(sector) * 8;
+        track[info + 2] = 0xc1 + sector;
+        track[info + 3] = 2;
+    }
+    for sector in 0..9u8 {
+        track.extend(std::iter::repeat_n(sector, 512));
+    }
+    bytes.extend(&track);
+
+    let extended = cpclib_disc::edsk::standard_dsk_to_extended(&bytes).unwrap();
+    assert_eq!(&extended[..8], b"EXTENDED");
+    assert_eq!(&extended[0x34..0x36], &[(track_size / 256) as u8, 0], "track 1 is missing: unformatted");
+    let disc = ExtendedDsk::from_buffer(&bytes).unwrap();
+    use cpclib_disc::disc::Disc;
+    for sector in 0..9u8 {
+        let values = disc.sector(0, 0, 0xc1 + sector).unwrap().values().to_vec();
+        assert_eq!(values, vec![sector; 512], "sector &{:02X}", 0xc1 + sector);
+    }
+
+    let mut garbage = bytes.clone();
+    garbage[0x32..0x34].copy_from_slice(&100u16.to_le_bytes());
+    assert!(ExtendedDsk::from_buffer(&garbage).is_err(), "a track size that isn't one");
+}
