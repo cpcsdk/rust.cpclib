@@ -442,7 +442,8 @@ fn parse_special_key<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, 
 fn parse_key_element<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, KeyElement> {
     alt((
         parse_special_key.map(KeyElement::Special),
-        one_of(|c: char| c != '\'' && c != '\\' && c != '{' && c != '}').map(KeyElement::Character)
+        // a key string is on one line: a forgotten closing quote must not swallow the next lines
+        one_of(|c: char| !matches!(c, '\'' | '\\' | '{' | '}' | '\n' | '\r')).map(KeyElement::Character)
     ))
     .parse_next(input)
 }
@@ -933,6 +934,17 @@ fn convert_parse_error_to_csl_error(
         }
     }
 
+    // an odd number of quotes (not counting \') on the line: one is never closed
+    let line_start = input[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = input[offset..].find(['\n', '\r']).map_or(input.len(), |i| offset + i);
+    let line = &input[line_start..line_end];
+    let mut span = span;
+    if line.trim_start().starts_with("key_output") && line.replace("\\'", "").matches('\'').count() % 2 == 1 {
+        message = "Invalid CSL syntax: unterminated quote in key_output".to_string();
+        notes.push("the key sequence must end with a closing quote (') on the same line".to_string());
+        span = line_start..line_end.max(line_start + 1);
+    }
+
     let mut error = CslError::new(input.to_string(), span, message);
 
     if let Some(fname) = filename {
@@ -1009,6 +1021,13 @@ mod tests {
             assert_eq!(drive, Drive::B);
             assert_eq!(filename, "AMAZING.DSK");
         }
+    }
+
+    #[test]
+    fn unterminated_key_output_is_reported_on_its_own_line() {
+        let error = parse_csl_with_rich_errors("csl_version 1.0\nkey_output 'CAT\\(RET)\nwait 3000\nkey_output 'A'\n", None).unwrap_err();
+        assert!(error.message.contains("unterminated quote"), "{}", error.message);
+        assert_eq!(&error.source[error.span.clone()], "key_output 'CAT\\(RET)");
     }
 
     #[test]
