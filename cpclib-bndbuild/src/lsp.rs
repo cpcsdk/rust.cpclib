@@ -348,6 +348,66 @@ pub const TASK_TYPES: &[TaskType] = &[
         synopsis: "TODO",
         example: "SongToAkm 'Targhan - Crtc - End part.aks' 'Targhan - Crtc - End part.akm'"
     },
+    TaskType {
+        names: SONG2AKG_CMDS,
+        description: "Convert song to AKG format",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2AKY_CMDS,
+        description: "Convert song to AKY format",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2EVENTS_CMDS,
+        description: "Convert song to an event stream",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2RAW_CMDS,
+        description: "Convert song to raw binary format",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2SOUNDEFFECTS_CMDS,
+        description: "Convert song to sound effects format",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2VGM_CMDS,
+        description: "Convert song to VGM format",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2WAV_CMDS,
+        description: "Convert song to WAV audio",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: SONG2YM_CMDS,
+        description: "Convert song to YM format",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: CRUNCH_CMDS,
+        description: "Compress data for the Z80 (crunch)",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
+        names: FADE_CMDS,
+        description: "Generate colour fade tables",
+        synopsis: "TODO",
+        example: ""
+    },
     // File operations
     TaskType {
         names: CP_CMDS,
@@ -542,6 +602,26 @@ mod tests {
     #[test]
     fn test_keywords_not_empty() {
         assert!(!BUILD_KEYWORDS.is_empty());
+    }
+
+    /// Every kind of task bndbuild runs must be listed by `bndbuild --help`
+    /// (`ALL_APPLICATIONS`), and therefore in TASK_TYPES too (test below):
+    /// both lists are kept by hand, and the song converters, `crunch` and
+    /// `fade` were once missing from them.
+    #[test]
+    fn every_task_is_listed_in_all_applications() {
+        let (listed, _clearable) = crate::commands_list();
+        let missing = crate::task::InnerTask::all()
+            .filter_map(|task| {
+                let shown = task.to_string();
+                let name = shown.split_whitespace().next()?.to_owned();
+                (!listed.iter().any(|c| c.eq_ignore_ascii_case(&name))).then_some(name)
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "ALL_APPLICATIONS (cpclib-bndbuild/src/lib.rs) misses these commands: {missing:?}"
+        );
     }
 
     /// Critical test: Ensures TASK_TYPES covers ALL commands from ALL_APPLICATIONS.
