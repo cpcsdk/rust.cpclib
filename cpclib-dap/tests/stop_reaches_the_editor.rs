@@ -5,6 +5,7 @@
 //! the page. This is the loop that was silently broken: the frames the adapter
 //! sent downstream could not be parsed by the emulator, so nothing ever
 //! attached and no stop was ever reported.
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 use cpclib_dap::peer::{DapPeer, RecordingPeer};

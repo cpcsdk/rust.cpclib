@@ -14,6 +14,7 @@
 //! module re-exports it under its own names so existing call sites here
 //! don't care where it lives.
 
+#[cfg(feature = "adapter")]
 pub use cpclib_runner::web::{
     decode_content_length_messages as decode, encode_content_length_message as encode
 };
@@ -126,6 +127,7 @@ mod tests {
     /// (`cpclib_runner::web::server`) - this just confirms the re-export
     /// under this module's own names actually round-trips.
     #[test]
+    #[cfg(feature = "adapter")]
     fn the_reexported_framing_still_round_trips() {
         let message = json!({"seq": 1, "type": "request", "command": "initialize"});
         let mut buffer = encode(&message).into_bytes();

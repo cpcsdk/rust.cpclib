@@ -4,6 +4,7 @@
 //! drive the whole recovery - scopes, registers, memory, walk - through a
 //! recording peer, because the interesting failures are in the chain rather
 //! than in the walk (which `callstack`'s own tests cover).
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 use cpclib_dap::peer::RecordingPeer;

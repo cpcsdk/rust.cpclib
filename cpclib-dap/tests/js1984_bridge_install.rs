@@ -8,6 +8,7 @@
 //! ```text
 //! cargo test -p cpclib-dap --test js1984_bridge_install -- --ignored --nocapture
 //! ```
+#![cfg(feature = "adapter")]
 
 #[test]
 #[ignore = "downloads the pinned 1984js distribution"]

@@ -3,6 +3,7 @@
 //! Registers, addresses and costs are all numbers to the emulator. Turning
 //! them back into the things the program is made of - labels, NOPs - is what
 //! makes them readable while stepping.
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 use cpclib_dap::peer::RecordingPeer;

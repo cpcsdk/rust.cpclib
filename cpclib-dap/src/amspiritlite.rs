@@ -1218,28 +1218,7 @@ pub fn wait_until_listening(endpoint: &str, patience: std::time::Duration) -> Re
     ))
 }
 
-/// Bytes as DAP carries them: the emulator answers hex, DAP asks for base64.
-pub(crate) fn encode_base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let block = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0)
-        ];
-        let packed = ((block[0] as u32) << 16) | ((block[1] as u32) << 8) | block[2] as u32;
-        for index in 0..4 {
-            if index <= chunk.len() {
-                out.push(ALPHABET[((packed >> (18 - 6 * index)) & 0x3F) as usize] as char);
-            }
-            else {
-                out.push('=');
-            }
-        }
-    }
-    out
-}
+pub(crate) use crate::text::encode_base64;
 
 /// Base64 as DAP sends it, into the hex this API wants.
 fn hex_from_base64(encoded: &str) -> String {

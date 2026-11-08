@@ -5,6 +5,7 @@
 //! adapter's job is to carry what it can and *say* what it cannot, rather than
 //! looking as though a conditional watchpoint was honoured when only its
 //! address was.
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::delayed_command::{AssembledBreakpoint, AssembledBreakpointKind, BreakpointDetails};
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};

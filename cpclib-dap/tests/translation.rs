@@ -1,6 +1,7 @@
 //! The editor speaks files and lines; the emulator speaks addresses. These
 //! pin the translation in both directions, against a recording peer rather
 //! than a browser.
+#![cfg(feature = "adapter")]
 
 use std::path::{Path, PathBuf};
 
