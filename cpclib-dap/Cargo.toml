@@ -12,9 +12,19 @@ homepage.workspace = true
 [[bin]]
 name = "cpclib-dap"
 path = "src/main.rs"
+required-features = ["adapter"]
+
+[features]
+default = ["adapter"]
+# The debug adapter itself: the DAP server, the emulators it launches and talks to, the
+# project's builds and source maps. Without it (`default-features = false`) only the
+# emulator-independent helpers remain - `disassemble`, `callstack`, `inspect` (without source
+# maps), `breakpoint_manager`, `protocol` - light enough for an emulator to show the same views,
+# and for the web (wasm32).
+adapter = ["dep:cpclib-runner", "dep:cpclib-bndbuild", "dep:cpclib-project"]
 
 [dependencies]
-cpclib-project.workspace = true
+cpclib-project = { workspace = true, optional = true }
 cpclib-asm.workspace = true
 cpclib-basic.workspace = true
 cpclib-sna.workspace = true
@@ -24,8 +34,8 @@ cpclib-image.workspace = true
 image.workspace = true
 cpclib-tokens.workspace = true
 cpclib-common.workspace = true
-cpclib-runner = { workspace = true, default-features = false }
-cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
+cpclib-runner = { workspace = true, default-features = false, optional = true }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"], optional = true }
 camino.workspace = true
 fs-err.workspace = true
 serde = { workspace = true, features = ["derive"] }

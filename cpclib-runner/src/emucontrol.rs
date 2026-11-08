@@ -1428,6 +1428,17 @@ fn spawn_emulator_with_args<E: EventObserver>(
     runner.inner_run(args, o)
 }
 
+/// Without the `screenshot` feature there is no window search (its crates find and capture
+/// the windows): the keys go to the focused window.
+#[cfg(not(feature = "screenshot"))]
+fn find_window_to_drive(
+    _emu: &Emulator,
+    _conf: &EmulatorConf,
+    _o: &dyn EventObserver
+) -> Result<Option<EmuWindow>, String> {
+    Ok(None)
+}
+
 /// The window to drive. `None` for an emulator driven through its own API (bemu).
 #[cfg(feature = "screenshot")]
 fn find_window_to_drive(

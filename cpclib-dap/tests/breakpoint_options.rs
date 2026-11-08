@@ -1,6 +1,7 @@
 //! Conditions, hit counts, log points and stopping data breakpoints: carried
 //! to an emulator that applies them (bemu), and refused with a reason by one
 //! that cannot, rather than turned into something else.
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 use cpclib_dap::peer::RecordingPeer;

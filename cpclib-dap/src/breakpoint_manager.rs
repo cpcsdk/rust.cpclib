@@ -82,7 +82,7 @@ impl ManagerBreakpoint {
                 None | Some(Value::Null) => Ok(None),
                 Some(Value::Number(n)) => n.as_u64().filter(|n| *n <= max).map(Some).ok_or_else(|| format!("{key} must be 0 to {max}")),
                 Some(Value::String(t)) if t.trim().is_empty() => Ok(None),
-                Some(Value::String(t)) => crate::session::parse_number(t.trim())
+                Some(Value::String(t)) => crate::text::parse_number(t.trim())
                     .map(u64::from)
                     .filter(|n| *n <= max)
                     .map(Some)
@@ -111,7 +111,7 @@ impl ManagerBreakpoint {
             });
         }
         let typed = text("address").ok_or("an address (or a label) is needed")?;
-        let address = crate::session::parse_number(typed)
+        let address = crate::text::parse_number(typed)
             .or_else(|| resolve(typed))
             .filter(|a| *a <= 0xffff)
             .ok_or_else(|| format!("\"{typed}\" is neither an address nor a label of the program"))?;

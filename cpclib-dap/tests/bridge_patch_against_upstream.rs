@@ -9,6 +9,7 @@
 //! CPCLIB_1984JS_DIST=/path/to/web/dist \
 //!   cargo test -p cpclib-dap --test bridge_patch_against_upstream -- --ignored
 //! ```
+#![cfg(feature = "adapter")]
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_dap::js1984_bridge::{BRIDGE_FILENAME, apply_bridge_patch};

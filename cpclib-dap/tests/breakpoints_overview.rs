@@ -1,6 +1,7 @@
 //! `cpclib/breakpoints`: every kind of breakpoint the session holds, each
 //! explained, for the extension's breakpoints view - with whether this
 //! emulator applies it as asked.
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::delayed_command::{AssembledBreakpoint, AssembledBreakpointKind, BreakpointDetails};
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};

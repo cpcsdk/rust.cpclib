@@ -4,6 +4,7 @@
 //! Needs bemu's `amsrust` executable, named by `$CPCLIB_BEMU`; without it
 //! each test says so and passes. bemu is built from its own repository
 //! (`cargo +nightly build --release` in rgiot/bemu).
+#![cfg(feature = "adapter")]
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};

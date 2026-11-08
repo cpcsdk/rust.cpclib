@@ -1,6 +1,7 @@
 //! The breakpoint manager (ACE's breakpoint window): breakpoints made by
 //! hand - execution, memory, I/O port - listed by tab with every other
 //! breakpoint of the session.
+#![cfg(feature = "adapter")]
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 use cpclib_dap::peer::RecordingPeer;

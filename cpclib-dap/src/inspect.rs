@@ -10,6 +10,7 @@ use cpclib_image::color::AmstradColor;
 use cpclib_image::image::{ColorMatrix, Mode};
 use cpclib_image::ink::Ink;
 use cpclib_image::palette::Palette;
+#[cfg(feature = "adapter")]
 use cpclib_project::srcmap::{SourceLocation, SourceMap};
 use serde_json::{Value, json};
 
@@ -92,7 +93,7 @@ pub fn flags_of(variables: &[Value]) -> Option<u8> {
 /// `AF` is one 16-bit value there; the flags live in its low byte and are the
 /// half people actually read while stepping.
 pub fn annotate_registers(variables: &mut Vec<Value>, flags_reference: i64) {
-    annotate_registers_with(variables, flags_reference, None)
+    annotate_flags(variables, flags_reference)
 }
 
 /// How far past a label a register may point and still be described by it.
@@ -100,8 +101,10 @@ pub fn annotate_registers(variables: &mut Vec<Value>, flags_reference: i64) {
 /// A pointer three bytes into `screen_buffer` is in `screen_buffer`. A pointer
 /// two kilobytes past the last label is not in it, and saying otherwise is
 /// worse than saying nothing.
+#[cfg(feature = "adapter")]
 const LABEL_WINDOW: u32 = 0x100;
 
+#[cfg(feature = "adapter")]
 /// As [`annotate_registers`], plus the label each pointer register points at.
 ///
 /// `HL = 0xC000` is a number; `HL = 0xC000 (screen_buffer)` is an answer. The
@@ -198,6 +201,7 @@ fn parse_hex_value(raw: &str) -> Option<u32> {
     u32::from_str_radix(digits, 16).ok()
 }
 
+#[cfg(feature = "adapter")]
 /// An operand this pass could not name on its own: several labels share the
 /// address, and nothing here has the evidence to prefer one.
 ///
@@ -217,6 +221,7 @@ pub(crate) struct AmbiguousOperand {
     pub candidates: Vec<String>
 }
 
+#[cfg(feature = "adapter")]
 /// Put each disassembled instruction back on the line it came from.
 ///
 /// This is what lets the disassembly view show your source beside the opcodes,
@@ -464,6 +469,7 @@ pub fn gate_array_pen(written: u8) -> Option<(String, String)> {
     ))
 }
 
+#[cfg(feature = "adapter")]
 /// The symbols any address-shaped operand in `text` could stand for.
 ///
 /// Only exact matches: an operand that is a label's address is that label, and
@@ -526,6 +532,7 @@ fn looks_like_an_address_operand(text: &str, value: u32) -> bool {
     false
 }
 
+#[cfg(feature = "adapter")]
 fn name_operand_addresses(
     text: &str,
     map: &SourceMap,
@@ -1044,12 +1051,12 @@ pub fn render_screen_view(
         .map_err(|problem| format!("could not encode the screen as an image: {problem}"))?;
 
     Ok(json!({
-        "png": crate::amspiritlite::encode_base64(&png),
+        "png": crate::text::encode_base64(&png),
         "address": address,
         "width": bytes_width,
         "height": pixel_height,
         "mode": mode as u8 as i64,
-        "bytes": crate::amspiritlite::encode_base64(memory),
+        "bytes": crate::text::encode_base64(memory),
         "charRowHeight": lines_per_char_row,
         "palette": palette_as_hex(palette),
         "hardwarePalette": hardware_palette_as_hex(),
@@ -1425,7 +1432,7 @@ pub fn chip_placeholder(reference: i64, why: &str) -> Option<Vec<Value>> {
     })])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "adapter"))]
 mod tests {
     use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
     use serial_test::serial;
@@ -1587,7 +1594,7 @@ mod tests {
             assert_eq!(body["width"], bytes_width, "mode {mode}");
             assert_eq!(body["height"], 10, "mode {mode}");
 
-            let png = crate::session::decode_base64(body["png"].as_str().unwrap());
+            let png = crate::text::decode_base64(body["png"].as_str().unwrap());
             // PNG signature (8 bytes) + chunk length (4) + "IHDR" (4), then
             // width and height as big-endian u32 - the cheapest correct way
             // to read a PNG's own pixel size without a new dependency.
@@ -1837,7 +1844,7 @@ mod tests {
         .unwrap();
         assert_eq!(body["encoding"], 1);
 
-        let png = crate::session::decode_base64(body["png"].as_str().unwrap());
+        let png = crate::text::decode_base64(body["png"].as_str().unwrap());
         let decoded = image::load_from_memory(&png).unwrap().to_rgb8();
         // Line 1, doubled vertically, starts at pixel row 2; Mode 2's own
         // 8 dots/byte are shown 1x horizontally (already the real width).

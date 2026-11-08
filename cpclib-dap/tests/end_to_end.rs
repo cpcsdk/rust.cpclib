@@ -3,6 +3,7 @@
 //! Everything else tests the translation with a peer in memory; this checks
 //! the binary an editor actually launches: that it frames correctly, answers
 //! `initialize`, and assembles a real program on `launch`.
+#![cfg(feature = "adapter")]
 
 use std::io::{BufReader, Read, Write};
 use std::process::{Command, Stdio};

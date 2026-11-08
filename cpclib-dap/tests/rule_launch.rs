@@ -3,6 +3,7 @@
 //! The shapes here are taken from a real build file: the emulator tool carries
 //! the `-` prefix that ignores its errors, and the snapshot comes from a
 //! template variable that is already expanded by the time a rule is read.
+#![cfg(feature = "adapter")]
 
 use cpclib_dap::launch::debuggable_rules;
 
