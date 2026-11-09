@@ -941,30 +941,23 @@ impl ScreenEncoding {
     }
 }
 
-/// A known screen address, mode and palette plus a raw memory window
-/// (`memory[0]` = real address 0x0000, i.e. the full 64K space - see
-/// `ColorMatrix::from_screen_at`'s own doc comment for why) turned into a
-/// `cpclib/screenView` event's body - shared by both session types' `-sv`
-/// command, one rendering pipeline rather than two to keep in sync.
-///
-/// `width`/`height` are already-resolved (defaulted by the caller, e.g.
-/// via [`DEFAULT_SCREEN_WIDTH`]/[`DEFAULT_SCREEN_HEIGHT`]) rather than
-/// `Option`s here - this function only clamps them to a sane range, it
-/// does not decide what "unset" means, since the two session types
-/// resolve that from slightly different pending-state shapes.
-///
-/// No visual spacer/separator of any kind is drawn into the image itself:
-/// an earlier version inserted a black row every `lines_per_char_row` real
-/// lines (`ColorMatrix::insert_blank_row_every`), but a real gap looked
-/// nothing like the padding the panel's own multi-column tiling already
-/// draws between columns - reported live as visually inconsistent. All
-/// spacing, in both directions alike, is the panel's own doing now,
-/// entirely client-side, on a plain, ungapped render.
-// Same "shared to avoid duplicating a rendering pipeline between the two
-// session types" tradeoff as `screen_view_event_and_receipt` above, which
-// calls this - see its own #[allow] for the reasoning.
+/// `palette` with the pens `overrides` sets replaced: the window's own palette, not the CPC's.
+fn with_overrides(palette: &Palette<Ink>, overrides: &[Option<Ink>]) -> Palette<Ink> {
+    let mut palette = palette.clone();
+    for (pen, ink) in overrides.iter().enumerate() {
+        if let Some(ink) = ink {
+            palette.set(pen as u8, *ink);
+        }
+    }
+    palette
+}
+
+/// The picture of [`render_screen_view`] before it is encoded: the bytes decoded (the CRTC's
+/// interleaved addressing or the plain one), in the palette with its overrides, stretched to the
+/// CPC's aspect (8 dots a byte in every mode, each line twice). For a viewer that draws the
+/// pixels itself (an emulator's own window) rather than a PNG.
 #[allow(clippy::too_many_arguments)]
-pub fn render_screen_view(
+pub fn screen_view_matrix(
     address: usize,
     width: usize,
     height: usize,
@@ -974,7 +967,7 @@ pub fn render_screen_view(
     lines_per_char_row: usize,
     palette_override: &[Option<Ink>],
     encoding: ScreenEncoding
-) -> Result<Value, String> {
+) -> Result<ColorMatrix<Ink>, String> {
     if memory.is_empty() {
         return Err("could not read the screen's own memory".to_string());
     }
@@ -989,13 +982,7 @@ pub fn render_screen_view(
     // one for this. A pen this session has overridden keeps that choice
     // across every re-render (including the automatic ones `-sv` never
     // asked for again), until the view is asked to auto-detect afresh.
-    let mut palette = palette.clone();
-    for (pen, ink) in palette_override.iter().enumerate() {
-        if let Some(ink) = ink {
-            palette.set(pen as u8, *ink);
-        }
-    }
-    let palette = &palette;
+    let palette = &with_overrides(palette, palette_override);
 
     let mut matrix: ColorMatrix<Ink> = match encoding {
         ScreenEncoding::Screen => {
@@ -1045,7 +1032,58 @@ pub fn render_screen_view(
     // Vertical stretch is uniform across every mode - a raster line reads
     // roughly twice as tall as it is a Mode 2 dot wide.
     matrix.double_vertically();
+    Ok(matrix)
+}
 
+/// A known screen address, mode and palette plus a raw memory window
+/// (`memory[0]` = real address 0x0000, i.e. the full 64K space - see
+/// `ColorMatrix::from_screen_at`'s own doc comment for why) turned into a
+/// `cpclib/screenView` event's body - shared by both session types' `-sv`
+/// command, one rendering pipeline rather than two to keep in sync.
+///
+/// `width`/`height` are already-resolved (defaulted by the caller, e.g.
+/// via [`DEFAULT_SCREEN_WIDTH`]/[`DEFAULT_SCREEN_HEIGHT`]) rather than
+/// `Option`s here - this function only clamps them to a sane range, it
+/// does not decide what "unset" means, since the two session types
+/// resolve that from slightly different pending-state shapes.
+///
+/// No visual spacer/separator of any kind is drawn into the image itself:
+/// an earlier version inserted a black row every `lines_per_char_row` real
+/// lines (`ColorMatrix::insert_blank_row_every`), but a real gap looked
+/// nothing like the padding the panel's own multi-column tiling already
+/// draws between columns - reported live as visually inconsistent. All
+/// spacing, in both directions alike, is the panel's own doing now,
+/// entirely client-side, on a plain, ungapped render.
+// Same "shared to avoid duplicating a rendering pipeline between the two
+// session types" tradeoff as `screen_view_event_and_receipt` above, which
+// calls this - see its own #[allow] for the reasoning.
+#[allow(clippy::too_many_arguments)]
+pub fn render_screen_view(
+    address: usize,
+    width: usize,
+    height: usize,
+    mode: u8,
+    palette: &Palette<Ink>,
+    memory: &[u8],
+    lines_per_char_row: usize,
+    palette_override: &[Option<Ink>],
+    encoding: ScreenEncoding
+) -> Result<Value, String> {
+    let matrix = screen_view_matrix(
+        address,
+        width,
+        height,
+        mode,
+        palette,
+        memory,
+        lines_per_char_row,
+        palette_override,
+        encoding
+    )?;
+    let palette = &with_overrides(palette, palette_override);
+    let mode = Mode::from(mode.min(3));
+    let bytes_width = width.clamp(1, MAX_SCREEN_WIDTH);
+    let pixel_height = height.clamp(1, MAX_SCREEN_HEIGHT);
     let png = matrix
         .as_png_bytes()
         .map_err(|problem| format!("could not encode the screen as an image: {problem}"))?;
@@ -1564,6 +1602,36 @@ mod tests {
     /// vertically. Reported live as missing from the first cut of this
     /// view - Mode 1 and Mode 0 screens rendered squashed relative to a
     /// real monitor.
+    #[test]
+    fn screen_view_matrix_is_the_picture_render_screen_view_encodes() {
+        // pen 0 blue (hardware &04), pen 1 bright white (&0B)
+        let mut pens = [0x04u8; 17];
+        pens[1] = 0x0B;
+        let palette = palette_from_raw_ga(&pens);
+        let mut memory = vec![0u8; 0x10000];
+        // a mode 2 line: its first pixel set (pen 1)
+        memory[0xC000] = 0x80;
+        let matrix = screen_view_matrix(
+            0xC000,
+            10,
+            4,
+            2,
+            &palette,
+            &memory,
+            8,
+            &[],
+            ScreenEncoding::Screen
+        )
+        .unwrap();
+        // 8 dots a byte, each line twice
+        assert_eq!((matrix.width(), matrix.height()), (80, 8));
+        let image = matrix.as_image();
+        assert_eq!(image.dimensions(), (80, 8));
+        // the first dot (pen 1, on both copies of the line) is not the second (pen 0)
+        assert_eq!(image.get_pixel(0, 0), image.get_pixel(0, 1));
+        assert_ne!(image.get_pixel(0, 0), image.get_pixel(1, 0));
+    }
+
     #[test]
     fn render_screen_view_stretches_the_png_to_the_cpc_pixel_aspect_ratio() {
         let palette = palette_from_raw_ga(&[0u8; 17]);
