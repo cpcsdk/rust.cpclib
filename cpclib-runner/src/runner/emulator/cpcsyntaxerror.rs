@@ -17,8 +17,9 @@ pub const CPCSYNTAXERROR_CMD: &str = "cpcse";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum CpcSyntaxErrorVersion {
+    V0_6_2,
     #[default]
-    V0_6_2
+    V0_14_2
 }
 
 impl Display for CpcSyntaxErrorVersion {
@@ -32,7 +33,8 @@ impl GithubCompiledApplication for CpcSyntaxErrorVersion {}
 impl ExecutableInformation for CpcSyntaxErrorVersion {
     fn target_os_folder(&self) -> &'static str {
         match self {
-            Self::V0_6_2 => "CPCSyntaxError_0.6.2"
+            Self::V0_6_2 => "CPCSyntaxError_0.6.2",
+            Self::V0_14_2 => "CPCSyntaxError_0.14.2"
         }
     }
 
@@ -46,6 +48,14 @@ impl ExecutableInformation for CpcSyntaxErrorVersion {
                 return "CPCSyntaxError.app/Contents/MacOS/cpcse";
                 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
                 return "CPCSyntaxError-linux-x86_64-v0.6.2/cpcse";
+            },
+            Self::V0_14_2 => {
+                #[cfg(target_os = "windows")]
+                return "cpcse.exe";
+                #[cfg(target_os = "macos")]
+                return "CPCSyntaxError.app/Contents/MacOS/cpcse";
+                #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+                return "CPCSyntaxError-linux-x86_64-v0.14.2/cpcse";
             }
         }
     }
@@ -67,25 +77,29 @@ impl GithubInformation for CpcSyntaxErrorVersion {
 
     fn version_name(&self) -> &'static str {
         match self {
-            Self::V0_6_2 => "v0.6.2"
+            Self::V0_6_2 => "v0.6.2",
+            Self::V0_14_2 => "v0.14.2"
         }
     }
 
     fn linux_key(&self) -> Option<&'static str> {
         match self {
-            Self::V0_6_2 => Some("CPCSyntaxError-linux-x86_64-v0.6.2.tar.gz")
+            Self::V0_6_2 => Some("CPCSyntaxError-linux-x86_64-v0.6.2.tar.gz"),
+            Self::V0_14_2 => Some("CPCSyntaxError-linux-x86_64-v0.14.2.tar.gz")
         }
     }
 
     fn windows_key(&self) -> Option<&'static str> {
         match self {
-            Self::V0_6_2 => Some("CPCSyntaxError-win64-v0.6.2.zip")
+            Self::V0_6_2 => Some("CPCSyntaxError-win64-v0.6.2.zip"),
+            Self::V0_14_2 => Some("CPCSyntaxError-win64-v0.14.2.zip")
         }
     }
 
     fn macos_key(&self) -> Option<&'static str> {
         match self {
-            Self::V0_6_2 => Some("CPCSyntaxError-macos-universal-v0.6.2.zip")
+            Self::V0_6_2 => Some("CPCSyntaxError-macos-universal-v0.6.2.zip"),
+            Self::V0_14_2 => Some("CPCSyntaxError-macos-universal-v0.14.2.zip")
         }
     }
 }
