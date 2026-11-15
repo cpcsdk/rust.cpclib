@@ -274,6 +274,106 @@ fn stop_on_entry_then_continue_to_a_breakpoint_then_step() {
     adapter.finish();
 }
 
+/// bemu sets every register (`POST /api/z80`), not only PC: what the
+/// Registers view writes is what the program then runs with.
+#[test]
+fn a_register_set_in_the_registers_view_is_the_emulators() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({ "stopOnEntry": true }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+
+    let trace = adapter.request("stackTrace", json!({ "threadId": 1 }));
+    let frame = trace["body"]["stackFrames"][0]["id"].clone();
+    let scopes = adapter.request("scopes", json!({ "frameId": frame }));
+    let registers = scopes["body"]["scopes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"].as_str().is_some_and(|n| n.contains("Registers")))
+        .unwrap()["variablesReference"]
+        .clone();
+
+    let set = adapter.request(
+        "setVariable",
+        json!({ "variablesReference": registers, "name": "HL", "value": "0x1234" })
+    );
+    assert_eq!(set["body"]["value"], "0x1234", "{set}");
+    adapter.request("setVariable", json!({ "variablesReference": registers, "name": "BC'", "value": "&BEEF" }));
+    assert_eq!(hex_value(&adapter.register("HL")), 0x1234);
+    assert_eq!(hex_value(&adapter.register("BC'")), 0xBEEF);
+
+    // A value too wide for the register is refused, and nothing is sent.
+    let seq = adapter.send("setVariable", json!({ "variablesReference": registers, "name": "I", "value": "0x100" }));
+    let refused = adapter.wait("refusal", |m| m["type"] == "response" && m["request_seq"] == seq);
+    assert_eq!(refused["success"], false, "{refused}");
+    adapter.finish();
+}
+
+/// With `&C4` paged, #4000 is bank 4: a write from the Memory View lands
+/// there, where the program and the view see it, not in bank 1.
+#[test]
+fn a_memory_write_follows_the_banking() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "banked.asm",
+        "\torg #8000\n\trun start\nstart\n\tld bc,#7fc4\n\tout (c),c\nloop\n\tjr loop\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": 7 }] }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+
+    adapter.request("writeMemory", json!({ "memoryReference": "0x4000", "data": "qrs=" }));
+    let memory = adapter.request("readMemory", json!({ "memoryReference": "0x4000", "count": 2 }));
+    assert_eq!(memory["body"]["data"], "qrs=", "#AA #BB at #4000 as the CPU sees it: {memory}");
+    adapter.finish();
+}
+
+/// Step over a `CALL`, into the routine and out of it again: bemu's own
+/// stepping when it offers it (`/api/step?mode=`), this side's otherwise.
+#[test]
+fn step_over_a_call_then_into_it_then_out() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "calls.asm",
+        "\torg #4000\n\trun start\nstart\n\tcall routine\n\tcall routine\nloop\n\tjr loop\nroutine\n\tnop\n\tret\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({ "stopOnEntry": true }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+    assert_eq!(adapter.line(), 4, "on the first call");
+
+    adapter.request("next", json!({ "threadId": 1 }));
+    let step = adapter.stopped();
+    assert_eq!(step["body"]["reason"], "step", "{step}");
+    assert_eq!(adapter.line(), 5, "the first call run whole");
+
+    adapter.request("stepIn", json!({ "threadId": 1 }));
+    adapter.stopped();
+    assert_eq!(adapter.line(), 9, "in the routine");
+
+    adapter.request("stepOut", json!({ "threadId": 1 }));
+    let out = adapter.stopped();
+    assert_eq!(out["body"]["reason"], "step", "{out}");
+    let line = adapter.line();
+    assert!((6..=7).contains(&line), "back after the second call: line {line}");
+    adapter.finish();
+}
+
 #[test]
 fn breakpoints_are_armed_before_the_program_runs() {
     let Some(bemu) = bemu()

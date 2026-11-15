@@ -228,19 +228,26 @@ impl Advanced {
     /// The `stopped` reason and description for a stop on a breakpoint
     /// armed here: a data breakpoint, told as one, with the access.
     pub(crate) fn stop(&self, event: &Value) -> Option<(&'static str, String)> {
-        // A raster breakpoint: no name, the beam says which.
+        // A raster breakpoint: no name, the beam says which. bemu stops at the
+        // first instruction boundary at or past the position, so the beam is
+        // up to one instruction (7 NOPs at most) beyond the breakpoint: the
+        // nearest one at or before it, on its line, is the one hit.
         if event.get("kind").and_then(Value::as_str) == Some("raster") {
+            const LONGEST_INSTRUCTION_NOPS: u64 = 7;
             let beam = event.get("beam")?;
             let (line, nop) = (beam.get("line")?.as_u64()?, beam.get("nop")?.as_u64()?);
             let label = self
                 .manager
                 .iter()
                 .filter(|e| is_raster(e))
-                .find(|e| {
-                    e.get("nop").and_then(Value::as_u64) == Some(nop)
-                        && e.get("line").and_then(Value::as_u64).is_none_or(|l| l == line)
+                .filter_map(|e| Some((number_of(e.get("nop")?)?, e)))
+                .filter(|(at, e)| {
+                    *at <= nop
+                        && nop - at <= LONGEST_INSTRUCTION_NOPS
+                        && e.get("line").and_then(number_of).is_none_or(|l| l == line)
                 })
-                .and_then(|e| e.get("label").and_then(Value::as_str))
+                .max_by_key(|(at, _)| *at)
+                .and_then(|(_, e)| e.get("label").and_then(Value::as_str))
                 .unwrap_or("raster");
             return Some(("breakpoint", format!("{label}: beam at line {line}, NOP {nop}")));
         }
@@ -311,6 +318,11 @@ impl Advanced {
         described["label"] = json!(label);
         described
     }
+}
+
+/// A number the manager keeps as a JSON number or as text (`"100"`).
+fn number_of(value: &Value) -> Option<u64> {
+    value.as_u64().or_else(|| value.as_str().and_then(|text| crate::text::parse_number(text)).map(u64::from))
 }
 
 fn is_raster(entry: &Value) -> bool {
@@ -416,6 +428,14 @@ mod tests {
         assert_eq!(rasters.raster_queries(), vec![vec![("add", 1), ("nop", 10), ("line", 100)]]);
         let stop = json!({ "kind": "raster", "beam": { "line": 100, "nop": 10, "x": 160, "y": 100 } });
         assert_eq!(rasters.stop(&stop).unwrap(), ("breakpoint", "split: beam at line 100, NOP 10".to_owned()));
+        // Stopped at the end of the instruction that crossed the position.
+        let late = json!({ "kind": "raster", "beam": { "line": 100, "nop": 13, "x": 208, "y": 100 } });
+        assert_eq!(rasters.stop(&late).unwrap(), ("breakpoint", "split: beam at line 100, NOP 13".to_owned()));
+        // Too far past it, or on another line: not that one.
+        let far = json!({ "kind": "raster", "beam": { "line": 100, "nop": 30, "x": 480, "y": 100 } });
+        assert_eq!(rasters.stop(&far).unwrap().1, "raster: beam at line 100, NOP 30");
+        let other_line = json!({ "kind": "raster", "beam": { "line": 101, "nop": 10, "x": 160, "y": 101 } });
+        assert_eq!(rasters.stop(&other_line).unwrap().1, "raster: beam at line 101, NOP 10");
         // A manager watch reports under its label.
         let watch = json!({ "name": "cpclib:manager:3", "pc": "0xc03c" });
         assert_eq!(set().report(&watch).unwrap(), "TrackDone (PC #C03C)\n");

@@ -24,6 +24,7 @@ use crate::runner::ay::fap::FAPVersion;
 use crate::runner::ay::minimiser::MinimiserVersion;
 use crate::runner::convgeneric::ConvGenericVersion;
 use crate::runner::disassembler::disark::DisarkVersion;
+use crate::runner::emulator::bemu::BemuVersion;
 use crate::runner::emulator::cadence::CadenceVersion;
 use crate::runner::emulator::caprice_forever::CapriceForeverVersion;
 use crate::runner::emulator::cpcemu::CpcEmuVersion;
@@ -71,6 +72,7 @@ fn resolved_downloads() -> Vec<(&'static str, Result<String, String>)> {
         "cpcemu" => CpcEmuVersion::default();
         "cpcemupower" => CpcEmuPowerVersion::default();
         "capriceforever" => CapriceForeverVersion::default();
+        "bemu" => BemuVersion::default();
         "cadence" => CadenceVersion::default();
         "cpcsyntaxerror" => CpcSyntaxErrorVersion::default();
         "koncepcja" => KoncepcjaVersion::default();

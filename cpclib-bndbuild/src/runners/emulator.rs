@@ -46,6 +46,12 @@ impl Emulator {
         ))
     }
 
+    pub fn new_bemu_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Bemu(
+            Default::default()
+        ))
+    }
+
     pub fn new_cpcsyntaxerror_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CpcSyntaxError(
             Default::default()
@@ -118,6 +124,7 @@ impl Emulator {
             Self::new_capriceforever_default(),
             Self::new_cadence_default(),
             Self::new_cpcsyntaxerror_default(),
+            Self::new_bemu_default(),
             Self::new_koncepcja_default(),
             Self::new_1984_default(),
             Self::new_retrovm_default(),

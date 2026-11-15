@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-bndbuild` add support of the catalog command
 - `cpclib-bndbuild`, `cpclib-runner` add the CPCSyntaxError (`cpcse`) and konCePCja (`koncepcja`) emulators
 - `cpclib-bndbuild`, `cpclib-runner` add the fantams assembler, built from its sources on first use
+- `cpclib-bndbuild`, `cpclib-runner` download the bemu emulator from the releases of github.com/rgiot/bemu instead of building it from its sources
+- `cpclib-dap` with bemu: every register can be set from the Registers view, memory writes follow the current banking, a raster breakpoint's stop is told with its name, and a request the emulator refuses is reported
 - `cpclib-bndbuild` add the `asm` command: one command line for basm, fantams, rasm, sjasmplus, uz80 and vasm. `assemble` is now an alias of `asm`, no longer of `basm`
 - `cpclib-bndbuild` add support to the hxcfe (inner) command
 - `cpclib-bndbuild` add support to the csl command

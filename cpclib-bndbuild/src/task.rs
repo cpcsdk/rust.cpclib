@@ -16,6 +16,7 @@ use cpclib_runner::runner::ay::fap::FAP_CMD;
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::disassembler::disark::{DISARK_CMD, DisarkVersion};
+use cpclib_runner::runner::emulator::bemu::BEMU_CMD;
 use cpclib_runner::runner::emulator::cadence::CADENCE_CMD;
 use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cpcemu::CPCEMU_CMD;
@@ -230,6 +231,7 @@ pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];
 pub const CAPRICEFOREVER_CMDS: &[&str] = &[CAPRICEFOREVER_CMD];
 pub const CADENCE_CMDS: &[&str] = &[CADENCE_CMD];
 pub const CPCSYNTAXERROR_CMDS: &[&str] = &[CPCSYNTAXERROR_CMD, "cpcsyntaxerror"];
+pub const BEMU_CMDS: &[&str] = &[BEMU_CMD, "amsrust"];
 pub const KONCEPCJA_CMDS: &[&str] = &[KONCEPCJA_CMD];
 pub const EMULATOR_1984_CMDS: &[&str] = &[EMULATOR_1984_CMD];
 pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
@@ -382,7 +384,7 @@ macro_rules! is_some_cmd {
 #[rustfmt::skip]
 is_some_cmd!(
     ace, amspirit, amspiritlite, asm, asmfmt, at, ayt, archive,
-    basm, basmdoc, bdasm, bndbuild,
+    basm, basmdoc, bdasm, bemu, bndbuild,
     basmopt,
     catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, zik2cpc, crunch, cp, cpcec, cpcemupower, cpc2img,
     cadence, cpcsyntaxerror, emulator_1984,
@@ -839,6 +841,9 @@ impl InnerTask {
         }
         else if is_cadence_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_cadence_default(), std))
+        }
+        else if is_bemu_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_bemu_default(), std))
         }
         else if is_cpcsyntaxerror_cmd(code) {
             Ok(Self::with_emulator(
