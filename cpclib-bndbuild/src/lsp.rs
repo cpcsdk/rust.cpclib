@@ -207,6 +207,12 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: BEMU_CMDS,
+        description: "Run in bemu emulator (downloaded from github.com/rgiot/bemu)",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
         names: CPCSYNTAXERROR_CMDS,
         description: "Run in CPCSyntaxError emulator",
         synopsis: "TODO",

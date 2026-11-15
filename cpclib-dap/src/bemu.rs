@@ -5,9 +5,9 @@
 //! before the first instruction runs; the session releases it at
 //! `configurationDone` (see [`crate::peer::DapPeer::release`]).
 //!
-//! Not downloaded: bemu is built from its own repository. The executable is
-//! the launch configuration's `emulatorPath`, else `$CPCLIB_BEMU`, else
-//! `amsrust` from the `PATH`.
+//! The executable is the launch configuration's `emulatorPath`, else
+//! `$CPCLIB_BEMU`, else `amsrust` from the `PATH` (bndbuild downloads it from
+//! the releases of github.com/rgiot/bemu).
 
 use std::path::{Path, PathBuf};
 

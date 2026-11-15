@@ -870,11 +870,9 @@ impl EmulatorConf {
                                 let nvram = roms_folder.join("nova_nvram.bin");
                                 args.push("--nova".to_owned());
                                 args.push(nvram.to_string());
-                                let amsdos = roms_folder.join("amsdos.rom");
-                                if amsdos.exists() {
-                                    args.push("--rom".to_owned());
-                                    args.push(format!("10={amsdos}"));
-                                }
+                                // the AMSDOS ROM embedded in bemu, in a slot of its own
+                                args.push("--rom".to_owned());
+                                args.push("10=inner://amsdos".to_owned());
                             },
                             AmstradRom::Orgams => slots.extend(amstrad_rom_slot_files(*rom))
                         }
@@ -3709,7 +3707,7 @@ pub struct EmuCli {
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Emu {
     Ace,
-    /// bemu (`amsrust`), built from its sources: `$CPCLIB_BEMU_SRC` is its checkout
+    /// bemu (`amsrust`), downloaded from the releases of github.com/rgiot/bemu
     Bemu,
     /// The portable AMSpiriT build - a different emulator from `Amspirit`,
     /// with its own releases and its own command line.
