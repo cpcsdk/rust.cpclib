@@ -131,19 +131,19 @@ pub fn call_for(request: &Value) -> Option<Call> {
             let name = arguments.and_then(|a| a.get("name")).and_then(Value::as_str)?;
             let value = arguments.and_then(|a| a.get("value")).and_then(Value::as_u64)?;
             let name = bemu_register_name(name)?;
-            let mut body = serde_json::Map::new();
-            // bemu sets PC, SP, IX and IY whole, and the pairs by their
-            // halves only (`HL` is refused, `H` and `L` are not).
+            let mut set = cpclib_bemu_api::SetZ80::default();
+            // A pair by its halves: every bemu takes those (the pairs
+            // themselves only from the `register_pairs` feature on).
             match bemu_register_halves(name) {
                 Some((high, low)) => {
-                    body.insert(high.to_owned(), json!(value >> 8));
-                    body.insert(low.to_owned(), json!(value & 0xFF));
+                    set.set(high, (value >> 8) as i64);
+                    set.set(low, (value & 0xFF) as i64);
                 },
                 None => {
-                    body.insert(name.to_owned(), json!(value));
+                    set.set(name, value as i64);
                 }
             }
-            Call::post("/api/z80").body(Value::Object(body).to_string())
+            Call::post("/api/z80").body(serde_json::to_string(&set).ok()?)
         },
 
         // Moving the program counter without writing to RAM: AMSpiriT Lite's
@@ -1585,18 +1585,13 @@ impl AmspiritLitePeer {
         let seq = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
         // bemu says so in its ping; its extensions are used then, and the
         // features it lists.
+        // bemu's ping is `cpclib_bemu_api::Ping`; AMSpiriT Lite's is not.
         let ping = perform(endpoint, &Call::get("/api/ping"))
             .ok()
-            .and_then(|body| serde_json::from_str::<Value>(&body).ok());
-        let extensions = ping
-            .as_ref()
-            .is_some_and(|ping| ping.get("frontend").and_then(Value::as_str) == Some("bemu"));
-        let features: Vec<String> = ping
-            .as_ref()
-            .and_then(|ping| ping.get("features"))
-            .and_then(Value::as_array)
-            .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect())
-            .unwrap_or_default();
+            .and_then(|body| serde_json::from_str::<cpclib_bemu_api::Ping>(&body).ok())
+            .filter(|ping| ping.frontend == "bemu");
+        let extensions = ping.is_some();
+        let features = ping.map(|ping| ping.features).unwrap_or_default();
         let native_step = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let watching = Stops {
             endpoint: endpoint.trim_end_matches('/').to_string(),
@@ -1727,7 +1722,8 @@ impl AmspiritLitePeer {
         // stack back above where it is) itself: exact, and nothing armed here.
         // A `defs` run is still this side's: only the source says it is one.
         if self.has_feature("step_modes") && !matches!(line, crate::peer::LineAtPc::Defs(_)) {
-            return self.native_step(message, if out_of_this_one { "out" } else { "over" });
+            let mode = if out_of_this_one { cpclib_bemu_api::StepMode::Out } else { cpclib_bemu_api::StepMode::Over };
+            return self.native_step(message, mode);
         }
         let target = if out_of_this_one {
             self.address_to_return_to()
@@ -1803,7 +1799,8 @@ impl AmspiritLitePeer {
     }
 
     /// A step over or out, run by bemu (`POST /api/step?mode=`).
-    fn native_step(&mut self, message: &Value, mode: &str) -> std::io::Result<()> {
+    fn native_step(&mut self, message: &Value, mode: cpclib_bemu_api::StepMode) -> std::io::Result<()> {
+        let mode = mode.as_str();
         use std::sync::atomic::Ordering::SeqCst;
         // A step: its stop is told as one, unless bemu says a breakpoint
         // stopped it first (see `read_events`).
