@@ -608,19 +608,52 @@ fn parse_screenshot_dir<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
         .parse_next(input)
 }
 
-/// Parse screenshot instruction
+/// Parse screenshot instruction: `screenshot [vsync] [<factor>|<width>px]`
 fn parse_screenshot<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
-    ("screenshot", ws0)
+    "screenshot"
         .context(StrContext::Label("screenshot"))
         .parse_next(input)?;
 
-    cut_err(opt(preceded(ws1, "vsync")).context(StrContext::Label("optional 'vsync' flag")))
-        .map(|vsync| {
-            CslInstruction::Screenshot {
-                wait_vsync: vsync.is_some()
-            }
-        })
-        .parse_next(input)
+    let vsync = opt(preceded(ws1, "vsync"))
+        .context(StrContext::Label("optional 'vsync' flag"))
+        .parse_next(input)?;
+    let scale = opt(preceded(ws1, parse_screenshot_scale))
+        .context(StrContext::Label(
+            "optional zoom: a factor (0.5) or a width (440px)"
+        ))
+        .parse_next(input)?;
+    ws0.parse_next(input)?;
+    Ok(CslInstruction::Screenshot {
+        wait_vsync: vsync.is_some(),
+        scale
+    })
+}
+
+/// A screenshot's zoom: a positive factor (`0.5`, `2`) or a width in pixels (`440px`)
+fn parse_screenshot_scale<'a>(
+    input: &mut LocatingSlice<&'a str>
+) -> ParseResult<'a, ScreenshotScale> {
+    let number = take_while(1.., |c: char| c.is_ascii_digit() || c == '.')
+        .context(StrContext::Label("zoom factor or width"))
+        .parse_next(input)?;
+    let pixels = opt("px").parse_next(input)?;
+    let scale = match pixels {
+        Some(_) => {
+            number
+                .parse::<u32>()
+                .ok()
+                .filter(|w| *w > 0)
+                .map(ScreenshotScale::Width)
+        },
+        None => {
+            number
+                .parse::<f32>()
+                .ok()
+                .filter(|f| *f > 0.0 && f.is_finite())
+                .map(ScreenshotScale::Factor)
+        },
+    };
+    scale.ok_or_else(|| cpclib_common::winnow::error::ErrMode::Cut(ContextError::new()))
 }
 
 /// Parse snapshot_name instruction
@@ -1386,5 +1419,67 @@ wait 100000
         let result4 = parse_csl_with_rich_errors(input4, None);
 
         assert!(result4.is_ok(), "v1.2 with v1.2 feature should succeed");
+    }
+}
+
+#[cfg(test)]
+mod screenshot_scale_tests {
+    use super::*;
+
+    fn screenshot(line: &str) -> CslInstruction {
+        let script = parse_csl_with_rich_errors(&format!("csl_version 1.0\n{line}\n"), None)
+            .unwrap_or_else(|e| panic!("{line}: {e}"));
+        script
+            .iter()
+            .find(|i| matches!(i, CslInstruction::Screenshot { .. }))
+            .cloned()
+            .unwrap()
+    }
+
+    #[test]
+    fn a_screenshot_takes_vsync_and_a_zoom() {
+        assert_eq!(screenshot("screenshot"), CslInstruction::screenshot(false));
+        assert_eq!(
+            screenshot("screenshot vsync"),
+            CslInstruction::screenshot(true)
+        );
+        assert_eq!(
+            screenshot("screenshot 0.5"),
+            CslInstruction::screenshot_scaled(false, ScreenshotScale::Factor(0.5))
+        );
+        assert_eq!(
+            screenshot("screenshot vsync 440px"),
+            CslInstruction::screenshot_scaled(true, ScreenshotScale::Width(440))
+        );
+        // as written, read back
+        for line in [
+            "screenshot",
+            "screenshot vsync",
+            "screenshot 0.25",
+            "screenshot vsync 880px"
+        ] {
+            assert_eq!(screenshot(line).to_string(), line);
+        }
+    }
+
+    #[test]
+    fn a_zoom_sizes_the_picture() {
+        assert_eq!(ScreenshotScale::Width(440).apply(1440, 1088), (440, 332));
+        assert_eq!(ScreenshotScale::Factor(0.5).apply(1440, 1088), (720, 544));
+    }
+
+    #[test]
+    fn a_wrong_zoom_is_refused() {
+        for line in [
+            "screenshot 0",
+            "screenshot 0px",
+            "screenshot -1",
+            "screenshot 1.2.3"
+        ] {
+            assert!(
+                parse_csl_with_rich_errors(&format!("csl_version 1.0\n{line}\n"), None).is_err(),
+                "{line}"
+            );
+        }
     }
 }

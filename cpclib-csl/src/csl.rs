@@ -402,6 +402,38 @@ impl TryFrom<&str> for KeyOutput {
         }
     }
 }
+/// The size of a screenshot, the emulator's picture zoomed (a cpclib extension of `screenshot`):
+/// by a factor (`0.5`), or to a width in pixels (`440px`), its height in proportion.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ScreenshotScale {
+    Factor(f32),
+    Width(u32)
+}
+
+impl ScreenshotScale {
+    /// The size of a `width` x `height` picture at this scale (at least 1 x 1).
+    pub fn apply(&self, width: u32, height: u32) -> (u32, u32) {
+        let factor = match self {
+            Self::Factor(factor) => *factor as f64,
+            Self::Width(w) => *w as f64 / width.max(1) as f64
+        };
+        let size = |n: u32| ((n as f64 * factor).round() as u32).max(1);
+        match self {
+            Self::Width(w) => ((*w).max(1), size(height)),
+            Self::Factor(_) => (size(width), size(height))
+        }
+    }
+}
+
+impl std::fmt::Display for ScreenshotScale {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Factor(factor) => write!(f, "{factor}"),
+            Self::Width(width) => write!(f, "{width}px")
+        }
+    }
+}
+
 /// All CSL instructions as defined in the specification
 #[derive(Debug, Clone, PartialEq)]
 pub enum CslInstruction {
@@ -508,9 +540,11 @@ pub enum CslInstruction {
     /// Specify screenshot directory
     ScreenshotDir(Utf8PathBuf),
 
-    /// Take a screenshot (optionally wait for vsync)
+    /// Take a screenshot (optionally wait for vsync), optionally zoomed (a cpclib extension:
+    /// `screenshot 0.5`, `screenshot vsync 440px`), resized without moiré by the emulator
     Screenshot {
-        wait_vsync: bool
+        wait_vsync: bool,
+        scale: Option<ScreenshotScale>
     },
 
     /// Specify name for next snapshot (without extension)
@@ -662,13 +696,15 @@ impl fmt::Display for CslInstruction {
             Self::ScreenshotDir(dir) => {
                 write!(f, "screenshot_dir '{}'", normalize_path_for_csl(dir, true))
             },
-            Self::Screenshot { wait_vsync } => {
+            Self::Screenshot { wait_vsync, scale } => {
+                write!(f, "screenshot")?;
                 if *wait_vsync {
-                    write!(f, "screenshot V")
+                    write!(f, " vsync")?;
                 }
-                else {
-                    write!(f, "screenshot")
+                if let Some(scale) = scale {
+                    write!(f, " {scale}")?;
                 }
+                Ok(())
             },
             Self::SnapshotName(name) => write!(f, "snapshot_name '{}'", name),
             Self::Snapshot { wait_vsync } => {
@@ -887,7 +923,18 @@ impl CslInstruction {
 
     /// Create a Screenshot instruction
     pub fn screenshot(wait_vsync: bool) -> Self {
-        Self::Screenshot { wait_vsync }
+        Self::Screenshot {
+            wait_vsync,
+            scale: None
+        }
+    }
+
+    /// Create a Screenshot instruction of a zoomed picture
+    pub fn screenshot_scaled(wait_vsync: bool, scale: ScreenshotScale) -> Self {
+        Self::Screenshot {
+            wait_vsync,
+            scale: Some(scale)
+        }
     }
 
     /// Create a RomDir instruction

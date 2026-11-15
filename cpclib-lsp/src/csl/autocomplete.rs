@@ -102,6 +102,7 @@ fn describe_shape(shape: ArgShape) -> &'static str {
         ArgShape::Duration => "<microseconds>",
         ArgShape::OptionalCount => "[count]",
         ArgShape::OptionalVsyncFlag => "[vsync]",
+        ArgShape::ScreenshotArgs => "[vsync] [<factor>|<width>px]",
         ArgShape::SnapshotVersion => "<1|2|3>",
         ArgShape::SsmCode => "<0xHHHH>"
     }
@@ -154,6 +155,13 @@ fn argument_completions(shape: ArgShape, arg_index: usize) -> Vec<CompletionItem
         },
         (ArgShape::DiskInsert, 1) => vec![value_item("A", None), value_item("B", None)],
         (ArgShape::OptionalVsyncFlag, 1) => vec![value_item("vsync", None)],
+        (ArgShape::ScreenshotArgs, 1) => {
+            vec![
+                value_item("vsync", None),
+                value_item("0.5", Some("Half the size (any factor)")),
+                value_item("440px", Some("440 pixels wide, the height in proportion")),
+            ]
+        },
         (ArgShape::SnapshotVersion, 1) => {
             vec![
                 value_item("1", None),
