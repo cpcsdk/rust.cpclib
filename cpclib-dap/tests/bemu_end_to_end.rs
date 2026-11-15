@@ -339,6 +339,41 @@ fn a_memory_write_follows_the_banking() {
     adapter.finish();
 }
 
+/// Step over a `CALL`, into the routine and out of it again: bemu's own
+/// stepping when it offers it (`/api/step?mode=`), this side's otherwise.
+#[test]
+fn step_over_a_call_then_into_it_then_out() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "calls.asm",
+        "\torg #4000\n\trun start\nstart\n\tcall routine\n\tcall routine\nloop\n\tjr loop\nroutine\n\tnop\n\tret\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({ "stopOnEntry": true }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+    assert_eq!(adapter.line(), 4, "on the first call");
+
+    adapter.request("next", json!({ "threadId": 1 }));
+    let step = adapter.stopped();
+    assert_eq!(step["body"]["reason"], "step", "{step}");
+    assert_eq!(adapter.line(), 5, "the first call run whole");
+
+    adapter.request("stepIn", json!({ "threadId": 1 }));
+    adapter.stopped();
+    assert_eq!(adapter.line(), 9, "in the routine");
+
+    adapter.request("stepOut", json!({ "threadId": 1 }));
+    let out = adapter.stopped();
+    assert_eq!(out["body"]["reason"], "step", "{out}");
+    let line = adapter.line();
+    assert!((6..=7).contains(&line), "back after the second call: line {line}");
+    adapter.finish();
+}
+
 #[test]
 fn breakpoints_are_armed_before_the_program_runs() {
     let Some(bemu) = bemu()

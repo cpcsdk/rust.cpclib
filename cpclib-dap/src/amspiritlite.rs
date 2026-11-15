@@ -1381,6 +1381,11 @@ pub struct AmspiritLitePeer {
     /// condition, hit count or log message, data breakpoints that stop, and
     /// watches (`/api/breakpoints`).
     extensions: bool,
+    /// What bemu says it offers beyond the AMSpiriT API (`/api/ping`'s
+    /// `features`): `step_modes` makes step over and out its own.
+    features: Vec<String>,
+    /// See `Stops::native_step`.
+    native_step: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// What this session armed through `/api/breakpoints`; shared with the
     /// event stream, which reports watches and log points from it.
     advanced: std::sync::Arc<std::sync::Mutex<crate::advanced_breakpoints::Advanced>>,
@@ -1578,11 +1583,21 @@ impl AmspiritLitePeer {
         let breakpoints = std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()));
         let advanced = std::sync::Arc::new(std::sync::Mutex::new(crate::advanced_breakpoints::Advanced::default()));
         let seq = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        // bemu says so in its ping; its extensions are used then.
-        let extensions = perform(endpoint, &Call::get("/api/ping"))
+        // bemu says so in its ping; its extensions are used then, and the
+        // features it lists.
+        let ping = perform(endpoint, &Call::get("/api/ping"))
             .ok()
-            .and_then(|body| serde_json::from_str::<Value>(&body).ok())
+            .and_then(|body| serde_json::from_str::<Value>(&body).ok());
+        let extensions = ping
+            .as_ref()
             .is_some_and(|ping| ping.get("frontend").and_then(Value::as_str) == Some("bemu"));
+        let features: Vec<String> = ping
+            .as_ref()
+            .and_then(|ping| ping.get("features"))
+            .and_then(Value::as_array)
+            .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+            .unwrap_or_default();
+        let native_step = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let watching = Stops {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             out: outgoing.clone(),
@@ -1594,7 +1609,8 @@ impl AmspiritLitePeer {
             breakpoints: breakpoints.clone(),
             advanced: advanced.clone(),
             stop_reason: Default::default(),
-            emulator: if extensions { "bemu" } else { "AMSpiriT Lite" }
+            emulator: if extensions { "bemu" } else { "AMSpiriT Lite" },
+            native_step: native_step.clone()
         };
         // Both threads report stops through the same `Stops`, so a stop seen
         // by both is told once, settled the same way whichever is first.
@@ -1615,6 +1631,8 @@ impl AmspiritLitePeer {
             stepping_over,
             breakpoints,
             extensions,
+            features,
+            native_step,
             advanced,
             held_at_start: held,
             resume_confirmation: Self::RESUME_CONFIRMATION,
@@ -1705,6 +1723,12 @@ impl AmspiritLitePeer {
         // describes the stop we are leaving, and is worth nothing once the
         // machine has moved.
         let line = std::mem::replace(&mut self.line_at_pc, crate::peer::LineAtPc::Unknown);
+        // bemu steps over (a CALL, RST, DJNZ, LDIR... run whole) and out (the
+        // stack back above where it is) itself: exact, and nothing armed here.
+        // A `defs` run is still this side's: only the source says it is one.
+        if self.has_feature("step_modes") && !matches!(line, crate::peer::LineAtPc::Defs(_)) {
+            return self.native_step(message, if out_of_this_one { "out" } else { "over" });
+        }
         let target = if out_of_this_one {
             self.address_to_return_to()
         }
@@ -1771,6 +1795,32 @@ impl AmspiritLitePeer {
         // nothing is owed a stop until the machine has really gone.
         self.wait_until_it_is_really_running();
         self.owe_a_stop();
+        Ok(())
+    }
+
+    fn has_feature(&self, feature: &str) -> bool {
+        self.features.iter().any(|offered| offered == feature)
+    }
+
+    /// A step over or out, run by bemu (`POST /api/step?mode=`).
+    fn native_step(&mut self, message: &Value, mode: &str) -> std::io::Result<()> {
+        use std::sync::atomic::Ordering::SeqCst;
+        // A step: its stop is told as one, unless bemu says a breakpoint
+        // stopped it first (see `read_events`).
+        self.begin_run(true);
+        self.native_step.store(true, SeqCst);
+        let seq = self.next_seq();
+        let _ = self
+            .outgoing
+            .send(crate::protocol::response(message, json!({}), seq));
+        match perform(&self.endpoint, &Call::post("/api/step").query("mode", mode)) {
+            Ok(_) => self.owe_a_stop(),
+            Err(why) => {
+                self.native_step.store(false, SeqCst);
+                self.say(&format!("step {mode} could not finish: {why}\n"));
+                self.announce_a_stop_anyway();
+            }
+        }
         Ok(())
     }
 
@@ -2587,7 +2637,10 @@ pub(crate) struct Stops {
     /// event stream knows better than "breakpoint" (a data breakpoint).
     pub(crate) stop_reason: std::sync::Arc<std::sync::Mutex<Option<(&'static str, String)>>>,
     /// The emulator's name, for what is told about it: "bemu" or "AMSpiriT Lite".
-    pub(crate) emulator: &'static str
+    pub(crate) emulator: &'static str,
+    /// A step over or out bemu runs itself (`/api/step?mode=`) is in flight:
+    /// a stop its event calls a breakpoint is one, not the end of the step.
+    pub(crate) native_step: std::sync::Arc<std::sync::atomic::AtomicBool>
 }
 
 /// Ask the emulator whether it is running, and report every change.
@@ -2744,6 +2797,7 @@ impl Stops {
         }
         let notice = self.settle(self.stopped_at());
         let single_step = self.stepping.swap(false, SeqCst);
+        self.native_step.store(false, SeqCst);
         if let Some(text) = notice.as_ref().and_then(|notice| notice.text.clone()) {
             *seq += 1;
             let said = crate::protocol::event(
@@ -2971,6 +3025,13 @@ fn read_events(host: &str, stops: &Stops) {
                     },
                     "basic_bp" | "z80_bp" if running => {
                         running = false;
+                        // A breakpoint stopped bemu's step over or out before
+                        // it ended: told as a breakpoint.
+                        if stops.native_step.swap(false, std::sync::atomic::Ordering::SeqCst)
+                            && payload.get("reason").and_then(Value::as_str) == Some("breakpoint")
+                        {
+                            stops.stepping.store(false, std::sync::atomic::Ordering::SeqCst);
+                        }
                         if let Some(stop) = stops.advanced.lock().ok().and_then(|set| set.stop(&payload))
                             && let Ok(mut reason) = stops.stop_reason.lock()
                         {
@@ -3254,7 +3315,8 @@ mod tests {
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
             advanced: Default::default(),
             stop_reason: Default::default(),
-            emulator: "AMSpiriT Lite"
+            emulator: "AMSpiriT Lite",
+            native_step: Default::default()
         }
     }
 
@@ -4943,6 +5005,8 @@ mod tests {
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
             extensions: false,
+            features: Vec::new(),
+            native_step: Default::default(),
             advanced: Default::default(),
             held_at_start: false,
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
