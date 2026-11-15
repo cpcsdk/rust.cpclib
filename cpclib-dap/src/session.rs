@@ -6540,6 +6540,12 @@ impl<P: DapPeer> Session<P> {
             .to_string();
 
         let seq = self.next_seq();
+        if !name.eq_ignore_ascii_case("pc")
+            && crate::amspiritlite::bemu_register_name(&name).is_some()
+            && self.peer_mut().supports("cpclib/setRegister")
+        {
+            return self.set_register(request, &name, &wanted, seq);
+        }
         if !name.eq_ignore_ascii_case("pc") {
             return Ok(vec![protocol::failure(
                 request,
@@ -6583,6 +6589,49 @@ impl<P: DapPeer> Session<P> {
         Ok(vec![protocol::response(
             request,
             json!({ "value": format!("0x{address:04X}") }),
+            seq
+        )])
+    }
+
+    /// Any register but PC, on an emulator that sets them (bemu): `wanted`
+    /// is a number or a label, checked against the register's width.
+    fn set_register(
+        &mut self,
+        request: &Value,
+        name: &str,
+        wanted: &str,
+        seq: i64
+    ) -> std::io::Result<Vec<Value>> {
+        let maximum = crate::amspiritlite::register_maximum(name);
+        let Some(value) = parse_number(wanted)
+            .or_else(|| self.map.address_of_symbol(wanted))
+            .and_then(|value| u32::try_from(value).ok())
+        else {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("{wanted} is neither a number nor a known label"),
+                seq
+            )]);
+        };
+        if value > maximum {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("{name} holds 0 to {maximum:#X}; {wanted} does not fit"),
+                seq
+            )]);
+        }
+
+        self.send_own(
+            "cpclib/setRegister",
+            json!({ "name": name, "value": value }),
+            Purpose::Plain
+        )?;
+        self.last_registers.insert(name.to_ascii_uppercase(), value);
+        let width = if maximum > 0xFF { 4 } else { 2 };
+        let seq = self.next_seq();
+        Ok(vec![protocol::response(
+            request,
+            json!({ "value": format!("0x{value:0width$X}") }),
             seq
         )])
     }

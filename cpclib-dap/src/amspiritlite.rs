@@ -123,9 +123,31 @@ pub fn call_for(request: &Value) -> Option<Call> {
             Call::post("/api/z80_bp").body(addresses.join(","))
         },
 
-        // Moving the program counter without writing to RAM - the only
-        // register this emulator lets anything set. There is no endpoint for
-        // `A`, `HL` or the rest, documented or otherwise.
+        // Any other register: bemu's `POST /api/z80` takes them by name (the
+        // alternate set as `AF2`..`HL2`, checked all before any is changed).
+        // AMSpiriT Lite has nothing of the kind, which is why `supports` only
+        // claims this for bemu.
+        "cpclib/setRegister" => {
+            let name = arguments.and_then(|a| a.get("name")).and_then(Value::as_str)?;
+            let value = arguments.and_then(|a| a.get("value")).and_then(Value::as_u64)?;
+            let name = bemu_register_name(name)?;
+            let mut body = serde_json::Map::new();
+            // bemu sets PC, SP, IX and IY whole, and the pairs by their
+            // halves only (`HL` is refused, `H` and `L` are not).
+            match bemu_register_halves(name) {
+                Some((high, low)) => {
+                    body.insert(high.to_owned(), json!(value >> 8));
+                    body.insert(low.to_owned(), json!(value & 0xFF));
+                },
+                None => {
+                    body.insert(name.to_owned(), json!(value));
+                }
+            }
+            Call::post("/api/z80").body(Value::Object(body).to_string())
+        },
+
+        // Moving the program counter without writing to RAM: AMSpiriT Lite's
+        // only way to set a register (bemu has `cpclib/setRegister` too).
         "cpclib/setPc" => {
             let address = arguments
                 .and_then(|a| a.get("address"))
@@ -909,6 +931,79 @@ fn register(state: &Value, name: &str) -> Option<u32> {
     }
 }
 
+/// A register as the editor names it (the pane above, case aside), as bemu's
+/// `POST /api/z80` names it; `None` for anything it cannot set.
+pub(crate) fn bemu_register_name(name: &str) -> Option<&'static str> {
+    const NAMES: [(&str, &str); 24] = [
+        ("AF", "AF"), ("BC", "BC"), ("DE", "DE"), ("HL", "HL"), ("IX", "IX"), ("IY", "IY"),
+        ("SP", "SP"), ("PC", "PC"), ("AF'", "AF2"), ("BC'", "BC2"), ("DE'", "DE2"),
+        ("HL'", "HL2"), ("A", "A"), ("F", "F"), ("B", "B"), ("C", "C"), ("D", "D"), ("E", "E"),
+        ("H", "H"), ("L", "L"), ("I", "I"), ("R", "R"), ("IM", "IM"), ("IFF1", "IFF1")
+    ];
+    let name = name.trim();
+    if name.eq_ignore_ascii_case("IFF2") {
+        return Some("IFF2");
+    }
+    NAMES
+        .iter()
+        .find(|(editor, _)| editor.eq_ignore_ascii_case(name))
+        .map(|(_, bemu)| *bemu)
+}
+
+/// The 8-bit halves bemu sets a register pair by.
+fn bemu_register_halves(name: &str) -> Option<(&'static str, &'static str)> {
+    Some(match name {
+        "AF" => ("A", "F"),
+        "BC" => ("B", "C"),
+        "DE" => ("D", "E"),
+        "HL" => ("H", "L"),
+        "AF2" => ("A2", "F2"),
+        "BC2" => ("B2", "C2"),
+        "DE2" => ("D2", "E2"),
+        "HL2" => ("H2", "L2"),
+        _ => return None
+    })
+}
+
+/// Where the CPU's writes of `bytes` at `address` land, from bemu's
+/// `/api/memmap`: `(RAM bank, offset in it, bytes)`, one per 16K region
+/// crossed (the address wraps at #FFFF, as the CPU's does).
+pub(crate) fn banked_writes(memmap: &Value, address: u16, bytes: &[u8]) -> Option<Vec<(u64, u64, Vec<u8>)>> {
+    let regions = memmap.get("regions")?.as_array()?;
+    let bank_of = |region: u16| -> Option<u64> {
+        regions
+            .iter()
+            .find(|r| r.get("base").and_then(Value::as_u64) == Some(u64::from(region) * 0x4000))?
+            .get("write_bank")?
+            .as_u64()
+    };
+    let mut writes: Vec<(u64, u64, Vec<u8>)> = Vec::new();
+    let mut at = address;
+    for &byte in bytes {
+        let region = at / 0x4000;
+        let bank = bank_of(region)?;
+        let offset = u64::from(at % 0x4000);
+        match writes.last_mut() {
+            Some((last_bank, last_offset, run)) if *last_bank == bank && *last_offset + run.len() as u64 == offset => {
+                run.push(byte)
+            },
+            _ => writes.push((bank, offset, vec![byte]))
+        }
+        at = at.wrapping_add(1);
+    }
+    Some(writes)
+}
+
+/// The largest value a register holds (`IM` is 0 to 2, an `IFF` 0 or 1).
+pub(crate) fn register_maximum(name: &str) -> u32 {
+    match bemu_register_name(name) {
+        Some("IM") => 2,
+        Some("IFF1" | "IFF2") => 1,
+        Some("A" | "F" | "B" | "C" | "D" | "E" | "H" | "L" | "I" | "R") => 0xFF,
+        _ => 0xFFFF
+    }
+}
+
 /// The register pane, in the order a Z80 programmer reads them.
 fn registers_of(state: &Value) -> Vec<Value> {
     const ORDER: [&str; 17] = [
@@ -1498,7 +1593,8 @@ impl AmspiritLitePeer {
             stepping_over: stepping_over.clone(),
             breakpoints: breakpoints.clone(),
             advanced: advanced.clone(),
-            stop_reason: Default::default()
+            stop_reason: Default::default(),
+            emulator: if extensions { "bemu" } else { "AMSpiriT Lite" }
         };
         // Both threads report stops through the same `Stops`, so a stop seen
         // by both is told once, settled the same way whichever is first.
@@ -1712,6 +1808,16 @@ impl AmspiritLitePeer {
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// One line in the Debug Console, as an error.
+    fn say_error(&self, note: &str) {
+        let seq = self.next_seq();
+        let _ = self.outgoing.send(crate::protocol::event(
+            "output",
+            json!({ "category": "stderr", "output": note }),
+            seq
+        ));
+    }
+
     /// One line in the Debug Console.
     fn say(&self, note: &str) {
         let seq = self.next_seq();
@@ -1888,6 +1994,54 @@ impl AmspiritLitePeer {
     /// live as needed on hardware with more than the base 128K's own one
     /// extra page: naming a configuration by mode alone can never reach a
     /// page other than whatever happens to be live.
+    /// A `writeMemory` through the current mapping (bemu): each 16K region
+    /// written to the RAM bank its writes reach (`/api/memmap`'s
+    /// `write_bank`, RAM under a ROM included).
+    fn write_memory_as_the_cpu(&mut self, message: &Value) -> std::io::Result<()> {
+        let arguments = message.get("arguments");
+        let address = arguments
+            .and_then(|a| a.get("memoryReference"))
+            .and_then(Value::as_str)
+            .and_then(crate::protocol::parse_address_reference);
+        let data = arguments
+            .and_then(|a| a.get("data"))
+            .and_then(Value::as_str)
+            .map(crate::session::decode_base64)
+            .unwrap_or_default();
+        let memmap = perform(&self.endpoint, &Call::get("/api/memmap"))
+            .ok()
+            .and_then(|body| serde_json::from_str::<Value>(&body).ok());
+        let seq = self.next_seq();
+        let Some(writes) = memmap
+            .as_ref()
+            .and_then(|memmap| address.and_then(|a| banked_writes(memmap, a as u16, &data)))
+        else {
+            let _ = self.outgoing.send(crate::protocol::failure(
+                message,
+                "cannot write: no address, or the emulator did not say what is mapped (/api/memmap)",
+                seq
+            ));
+            return Ok(());
+        };
+        for (bank, offset, bytes) in writes {
+            let hex: String = bytes.iter().map(|byte| format!("{byte:02X}")).collect();
+            let body = perform(
+                &self.endpoint,
+                &Call::post("/api/ram").body(json!({ "bank": bank, "addr": offset, "data": hex }).to_string())
+            )?;
+            if let Some(error) = serde_json::from_str::<Value>(&body).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_owned)) {
+                let _ = self.outgoing.send(crate::protocol::failure(message, &format!("the emulator refused the write: {error}"), seq));
+                return Ok(());
+            }
+        }
+        let _ = self.outgoing.send(crate::protocol::response(
+            message,
+            json!({ "bytesWritten": data.len() }),
+            seq
+        ));
+        Ok(())
+    }
+
     fn read_memory_with_config_override(
         &mut self,
         message: &Value,
@@ -2258,6 +2412,14 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             return self.read_memory_with_config_override(&message, config as u8, page);
         }
 
+        // bemu's `POST /api/ram` writes to the RAM banks (`addr` an offset in
+        // `bank`, bank 0 by default), not to what the CPU sees: with `&C4`
+        // paged, a write at #4000 would land in bank 1, not in the bank 4 the
+        // Memory View shows there. So the write goes where the CPU's would.
+        if command == "writeMemory" && self.extensions {
+            return self.write_memory_as_the_cpu(&message);
+        }
+
         let Some(call) = call_for(&message)
         else {
             // Nothing to ask this emulator. Answered as success with an empty
@@ -2275,6 +2437,12 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         }
         let body = perform(&self.endpoint, &call)?;
         let mut state: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+        // A refusal (`400 {error}`) reads like any other answer: said in the
+        // Debug Console, or a request the session already answered for (a
+        // register set) would fail without a word.
+        if let Some(error) = state.get("error").and_then(Value::as_str) {
+            self.say_error(&format!("{command} was refused by the emulator: {error}\n"));
+        }
 
         // The Gate Array pane wants its banking register, and `/api/ga` does
         // not carry it - only `/api/memmap` does. Two calls, one pane: the
@@ -2371,6 +2539,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             && matches!(
                 command,
                 "cpclib/conditionalBreakpoints"
+                    | "cpclib/setRegister"
                     | "cpclib/setDataBreakpoints"
                     | "cpclib/setWatches"
                     | "cpclib/setProgramBreakpoints"
@@ -2416,7 +2585,9 @@ pub(crate) struct Stops {
     pub(crate) advanced: std::sync::Arc<std::sync::Mutex<crate::advanced_breakpoints::Advanced>>,
     /// The reason and description the next stop is told with, when the
     /// event stream knows better than "breakpoint" (a data breakpoint).
-    pub(crate) stop_reason: std::sync::Arc<std::sync::Mutex<Option<(&'static str, String)>>>
+    pub(crate) stop_reason: std::sync::Arc<std::sync::Mutex<Option<(&'static str, String)>>>,
+    /// The emulator's name, for what is told about it: "bemu" or "AMSpiriT Lite".
+    pub(crate) emulator: &'static str
 }
 
 /// Ask the emulator whether it is running, and report every change.
@@ -2461,8 +2632,11 @@ fn watch_run_state(watched: &Stops) {
                         "output",
                         json!({
                             "category": "console",
-                            "output": "AMSpiriT Lite is no longer answering - the window was \
-                                       probably closed. Ending the debug session.\n"
+                            "output": format!(
+                                "{} is no longer answering - the window was probably closed. \
+                                 Ending the debug session.\n",
+                                watched.emulator
+                            )
                         }),
                         seq
                     );
@@ -2746,7 +2920,7 @@ fn read_events(host: &str, stops: &Stops) {
                 "output",
                 json!({
                     "category": "console",
-                    "output": format!("[amspiritlite] SSE event: {name} {payload}\n")
+                    "output": format!("[{}] SSE event: {name} {payload}\n", stops.emulator)
                 }),
                 seq
             ));
@@ -3079,7 +3253,8 @@ mod tests {
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
             advanced: Default::default(),
-            stop_reason: Default::default()
+            stop_reason: Default::default(),
+            emulator: "AMSpiriT Lite"
         }
     }
 
@@ -3210,6 +3385,57 @@ mod tests {
             call.body.as_deref(),
             Some(r#"{"addr":16384,"data":"3E00C9"}"#)
         );
+    }
+
+    #[test]
+    fn a_register_is_set_by_bemus_own_name_for_it() {
+        let call = call_for(&request("cpclib/setRegister", json!({ "name": "hl'", "value": 0x1234 }))).unwrap();
+        assert_eq!(call.method, Method::Post);
+        assert_eq!(call.path, "/api/z80");
+        // bemu takes the pairs by their halves.
+        assert_eq!(call.body.as_deref(), Some(r#"{"H2":18,"L2":52}"#));
+
+        let call = call_for(&request("cpclib/setRegister", json!({ "name": "IX", "value": 0x4000 }))).unwrap();
+        assert_eq!(call.body.as_deref(), Some(r#"{"IX":16384}"#));
+
+        let call = call_for(&request("cpclib/setRegister", json!({ "name": "A", "value": 7 }))).unwrap();
+        assert_eq!(call.body.as_deref(), Some(r#"{"A":7}"#));
+
+        // Nothing is sent for a name bemu does not know.
+        assert!(call_for(&request("cpclib/setRegister", json!({ "name": "Q", "value": 1 }))).is_none());
+    }
+
+    #[test]
+    fn a_write_goes_to_the_bank_the_cpu_writes_to() {
+        // `&C4`: bank 4 at #4000; RAM bank 0 under the lower ROM.
+        let memmap = json!({ "regions": [
+            { "base": 0, "rom": true, "write_bank": 0 },
+            { "base": 16384, "ram_bank": 4, "write_bank": 4 },
+            { "base": 32768, "ram_bank": 2, "write_bank": 2 },
+            { "base": 49152, "ram_bank": 3, "write_bank": 3 }
+        ] });
+        assert_eq!(banked_writes(&memmap, 0x4000, &[0xAA, 0xBB]).unwrap(), vec![(4, 0, vec![0xAA, 0xBB])]);
+        // Across a region boundary: the end of bank 4, then the start of bank 2.
+        assert_eq!(
+            banked_writes(&memmap, 0x7FFF, &[1, 2]).unwrap(),
+            vec![(4, 0x3FFF, vec![1]), (2, 0, vec![2])]
+        );
+        // Under the ROM: its RAM.
+        assert_eq!(banked_writes(&memmap, 0x0010, &[9]).unwrap(), vec![(0, 0x10, vec![9])]);
+        // And from #FFFF on to #0000, as the CPU wraps.
+        assert_eq!(
+            banked_writes(&memmap, 0xFFFF, &[5, 6]).unwrap(),
+            vec![(3, 0x3FFF, vec![5]), (0, 0, vec![6])]
+        );
+    }
+
+    #[test]
+    fn a_register_is_checked_against_its_width() {
+        assert_eq!(register_maximum("A"), 0xFF);
+        assert_eq!(register_maximum("ix"), 0xFFFF);
+        assert_eq!(register_maximum("AF'"), 0xFFFF);
+        assert_eq!(register_maximum("IM"), 2);
+        assert_eq!(register_maximum("IFF2"), 1);
     }
 
     /// The question 1984js cannot answer at all.
@@ -4756,7 +4982,7 @@ mod tests {
             }))
             .is_some()
         );
-        for absent in ["disassemble", "evaluate", "setDataBreakpoints", "stepBack"] {
+        for absent in ["disassemble", "evaluate", "setDataBreakpoints", "stepBack", "cpclib/setRegister"] {
             assert!(!peer.supports(absent), "{absent}");
         }
 
