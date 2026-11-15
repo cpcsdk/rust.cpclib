@@ -50,6 +50,9 @@ pub enum ArgShape {
     OptionalCount,
     /// An optional bare word `vsync` (`screenshot`/`snapshot`).
     OptionalVsyncFlag,
+    /// An optional bare word `vsync`, then an optional zoom: a factor (`0.5`) or a width
+    /// (`440px`) (`screenshot`, a cpclib extension).
+    ScreenshotArgs,
     /// One of `1`, `2`, `3` (`snapshot_version`).
     SnapshotVersion,
     /// A hexadecimal SSM code, `0x`-prefixed (`wait_ssm`, v1.5).
@@ -222,7 +225,7 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
     InstructionSpec {
         name: "screenshot",
         min_version: V1_0,
-        args: ArgShape::OptionalVsyncFlag
+        args: ArgShape::ScreenshotArgs
     },
     InstructionSpec {
         name: "snapshot_name",
