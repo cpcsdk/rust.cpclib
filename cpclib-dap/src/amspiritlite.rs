@@ -969,13 +969,13 @@ fn bemu_register_halves(name: &str) -> Option<(&'static str, &'static str)> {
 /// `/api/memmap`: `(RAM bank, offset in it, bytes)`, one per 16K region
 /// crossed (the address wraps at #FFFF, as the CPU's does).
 pub(crate) fn banked_writes(memmap: &Value, address: u16, bytes: &[u8]) -> Option<Vec<(u64, u64, Vec<u8>)>> {
-    let regions = memmap.get("regions")?.as_array()?;
+    let memmap: cpclib_bemu_api::MemMap = serde_json::from_value(memmap.clone()).ok()?;
     let bank_of = |region: u16| -> Option<u64> {
-        regions
+        memmap
+            .regions
             .iter()
-            .find(|r| r.get("base").and_then(Value::as_u64) == Some(u64::from(region) * 0x4000))?
-            .get("write_bank")?
-            .as_u64()
+            .find(|r| u32::from(r.base) == u32::from(region) * 0x4000)
+            .map(|r| u64::from(r.write_bank))
     };
     let mut writes: Vec<(u64, u64, Vec<u8>)> = Vec::new();
     let mut at = address;
@@ -2072,9 +2072,15 @@ impl AmspiritLitePeer {
         };
         for (bank, offset, bytes) in writes {
             let hex: String = bytes.iter().map(|byte| format!("{byte:02X}")).collect();
+            let write = cpclib_bemu_api::WriteRam {
+                bank: Some(cpclib_bemu_api::Int(bank as i64)),
+                addr: Some(cpclib_bemu_api::Int(offset as i64)),
+                data: Some(hex),
+                ..Default::default()
+            };
             let body = perform(
                 &self.endpoint,
-                &Call::post("/api/ram").body(json!({ "bank": bank, "addr": offset, "data": hex }).to_string())
+                &Call::post("/api/ram").body(serde_json::to_string(&write).unwrap_or_default())
             )?;
             if let Some(error) = serde_json::from_str::<Value>(&body).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_owned)) {
                 let _ = self.outgoing.send(crate::protocol::failure(message, &format!("the emulator refused the write: {error}"), seq));
@@ -3467,12 +3473,13 @@ mod tests {
     #[test]
     fn a_write_goes_to_the_bank_the_cpu_writes_to() {
         // `&C4`: bank 4 at #4000; RAM bank 0 under the lower ROM.
+        // As bemu answers it (`cpclib_bemu_api::MemMap`).
         let memmap = json!({ "regions": [
-            { "base": 0, "rom": true, "write_bank": 0 },
-            { "base": 16384, "ram_bank": 4, "write_bank": 4 },
-            { "base": 32768, "ram_bank": 2, "write_bank": 2 },
-            { "base": 49152, "ram_bank": 3, "write_bank": 3 }
-        ] });
+            { "base": 0, "name": "0000", "rom": true, "rom_bank": 255, "write_bank": 0 },
+            { "base": 16384, "name": "4000", "rom": false, "ram_bank": 4, "ext": true, "write_bank": 4 },
+            { "base": 32768, "name": "8000", "rom": false, "ram_bank": 2, "ext": false, "write_bank": 2 },
+            { "base": 49152, "name": "C000", "rom": false, "ram_bank": 3, "ext": false, "write_bank": 3 }
+        ], "rmr": 137, "ram_mode": 4, "ram_page": 0, "mmr": 196, "ram_banks": 8 });
         assert_eq!(banked_writes(&memmap, 0x4000, &[0xAA, 0xBB]).unwrap(), vec![(4, 0, vec![0xAA, 0xBB])]);
         // Across a region boundary: the end of bank 4, then the start of bank 2.
         assert_eq!(
