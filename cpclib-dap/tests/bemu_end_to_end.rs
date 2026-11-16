@@ -51,7 +51,7 @@ impl Adapter {
         let mut child = Command::new(env!("CARGO_BIN_EXE_cpclib-dap"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(if std::env::var_os("CPCLIB_TEST_ADAPTER_STDERR").is_some() { Stdio::inherit() } else { Stdio::null() })
             .spawn()
             .expect("the adapter starts");
         let stdin = child.stdin.take().unwrap();
@@ -751,4 +751,70 @@ fn saved_manager_breakpoints_are_armed_at_launch() {
     assert!(stop["body"]["description"].as_str().unwrap().contains("Gate Array: ink: write of #55"), "{stop}");
     assert_eq!(hex_value(&adapter.register("A")), 0x55, "the second pass: armed before the first");
     adapter.finish();
+}
+
+/// bemu in a tab: its web build, served by the adapter, opened by a browser
+/// as the editor opens it, and debugged through the page. Needs a web build
+/// with the debug API (`$CPCLIB_BEMU_WEB`, bemu's `web/pkg`) and a browser
+/// to open it (`$CPCLIB_TEST_BROWSER`, a Chromium); without them the test
+/// says so and passes.
+#[test]
+fn in_a_tab_the_page_is_debugged() {
+    let (Ok(web), Ok(browser)) = (std::env::var("CPCLIB_BEMU_WEB"), std::env::var("CPCLIB_TEST_BROWSER"))
+    else {
+        eprintln!("skipped: set $CPCLIB_BEMU_WEB (bemu's web/pkg) and $CPCLIB_TEST_BROWSER (a Chromium) to run this test");
+        return;
+    };
+    assert!(Path::new(&web).join("bemu.js").is_file(), "no bemu.js in {web}");
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.request("initialize", json!({ "adapterID": "cpclib", "linesStartAt1": true, "columnsStartAt1": true }));
+    let launch = adapter.send("launch", json!({ "program": source, "emulator": "bemu", "stopOnEntry": true }));
+
+    // told before the launch is over: the page has to be opened for it to end
+    let ready = adapter.wait("the page to open", |m| m["event"] == "cpclib/emulatorReady");
+    let url = ready["body"]["url"].as_str().expect("a page").to_owned();
+    assert!(url.starts_with("http://127.0.0.1:") && url.ends_with("/debug"), "{ready}");
+    let profile = std::env::temp_dir().join(format!("cpclib-dap-bemu-tab-{}", std::process::id()));
+    let mut page = Command::new(&browser)
+        .args(["--headless=new", "--no-sandbox", "--disable-gpu", "--autoplay-policy=no-user-gesture-required"])
+        .arg(format!("--user-data-dir={}", profile.display()))
+        .arg(&url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("the browser starts");
+    struct Closed(Child);
+    impl Drop for Closed {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let _closed = Closed(std::mem::replace(&mut page, Command::new("true").spawn().unwrap()));
+
+    let response = adapter.wait("response to launch", |m| m["type"] == "response" && m["request_seq"] == launch);
+    assert_eq!(response["success"], true, "{response}\n{}", adapter.transcript());
+    let again = adapter.wait("the emulator ready", |m| m["event"] == "cpclib/emulatorReady");
+    assert_eq!(again["body"]["emulator"], "bemu", "{again}");
+    assert_eq!(again["body"]["url"], url.as_str(), "{again}");
+
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": LINE_INC_A }] }));
+    adapter.request("configurationDone", json!({}));
+    let entry = adapter.stopped();
+    assert_eq!(entry["body"]["reason"], "entry", "{entry}");
+    assert_eq!(adapter.line(), LINE_LD_A_1);
+
+    adapter.request("continue", json!({ "threadId": 1 }));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(adapter.line(), LINE_INC_A);
+    assert_eq!(hex_value(&adapter.register("A")), 1);
+
+    adapter.request("next", json!({ "threadId": 1 }));
+    adapter.stopped();
+    assert_eq!(adapter.line(), LINE_LD_C000);
+    assert_eq!(hex_value(&adapter.register("A")), 2);
+    adapter.finish();
+    let _ = std::fs::remove_dir_all(&profile);
 }

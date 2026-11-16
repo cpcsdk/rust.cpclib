@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 
 const emulatorPanels = new Map<string, vscode.WebviewPanel>();
+/** The page each session opened in the browser. */
+const openedExternally = new Map<string, string>();
 
 /**
  * Where each session's emulator is being served.
@@ -28,6 +30,10 @@ export const sessionCapabilities = new Map<string, Set<string>>();
 export async function showEmulator(session: vscode.DebugSession, url: string | undefined): Promise<void> {
     if (!url) { return; }
     if (!vscode.workspace.getConfiguration('cpclib').get<boolean>('debug.openInWebview', true)) {
+        // told twice for an emulator whose page has to be open for the launch
+        // to end (bemu's: before, then once ready): one browser tab
+        if (openedExternally.get(session.id) === url) { return; }
+        openedExternally.set(session.id, url);
         await vscode.env.openExternal(vscode.Uri.parse(url));
         return;
     }
@@ -70,6 +76,7 @@ export async function showEmulator(session: vscode.DebugSession, url: string | u
 }
 
 export function disposeEmulator(sessionId: string): void {
+    openedExternally.delete(sessionId);
     emulatorPanels.get(sessionId)?.dispose();
     emulatorPanels.delete(sessionId);
 }

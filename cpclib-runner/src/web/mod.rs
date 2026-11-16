@@ -14,6 +14,7 @@
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 
+pub mod bemu;
 pub mod js1984;
 pub mod robot_bridge;
 pub mod server;

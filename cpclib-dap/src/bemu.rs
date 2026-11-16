@@ -5,9 +5,18 @@
 //! before the first instruction runs; the session releases it at
 //! `configurationDone` (see [`crate::peer::DapPeer::release`]).
 //!
-//! The executable is the launch configuration's `emulatorPath`, else
-//! `$CPCLIB_BEMU`, else `amsrust` from the `PATH` (bndbuild downloads it from
-//! the releases of github.com/rgiot/bemu).
+//! Two ways to show it:
+//!
+//! - **in an editor tab**, the default: its web build (downloaded by
+//!   bndbuild from the releases of github.com/rgiot/bemu, or
+//!   `$CPCLIB_BEMU_WEB`) served over loopback by
+//!   [`cpclib_runner::web::bemu`], which relays the debug API to the page;
+//! - **in its own window** (`"bemuWindow": true`): the native executable,
+//!   the launch configuration's `emulatorPath`, else `$CPCLIB_BEMU`, else the
+//!   one bndbuild installs (downloaded from the same releases if missing),
+//!   else `amsrust` from the `PATH`.
+//!
+//! `"headless": true` starts the native one without a window (tests, CI).
 
 use std::path::{Path, PathBuf};
 
@@ -15,14 +24,73 @@ use serde_json::Value;
 
 use crate::amspiritlite::{port_to_serve_on, wait_until_listening};
 
-/// The executable to start.
-pub fn executable(arguments: &Value) -> PathBuf {
+/// Whether bemu is shown in an editor tab (its web build) rather than its
+/// own window: unless the launch asks for the window (`"bemuWindow": true`),
+/// or for none (`"headless": true`), or names an executable (`emulatorPath`).
+pub fn in_tab(arguments: &Value) -> bool {
+    let asked = |name: &str| arguments.get(name).and_then(Value::as_bool) == Some(true);
+    !asked("bemuWindow")
+        && !asked("headless")
+        && arguments
+            .get("emulatorPath")
+            .and_then(Value::as_str)
+            .is_none()
+}
+
+/// The executable named by the launch configuration or the environment.
+fn named_executable(arguments: &Value) -> Option<PathBuf> {
     arguments
         .get("emulatorPath")
         .and_then(Value::as_str)
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("CPCLIB_BEMU").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("amsrust"))
+}
+
+/// The executable to start: the one named, else bndbuild's (installed if
+/// it is not yet), else `amsrust` from the `PATH`.
+pub fn executable(arguments: &Value) -> PathBuf {
+    named_executable(arguments).unwrap_or_else(|| {
+        use cpclib_runner::runner::emulator::Emulator;
+        use cpclib_runner::runner::emulator::bemu::BemuVersion;
+        let configuration = Emulator::Bemu(BemuVersion::default())
+            .configuration::<cpclib_common::event::DiscardObserver>();
+        if configuration.is_cached()
+            || configuration
+                .install(&cpclib_common::event::DiscardObserver)
+                .is_ok()
+        {
+            configuration.exec_fname().into_std_path_buf()
+        }
+        else {
+            PathBuf::from("amsrust")
+        }
+    })
+}
+
+/// bemu's web build in a page, loaded with `load`, the machine configured
+/// by the launch's `bemuConfig` (`Bemu.create`'s configuration: `model`,
+/// `crtc`, `ramKb`...). The page is the caller's to open; its API is the
+/// returned server's endpoint.
+pub fn serve_in_tab(
+    arguments: &Value,
+    load: Load
+) -> Result<cpclib_runner::web::bemu::BemuPage, String> {
+    use cpclib_runner::web::bemu;
+    let package = bemu::package_root()?;
+    let load = match load {
+        Load::Snapshot(snapshot) => bemu::Load::Snapshot(snapshot.to_vec()),
+        Load::Disk(disk) => {
+            bemu::Load::Disc(
+                fs_err::read(disk).map_err(|e| format!("cannot read {}: {e}", disk.display()))?
+            )
+        },
+        Load::Boot => bemu::Load::Boot
+    };
+    let config = arguments
+        .get("bemuConfig")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    bemu::serve(&package, load, config).map_err(|e| format!("cannot serve bemu's page: {e}"))
 }
 
 /// What bemu starts with.
@@ -38,15 +106,21 @@ pub enum Load<'a> {
 /// Start bemu with its debug server on `port` (or a free one if that is
 /// taken), in a window unless the launch says `"headless": true`. Returns
 /// the endpoint and the process.
-pub fn launch(arguments: &Value, load: Load, port: u16) -> Result<(String, std::process::Child), String> {
+pub fn launch(
+    arguments: &Value,
+    load: Load,
+    port: u16
+) -> Result<(String, std::process::Child), String> {
     let program = executable(arguments);
     let port = port_to_serve_on(port);
     let mut command = std::process::Command::new(&program);
     let mut snapshot_file = None;
     match load {
         Load::Snapshot(snapshot) => {
-            let path = std::env::temp_dir().join(format!("cpclib-dap-bemu-{}.sna", std::process::id()));
-            fs_err::write(&path, snapshot).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+            let path =
+                std::env::temp_dir().join(format!("cpclib-dap-bemu-{}.sna", std::process::id()));
+            fs_err::write(&path, snapshot)
+                .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
             command.arg("--sna").arg(&path).arg("--debug-paused");
             snapshot_file = Some(path);
         },
@@ -100,6 +174,15 @@ mod tests {
     fn the_executable_is_the_launch_configurations_first() {
         let named = json!({ "emulatorPath": "/opt/bemu/amsrust" });
         assert_eq!(executable(&named), PathBuf::from("/opt/bemu/amsrust"));
+    }
+
+    #[test]
+    fn bemu_is_in_a_tab_unless_asked_otherwise() {
+        assert!(in_tab(&json!({})));
+        assert!(in_tab(&json!({ "bemuWindow": false })));
+        assert!(!in_tab(&json!({ "bemuWindow": true })));
+        assert!(!in_tab(&json!({ "headless": true })));
+        assert!(!in_tab(&json!({ "emulatorPath": "/opt/bemu/amsrust" })));
     }
 
     #[test]

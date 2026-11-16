@@ -201,6 +201,7 @@ export const EMULATOR_MENU_ENTRIES: { id: string; label: string; dapId?: string 
     { id: 'ace', label: 'ACE-DL' },
     { id: 'amspirit', label: 'AMSpiriT' },
     { id: 'amspiritlite', label: 'AMSpiriT Lite', dapId: 'amspiritlite' },
+    { id: 'bemu', label: 'bemu', dapId: 'bemu' },
     { id: 'winape', label: 'WinAPE' },
     { id: 'cpcec', label: 'CPCEC' },
     { id: 'sugarbox', label: 'SugarBox v2' },

@@ -324,6 +324,20 @@ impl Transcript {
     }
 }
 
+/// Events a launch has to send before it is over: the page of an emulator
+/// shown in a tab, which the editor has to open for the emulator to start -
+/// and the launch waits for that. Set while a launch runs; the launch thread
+/// sends, the protocol thread emits.
+static EARLY_EVENTS: std::sync::Mutex<Option<std::sync::mpsc::Sender<(String, Value)>>> =
+    std::sync::Mutex::new(None);
+
+/// Send `event` to the editor now, from inside a launch (see [`EARLY_EVENTS`]).
+fn announce(event: &str, body: Value) {
+    if let Some(sender) = EARLY_EVENTS.lock().unwrap_or_else(|held| held.into_inner()).as_ref() {
+        let _ = sender.send((event.to_owned(), body));
+    }
+}
+
 /// Run the adapter: DAP on stdio towards the editor, the served emulator on the
 /// other side.
 ///
@@ -461,6 +475,8 @@ pub fn run_stdio() -> std::io::Result<()> {
                     // there rather than in any one of the three).
                     let (progress_tx, progress_rx) =
                         std::sync::mpsc::channel::<cpclib_bndbuild::progress::ProgressUpdate>();
+                    let (early_tx, early_rx) = std::sync::mpsc::channel::<(String, Value)>();
+                    *EARLY_EVENTS.lock().unwrap_or_else(|held| held.into_inner()) = Some(early_tx);
                     let message_for_worker = message.clone();
                     let worker = std::thread::spawn(move || {
                         if is_basic {
@@ -503,7 +519,25 @@ pub fn run_stdio() -> std::io::Result<()> {
                     const MIN_PROGRESS_INTERVAL: std::time::Duration =
                         std::time::Duration::from_millis(100);
                     let mut last_emitted_at: Option<std::time::Instant> = None;
-                    while let Ok(update) = progress_rx.recv() {
+                    loop {
+                        // what the launch says before it is over (`announce`)
+                        while let Ok((event, body)) = early_rx.try_recv() {
+                            seq += 1;
+                            emit(&protocol::event(&event, body, seq), &mut output)?;
+                        }
+                        let update = match progress_rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                            Ok(update) => update,
+                            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                            // the build is over, the launch maybe not: what it
+                            // says until it is (a page to open) is still owed
+                            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                                if worker.is_finished() {
+                                    break;
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                continue;
+                            }
+                        };
                         if client_accepts_progress {
                             let (progress_message, percentage) = progress_state.apply(update);
                             let now = std::time::Instant::now();
@@ -532,6 +566,11 @@ pub fn run_stdio() -> std::io::Result<()> {
                     let outcome = worker
                         .join()
                         .unwrap_or_else(|_| Err("the build thread panicked".to_string()));
+                    *EARLY_EVENTS.lock().unwrap_or_else(|held| held.into_inner()) = None;
+                    while let Ok((event, body)) = early_rx.try_recv() {
+                        seq += 1;
+                        emit(&protocol::event(&event, body, seq), &mut output)?;
+                    }
                     if client_accepts_progress {
                         seq += 1;
                         emit(
@@ -733,6 +772,11 @@ fn start_session(
     let wants_lite_early = early_chosen_emulator.eq_ignore_ascii_case("amspiritlite") && !attaches;
     let wants_sugarbox_early = early_chosen_emulator.eq_ignore_ascii_case("sugarbox");
     let wants_ace_early = early_chosen_emulator.eq_ignore_ascii_case("ace");
+    // bemu, started here: its web build for a tab, its executable for a window
+    let wants_bemu_early = early_chosen_emulator.eq_ignore_ascii_case("bemu") && !attaches;
+    let bemu_in_tab = bemu::in_tab(&arguments);
+    let bemu_named = arguments.get("emulatorPath").and_then(Value::as_str).is_some()
+        || std::env::var_os("CPCLIB_BEMU").is_some();
     // 1984js is what a session uses when it names no other debuggable
     // emulator: an attached AMSpiriT Lite, or bemu, never needs it downloaded.
     let wants_1984js_early = !["amspiritlite", "bemu", "sugarbox", "ace"]
@@ -763,7 +807,20 @@ fn start_session(
                 let _ = configuration.install(&cpclib_common::event::DiscardObserver);
             }
         }
-        else if wants_1984js_early {
+        else if wants_bemu_early {
+            if bemu_in_tab {
+                let _ = cpclib_runner::web::bemu::package_root();
+            }
+            else if !bemu_named {
+                use cpclib_runner::runner::emulator::{Emulator, bemu::BemuVersion};
+                let configuration = Emulator::Bemu(BemuVersion::default())
+                    .configuration::<cpclib_common::event::DiscardObserver>();
+                if !configuration.is_cached() {
+                    let _ = configuration.install(&cpclib_common::event::DiscardObserver);
+                }
+            }
+        }
+else if wants_1984js_early {
             let _ = crate::js1984_bridge::install();
         }
     });
@@ -1151,6 +1208,13 @@ fn resolve_emulator_choice(arguments: &Value) -> (String, cpclib_project::config
     (chosen_emulator, dap_config)
 }
 
+/// A bemu this session started: its process (its own window), or the
+/// server of its page (in a tab) and the page's URL.
+enum Started {
+    Process(std::process::Child),
+    Page(cpclib_runner::web::bemu::BemuPage, String)
+}
+
 /// Picks and connects to whichever emulator this session talks to (1984js
 /// or AMSpiriT Lite), loaded with `snapshot`. Shared between the Z80
 /// launch flow above and the BASIC one below - they differ only in how the
@@ -1219,8 +1283,27 @@ fn connect_backend(
                     bemu::Load::Snapshot(&snapshot)
                 };
                 let held = matches!(load, bemu::Load::Snapshot(_));
-                let (endpoint, child) = bemu::launch(arguments, load, port)?;
-                (endpoint, Some((child, held)))
+                if bemu::in_tab(arguments) {
+                    // Its web build, in a tab the editor opens: told now, the
+                    // emulator starts once the page is open.
+                    let page = bemu::serve_in_tab(arguments, load)?;
+                    announce(
+                        "output",
+                        json!({ "category": "console", "output": format!("bemu is starting in its tab ({})\n", page.page_url()) })
+                    );
+                    announce(
+                        "cpclib/emulatorReady",
+                        json!({ "url": page.page_url(), "emulator": "bemu", "supports": [] })
+                    );
+                    page.wait_until_ready(std::time::Duration::from_secs(120))?;
+                    let endpoint = page.endpoint();
+                    let url = page.page_url();
+                    (endpoint, Some((Started::Page(page, url), held)))
+                }
+                else {
+                    let (endpoint, child) = bemu::launch(arguments, load, port)?;
+                    (endpoint, Some((Started::Process(child), held)))
+                }
             }
         };
         let held = matches!(&started, Some((_, true)));
@@ -1234,21 +1317,28 @@ fn connect_backend(
             Ok(peer) => peer,
             Err(e) => {
                 // a bemu this session started must not outlive its failure
-                if let Some((mut child, _)) = started {
+                if let Some((Started::Process(mut child), _)) = started {
                     let _ = child.kill();
                     let _ = child.wait();
                 }
                 return Err(format!("cannot reach bemu at {endpoint}: {e}").into());
             }
         };
-        if let Some((child, _)) = started {
-            peer = peer.owning(child);
+        let mut url = String::new();
+        if let Some((started, _)) = started {
+            peer = match started {
+                Started::Process(child) => peer.owning(child),
+                Started::Page(page, page_url) => {
+                    url = page_url;
+                    peer.serving(page)
+                }
+            };
             // The snapshot's breakpoints are the program's `BREAKPOINT`
             // directives, which the session arms itself from the source map:
             // bemu's copies would double them and outlive a red dot removed.
             peer.forget_emulator_breakpoints();
         }
-        (Backend::Bemu(peer), String::new())
+        (Backend::Bemu(peer), url)
     }
     else if wants_lite {
         // An instance already serving, named by the configuration or found at

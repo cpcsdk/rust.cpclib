@@ -629,6 +629,18 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "cpclib.runWith.bemu",
+        "title": "bemu",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.bemu.needsInstall",
+        "title": "bemu (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "cpclib.runWith.winape",
         "title": "WinAPE",
         "category": "CPClib",
@@ -781,6 +793,18 @@
       {
         "command": "cpclib.debugWith.amspiritlite.needsInstall",
         "title": "AMSpiriT Lite (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.debugWith.bemu",
+        "title": "bemu",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.debugWith.bemu.needsInstall",
+        "title": "bemu (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
@@ -1052,6 +1076,16 @@
           "group": "1_installed"
         },
         {
+          "command": "cpclib.debugWith.bemu",
+          "when": "cpclib.emu.bemu.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.debugWith.bemu.needsInstall",
+          "when": "!cpclib.emu.bemu.installed",
+          "group": "1_installed"
+        },
+        {
           "command": "cpclib.debugWith.1984js",
           "when": "cpclib.emu.emulator1984-js.installed",
           "group": "1_installed"
@@ -1091,6 +1125,16 @@
         {
           "command": "cpclib.runWith.amspiritlite.needsInstall",
           "when": "!cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.bemu",
+          "when": "cpclib.emu.bemu.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.bemu.needsInstall",
+          "when": "!cpclib.emu.bemu.installed",
           "group": "1_installed"
         },
         {
@@ -1423,6 +1467,14 @@
           "when": "false"
         },
         {
+          "command": "cpclib.runWith.bemu",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.bemu.needsInstall",
+          "when": "false"
+        },
+        {
           "command": "cpclib.runWith.winape",
           "when": "false"
         },
@@ -1639,6 +1691,14 @@
           "when": "false"
         },
         {
+          "command": "cpclib.debugWith.bemu",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.debugWith.bemu.needsInstall",
+          "when": "false"
+        },
+        {
           "command": "cpclib.debugWith.1984js",
           "when": "false"
         },
@@ -1702,8 +1762,22 @@
               },
               "emulator": {
                 "type": "string",
-                "description": "Which emulator to debug in - \"1984js\" or \"amspiritlite\". Any other value falls back to 1984js with a notice. Use the explorer context menu's \"Debug with a specific emulator...\" to pick one per launch instead of editing this.",
+                "description": "Which emulator to debug in: \"1984js\", \"bemu\" (in a tab, or its own window with bemuWindow), \"amspiritlite\", \"sugarbox\" or \"ace\". Any other value falls back to 1984js with a notice. Use the explorer context menu's \"Debug with a specific emulator...\" to pick one per launch instead of editing this.",
                 "default": "1984js"
+              },
+              "bemuWindow": {
+                "type": "boolean",
+                "description": "bemu: open it in its own window (its native executable, the one bndbuild downloads, or emulatorPath) instead of a VS Code tab (its web build). Defaults to the cpclib.debug.bemuWindow setting.",
+                "default": false
+              },
+              "bemuConfig": {
+                "type": "object",
+                "description": "bemu in a tab: the machine (its web build's configuration), e.g. {\"model\": \"6128\", \"crtc\": 1, \"ramKb\": 576}. Its own window takes the snapshot's machine.",
+                "default": {}
+              },
+              "emulatorPath": {
+                "type": "string",
+                "description": "bemu in its own window: the amsrust executable to start instead of the one bndbuild installs (or $CPCLIB_BEMU)."
               },
               "watchLabels": {
                 "type": "array",
@@ -1866,6 +1940,11 @@
     "configuration": {
       "title": "CPClib",
       "properties": {
+        "cpclib.debug.bemuWindow": {
+          "type": "boolean",
+          "default": false,
+          "description": "Debug bemu in its own window (its native executable, downloaded by bndbuild) rather than in a VS Code tab (its web build). A launch configuration's bemuWindow wins."
+        },
         "cpclib.debug.openInWebview": {
           "type": "boolean",
           "default": true,

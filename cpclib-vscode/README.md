@@ -86,6 +86,16 @@ bndbuild rule that launches an emulator. The extension assembles the program,
 starts [1984js](https://github.com/gmarcusroberto/1984js) in a tab beside your
 code, and steps through your *source* rather than through addresses.
 
+**bemu** (`"emulator": "bemu"` in the launch configuration, or **Debug with...
+> bemu**) also opens in a tab: its web build, downloaded by bndbuild from the
+releases of [bemu](https://github.com/rgiot/bemu), runs in the tab and the
+debugger reaches it through the adapter - the same debug API, answered by the
+same code, as the desktop bemu. To get bemu's own window instead, set
+`"bemuWindow": true` in the launch configuration, or the
+`cpclib.debug.bemuWindow` setting for every session: the adapter then starts the
+native executable bndbuild installs (or `emulatorPath`, or `$CPCLIB_BEMU`). In a
+tab, `bemuConfig` chooses the machine (`{"model": "6128", "ramKb": 576}`).
+
 **What works**
 
 - **Breakpoints** from the gutter, and from the program itself: every
