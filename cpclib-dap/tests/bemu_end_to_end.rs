@@ -875,3 +875,38 @@ fn a_basic_program_in_a_tab() {
     assert!(a.starts_with("1 "), "A on the first pass: {a}");
     adapter.finish();
 }
+
+/// Stopped while bemu's page is not open yet (the tab closed at once, or
+/// Stop pressed): the launch ends then, not when its wait for the page runs
+/// out, and the adapter with it. Needs bemu's web build (`$CPCLIB_BEMU_WEB`).
+#[test]
+fn a_stop_before_the_page_opens_ends_the_launch_at_once() {
+    match std::env::var("CPCLIB_BEMU_WEB") {
+        Ok(web) => assert!(Path::new(&web).join("bemu.js").is_file(), "no bemu.js in {web}"),
+        Err(_) => {
+            eprintln!("skipped: set $CPCLIB_BEMU_WEB (bemu's web/pkg) to run this test");
+            return;
+        }
+    }
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.request("initialize", json!({ "adapterID": "cpclib", "linesStartAt1": true, "columnsStartAt1": true }));
+    let launch = adapter.send("launch", json!({ "program": source, "emulator": "bemu" }));
+    adapter.wait("the page to open", |m| m["event"] == "cpclib/emulatorReady");
+
+    // the page is never opened: the editor stops the session instead
+    let stopped_at = Instant::now();
+    adapter.send("disconnect", json!({}));
+    let response = adapter.wait("response to launch", |m| m["type"] == "response" && m["request_seq"] == launch);
+    assert_eq!(response["success"], false, "{response}");
+    assert!(response["message"].as_str().unwrap_or_default().contains("stopped"), "{response}");
+    assert!(stopped_at.elapsed() < Duration::from_secs(5), "the launch ended late: {:?}", stopped_at.elapsed());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if let Ok(Some(_)) = adapter.child.try_wait() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    panic!("the adapter did not exit after the disconnect");
+}

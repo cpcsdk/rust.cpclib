@@ -38,8 +38,10 @@ pub fn in_tab(arguments: &Value) -> bool {
 }
 
 /// How long a launch waits for bemu's page to be opened and its emulator to
-/// start.
-pub const PAGE_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+/// start, at most: VS Code opens it at once, and it starts in a second or
+/// two; the rest is for a person opening it in a browser by hand. A stop
+/// meanwhile ends the wait at once.
+pub const PAGE_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// The executable named by the launch configuration or the environment.
 fn named_executable(arguments: &Value) -> Option<PathBuf> {

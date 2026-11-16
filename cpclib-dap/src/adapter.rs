@@ -331,6 +331,19 @@ impl Transcript {
 static EARLY_EVENTS: std::sync::Mutex<Option<std::sync::mpsc::Sender<(String, Value)>>> =
     std::sync::Mutex::new(None);
 
+/// The editor stopped the session (`disconnect`, `terminate`) or went: what
+/// a launch waits for (bemu's page) is waited for no longer. Set by the
+/// thread reading the editor, which sees every message as it comes, while
+/// the protocol thread may be busy with the launch. Never cleared: the
+/// protocol thread ends the adapter on that same message.
+static LAUNCH_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the editor stopped the session during the launch (see
+/// [`LAUNCH_CANCELLED`]).
+fn launch_cancelled() -> bool {
+    LAUNCH_CANCELLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Send `event` to the editor now, from inside a launch (see [`EARLY_EVENTS`]).
 fn announce(event: &str, body: Value) {
     if let Some(sender) = EARLY_EVENTS.lock().unwrap_or_else(|held| held.into_inner()).as_ref() {
@@ -397,10 +410,19 @@ pub fn run_stdio() -> std::io::Result<()> {
         let mut chunk = [0u8; 8192];
         loop {
             match input.read(&mut chunk) {
-                Ok(0) | Err(_) => return,
+                Ok(0) | Err(_) => {
+                    // the editor is gone: nothing to launch for
+                    LAUNCH_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    return;
+                },
                 Ok(read) => buffer.extend_from_slice(&chunk[..read])
             }
             for message in protocol::decode(&mut buffer) {
+                // seen here, as it comes: the protocol thread may be busy
+                // with a launch that waits for something (see `LAUNCH_CANCELLED`)
+                if matches!(message.get("command").and_then(Value::as_str), Some("disconnect" | "terminate")) {
+                    LAUNCH_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
                 if editor_tx.send(message).is_err() {
                     return;
                 }
@@ -1301,7 +1323,7 @@ fn connect_backend(
                         "cpclib/emulatorReady",
                         json!({ "url": page.page_url(), "emulator": "bemu", "supports": [] })
                     );
-                    page.wait_until_ready(bemu::PAGE_OPEN_TIMEOUT)?;
+                    page.wait_until_ready(bemu::PAGE_OPEN_TIMEOUT, launch_cancelled)?;
                     (page.endpoint(), Some((Started::Page(page), held)))
                 }
                 else {

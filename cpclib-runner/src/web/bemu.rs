@@ -193,8 +193,9 @@ const ANSWER_TIMEOUT: Duration = Duration::from_secs(30);
 const POLL_HOLD: Duration = Duration::from_secs(15);
 /// The page asked nothing for this long, after its first poll: it is gone.
 const PAGE_GONE_AFTER: Duration = Duration::from_secs(5);
-/// How long a request made before the page is up waits for it.
-const PAGE_LOAD_TIMEOUT: Duration = Duration::from_secs(120);
+/// How long a request made before the page is up waits for it (as long as
+/// the debugger waits for the page to open).
+const PAGE_LOAD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A running relay: the page to open, and the API to debug.
 pub struct BemuPage {
@@ -217,8 +218,14 @@ impl BemuPage {
         self.address.port()
     }
 
-    /// Wait for the page to run the emulator, loaded; its error otherwise.
-    pub fn wait_until_ready(&self, timeout: Duration) -> Result<(), String> {
+    /// Wait for the page to run the emulator, loaded; its error otherwise,
+    /// or after `timeout`, or as soon as `cancelled()` says so (looked at
+    /// every tenth of a second: the debug session stopped meanwhile).
+    pub fn wait_until_ready(
+        &self,
+        timeout: Duration,
+        cancelled: impl Fn() -> bool
+    ) -> Result<(), String> {
         let deadline = Instant::now() + timeout;
         let mut state = self.relay.state.lock().unwrap();
         loop {
@@ -229,18 +236,23 @@ impl BemuPage {
                 },
                 PageState::Waiting => {}
             }
+            if cancelled() {
+                return Err("the debug session was stopped before bemu's page was open".to_owned());
+            }
             let now = Instant::now();
             if now >= deadline {
                 return Err(format!(
-                    "bemu's page ({}) was not opened, or did not start, within {}s",
+                    "bemu's page ({}) was not opened within {}s: open it in a browser, or set \
+                     \"bemuWindow\": true for bemu's own window",
                     self.page_url(),
                     timeout.as_secs()
                 ));
             }
+            let slice = (deadline - now).min(Duration::from_millis(100));
             state = self
                 .relay
                 .state_changed
-                .wait_timeout(state, deadline - now)
+                .wait_timeout(state, slice)
                 .unwrap()
                 .0;
         }
@@ -930,7 +942,8 @@ mod tests {
         let package = package();
         let page = serve(package.path(), Load::Boot, serde_json::json!({})).unwrap();
         let _page_thread = fake_page(&page);
-        page.wait_until_ready(Duration::from_secs(5)).unwrap();
+        page.wait_until_ready(Duration::from_secs(5), || false)
+            .unwrap();
 
         let answer = call(
             page.port(),
@@ -956,7 +969,8 @@ mod tests {
         let package = package();
         let page = serve(package.path(), Load::Boot, serde_json::json!({})).unwrap();
         let _page_thread = fake_page(&page);
-        page.wait_until_ready(Duration::from_secs(5)).unwrap();
+        page.wait_until_ready(Duration::from_secs(5), || false)
+            .unwrap();
 
         let mut stream = TcpStream::connect(("127.0.0.1", page.port())).unwrap();
         stream
@@ -1100,12 +1114,41 @@ mod tests {
                 "POST /session/failed?token={token} HTTP/1.1\r\nContent-Length: 6\r\n\r\nno gpu"
             )
         );
-        let error = page.wait_until_ready(Duration::from_secs(5)).unwrap_err();
+        let error = page
+            .wait_until_ready(Duration::from_secs(5), || false)
+            .unwrap_err();
         assert!(error.contains("no gpu"), "{error}");
         let answer = call(page.port(), "GET /api/ping HTTP/1.1\r\n\r\n");
         assert!(
             answer.starts_with("HTTP/1.1 503") && answer.contains("no gpu"),
             "{answer}"
+        );
+    }
+
+    #[test]
+    fn waiting_for_the_page_ends_when_cancelled_or_too_long() {
+        let package = package();
+        let page = serve(package.path(), Load::Boot, serde_json::json!({})).unwrap();
+
+        let started = Instant::now();
+        let error = page
+            .wait_until_ready(Duration::from_secs(30), || {
+                started.elapsed() > Duration::from_millis(200)
+            })
+            .unwrap_err();
+        assert!(error.contains("stopped"), "{error}");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "cancelled at once: {:?}",
+            started.elapsed()
+        );
+
+        let error = page
+            .wait_until_ready(Duration::from_millis(300), || false)
+            .unwrap_err();
+        assert!(
+            error.contains("was not opened") && error.contains("bemuWindow"),
+            "{error}"
         );
     }
 
