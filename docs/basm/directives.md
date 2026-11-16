@@ -692,7 +692,7 @@ values of the three first may also be given alone, without their name):
 | `VALUE=`, `VALMASK=` | 8 bits | 0, 0 | The value accessed, compared through `VALMASK` (0: any value) |
 | `CONDITION=` | a string | none | An ACE condition on the registers and memory (`"A = &55 AND NOT FlagZ"`): it only acts while it holds |
 | `NAME=` | a string | none | What the debugger calls it when it acts |
-| `STEP=` | a number | 0 | Hits let pass before it acts (the pass of ACE's breakpoint window) |
+| `STEP=` | a number | 0 | Written to the snapshot as rasm does (rasm does not interpret it); cpclib's debugger and bemu read it as hits let pass before it acts, the pass of the breakpoint manager |
 
 Description:
 Insert a breakpoint in the generated snapshot for debugging (its REMU and
