@@ -20,6 +20,7 @@ members = [
   "cpclib-common",
   "cpclib-project",
   "cpclib-dap",
+  "cpclib-bemu-api",
   "cpclib-cpr",
   "cpclib-cprcli", 
    "cpclib-crunch",
@@ -69,6 +70,7 @@ default-members = [
   "cpclib-common",
   "cpclib-project",
   "cpclib-dap",
+  "cpclib-bemu-api",
   "cpclib-cpr",
   "cpclib-cprcli",
    "cpclib-crunch",
@@ -133,6 +135,7 @@ cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-t
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
 cpclib-project = { version = "0.11.0", path = "cpclib-project", default-features = false }
 cpclib-dap = { version = "0.11.0", path = "cpclib-dap", default-features = false }
+cpclib-bemu-api = { version = "0.11.0", path = "cpclib-bemu-api" }
 cpclib-cpr = { version = "0.11.0", path = "cpclib-cpr", default-features = false }
 cpclib-cprcli = { version = "0.11.0", path = "cpclib-cprcli", default-features = false }
 cpclib-crunch = { version = "0.11.0", path = "cpclib-crunch", default-features = false }

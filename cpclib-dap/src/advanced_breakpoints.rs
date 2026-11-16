@@ -12,6 +12,7 @@
 //! replaced when the editor changes its set.
 
 use cpclib_runner::runner::emulator::amspiritlite_api::{Call, perform};
+use cpclib_bemu_api as api;
 use serde_json::{Value, json};
 
 /// The prefix of the names of the breakpoints this adapter armed.
@@ -99,20 +100,19 @@ impl Advanced {
             let label = entry.get("label").and_then(Value::as_str).unwrap_or_default();
             let flag = |key: &str| entry.get(key).and_then(Value::as_bool).unwrap_or(false);
             let access = match (flag("read"), flag("write")) {
-                (true, true) => "rw",
-                (true, false) => "r",
-                _ => "w"
+                (true, true) => api::BreakpointAccess::ReadWrite,
+                (true, false) => api::BreakpointAccess::Read,
+                _ => api::BreakpointAccess::Write
             };
-            requests.push((
-                format!("watch on {label}"),
-                json!({
-                    "kind": "mem",
-                    "access": access,
-                    "addr": entry.get("address").and_then(Value::as_u64).unwrap_or(0),
-                    "run": "watch",
-                    "name": watch_name(label)
-                })
-            ));
+            let watch = api::NewBreakpoint {
+                kind: Some(api::BreakpointKind::Mem),
+                access: Some(access),
+                addr: Some(api::Int(entry.get("address").and_then(Value::as_u64).unwrap_or(0) as i64)),
+                run: Some(api::BreakpointRun::Watch),
+                name: Some(watch_name(label)),
+                ..api::NewBreakpoint::default()
+            };
+            requests.push((format!("watch on {label}"), serde_json::to_value(watch).unwrap_or(Value::Null)));
         }
         let whole = |entry: &Value, name: String| {
             let mut body = entry.clone();
@@ -147,15 +147,20 @@ impl Advanced {
     }
 
     /// The manager's raster breakpoints: the query of each
-    /// `POST /api/raster_bp` (`add=1`, so none replaces another).
-    fn raster_queries(&self) -> Vec<Vec<(&'static str, u64)>> {
+    /// `POST /api/raster_bp` (`add=1`, so none replaces another), named by
+    /// their label (bemu says it in the stop).
+    fn raster_queries(&self) -> Vec<Vec<(&'static str, String)>> {
         self.manager
             .iter()
             .filter(|e| is_raster(e))
             .map(|entry| {
-                let mut query = vec![("add", 1), ("nop", entry.get("nop").and_then(Value::as_u64).unwrap_or(0))];
-                if let Some(line) = entry.get("line").and_then(Value::as_u64) {
-                    query.push(("line", line));
+                let nop = entry.get("nop").and_then(number_of).unwrap_or(0);
+                let mut query = vec![("add", "1".to_owned()), ("nop", nop.to_string())];
+                if let Some(line) = entry.get("line").and_then(number_of) {
+                    query.push(("line", line.to_string()));
+                }
+                if let Some(label) = entry.get("label").and_then(Value::as_str) {
+                    query.push(("name", label.to_owned()));
                 }
                 query
             })
@@ -168,14 +173,13 @@ impl Advanced {
         // Ours out, highest index first: each removal renumbers the ones
         // after it.
         let listed = perform(endpoint, &Call::get("/api/breakpoints"))?;
-        let listed: Value = serde_json::from_str(&listed).unwrap_or(Value::Null);
-        let mut ours: Vec<u64> = listed
-            .get("advanced")
-            .and_then(Value::as_array)
-            .map(|list| {
-                list.iter()
-                    .filter(|b| b.get("name").and_then(Value::as_str).is_some_and(|n| n.starts_with(OURS)))
-                    .filter_map(|b| b.get("index").and_then(Value::as_u64))
+        let mut ours: Vec<u64> = serde_json::from_str::<api::Breakpoints>(&listed)
+            .map(|listed| {
+                listed
+                    .advanced
+                    .iter()
+                    .filter(|b| b.name.as_deref().is_some_and(|n| n.starts_with(OURS)))
+                    .map(|b| b.index)
                     .collect()
             })
             .unwrap_or_default();
@@ -190,17 +194,15 @@ impl Advanced {
             self.raster_armed = !rasters.is_empty();
             for query in rasters {
                 let call = query.into_iter().fold(Call::post("/api/raster_bp"), |call, (key, value)| call.query(key, value));
-                let answer: Value = serde_json::from_str(&perform(endpoint, &call)?).unwrap_or(Value::Null);
-                if let Some(error) = answer.get("error").and_then(Value::as_str) {
-                    refused.push(format!("bemu refused the raster breakpoint: {error}"));
+                if let Ok(refusal) = serde_json::from_str::<api::ErrorReply>(&perform(endpoint, &call)?) {
+                    refused.push(format!("bemu refused the raster breakpoint: {}", refusal.error));
                 }
             }
         }
         for (what, body) in self.requests() {
             let answer = perform(endpoint, &Call::post("/api/breakpoints").body(body.to_string()))?;
-            let answer: Value = serde_json::from_str(&answer).unwrap_or(Value::Null);
-            if let Some(error) = answer.get("error").and_then(Value::as_str) {
-                refused.push(format!("bemu refused the {what}: {error}"));
+            if let Ok(refusal) = serde_json::from_str::<api::ErrorReply>(&answer) {
+                refused.push(format!("bemu refused the {what}: {}", refusal.error));
             }
         }
         Ok(refused)
@@ -236,7 +238,13 @@ impl Advanced {
             const LONGEST_INSTRUCTION_NOPS: u64 = 7;
             let beam = event.get("beam")?;
             let (line, nop) = (beam.get("line")?.as_u64()?, beam.get("nop")?.as_u64()?);
-            let label = self
+            // bemu names the one hit (`raster_names`), the label armed here;
+            // else it is found by where the beam is.
+            let named = event
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|name| self.manager.iter().any(|e| is_raster(e) && e.get("label").and_then(Value::as_str) == Some(name)));
+            let label = named.or_else(|| self
                 .manager
                 .iter()
                 .filter(|e| is_raster(e))
@@ -247,7 +255,7 @@ impl Advanced {
                         && e.get("line").and_then(number_of).is_none_or(|l| l == line)
                 })
                 .max_by_key(|(at, _)| *at)
-                .and_then(|(_, e)| e.get("label").and_then(Value::as_str))
+                .and_then(|(_, e)| e.get("label").and_then(Value::as_str)))
                 .unwrap_or("raster");
             return Some(("breakpoint", format!("{label}: beam at line {line}, NOP {nop}")));
         }
@@ -271,8 +279,17 @@ impl Advanced {
         let read = |path: &'static str| -> std::io::Result<Value> {
             Ok(serde_json::from_str(&perform(endpoint, &Call::get(path))?).unwrap_or(Value::Null))
         };
+        // As bemu's types say, then as JSON again for the view.
         let listed = read("/api/breakpoints")?;
         let raster = read("/api/raster_bp")?;
+        let listed = serde_json::from_value::<api::Breakpoints>(listed.clone())
+            .ok()
+            .and_then(|typed| serde_json::to_value(typed).ok())
+            .unwrap_or(listed);
+        let raster = serde_json::from_value::<api::RasterBreakpoints>(raster.clone())
+            .ok()
+            .and_then(|typed| serde_json::to_value(typed).ok())
+            .unwrap_or(raster);
         let advanced: Vec<Value> = listed
             .get("advanced")
             .and_then(Value::as_array)
@@ -322,7 +339,7 @@ impl Advanced {
 
 /// A number the manager keeps as a JSON number or as text (`"100"`).
 fn number_of(value: &Value) -> Option<u64> {
-    value.as_u64().or_else(|| value.as_str().and_then(|text| crate::text::parse_number(text)).map(u64::from))
+    value.as_u64().or_else(|| value.as_str().and_then(crate::text::parse_number).map(u64::from))
 }
 
 fn is_raster(entry: &Value) -> bool {
@@ -425,7 +442,11 @@ mod tests {
         let mut rasters = set();
         rasters.manager.push(json!({ "id": 4, "label": "split", "kind": "raster", "line": 100, "nop": 10 }));
         assert_eq!(rasters.requests().len(), set().requests().len(), "a raster one is not an advanced breakpoint");
-        assert_eq!(rasters.raster_queries(), vec![vec![("add", 1), ("nop", 10), ("line", 100)]]);
+        let query = |pairs: &[(&'static str, &str)]| pairs.iter().map(|(k, v)| (*k, v.to_string())).collect::<Vec<_>>();
+        assert_eq!(rasters.raster_queries(), vec![query(&[("add", "1"), ("nop", "10"), ("line", "100"), ("name", "split")])]);
+        // bemu names the one hit: told by its name, wherever the beam is.
+        let named = json!({ "kind": "raster", "name": "split", "beam": { "line": 120, "nop": 40, "x": 640, "y": 120 } });
+        assert_eq!(rasters.stop(&named).unwrap().1, "split: beam at line 120, NOP 40");
         let stop = json!({ "kind": "raster", "beam": { "line": 100, "nop": 10, "x": 160, "y": 100 } });
         assert_eq!(rasters.stop(&stop).unwrap(), ("breakpoint", "split: beam at line 100, NOP 10".to_owned()));
         // Stopped at the end of the instruction that crossed the position.

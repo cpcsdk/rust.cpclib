@@ -40,6 +40,8 @@ camino.workspace = true
 fs-err.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# bemu's debug API, typed: what its requests take and its replies give
+cpclib-bemu-api.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

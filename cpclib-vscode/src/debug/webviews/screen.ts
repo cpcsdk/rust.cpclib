@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { hex } from '../../shared/html';
 import { ScreenDump } from '../types';
 import { consoleCommand } from '../consoleCommand';
+import { pagingFormHtml, PAGING_FORM_SCRIPT, PAGING_FORM_STYLE } from './paging';
 
 const screenPanels = new Map<string, vscode.WebviewPanel>();
 
@@ -101,7 +102,7 @@ function screenHtml(dump: ScreenDump): string {
 <head>
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<style>
+<style>${PAGING_FORM_STYLE}
 html, body { height: 100%; }
 body {
   font-family: var(--vscode-editor-font-family, monospace); color: var(--vscode-editor-foreground);
@@ -172,14 +173,9 @@ canvas#screen { image-rendering: pixelated; border: 1px solid var(--vscode-panel
     <option value="0"${dump.encoding === 0 ? ' selected' : ''}>Screen</option>
     <option value="1"${dump.encoding === 1 ? ' selected' : ''}>CPC</option>
   </select></label>
-  <label>RAM configuration <select id="config">
-    <option value="">Live (CPU)</option>
-    ${[0, 1, 2, 3, 4, 5, 6, 7]
-        .map(n => `<option value="${n}"${dump.config === n ? ' selected' : ''}>C${n}</option>`)
-        .join('')}
-  </select></label>
   <button type="button" id="auto">Auto-detect</button>
 </form>
+${pagingFormHtml('paging', dump)}
 <div id="palette" title="This window's own palette - starts from the live Gate Array, click a swatch to change it. Never written back to the emulator: the CPC itself never hears about it."></div>
 <div id="imgWrap"><canvas id="screen"></canvas></div>
 <div id="readout">&nbsp;</div>
@@ -187,8 +183,8 @@ canvas#screen { image-rendering: pixelated; border: 1px solid var(--vscode-panel
 automatically, tiling into more columns when there is room for them; everything else applies the moment
 it changes. Point it elsewhere with
 <code>-sv &lt;address&gt; &lt;width&gt; &lt;height&gt; &lt;mode&gt; &lt;gap&gt; &lt;palette&gt; &lt;encoding&gt; &lt;config&gt;</code>
-in the debug console - <code>-help</code> lists every command. Only AMSpiriT
-Lite can honour an explicit RAM configuration.</footer>
+in the debug console - <code>-help</code> lists every command. The paging reads the screen another way
+than the CPU's paging now: bemu reads through any; AMSpiriT Lite through a RAM configuration.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   // \`dump\` and \`bytes\` are reassigned by \`applyDump\` on every new frame -
@@ -234,7 +230,8 @@ Lite can honour an explicit RAM configuration.</footer>
   const charRowHeightField = document.getElementById('charRowHeight');
   const modeField = document.getElementById('mode');
   const encodingField = document.getElementById('encoding');
-  const configField = document.getElementById('config');
+${PAGING_FORM_SCRIPT}
+  const paging = pagingForm('paging', () => requestRender(false));
   const imgWrap = document.getElementById('imgWrap');
   const canvas = document.getElementById('screen');
   const ctx = canvas.getContext('2d');
@@ -289,7 +286,7 @@ Lite can honour an explicit RAM configuration.</footer>
       gap: useDefaults ? '' : charRowHeightField.value,
       mode: useDefaults ? '' : modeField.value,
       encoding: useDefaults ? '' : encodingField.value,
-      config: useDefaults ? '' : configField.value,
+      config: useDefaults ? '' : paging.argument(),
       totalHeight: columns * rows * rowHeightValue,
       palette: paletteArgument(useDefaults),
     });
@@ -411,9 +408,8 @@ Lite can honour an explicit RAM configuration.</footer>
     if (focused !== charRowHeightField) { charRowHeightField.value = String(dump.charRowHeight); }
     if (focused !== modeField) { modeField.value = String(dump.mode); }
     if (focused !== encodingField) { encodingField.value = String(dump.encoding); }
-    if (focused !== configField) {
-      configField.value = typeof dump.config === 'number' ? String(dump.config) : '';
-    }
+    paging.set(dump.paging ? (dump.paging === 'cpu' ? '' : dump.paging)
+      : (typeof dump.config === 'number' ? 'C' + dump.config : ''));
 
     renderPaletteSwatches();
     readout.textContent = '\\u00a0';
@@ -496,6 +492,7 @@ Lite can honour an explicit RAM configuration.</footer>
     hardwarePalette: ${JSON.stringify(dump.hardwarePalette)},
     encoding: ${dump.encoding},
     config: ${JSON.stringify(dump.config ?? null)},
+    paging: ${JSON.stringify(dump.paging ?? null)},
   });
   requestRender(false);
 

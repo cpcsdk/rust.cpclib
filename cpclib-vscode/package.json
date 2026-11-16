@@ -840,6 +840,11 @@
         "command": "cpclib.disassemblyConfigPicker.c7",
         "title": "$(chip) C7",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.paging",
+        "title": "$(chip) Paging…",
+        "category": "CPClib"
       }
     ],
     "submenus": [
@@ -960,6 +965,11 @@
         {
           "command": "cpclib.disassemblyConfigPicker.c7",
           "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c7",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.paging",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == paging",
           "group": "navigation"
         }
       ],
@@ -1382,6 +1392,10 @@
         },
         {
           "command": "cpclib.disassemblyConfigPicker.c7",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.paging",
           "when": "false"
         },
         {

@@ -3,6 +3,9 @@ import { hex, escapeHtml } from '../../shared/html';
 import { MemoryDump } from '../types';
 import { consoleCommand } from '../consoleCommand';
 import { showGroupedMemory } from './groupedMemory';
+import {
+    locationFieldHtml, pagingFormHtml, pagingValue, PAGING_FORM_SCRIPT, PAGING_FORM_STYLE,
+} from './paging';
 
 /** Shared by `memory.ts` and `groupedMemory.ts` - a grouped panel and a
  * single-view panel key into the same map (distinguished by key prefix,
@@ -62,7 +65,7 @@ export function showMemory(session: vscode.DebugSession, dump: MemoryDump | unde
             title: memoryTitle(dump),
             byteCount: dump.bytes.length,
             tableHtml: memoryTableHtml(dump),
-            config: dump.config,
+            paging: pagingValue(dump),
             anchorArgument: anchorArgumentFromViewId(dump.viewId, dump.address),
             count: dump.bytes.length || 0x40,
         });
@@ -84,16 +87,22 @@ export function showMemory(session: vscode.DebugSession, dump: MemoryDump | unde
     panel.onDidDispose(() => {
         if (memoryPanels.get(key) === panel) { memoryPanels.delete(key); }
     });
-    // The config picker's own change event - reissues -mv with the
-    // same anchor/count and the newly chosen RAM-configuration
-    // override, the same round trip the disassembly view's own picker
-    // takes.
+    // The paging form's own change, or the Show field's - reissues -mv,
+    // the same round trip the disassembly view's own picker takes. A
+    // location (`UPPER07:0000`) names its own paging, so it goes alone.
     panel.webview.onDidReceiveMessage(async (
-        message: { config?: string; anchor?: string; count?: number },
+        message: { paging?: string; anchor?: string; count?: number; show?: string },
     ) => {
-        if (message?.config === undefined) { return; }
-        const config = message.config === '' ? '_' : message.config;
-        await consoleCommand(`-mv ${message.anchor ?? '_'} ${message.count ?? 0x40} ${config}`);
+        const count = message?.count ?? 0x40;
+        if (message?.show !== undefined) {
+            const where = message.show.trim().replace(/\s+/g, '');
+            if (where === '') { return; }
+            const paging = where.includes(':') ? '' : ` ${message.paging ?? '_'}`;
+            await consoleCommand(`-mv ${where} ${count}${paging}`);
+            return;
+        }
+        if (message?.paging === undefined) { return; }
+        await consoleCommand(`-mv ${message.anchor ?? '_'} ${count} ${message.paging}`);
     });
     memoryPanels.set(key, panel);
 
@@ -189,14 +198,6 @@ function anchorArgumentFromViewId(viewId: string | undefined, address: number): 
 function memoryHtml(dump: MemoryDump): string {
     const nonce = Math.random().toString(36).slice(2);
     const title = memoryTitle(dump);
-    // Same convention as the disassembly view's own picker.
-    const configOptions = ['<option value="">Live (CPU)</option>']
-        .concat(
-            [0, 1, 2, 3, 4, 5, 6, 7].map(
-                n => `<option value="${n}"${dump.config === n ? ' selected' : ''}>C${n}</option>`,
-            ),
-        )
-        .join('');
     const anchorArgument = anchorArgumentFromViewId(dump.viewId, dump.address);
 
     return `<!DOCTYPE html>
@@ -204,7 +205,7 @@ function memoryHtml(dump: MemoryDump): string {
 <head>
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<style>${memoryPageStyle}
+<style>${memoryPageStyle}${PAGING_FORM_STYLE}
   .controls { margin-bottom: 8px; }
   .controls select, .controls input { font-family: inherit; }
 </style>
@@ -212,12 +213,15 @@ function memoryHtml(dump: MemoryDump): string {
 <body>
 <h2><span id="titleText">${title}</span> &nbsp;<span class="addr"><span id="byteCount">${dump.bytes.length}</span> bytes</span></h2>
 <div class="controls">
-  <label>RAM configuration: <select id="config">${configOptions}</select></label>
+  ${locationFieldHtml('show', anchorArgument)}
 </div>
+${pagingFormHtml('paging', dump)}
 <div id="tableContainer">${memoryTableHtml(dump)}</div>
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
 Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.
-Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
+Show a ROM, a RAM bank, a cartridge page by its place (UPPER07:0000, B04:0000, CART01:0000): it is
+shown where it runs, through the paging that puts it there. The paging reads the CPU's addresses
+another way than they are paged now: bemu reads through any; AMSpiriT Lite through the RAM's alone.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   // Reassigned by the message listener below on every subsequent frame -
@@ -227,16 +231,19 @@ Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
   // being rebuilt from scratch on every debug step.
   let anchorArgument = ${JSON.stringify(anchorArgument)};
   let count = ${dump.bytes.length || 0x40};
-  const configSelect = document.getElementById('config');
+${PAGING_FORM_SCRIPT}
+  const showField = document.getElementById('show');
   const titleText = document.getElementById('titleText');
   const byteCount = document.getElementById('byteCount');
   const tableContainer = document.getElementById('tableContainer');
 
-  // Reissues -mv with the same anchor/count and the newly chosen config.
-  function reissue() {
-    vscode.postMessage({ config: configSelect.value, anchor: anchorArgument, count });
-  }
-  configSelect.addEventListener('change', reissue);
+  // Reissues -mv with the same anchor/count and the paging the form makes.
+  const paging = pagingForm('paging', () => {
+    vscode.postMessage({ paging: paging.argument(), anchor: anchorArgument, count });
+  });
+  showField.addEventListener('change', () => {
+    vscode.postMessage({ show: showField.value, paging: paging.argument(), count });
+  });
 
   window.addEventListener('message', event => {
     const msg = event.data;
@@ -246,13 +253,10 @@ Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
     tableContainer.innerHTML = msg.tableHtml;
     anchorArgument = msg.anchorArgument;
     count = msg.count;
-    // Left alone while the picker has focus, same reason \`screen.ts\`
-    // leaves a focused field alone on an automatic refresh - a person
-    // mid-choosing a config shouldn't have their own in-progress selection
-    // overwritten by the next stop's answer.
-    if (document.activeElement !== configSelect) {
-      configSelect.value = msg.config != null ? String(msg.config) : '';
-    }
+    // The form is left alone while a person is in it (see pagingForm's
+    // set): the next stop's answer shouldn't overwrite what they are doing.
+    paging.set(msg.paging ?? '');
+    if (document.activeElement !== showField) { showField.value = anchorArgument; }
   });
 </script>
 </body>

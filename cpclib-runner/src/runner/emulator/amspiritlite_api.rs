@@ -93,7 +93,7 @@ impl Call {
             let query: Vec<String> = self
                 .query
                 .iter()
-                .map(|(key, value)| format!("{key}={value}"))
+                .map(|(key, value)| format!("{}={}", encode_query(key), encode_query(value)))
                 .collect();
             path.push('?');
             path.push_str(&query.join("&"));
@@ -392,8 +392,31 @@ pub fn save_disc(endpoint: &str, drive: u8) -> Result<Vec<u8>, String> {
     Ok(response)
 }
 
+/// A query key or value, with what cannot stand in one as it is (a space, `&`, `=`, `#`, `%`,
+/// `+`, `?`, anything not ASCII) percent-encoded.
+fn encode_query(text: &str) -> String {
+    let mut encoded = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        match byte {
+            b' ' | b'&' | b'=' | b'#' | b'%' | b'+' | b'?' | 0..=0x1f | 0x7f..=0xff => {
+                encoded.push_str(&format!("%{byte:02X}"))
+            },
+            _ => encoded.push(byte as char)
+        }
+    }
+    encoded
+}
+
 #[cfg(test)]
 mod test {
+    #[test]
+    fn a_query_value_is_encoded() {
+        assert_eq!(super::encode_query("split screen"), "split%20screen");
+        assert_eq!(super::encode_query("a&b=c#d"), "a%26b%3Dc%23d");
+        assert_eq!(super::encode_query("0x4000,B01:0010"), "0x4000,B01:0010");
+        assert_eq!(super::encode_query("é"), "%C3%A9");
+    }
+
     use super::*;
 
     #[test]

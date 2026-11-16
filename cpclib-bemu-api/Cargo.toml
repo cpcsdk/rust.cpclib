@@ -1,0 +1,15 @@
+[package]
+name = "cpclib-bemu-api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+description = "The types of the bemu emulator's debug API: what its requests take and its replies give, with their JSON schemas. Shared by bemu (the server) and cpclib-dap (a client)"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+schemars = "0.9"

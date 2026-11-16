@@ -1129,7 +1129,7 @@ pub fn screen_view_event_and_receipt(
     row_height_override: Option<usize>,
     palette_override: &[Option<Ink>],
     encoding_override: Option<u8>,
-    config_stamp: Option<(u8, Option<u32>)>,
+    config_stamp: Option<&cpclib_bemu_api::Paging>,
     regs: &[u8; 18],
     mode: u8,
     palette: &Palette<Ink>,
@@ -1154,11 +1154,13 @@ pub fn screen_view_event_and_receipt(
         encoding
     ) {
         Ok(mut body) => {
-            if let Some((mode, page)) = config_stamp
+            // what the panel's controls show: the paging, and its RAM configuration and page
+            if let Some(paging) = config_stamp
                 && let Some(object) = body.as_object_mut()
             {
-                object.insert("config".to_string(), json!(mode));
-                object.insert("page".to_string(), json!(page));
+                object.insert("config".to_string(), json!(paging.ram_config));
+                object.insert("page".to_string(), json!(paging.page));
+                object.insert("paging".to_string(), json!(paging.to_string()));
             }
             let seq = next_seq();
             let event = crate::protocol::event("cpclib/screenView", body, seq);

@@ -374,6 +374,77 @@ fn step_over_a_call_then_into_it_then_out() {
     adapter.finish();
 }
 
+/// Memory elsewhere than the CPU's paging shows it: a ROM by its location, a RAM bank by its
+/// name, a paging chosen for a view - read and written by bemu itself.
+#[test]
+fn memory_is_read_and_written_in_a_bank_a_rom_or_through_a_paging() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": LINE_INC_A }] }));
+    adapter.request("configurationDone", json!({}));
+    adapter.stopped();
+    let bytes = |view: &Value| -> Vec<u64> {
+        view["body"]["bytes"].as_array().unwrap().iter().map(|b| b.as_u64().unwrap()).collect()
+    };
+
+    // BASIC's ROM (upper ROM 0), by its location: shown at &C000, through U0. A bemu older
+    // than its memory spaces says it cannot, and why.
+    let seq = adapter.send("evaluate", json!({ "expression": "-mv UPPER00:0000 16", "context": "repl" }));
+    let answer = adapter.wait("ROM view's answer", |m| m["type"] == "response" && m["request_seq"] == seq);
+    if answer["success"] == false {
+        let why = answer["message"].as_str().unwrap_or_default();
+        assert!(why.contains("needs a bemu that pages its memory"), "{answer}");
+        adapter.finish();
+        return;
+    }
+    let rom = adapter.wait("ROM view", |m| m["event"] == "cpclib/memoryView");
+    assert_eq!(rom["body"]["address"], 0xC000, "{rom}");
+    assert_eq!(rom["body"]["paging"], "U0", "the panel is told its paging");
+    // the same bytes as the editor's own read of that location
+    let read = adapter.request("readMemory", json!({ "memoryReference": "UPPER00:0000", "count": 16 }));
+    let decoded: Vec<u64> = base64_decode(read["body"]["data"].as_str().unwrap()).into_iter().map(u64::from).collect();
+    assert_eq!(bytes(&rom), decoded);
+    assert!(decoded.iter().any(|b| *b != 0), "a ROM's bytes, not empty RAM: {decoded:?}");
+
+    // a RAM bank of the extension, by its name: written, then read back there and through C4
+    adapter.request("writeMemory", json!({ "memoryReference": "B04:0000", "data": "qrs=" }));
+    let read = adapter.request("readMemory", json!({ "memoryReference": "B04:0000", "count": 2 }));
+    assert_eq!(read["body"]["data"], "qrs=", "{read}");
+    adapter.request("evaluate", json!({ "expression": "-mv 0x4000 2 C4", "context": "repl" }));
+    let banked = adapter.wait("C4 view", |m| m["event"] == "cpclib/memoryView" && m["body"]["paging"] == "C4");
+    assert_eq!(bytes(&banked), vec![0xAA, 0xBB]);
+
+    // refused: a ROM written, a paging that is none
+    let seq = adapter.send("writeMemory", json!({ "memoryReference": "UPPER00:0000", "data": "AA==" }));
+    let refused = adapter.wait("ROM write refusal", |m| m["type"] == "response" && m["request_seq"] == seq);
+    assert_eq!(refused["success"], false, "{refused}");
+    let seq = adapter.send("evaluate", json!({ "expression": "-mv 0x4000 2 C9", "context": "repl" }));
+    let refused = adapter.wait("paging refusal", |m| m["type"] == "response" && m["request_seq"] == seq);
+    assert_eq!(refused["success"], false, "{refused}");
+    adapter.finish();
+}
+
+fn base64_decode(text: &str) -> Vec<u8> {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut bits = 0u32;
+    let mut count = 0;
+    let mut out = Vec::new();
+    for c in text.bytes().filter(|c| *c != b'=') {
+        bits = (bits << 6) | ALPHABET.iter().position(|a| *a == c).unwrap() as u32;
+        count += 6;
+        if count >= 8 {
+            count -= 8;
+            out.push((bits >> count) as u8);
+        }
+    }
+    out
+}
+
 #[test]
 fn breakpoints_are_armed_before_the_program_runs() {
     let Some(bemu) = bemu()
