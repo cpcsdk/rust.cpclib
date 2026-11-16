@@ -227,6 +227,15 @@ pub struct Z80Registers {
     pub IM: u8,
     /// NOPs emulated.
     pub ticks: u64,
+    /// WZ (MEMPTR).
+    #[serde(default)]
+    pub WZ: u16,
+    /// The flags set, by name, bits 7 to 0 (`SZYHXPNC`), a dash for a clear one.
+    #[serde(default)]
+    pub flags: String,
+    /// On a HALT, waiting for an interrupt.
+    #[serde(default)]
+    pub halted: bool,
 }
 
 /// `POST /api/z80`: the registers to set, by name; any left out are kept. All are checked
@@ -1496,8 +1505,8 @@ pub struct GateArray {
     pub r52: u8,
 }
 
-/// `GET /api/psg`: the PSG, decoded.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// `GET /api/psg`: AMSpiriT's fields, the 16 registers, and the channels read.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Psg {
     pub period_a: u16,
     pub period_b: u16,
@@ -1513,10 +1522,20 @@ pub struct Psg {
     pub regs: Vec<u8>,
     /// The register selected, if any.
     pub selected_reg: Option<u8>,
+    /// Each tone channel, as a musician reads it (none from a bemu older than them).
+    #[serde(default)]
+    pub channels: Vec<PsgChannel>,
+    #[serde(default)]
+    pub noise_hz: f64,
+    #[serde(default)]
+    pub envelope_hz: f64,
+    /// Port A reads (the keyboard), else writes.
+    #[serde(default)]
+    pub port_a_input: bool,
 }
 
-/// `GET /api/fdc`: the FDC.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// `GET /api/fdc`: the status registers, the phase, the drives and their discs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Fdc {
     /// The main status register.
     pub msr: u8,
@@ -1526,12 +1545,12 @@ pub struct Fdc {
     pub motor: bool,
     pub phase: String,
     pub command: String,
-    pub drives: Vec<Drive>,
+    pub drives: Vec<FdcDrive>,
 }
 
 /// One drive of the FDC.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct Drive {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FdcDrive {
     pub connected: bool,
     /// `3` (one head: the side read is the side up) or `3.5` (double sided).
     pub kind: String,
@@ -1540,7 +1559,164 @@ pub struct Drive {
     /// The side up, `A` or `B`.
     pub side: String,
     pub track: u8,
+    /// Its disc as the head sees it (none from a bemu older than it).
+    #[serde(default)]
+    pub disc: Option<Disc>,
 }
+
+/// The name an FDC drive had first.
+pub type Drive = FdcDrive;
+
+/// A PSG tone channel, as a musician reads it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PsgChannel {
+    /// R0-R5: 12 bits.
+    pub period: u16,
+    pub frequency_hz: f64,
+    /// The nearest note (`A4`), how far from it in cents, its MIDI number: none out of hearing.
+    pub note: Option<String>,
+    pub cents: Option<i32>,
+    pub midi: Option<i32>,
+    /// Its tone, and the noise, mixed in.
+    pub tone: bool,
+    pub noise: bool,
+    /// Its volume, 0 to 15 (or the envelope's).
+    pub volume: u8,
+    pub envelope: bool,
+}
+
+impl PsgChannel {
+    /// The note it sounds: its tone on, a volume.
+    pub fn sounding(&self) -> Option<i32> {
+        self.midi
+            .filter(|_| self.tone && (self.envelope || self.volume != 0))
+    }
+}
+
+
+// ------------------------------------------------------------------ /api/fdc
+
+/// A track in a word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TrackKind {
+    Unformatted,
+    /// Sectors with several copies of their data.
+    WeakSectors,
+    /// The 9 sectors of 512 bytes of AMSDOS.
+    Standard,
+    NoSector,
+    /// A protection, a more packed format...
+    AnotherLayout,
+}
+
+impl TrackKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Unformatted => "unformatted",
+            Self::WeakSectors => "weak sectors",
+            Self::Standard => "9 x 512",
+            Self::NoSector => "no sector",
+            Self::AnotherLayout => "another layout",
+        }
+    }
+}
+
+/// A sector of the track under the head.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DiscSector {
+    pub c: u8,
+    pub h: u8,
+    pub r: u8,
+    pub n: u8,
+    /// The size its N announces, and the data the image holds.
+    pub size: usize,
+    pub data_len: usize,
+    /// What is special about it: weak (several copies), deleted, another track's ID, odd size.
+    pub notes: Vec<String>,
+}
+
+/// A file of a disc's AMSDOS catalogue.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CatalogueEntry {
+    /// `NAME.EXT`.
+    pub name: String,
+    pub user: u8,
+    pub hidden: bool,
+    pub kilobytes: u32,
+}
+
+/// The disc in a drive as the head sees it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Disc {
+    /// `DSK` or `HFE`.
+    pub image: String,
+    /// The format of the track under the head: `Data`, `System`, `IBM`, else its sectors.
+    pub format: String,
+    pub tracks: u8,
+    pub double_sided: bool,
+    /// The side read: `A` or `B`.
+    pub side: String,
+    pub head_track: u8,
+    /// Each track of the side read.
+    pub track_kinds: Vec<TrackKind>,
+    /// Each track's sector IDs (R), in their order on the track.
+    pub track_sectors: Vec<Vec<u8>>,
+    /// The track under the head, its sectors in the order they pass; the next one's index.
+    pub sectors: Vec<DiscSector>,
+    pub next_sector: Option<usize>,
+    pub catalogue: Vec<CatalogueEntry>,
+}
+
+
+
+// ------------------------------------------------------------------ /api/asic
+
+/// A DMA channel of the ASIC.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AsicDma {
+    /// SAR: the next instruction's address.
+    pub address: u16,
+    /// PPR: a PAUSE tick is this + 1 HSYNCs.
+    pub prescaler: u8,
+    pub enabled: bool,
+    /// PAUSE ticks left.
+    pub pause: u16,
+    /// REPEAT's counter.
+    pub loop_count: u16,
+    pub interrupt: bool,
+}
+
+/// A hardware sprite of the ASIC.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AsicSprite {
+    pub x: u16,
+    pub y: u16,
+    /// 0 hides it; 1, 2, 3 make a pixel 1, 2, 4 wide or high.
+    pub zoom_x: u8,
+    pub zoom_y: u8,
+    pub shown: bool,
+    /// Its 16 x 16 pens, row by row (0: transparent, n: sprite colour n).
+    pub pixels: Vec<u8>,
+}
+
+/// `GET /api/asic`: a CPC+'s ASIC (null on a CPC).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Asic {
+    pub unlocked: bool,
+    /// The 32 palette entries (12 bits, `&GRB`): pens 0-15, the border, sprite colours 1-15.
+    pub palette: Vec<u16>,
+    /// The line of the programmable raster interrupt (0: none).
+    pub pri: u8,
+    /// The line of the split screen (0: none).
+    pub splt: u8,
+    pub sscr: u8,
+    pub ivr: u8,
+    pub rmr2: u8,
+    pub dma: Vec<AsicDma>,
+    pub sprites: Vec<AsicSprite>,
+}
+
 
 /// `POST /api/drive`'s query.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -2098,6 +2274,30 @@ mod tests {
         assert_eq!(serde_json::to_string(&parse("C4,U7").unwrap()).unwrap(), r#""C4,U7""#);
         let refused = serde_json::from_str::<Paging>(r#""C9""#).unwrap_err().to_string();
         assert!(refused.contains("is not a paging"), "{refused}");
+    }
+
+    /// A client reads an older bemu's chips: their newer fields default.
+    #[test]
+    fn an_older_bemus_chips_still_parse() {
+        let z80: Z80Registers = serde_json::from_str(
+            r#"{"PC":0,"SP":0,"IX":0,"IY":0,"A":0,"F":0,"B":0,"C":0,"D":0,"E":0,"H":0,"L":0,
+                "A2":0,"F2":0,"B2":0,"C2":0,"D2":0,"E2":0,"H2":0,"L2":0,"I":0,"R":0,
+                "IFF1":0,"IFF2":0,"IM":1,"ticks":0}"#,
+        )
+        .unwrap();
+        assert!(!z80.halted && z80.flags.is_empty());
+        let psg: Psg = serde_json::from_str(
+            r#"{"period_a":0,"period_b":0,"period_c":0,"vol_a":0,"vol_b":0,"vol_c":0,"mixer":63,
+                "noise":0,"env_period":0,"env_shape":0,"regs":[],"selected_reg":null}"#,
+        )
+        .unwrap();
+        assert!(psg.channels.is_empty());
+        let fdc: Fdc = serde_json::from_str(
+            r#"{"msr":128,"sr0":0,"sr1":0,"sr2":0,"motor":false,"phase":"idle","command":"",
+                "drives":[{"connected":true,"kind":"3","disk":false,"side":"A","track":0}]}"#,
+        )
+        .unwrap();
+        assert!(fdc.drives[0].disc.is_none());
     }
 
     #[test]
