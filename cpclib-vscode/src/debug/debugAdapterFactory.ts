@@ -51,6 +51,12 @@ export function registerDebugConfigurationProvider(context: vscode.ExtensionCont
                     const saved = savedManagerBreakpoints(context, config.program);
                     if (saved.length > 0) { config.managerBreakpoints = saved; }
                 }
+                // bemu in its own window rather than a tab, for every session
+                // that does not say
+                if (config.bemuWindow === undefined
+                    && vscode.workspace.getConfiguration('cpclib').get<boolean>('debug.bemuWindow', false)) {
+                    config.bemuWindow = true;
+                }
                 return config;
             },
         }),

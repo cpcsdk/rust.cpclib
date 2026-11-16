@@ -221,7 +221,7 @@ pub fn serve_on(
 }
 
 /// Enough randomness that another local page cannot guess it.
-fn random_token() -> String {
+pub(super) fn random_token() -> String {
     use std::hash::{BuildHasher, Hasher, RandomState};
     let mut token = String::with_capacity(64);
     for round in 0..4u64 {
@@ -235,11 +235,15 @@ fn random_token() -> String {
     token
 }
 
-struct Request {
-    method: String,
-    path: String,
-    query: HashMap<String, String>,
-    body: Vec<u8>
+pub(super) struct Request {
+    pub(super) method: String,
+    pub(super) path: String,
+    pub(super) query: HashMap<String, String>,
+    /// The query as sent, undecoded.
+    pub(super) raw_query: String,
+    /// Names in lower case.
+    pub(super) headers: HashMap<String, String>,
+    pub(super) body: Vec<u8>
 }
 
 fn handle(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
@@ -280,7 +284,7 @@ fn handle(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
     }
 }
 
-fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
+pub(super) fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
     if reader.read_line(&mut line)? == 0 {
@@ -291,13 +295,18 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let target = parts.next().unwrap_or("/").to_string();
 
     let mut length = 0usize;
+    let mut headers = HashMap::new();
     loop {
         let mut header = String::new();
         if reader.read_line(&mut header)? == 0 || header.trim().is_empty() {
             break;
         }
-        if let Some(value) = header.to_ascii_lowercase().strip_prefix("content-length:") {
-            length = value.trim().parse().unwrap_or(0);
+        if let Some((name, value)) = header.split_once(':') {
+            let name = name.trim().to_ascii_lowercase();
+            if name == "content-length" {
+                length = value.trim().parse().unwrap_or(0);
+            }
+            headers.insert(name, value.trim().to_string());
         }
     }
 
@@ -306,15 +315,18 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
         reader.read_exact(&mut body)?;
     }
 
-    let (path, query) = match target.split_once('?') {
-        Some((path, query)) => (path.to_string(), parse_query(query)),
-        None => (target, HashMap::new())
+    let (path, raw_query) = match target.split_once('?') {
+        Some((path, query)) => (path.to_string(), query.to_string()),
+        None => (target, String::new())
     };
+    let query = parse_query(&raw_query);
 
     Ok(Some(Request {
         method,
         path,
         query,
+        raw_query,
+        headers,
         body
     }))
 }
@@ -506,7 +518,7 @@ fn event_stream(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
     Ok(())
 }
 
-fn respond(
+pub(super) fn respond(
     stream: &mut TcpStream,
     status: u16,
     content_type: &str,
@@ -519,6 +531,8 @@ fn respond(
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
         _ => "OK"
     };
     write!(

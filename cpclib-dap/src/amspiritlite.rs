@@ -1390,6 +1390,9 @@ pub struct AmspiritLitePeer {
     /// program instead. An emulator the user started is left alone - it is
     /// theirs, and they arranged its window.
     launched: Option<std::process::Child>,
+    /// What serves the emulator this session started in a page (bemu's
+    /// relay, `cpclib_runner::web::bemu::BemuPage`): stopped with the session.
+    served: Option<Box<dyn std::any::Any + Send>>,
     /// What a step over armed and is waiting to come back to.
     ///
     /// Shared with the run-state poller, which is the thread that notices the
@@ -1657,6 +1660,7 @@ impl AmspiritLitePeer {
             resume_confirmation: Self::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
+            served: None,
             pending,
             outgoing,
             seq
@@ -1675,6 +1679,13 @@ impl AmspiritLitePeer {
     /// with the session.
     pub fn owning(mut self, child: std::process::Child) -> Self {
         self.launched = Some(child);
+        self
+    }
+
+    /// Keep what serves the emulator this session started in a page, so it
+    /// stops with the session.
+    pub fn serving(mut self, server: impl std::any::Any + Send) -> Self {
+        self.served = Some(Box::new(server));
         self
     }
 
@@ -2763,7 +2774,7 @@ impl Drop for AmspiritLitePeer {
         // An emulator the user keeps running must not be handed back with
         // breakpoints on addresses nothing can show them. A `disconnect` does
         // this too; this catches a session that ended some other way.
-        if self.launched.is_none() {
+        if self.launched.is_none() && self.served.is_none() {
             self.forget_temporary_breakpoints();
         }
 
@@ -5194,6 +5205,7 @@ mod tests {
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
             line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
+            served: None,
             pending,
             outgoing,
             seq: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0))

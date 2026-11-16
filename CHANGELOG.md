@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-bndbuild`, `cpclib-runner` add the fantams assembler, built from its sources on first use
 - `cpclib-bndbuild`, `cpclib-runner` download the bemu emulator from the releases of github.com/rgiot/bemu instead of building it from its sources
 - `cpclib-dap`, `cpclib-vscode` memory elsewhere than the CPU's paging: a view (`-mv`, `-dv`, `-sv`) reads through a chosen paging (the RAM configuration and page, the lower and upper ROMs, an upper ROM's number, a CPC+'s cartridge page and ASIC registers, what a write reaches), and shows a RAM bank, a ROM or a cartridge page by its location (`UPPER07:0000`, `B04:0000`, `CART01:0000`) where it runs; the panels have a paging form, the disassembly view a picker for them
+- `cpclib-dap` debug bemu in a VS Code tab by default: its web build (downloaded from bemu's releases, or `$CPCLIB_BEMU_WEB`) is served over loopback and the adapter relays bemu's debug API to the page; `"bemuWindow": true` starts the native bemu bndbuild installs, in its own window
+- `cpclib-runner` add `web::bemu`: bemu's web build installed from its releases, and the loopback server relaying its debug API to the page
 - `cpclib-bemu-api` add this crate: the types of bemu's debug API (requests, replies, JSON schemas), shared by bemu (the server) and `cpclib-dap` (a client)
 - `cpclib-dap` with bemu: every register can be set from the Registers view, memory writes follow the current banking, a raster breakpoint's stop is told with its name, and a request the emulator refuses is reported
 - `cpclib-bndbuild` add the `asm` command: one command line for basm, fantams, rasm, sjasmplus, uz80 and vasm. `assemble` is now an alias of `asm`, no longer of `basm`
