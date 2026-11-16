@@ -89,23 +89,154 @@ fn line_and_column(token: &impl MayHaveSpan) -> (u32, u32) {
 /// The edit that toggles a `breakpoint` on `line` of `document`, or `None`
 /// when the line cannot carry one or already says what is being asked.
 ///
+/// `condition` is the red dot's, when the editor says (`Some`): written as the
+/// directive's `CONDITION="..."`, kept in step with it - added, changed, or
+/// taken off (`Some(None)`) on a directive already there. Without it (`None`,
+/// an older editor) a directive already there is left as it is.
+///
 /// The single entry point the server calls: it parses, so callers do not need
 /// access to the analyzer's internals.
 pub(crate) fn breakpoint_edit(
     analyzer: &super::AssemblyAnalyzer,
     document: &Document,
     line: u32,
-    enable: bool
+    enable: bool,
+    condition: Option<Option<&str>>
 ) -> Option<TextEdit> {
     let listing = analyzer.parse_document(document).ok()?;
     let line_text = document.line(line as usize)?;
     let line_text = line_text.trim_end_matches(['\r', '\n']);
-    if enable {
-        add_breakpoint_edit(&listing, line_text, line, &directive(&analyzer.config()))
+    if !enable {
+        return remove_breakpoint_edit(&listing, line_text, line);
     }
-    else {
-        remove_breakpoint_edit(&listing, line_text, line)
+    match directive_start(&listing, line_text, line) {
+        Some(start) => set_condition_edit(line_text, line, start, condition?),
+        None => {
+            let config = analyzer.config();
+            let directive = match condition.flatten() {
+                Some(condition) => {
+                    format!("{} {} : ", config.breakpoint_directive, condition_argument(condition)?)
+                },
+                None => directive(&config)
+            };
+            add_breakpoint_edit(&listing, line_text, line, &directive)
+        }
     }
+}
+
+/// Where the `breakpoint` word of the directive on `line` starts, in bytes,
+/// if the line has one: from its token, or in a macro body (no tokens there)
+/// from the text.
+fn directive_start(listing: &LocatedListing, line_text: &str, line: u32) -> Option<usize> {
+    let token = super::token::flatten_listing(listing.iter())
+        .find(|t| line_and_column(*t).0 == line && t.is_breakpoint());
+    match token {
+        Some(token) => {
+            let start_byte = line_and_column(token).1 as usize;
+            let rest = line_text.get(start_byte..)?;
+            Some(start_byte + rest.len() - rest.trim_start().len())
+        },
+        None if inside_a_macro_body(&macro_body_ranges(listing), line) => {
+            directive_in_text(line_text).map(|(start, _)| start)
+        },
+        None => None
+    }
+}
+
+/// Where the directive starting at `start` ends, in bytes: its arguments
+/// included, up to a statement separator or a comment that is not inside a
+/// string (a name or a condition may hold either), trailing blanks left out.
+fn directive_end(line_text: &str, start: usize) -> usize {
+    let mut quoted = false;
+    let mut end = line_text.len();
+    for (offset, c) in line_text[start..].char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            ':' | ';' if !quoted => {
+                end = start + offset;
+                break;
+            },
+            _ => {}
+        }
+    }
+    start + line_text[start..end].trim_end().len()
+}
+
+/// The directive's arguments, split on the commas outside strings.
+fn directive_arguments(arguments: &str) -> Vec<String> {
+    let mut parts = vec![String::new()];
+    let mut quoted = false;
+    for c in arguments.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                parts.last_mut().unwrap().push(c);
+            },
+            ',' if !quoted => parts.push(String::new()),
+            _ => parts.last_mut().unwrap().push(c)
+        }
+    }
+    parts.into_iter().map(|part| part.trim().to_owned()).filter(|part| !part.is_empty()).collect()
+}
+
+/// Whether an argument is `CONDITION=...`.
+fn is_condition_argument(argument: &str) -> bool {
+    argument
+        .split_once('=')
+        .is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("condition"))
+}
+
+/// `CONDITION="..."` for `condition`, or `None` when it cannot be written (it
+/// holds a `"`, which would end the string).
+fn condition_argument(condition: &str) -> Option<String> {
+    (!condition.contains('"')).then(|| format!("CONDITION=\"{condition}\""))
+}
+
+/// The condition of a directive (`breakpoint ..., CONDITION="A = 5"`), if it
+/// has one.
+fn condition_of(directive: &str) -> Option<String> {
+    let arguments = directive.trim_start().split_once(char::is_whitespace)?.1;
+    directive_arguments(arguments)
+        .into_iter()
+        .find(|argument| is_condition_argument(argument))
+        .and_then(|argument| argument.split_once('=').map(|(_, value)| value.trim().trim_matches('"').to_owned()))
+        .filter(|condition| !condition.is_empty())
+}
+
+/// The directive with `condition` as its condition, or none: its other
+/// arguments kept, in their order.
+fn with_condition(directive: &str, condition: Option<&str>) -> Option<String> {
+    let directive = directive.trim();
+    let (word, arguments) = directive.split_once(char::is_whitespace).unwrap_or((directive, ""));
+    let mut arguments: Vec<String> =
+        directive_arguments(arguments).into_iter().filter(|argument| !is_condition_argument(argument)).collect();
+    if let Some(condition) = condition.filter(|condition| !condition.trim().is_empty()) {
+        arguments.push(condition_argument(condition.trim())?);
+    }
+    Some(if arguments.is_empty() { word.to_owned() } else { format!("{word} {}", arguments.join(", ")) })
+}
+
+/// The edit that gives the directive starting at `start` the condition
+/// `condition` (none: takes its condition off), or `None` when it already
+/// has it.
+fn set_condition_edit(line_text: &str, line: u32, start: usize, condition: Option<&str>) -> Option<TextEdit> {
+    let end = directive_end(line_text, start);
+    let directive = &line_text[start..end];
+    let wanted = condition.map(str::trim).filter(|condition| !condition.is_empty());
+    if condition_of(directive).as_deref() == wanted {
+        return None;
+    }
+    let new_text = with_condition(directive, wanted)?;
+    let at = |byte: usize| {
+        Position {
+            line,
+            character: crate::common::document::byte_offset_to_utf16_col(line_text, byte) as u32
+        }
+    };
+    Some(TextEdit {
+        range: Range { start: at(start), end: at(end) },
+        new_text
+    })
 }
 
 /// The edit that adds a `breakpoint` to `line`, or `None` when there is
@@ -179,26 +310,10 @@ pub(super) fn remove_breakpoint_edit(
     line_text: &str,
     line: u32
 ) -> Option<TextEdit> {
-    let token = super::token::flatten_listing(listing.iter())
-        .find(|t| line_and_column(*t).0 == line && t.is_breakpoint());
-
-    let (mut start, mut end) = match token {
-        Some(token) => {
-            let start_byte = line_and_column(token).1 as usize;
-            let rest = line_text.get(start_byte..)?;
-            let start = start_byte + rest.len() - rest.trim_start().len();
-            let after_word = rest.trim_start();
-            let word_len = after_word
-                .find(|c: char| !c.is_alphanumeric() && c != '_')
-                .unwrap_or(after_word.len());
-            (start, start + word_len)
-        },
-        // Inside a macro body there is no token to find it by.
-        None if inside_a_macro_body(&macro_body_ranges(listing), line) => {
-            directive_in_text(line_text)?
-        },
-        None => return None
-    };
+    // The whole directive, its arguments with it: `BREAKPOINT TYPE=MEM,
+    // ADDR=buffer` loses all of it, not only its first word.
+    let mut start = directive_start(listing, line_text, line)?;
+    let mut end = directive_end(line_text, start);
 
     // A separator on the right closes the line up after the removal.
     let tail = line_text.get(end..)?;
@@ -232,6 +347,30 @@ pub(super) fn remove_breakpoint_edit(
         },
         new_text: String::new()
     })
+}
+
+/// Every directive of `document`: its 0-based line and its condition, for the
+/// editor to draw its red dot with that condition - the dot's condition is
+/// written back into the directive when it changes.
+pub(crate) fn breakpoint_directives(
+    analyzer: &super::AssemblyAnalyzer,
+    document: &Document
+) -> Vec<(u32, Option<String>)> {
+    let Ok(listing) = analyzer.parse_document(document)
+    else {
+        return Vec::new();
+    };
+    breakpoint_lines(analyzer, document)
+        .into_iter()
+        .map(|line| {
+            let condition = document.line(line as usize).and_then(|text| {
+                let text = text.trim_end_matches(['\r', '\n']);
+                let start = directive_start(&listing, text, line)?;
+                condition_of(&text[start..directive_end(text, start)])
+            });
+            (line, condition)
+        })
+        .collect()
 }
 
 /// Every 0-based line of `document` carrying a `breakpoint` directive.
@@ -497,5 +636,81 @@ mod tests {
     #[test]
     fn removing_from_a_plain_line_does_nothing() {
         assert!(toggled("\tld a, 0\n", 0, false).is_none());
+    }
+
+    /// The line once `breakpoint_edit` is applied, with a red dot's condition.
+    fn edited(text: &str, line: u32, enable: bool, condition: Option<Option<&str>>) -> Option<String> {
+        let d = Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let edit = breakpoint_edit(&analyzer, &d, line, enable, condition)?;
+        let line_text = d.line(line as usize).unwrap_or_default();
+        let line_text = line_text.trim_end_matches(['\r', '\n']);
+        let start = edit.range.start.character as usize;
+        let end = edit.range.end.character as usize;
+        let mut out: String = line_text.chars().take(start).collect();
+        out.push_str(&edit.new_text);
+        out.extend(line_text.chars().skip(end));
+        Some(out)
+    }
+
+    /// An advanced directive comes off whole: leaving its arguments behind
+    /// would not assemble.
+    #[test]
+    fn removing_an_advanced_directive_takes_its_arguments_too() {
+        let program = "\tbreakpoint type=mem, access=write, addr=buffer, name=\"a: b\" ; why\n\tld a,1\nbuffer\n\tdefb 0\n";
+        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\t ; why"));
+        let program = "\tbreakpoint condition=\"A = 5\" : inc a\n";
+        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\tinc a"));
+        let program = "\tld a,0 : breakpoint #7f00, type=io\n";
+        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\tld a,0"));
+    }
+
+    /// A red dot with a condition writes a directive with it.
+    #[test]
+    fn a_red_dot_with_a_condition_writes_it() {
+        assert_eq!(
+            edited("\tinc a\n", 0, true, Some(Some("A = 5"))).as_deref(),
+            Some("\tBREAKPOINT CONDITION=\"A = 5\" : inc a")
+        );
+        // without one, the plain directive
+        assert_eq!(edited("\tinc a\n", 0, true, Some(None)).as_deref(), Some("\tBREAKPOINT : inc a"));
+        // a `"` cannot be written in the string: nothing is
+        assert_eq!(edited("\tinc a\n", 0, true, Some(Some("A = \"x\""))), None);
+    }
+
+    /// The dot's condition changed: the directive's follows - added, changed,
+    /// taken off - its other arguments kept.
+    #[test]
+    fn a_directives_condition_follows_its_red_dot() {
+        let plain = "\tbreakpoint : inc a\n";
+        assert_eq!(
+            edited(plain, 0, true, Some(Some("A = 5"))).as_deref(),
+            Some("\tbreakpoint CONDITION=\"A = 5\" : inc a")
+        );
+        let advanced = "\tbreakpoint type=mem, addr=buffer, condition=\"A = 3\", name=\"n\"\n\tinc a\nbuffer\n\tdefb 0\n";
+        assert_eq!(
+            edited(advanced, 0, true, Some(Some("A = 7"))).as_deref(),
+            Some("\tbreakpoint type=mem, addr=buffer, name=\"n\", CONDITION=\"A = 7\"")
+        );
+        assert_eq!(
+            edited(advanced, 0, true, Some(None)).as_deref(),
+            Some("\tbreakpoint type=mem, addr=buffer, name=\"n\"")
+        );
+        // the same condition: nothing to do
+        assert_eq!(edited(advanced, 0, true, Some(Some("A = 3"))), None);
+        // an editor that does not say: left alone
+        assert_eq!(edited(advanced, 0, true, None), None);
+    }
+
+    /// The directives of a file, each with its condition, for their red dots.
+    #[test]
+    fn directives_are_listed_with_their_conditions() {
+        let text = "\tbreakpoint : ld b, 1\n\tbreakpoint condition=\"A = 5\", name=\"x\"\n\tnop\n";
+        let d = Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        assert_eq!(
+            breakpoint_directives(&analyzer, &d),
+            vec![(0, None), (1, Some("A = 5".to_owned()))]
+        );
     }
 }

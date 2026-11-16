@@ -675,11 +675,38 @@ Example:
 Synopsis:
 
 ```
-BREAKPOINT [expression]
+BREAKPOINT [address] [, argument]...
 ```
 
+Arguments, in any order, each at most once (names in any letter case; the
+values of the three first may also be given alone, without their name):
+
+| Argument | Values | Default | Meaning |
+|---|---|---|---|
+| `TYPE=` | `EXEC`/`EXECUTE`, `MEM`/`MEMORY`, `IO` | `EXEC` | What is watched: an instruction run, a memory access, a port access |
+| `ACCESS=` | `R`/`READ`, `W`/`WRITE`, `RW`/`READWRITE` | `RW` | Which accesses (memory and ports) |
+| `RUNMODE=` | `STOP`/`STOPPER`, `WATCH`/`WATCHER` | `STOP` | Stop the emulation, or only report the hit |
+| `ADDR=`/`ADDRESS=` (or the first value) | an expression | the next instruction | The address or the port |
+| `MASK=` | 16 bits | `&FFFF` | The address bits compared (`&FF00` for a port decoded on its high byte) |
+| `SIZE=` | 1 to 65535 | 1 | How many addresses from `ADDR`, through `MASK` |
+| `VALUE=`, `VALMASK=` | 8 bits | 0, 0 | The value accessed, compared through `VALMASK` (0: any value) |
+| `CONDITION=` | a string | none | An ACE condition on the registers and memory (`"A = &55 AND NOT FlagZ"`): it only acts while it holds |
+| `NAME=` | a string | none | What the debugger calls it when it acts |
+| `STEP=` | a number | 0 | Hits let pass before it acts (the pass of ACE's breakpoint window) |
+
 Description:
-Insert a breakpoint in the generated snapshot for debugging. Optional expression can specify a condition.
+Insert a breakpoint in the generated snapshot for debugging (its REMU and
+WinAPE chunks), and in the program's breakpoints a debugger reads. Without any
+argument it stops on the instruction that follows; with arguments it is
+written in ACE's form, which bemu applies whole. An address may be a label
+defined further on.
+
+In VS Code, a `BREAKPOINT` directive shows as a red dot on its line. Clearing
+the dot removes the whole directive, arguments included; giving the dot a
+condition writes it as `CONDITION="..."` (changed or cleared with the dot).
+During a debug session the dot *is* the directive: clearing it takes the
+directive back for the session, and its condition, hit count or log message
+replace the directive's.
 
 Example:
 

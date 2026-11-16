@@ -99,9 +99,15 @@ tab, `bemuConfig` chooses the machine (`{"model": "6128", "ramKb": 576}`).
 **What works**
 
 - **Breakpoints** from the gutter, and from the program itself: every
-  `BREAKPOINT` directive basm assembled is armed too, and clearing the editor's
-  red dots does not clear them - you cannot un-write a line of source by
-  clicking.
+  `BREAKPOINT` directive basm assembled is armed too, in ACE's form when it
+  carries one (memory or port, read or write, mask, size, value, an ACE
+  condition, a pass with `STEP=`, `RUNMODE=WATCH` to only report) - bemu applies
+  them whole. Each directive shows as a red dot on its line, and that dot *is*
+  the directive: clearing it takes the directive back for the session, giving
+  it a condition, hit count or log message replaces the directive's. Outside a
+  session the gutter edits the source: a red dot writes a `BREAKPOINT`, its
+  condition becomes the directive's `CONDITION="..."`, and clearing it removes
+  the whole directive.
 - **Stepping** in, over, out - and *back*, which the emulator supports through
   its own checkpoints. On a line holding several instructions
   (`ld a,l : inc a : ld (.p),a`) the cursor lands on the **instruction**, not on

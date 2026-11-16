@@ -753,6 +753,238 @@ fn saved_manager_breakpoints_are_armed_at_launch() {
     adapter.finish();
 }
 
+/// A program whose `BREAKPOINT` directives are written on lines of their own,
+/// as the gutter shows them: a memory one watching the writes to `buffer`
+/// (line 4) and an execution one with a condition (line 9).
+const DIRECTIVES: &str = "\torg #4000\n\trun start\nstart\n\tbreakpoint type=mem, access=write, addr=buffer, value=3, valmask=#ff, name=\"third write\"\n\tld hl,buffer\n\tld a,0\nloop\n\tld (hl),a\n\tbreakpoint condition=\"A = 5\", name=\"fifth pass\"\n\tinc a\n\tjr loop\nbuffer\n\tdefb 0\n";
+/// Lines of `DIRECTIVES` (1-based).
+const LINE_MEM_DIRECTIVE: i64 = 4;
+const LINE_EXEC_DIRECTIVE: i64 = 9;
+const LINE_JR_LOOP: i64 = 11;
+
+/// The red dots VS Code shows for a file's directives (one on each
+/// directive's line), the gutter's own besides.
+fn red_dots(adapter: &mut Adapter, source: &Path, dots: Value) -> Value {
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": dots }))
+}
+
+/// `DIRECTIVES` opened in VS Code: a red dot on each directive's line.
+fn opened(adapter: &mut Adapter, source: &Path) {
+    red_dots(adapter, source, json!([{ "line": LINE_MEM_DIRECTIVE }, { "line": LINE_EXEC_DIRECTIVE }]));
+}
+
+/// The red dot on a directive's line is that directive: a memory directive
+/// stops on the write it describes, not on the instruction after its line,
+/// and an execution one keeps its condition.
+#[test]
+fn a_red_dot_on_a_directive_is_the_directive() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", DIRECTIVES);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    let placed = red_dots(&mut adapter, &source, json!([{ "line": LINE_MEM_DIRECTIVE }, { "line": LINE_EXEC_DIRECTIVE }]));
+    for dot in placed["body"]["breakpoints"].as_array().unwrap() {
+        assert_eq!(dot["verified"], true, "{placed}");
+    }
+    adapter.request("configurationDone", json!({}));
+
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "data breakpoint", "{stop}");
+    assert!(stop["body"]["description"].as_str().unwrap().contains("third write: write of #03"), "{stop}");
+    adapter.request("continue", json!({ "threadId": 1 }));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 5, "the directive's condition holds: {stop}");
+    adapter.finish();
+}
+
+/// Clearing a directive's red dot takes the directive back; setting it again
+/// brings it back - memory and execution ones alike. A red dot elsewhere in
+/// the file, from an editor that shows no dot for directives, leaves them
+/// armed (see `the_breakpoints_view_lists_what_bemu_holds`).
+#[test]
+fn a_directive_is_removed_and_restored_with_its_red_dot() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", DIRECTIVES);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    opened(&mut adapter, &source);
+    // both directives taken back: only the gutter's own dot on `jr loop` stops
+    red_dots(&mut adapter, &source, json!([{ "line": LINE_JR_LOOP }]));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(adapter.line(), LINE_JR_LOOP, "no directive stopped first: {stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 1, "the first pass: {stop}");
+
+    let overview = adapter.request("cpclib/breakpoints", json!({}));
+    let kinds = overview["body"]["kinds"].as_array().unwrap();
+    let directives = kinds.iter().find(|k| k["id"] == "directive").unwrap()["entries"].as_array().unwrap().clone();
+    assert!(directives.iter().all(|d| d["status"] == "inactive"), "{overview}");
+
+    // the execution directive back, and the dot on `jr loop` gone
+    red_dots(&mut adapter, &source, json!([{ "line": LINE_EXEC_DIRECTIVE }]));
+    adapter.request("continue", json!({ "threadId": 1 }));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 5, "the directive, with its condition: {stop}");
+    adapter.finish();
+}
+
+/// A condition or a hit count given to a directive's red dot replaces the
+/// directive's own for the session.
+#[test]
+fn a_directives_red_dot_changes_its_condition() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", DIRECTIVES);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    opened(&mut adapter, &source);
+    // the memory directive's dot cleared, the execution one's given a condition
+    red_dots(&mut adapter, &source, json!([{ "line": LINE_EXEC_DIRECTIVE, "condition": "A = 7" }]));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(hex_value(&adapter.register("A")), 7, "the dot's condition: {stop}");
+
+    // changed again, live: a hit count instead (the condition back to the directive's)
+    red_dots(&mut adapter, &source, json!([{ "line": LINE_EXEC_DIRECTIVE, "hitCondition": "2" }]));
+    adapter.request("continue", json!({ "threadId": 1 }));
+    let stop = adapter.stopped();
+    // `A = 5` holds once every 256 passes: its second hit is A = 5 again, a lap later
+    assert_eq!(hex_value(&adapter.register("A")), 5, "{stop}");
+    adapter.finish();
+}
+
+/// What the Debug Console was told, so far.
+fn console(adapter: &Adapter) -> String {
+    adapter
+        .seen
+        .iter()
+        .filter(|m| m["event"] == "output")
+        .filter_map(|m| m["body"]["output"].as_str())
+        .collect()
+}
+
+/// A `RUNMODE=WATCH` directive reports each access it describes in the
+/// Debug Console, and the program runs on.
+#[test]
+fn a_watch_directive_reports_without_stopping() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld hl,buffer\n\tld a,0\nloop\n\tld (hl),a\n\tinc a\n\tjr loop\n\
+         \tbreakpoint type=mem, access=write, runmode=watch, addr=buffer, name=\"buffer write\"\nbuffer\n\tdefb 0\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    // the directive's dot (line 10, as the gutter shows it), and `jr loop`
+    // (line 9) from its third pass: two writes have gone by
+    red_dots(&mut adapter, &source, json!([{ "line": 10 }, { "line": 9, "hitCondition": "3" }]));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(adapter.line(), 9, "{stop}");
+    let told = console(&adapter);
+    assert!(told.contains("buffer write: write of #00") && told.contains("buffer write: write of #01"), "{told}");
+    adapter.finish();
+}
+
+/// A directive's `STEP=` lets that many hits pass before it acts, as the
+/// manager's pass does.
+#[test]
+fn a_directive_step_lets_hits_pass() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld a,0\nloop\n\tbreakpoint step=2, name=\"third pass\"\n\tinc a\n\tjr loop\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(hex_value(&adapter.register("A")), 2, "two passes let through: {stop}");
+    assert!(!console(&adapter).contains("not applied"), "{}", console(&adapter));
+    adapter.finish();
+}
+
+/// A log message given to a directive's red dot: the directive reports it
+/// instead of stopping, when it fires (its own condition kept).
+#[test]
+fn a_directives_red_dot_logs() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program("main.asm", DIRECTIVES);
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    opened(&mut adapter, &source);
+    // the memory directive's dot cleared, the execution one's made to log
+    red_dots(&mut adapter, &source, json!([{ "line": LINE_EXEC_DIRECTIVE, "logMessage": "fifth pass, A={A}" }]));
+    adapter.request("configurationDone", json!({}));
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !console(&adapter).contains("fifth pass, A=#05") {
+        assert!(Instant::now() < deadline, "no log line: {}", console(&adapter));
+        let _ = adapter.wait("output", |m| m["event"] == "output" || m["event"] == "stopped");
+    }
+    assert!(!adapter.seen.iter().any(|m| m["event"] == "stopped"), "a log point does not stop: {}", adapter.transcript());
+    adapter.finish();
+}
+
+/// A manager breakpoint changed takes effect at once, and one removed stops
+/// nothing any more.
+#[test]
+fn a_manager_breakpoint_is_changed_then_removed() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld bc,#7f10\n\tld a,#54\nloop\n\tout (c),c\n\tout (c),a\n\tinc a\n\tand #5f\n\tor #40\n\tjr loop\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    let form = |condition: &str| json!({ "kind": "io", "address": "&7F00", "mask": "&FF00", "access": "w", "value": "&40",
+                                          "valmask": "&C0", "condition": condition, "name": "ink" });
+    let made = adapter.request("cpclib/managerSet", json!({ "breakpoint": form("A = &56") }));
+    let id = made["body"]["id"].clone();
+    // changed before it is hit: the change is what stops
+    let mut changed = form("A = &57");
+    changed["id"] = id.clone();
+    adapter.request("cpclib/managerSet", json!({ "breakpoint": changed }));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert!(stop["body"]["description"].as_str().unwrap().contains("ink: write of #57"), "{stop}");
+    let listed = adapter.request("cpclib/breakpointManager", json!({}));
+    assert_eq!(listed["body"]["tabs"]["io"].as_array().unwrap().len(), 1, "one breakpoint, changed: {listed}");
+
+    // removed: the next stop is the red dot's, a full lap later than an ink
+    adapter.request("cpclib/managerRemove", json!({ "id": id }));
+    red_dots(&mut adapter, &source, json!([{ "line": 9 }]));
+    adapter.request("continue", json!({ "threadId": 1 }));
+    let stop = adapter.stopped();
+    assert_eq!((stop["body"]["reason"].as_str(), adapter.line()), (Some("breakpoint"), 9), "{stop}");
+    let listed = adapter.request("cpclib/breakpointManager", json!({}));
+    assert!(listed["body"]["tabs"]["io"].as_array().unwrap().is_empty(), "{listed}");
+    let held = adapter.request("cpclib/emulatorBreakpoints", json!({}));
+    assert!(!held["body"]["advanced"].as_array().unwrap().iter().any(|b| b["owner"] == "manager"), "gone from bemu: {held}");
+    adapter.finish();
+}
+
 /// A browser showing bemu's page, closed with the test.
 struct Browser {
     child: Child,

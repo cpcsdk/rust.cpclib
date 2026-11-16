@@ -23,6 +23,12 @@ import { isDebugSessionActive } from '../debug/launch';
  *
  * The server decides *where* on the line the directive goes: in basm, telling a
  * label from a mnemonic needs a parse, not a regex.
+ *
+ * A red dot's condition is the directive's `CONDITION="..."` (ACE's language,
+ * as the debugger applies it): set, changed or cleared on the dot, the
+ * directive follows. Removing the dot removes the whole directive, whatever
+ * it carries. A hit count or a log message has no directive attribute: it
+ * lasts as long as the dot.
  */
 async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): Promise<void> {
     // During a debug session a red dot is a *live* breakpoint: VS Code sends it
@@ -46,13 +52,14 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
         return;
     }
 
-    const wanted: { uri: vscode.Uri; line: number; enable: boolean }[] = [];
+    const wanted: { uri: vscode.Uri; line: number; enable: boolean; condition: string | null }[] = [];
     const collect = (breakpoints: readonly vscode.Breakpoint[], enable: boolean) => {
         for (const breakpoint of breakpoints) {
             if (!(breakpoint instanceof vscode.SourceBreakpoint)) { continue; }
             const uri = breakpoint.location.uri;
             if (!uri.fsPath.toLowerCase().endsWith('.asm')) { continue; }
-            wanted.push({ uri, line: breakpoint.location.range.start.line, enable });
+            const condition = breakpoint.condition?.trim() || null;
+            wanted.push({ uri, line: breakpoint.location.range.start.line, enable, condition });
         }
     };
     collect(event.added, true);
@@ -68,7 +75,7 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
     }
 
     const edit = new vscode.WorkspaceEdit();
-    for (const { uri, line, enable } of wanted) {
+    for (const { uri, line, enable, condition } of wanted) {
         try {
             // The document must be open for the server to have parsed it.
             await vscode.workspace.openTextDocument(uri);
@@ -77,7 +84,7 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
                 newText: string;
             } | null>(
                 'workspace/executeCommand',
-                { command: 'cpclib.breakpointEdit', arguments: [uri.toString(), line, enable] },
+                { command: 'cpclib.breakpointEdit', arguments: [uri.toString(), line, enable, condition] },
             );
             if (!textEdit) { continue; }
             edit.replace(
@@ -121,19 +128,21 @@ async function showExistingBreakpoints(document: vscode.TextDocument): Promise<v
         return;
     }
 
-    let lines: number[] = [];
+    // Each directive with its condition, for its dot to carry it: a dot
+    // without would write "no condition" back the first time it changes.
+    let directives: { line: number; condition: string | null }[] = [];
     try {
-        lines = await client.sendRequest<number[]>(
+        directives = await client.sendRequest<{ line: number; condition: string | null }[]>(
             'workspace/executeCommand',
-            { command: 'cpclib.breakpointLines', arguments: [document.uri.toString()] },
+            { command: 'cpclib.breakpointDirectives', arguments: [document.uri.toString()] },
         ) ?? [];
     } catch (err) {
         client.outputChannel.appendLine(
-            `[breakpoints] cpclib.breakpointLines failed for ${document.uri.fsPath}: ${err}`,
+            `[breakpoints] cpclib.breakpointDirectives failed for ${document.uri.fsPath}: ${err}`,
         );
         return;
     }
-    if (lines.length === 0) {
+    if (directives.length === 0) {
         return;
     }
 
@@ -145,15 +154,17 @@ async function showExistingBreakpoints(document: vscode.TextDocument): Promise<v
             .filter(b => b.location.uri.toString() === document.uri.toString())
             .map(b => b.location.range.start.line),
     );
-    const missing = lines.filter(line => !known.has(line));
+    const missing = directives.filter(({ line }) => !known.has(line));
     if (missing.length === 0) {
         return;
     }
 
     adoptingExistingBreakpoints = true;
     try {
-        vscode.debug.addBreakpoints(missing.map(line => new vscode.SourceBreakpoint(
+        vscode.debug.addBreakpoints(missing.map(({ line, condition }) => new vscode.SourceBreakpoint(
             new vscode.Location(document.uri, new vscode.Position(line, 0)),
+            true,
+            condition ?? undefined,
         )));
     } finally {
         adoptingExistingBreakpoints = false;

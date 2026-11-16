@@ -117,8 +117,10 @@ impl Advanced {
         let whole = |entry: &Value, name: String| {
             let mut body = entry.clone();
             if let Some(fields) = body.as_object_mut() {
+                // ours, not bemu's: what the breakpoint is, what its log point says
                 fields.remove("label");
                 fields.remove("id");
+                fields.remove("logMessage");
             }
             body["name"] = json!(name);
             body
@@ -137,6 +139,12 @@ impl Advanced {
 
     /// The label of a breakpoint sent whole (a directive's, the manager's)
     /// by its name.
+    /// A directive sent whole, by its name.
+    fn program_entry(&self, name: &str) -> Option<&Value> {
+        let index = name.strip_prefix(&format!("{OURS}program:"))?.parse::<usize>().ok()?;
+        self.program.get(index)
+    }
+
     fn program_label(&self, name: &str) -> Option<&str> {
         if let Some(id) = name.strip_prefix(&format!("{OURS}manager:")).and_then(|id| id.parse::<u64>().ok()) {
             let entry = self.manager.iter().find(|e| e.get("id").and_then(Value::as_u64) == Some(id))?;
@@ -215,6 +223,10 @@ impl Advanced {
         if let Some(index) = name.strip_prefix(&format!("{OURS}exec:")) {
             let entry = self.exec.get(index.parse::<usize>().ok()?)?;
             let message = entry.get("logMessage").and_then(Value::as_str)?;
+            return Some(format!("{}\n", interpolate(message, event)));
+        }
+        // a directive whose red dot logs: its message
+        if let Some(message) = self.program_entry(name).and_then(|entry| entry.get("logMessage")).and_then(Value::as_str) {
             return Some(format!("{}\n", interpolate(message, event)));
         }
         if let Some(label) = self.program_label(name) {

@@ -1555,6 +1555,7 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.assembleFile",
     "cpclib.breakpointEdit",
     "cpclib.breakpointLines",
+    "cpclib.breakpointDirectives",
     "cpclib.getDebuggableRules",
     "cpclib.musicPlay",
     "cpclib.musicBuildDsk",
@@ -4367,6 +4368,9 @@ impl LanguageServer for CpcLspBackend {
                 .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()));
             let line = args.next().and_then(|v| v.as_u64()).map(|l| l as u32);
             let enable = args.next().and_then(|v| v.as_bool()).unwrap_or(true);
+            // the red dot's condition (null: none), from an editor that says
+            let condition: Option<Option<String>> =
+                args.next().map(|v| v.as_str().map(str::to_owned));
             let (Some(uri), Some(line)) = (uri, line)
             else {
                 return Ok(None);
@@ -4379,7 +4383,8 @@ impl LanguageServer for CpcLspBackend {
                 &self.asm_analyzer,
                 &document,
                 line,
-                enable
+                enable,
+                condition.as_ref().map(|condition| condition.as_deref())
             );
             return Ok(edit.map(|e| serde_json::json!(e)));
         }
@@ -4435,6 +4440,29 @@ impl LanguageServer for CpcLspBackend {
                 })
                 .collect();
             return Ok(Some(serde_json::json!(rules)));
+        }
+
+        // Every directive of a file with its condition (`[{line, condition}]`),
+        // for the editor to draw each red dot with it. Argument: `[uri]`.
+        if params.command == "cpclib.breakpointDirectives" {
+            let Some(uri) = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()))
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            let directives: Vec<serde_json::Value> =
+                crate::basm::breakpoint::breakpoint_directives(&self.asm_analyzer, &document)
+                    .into_iter()
+                    .map(|(line, condition)| serde_json::json!({ "line": line, "condition": condition }))
+                    .collect();
+            return Ok(Some(serde_json::json!(directives)));
         }
 
         if params.command == "cpclib.breakpointLines" {
