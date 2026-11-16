@@ -83,18 +83,25 @@ const OUTER_FRAME_NOTE: &str = "the CPU's registers belong to the innermost fram
 /// What `-help` prints.
 const CONSOLE_HELP: &str = "\
 CPC debug console commands:
-  -mv [address|label] [count] [config]
+  -mv [address|label|location] [count] [paging]
                                 open a memory view (defaults to PC, and then
                                 follows it, like -dv; count defaults to 64).
-                                config is an optional RAM configuration
-                                (0-7, i.e. C0-C7) to read under instead of
-                                whatever is live right now - _ or unset
-                                means the CPU's own live view (the default).
-                                mode:page (e.g. 4:2) also picks an explicit
-                                extended-RAM page, for boards with more
-                                than the base 128K's own one extra page -
-                                a bare mode number leaves the live page
-                                alone. Only AMSpiriT Lite can honour it
+                                paging reads the CPU's addresses another way
+                                than they are paged now (_ or unset: as now),
+                                each part left out as it is now: C0-C7 (or
+                                &C0-&FF) the RAM configuration, Pn its page,
+                                L/-L the lower ROM paged or not, U/-U the
+                                upper ROM, Un upper ROM n, on a CPC+ LPn the
+                                lower ROM's cartridge page, LBn its block,
+                                R/-R the ASIC registers, W what a write
+                                reaches - comma-separated: C4,P1,-L or U7
+                                (4 and 4:2 still mean C4 and C4,P2). A
+                                location names a space instead and is shown
+                                where it runs: B04:0010 (RAM bank 4; also
+                                P0B0:0010), LOWER:0038, UPPER07:0000 (at
+                                &C000), CART01:0100 (a CPC+ cartridge page),
+                                ASIC:0000. bemu reads through any paging;
+                                AMSpiriT Lite through a RAM configuration
   -mv <register> [count] [config]
                                 ...or a register name - a snapshot of where
                                 it points right now, e.g. -mv HL
@@ -107,11 +114,10 @@ CPC debug console commands:
   -mv all,follow [count] [config]
                                 ...one view per pointer register (PC, SP,
                                 HL, DE, BC, IX, IY) at once
-  -dv [address|label] [count] [config]
+  -dv [address|label|location] [count] [paging]
                                 disassemble memory (defaults to PC, and then
                                 follows it); rows link to your source.
-                                config is the same RAM-configuration
-                                override -mv's own [config] argument is
+                                location and paging are -mv's
   -chips                        CRTC, Gate Array, PSG and PPI, with counters
   -crtcview                     open a CRTC panel, flagging register
                                 combinations known to lose sync or mistime a
@@ -153,12 +159,10 @@ CPC debug console commands:
                                 'CPC' (1: plain sequential bytes, wrapped at
                                 the full 64K space, `rowheight` a pure
                                 layout value with no effect on which bytes
-                                are read); `config` is the same RAM-
-                                configuration override -mv's own [config]
-                                argument is - _ or unset for the live/CPU
-                                view (the default), 0-7 (C0-C7) or mode:page
-                                (e.g. 4:2) to render what a chosen
-                                configuration would show instead
+                                are read); `config` is -mv's [paging]
+                                - _ or unset for the CPU's own (the
+                                default), C4, C4,P2, -L... to render what
+                                another paging would show instead
   -frame [whole] [last] [alone] the emulator's own picture, in a panel kept
                                 up to date at every stop, with the beam
                                 marked: by default the visible area, the
@@ -445,25 +449,31 @@ struct Timer {
     exact: bool
 }
 
-/// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument,
-/// parsed - an explicit RAM configuration ("C0"-"C7", real hardware's own
-/// MMR mode bits) to interpret a read under instead of whatever is live
-/// right now, with an optional explicit extended-RAM page too.
+/// `-mv`/`-dv`/`-sv`'s optional trailing paging argument, parsed: how the view reads the CPU's
+/// addresses instead of as they are paged now - a RAM configuration and page, the ROMs paged or
+/// not, an upper ROM's number, on a CPC+ the lower ROM's cartridge page and the ASIC's registers,
+/// what a write reaches (see [`cpclib_bemu_api::Paging`]: `C4`, `C4,P2`, `U7`, `-L`, `W`; the
+/// older `4` and `4:2` are `C4` and `C4,P2`). A view that names a location in a space
+/// (`UPPER07:0000`) gets the paging that shows it ([`crate::protocol::view_of_location`]).
 ///
-/// `page: None` means "the live `ram_page`", the same default the whole
-/// override being absent means for `mode`. Reported live: a board with
-/// more than the base 128K's own one extra page puts useful data in pages
-/// the "C0"-"C7" names alone never address, since those names only ever
-/// vary the mode - `mode` and `page` are genuinely independent MMR fields
-/// (`ppp`/`M b b` in the register's own bit layout), and picking a
-/// configuration by name alone silently pins the read to whatever page
-/// happens to be live. See `amspiritlite::physical_bank_for_config`'s own
-/// doc comment for why an override needs a whole separate read path rather
-/// than adjusting the address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ConfigOverride {
-    mode: u8,
-    page: Option<u32>
+/// bemu reads through any of them; AMSpiriT Lite through a RAM view alone
+/// ([`crate::protocol::ram_view`]):
+/// reported live, a board with more than the base 128K's one extra page puts useful data in
+/// pages the configuration alone never reaches, hence the page.
+type ConfigOverride = cpclib_bemu_api::Paging;
+
+/// What a `readMemory` through `paging` carries: the paging (bemu reads through it), and the RAM
+/// configuration and page when it is a RAM view (AMSpiriT Lite).
+fn paging_config(paging: Option<ConfigOverride>) -> Option<u8> {
+    paging.as_ref().and_then(crate::protocol::ram_view).map(|(config, _)| config)
+}
+
+fn paging_page(paging: Option<ConfigOverride>) -> Option<u8> {
+    paging.as_ref().and_then(crate::protocol::ram_view).and_then(|(_, page)| page)
+}
+
+fn paging_text(paging: Option<ConfigOverride>) -> Option<String> {
+    paging.map(|paging| paging.to_string())
 }
 
 /// A memory view waiting for the bytes it asked for.
@@ -3142,7 +3152,13 @@ impl<P: DapPeer> Session<P> {
             palette: palette_override,
             encoding: encoding_override
         } = crate::inspect::parse_screen_view_overrides(arguments);
-        let config_override = parse_config_override(arguments.get(7));
+        let config_override = match parse_config_override(arguments.get(7)) {
+            Ok(paging) => paging,
+            Err(problem) => {
+                let seq = self.next_seq();
+                return Ok(vec![protocol::failure(request, &problem, seq)]);
+            }
+        };
         // Remembered so `refresh_screen_view` can keep re-issuing this exact
         // request on every stop - every `-sv`, typed or from the panel's own
         // controls, replaces whichever view was open before; there is only
@@ -3311,8 +3327,9 @@ impl<P: DapPeer> Session<P> {
             json!({
                 "memoryReference": address_reference(0),
                 "count": 0x10000u32,
-                "config": config_override.map(|c| c.mode),
-                "page": config_override.and_then(|c| c.page)
+                "config": paging_config(config_override),
+                "page": paging_page(config_override),
+                "paging": paging_text(config_override)
             }),
             Purpose::ScreenViewMemory
         ) {
@@ -3412,7 +3429,7 @@ impl<P: DapPeer> Session<P> {
             row_height_override,
             palette_override,
             encoding_override,
-            config_override.map(|c| (c.mode, c.page)),
+            config_override.as_ref(),
             regs,
             mode,
             palette,
@@ -4241,7 +4258,10 @@ impl<P: DapPeer> Session<P> {
                 .and_then(|count| parse_number(count))
                 .unwrap_or(0x40)
                 .clamp(1, 0x1000) as usize;
-            let config_override = parse_config_override(arguments.get(2));
+            let config_override = match parse_config_override(arguments.get(2)) {
+                Ok(paging) => paging,
+                Err(problem) => return Ok(vec![protocol::failure(request, &problem, seq)])
+            };
             let mut opened = 0;
             for name in POINTER_REGISTERS {
                 let Some(&value) = self.last_registers.get(name)
@@ -4289,8 +4309,9 @@ impl<P: DapPeer> Session<P> {
                     json!({
                         "memoryReference": address_reference(value),
                         "count": count,
-                        "config": config_override.map(|c| c.mode),
-                        "page": config_override.and_then(|c| c.page)
+                        "config": paging_config(config_override),
+                        "page": paging_page(config_override),
+                        "paging": paging_text(config_override)
                     }),
                     Purpose::MemoryView
                 )?;
@@ -4323,8 +4344,15 @@ impl<P: DapPeer> Session<P> {
             Follow(String),
             Snapshot(String)
         }
+        // A location in a space (`UPPER07:0000`): shown where it runs, through the paging that
+        // puts it there.
+        let location = arguments
+            .first()
+            .and_then(|where_| crate::protocol::view_of_location_text(where_));
+        let location_paging = location.map(|(_, paging)| paging);
         let register_use = match arguments.first() {
             None => Some(RegisterUse::Follow("PC".to_string())),
+            Some(_) if location.is_some() => None,
             Some(where_) => {
                 match where_.split_once(',') {
                     Some((name, suffix)) if suffix.eq_ignore_ascii_case("follow") => {
@@ -4386,6 +4414,9 @@ impl<P: DapPeer> Session<P> {
                 }
             }
         }
+        else if let Some((address, _)) = location {
+            (MemoryAnchor::Fixed(address), address)
+        }
         else {
             // A label is as good an answer as a number, and rather more
             // likely to be what someone wants to look at.
@@ -4408,7 +4439,18 @@ impl<P: DapPeer> Session<P> {
             .and_then(|count| parse_number(count))
             .unwrap_or(0x40)
             .clamp(1, 0x1000) as usize;
-        let config_override = parse_config_override(arguments.get(2));
+        let config_override = match (parse_config_override(arguments.get(2)), location_paging) {
+            (Ok(None), paging) => paging,
+            (Ok(Some(_)), Some(_)) => {
+                return Ok(vec![protocol::failure(
+                    request,
+                    "a location in a space (B04:0010, UPPER07:0000...) names its own paging: leave the paging out",
+                    seq
+                )]);
+            },
+            (Ok(paging), None) => paging,
+            (Err(problem), _) => return Ok(vec![protocol::failure(request, &problem, seq)])
+        };
 
         let label = match &anchor {
             MemoryAnchor::Register(name) => Some(name.clone()),
@@ -4456,8 +4498,9 @@ impl<P: DapPeer> Session<P> {
             json!({
                 "memoryReference": address_reference(address),
                 "count": count,
-                "config": config_override.map(|c| c.mode),
-                "page": config_override.and_then(|c| c.page)
+                "config": paging_config(config_override),
+                "page": paging_page(config_override),
+                "paging": paging_text(config_override)
             }),
             Purpose::MemoryView
         )?;
@@ -4486,6 +4529,11 @@ impl<P: DapPeer> Session<P> {
         // reissue "still following PC" alongside an explicit trailing
         // count/config argument, which position alone could not otherwise
         // say without an address in front of them.
+        // A location in a space: shown where it runs, through the paging that puts it there.
+        let location = arguments
+            .first()
+            .and_then(|where_| crate::protocol::view_of_location_text(where_));
+        let location_paging = location.map(|(_, paging)| paging);
         let (anchor, address) = match arguments.first().filter(|a| **a != "_") {
             None => {
                 let Some(pc) = self.last_pc
@@ -4500,7 +4548,10 @@ impl<P: DapPeer> Session<P> {
                 (DisassemblyAnchor::ProgramCounter, pc as u32)
             },
             Some(where_) => {
-                let address = parse_number(where_).or_else(|| self.map.address_of_symbol(where_));
+                let address = location
+                    .map(|(address, _)| address)
+                    .or_else(|| parse_number(where_))
+                    .or_else(|| self.map.address_of_symbol(where_));
                 let Some(address) = address
                 else {
                     let mut detail = format!("'{where_}' is neither an address nor a label");
@@ -4519,7 +4570,18 @@ impl<P: DapPeer> Session<P> {
             .and_then(|count| parse_number(count))
             .unwrap_or(32)
             .clamp(1, 512) as i64;
-        let config_override = parse_config_override(arguments.get(2));
+        let config_override = match (parse_config_override(arguments.get(2)), location_paging) {
+            (Ok(None), paging) => paging,
+            (Ok(Some(_)), Some(_)) => {
+                return Ok(vec![protocol::failure(
+                    request,
+                    "a location in a space (B04:0010, UPPER07:0000...) names its own paging: leave the paging out",
+                    seq
+                )]);
+            },
+            (Ok(paging), None) => paging,
+            (Err(problem), _) => return Ok(vec![protocol::failure(request, &problem, seq)])
+        };
 
         let label = self.map.symbol_at(address).map(str::to_owned);
         // Replaces whatever was open: there is one panel, and `-dv` elsewhere
@@ -4575,8 +4637,9 @@ impl<P: DapPeer> Session<P> {
             json!({
                 "memoryReference": address_reference(address),
                 "count": bytes,
-                "config": config_override.map(|c| c.mode),
-                "page": config_override.and_then(|c| c.page)
+                "config": paging_config(config_override),
+                "page": paging_page(config_override),
+                "paging": paging_text(config_override)
             }),
             Purpose::DisassemblyView
         )
@@ -4979,8 +5042,9 @@ impl<P: DapPeer> Session<P> {
                 // So the panel's own config picker stays in sync with what
                 // this frame was actually read under, the same way the
                 // screen viewer's own encoding/palette selectors do.
-                "config": view.config_override.map(|c| c.mode),
-                "page": view.config_override.and_then(|c| c.page)
+                "config": view.config_override.and_then(|c| c.ram_config),
+                "page": view.config_override.and_then(|c| c.page),
+                "paging": paging_text(view.config_override)
             }),
             seq
         );
@@ -5037,10 +5101,17 @@ impl<P: DapPeer> Session<P> {
                 // rather than blanking, and nothing is said.
                 return Vec::new();
             };
+            // the emulator's own reason, when it gave one (a paging it cannot read through)
+            let why = response
+                .get("message")
+                .and_then(Value::as_str)
+                .filter(|_| response.get("success") == Some(&json!(false)))
+                .map(|why| format!(": {why}"))
+                .unwrap_or_default();
             let seq = self.next_seq();
             return vec![protocol::failure(
                 &request,
-                &format!("{} could not be read", address_reference(view.address)),
+                &format!("{} could not be read{why}", address_reference(view.address)),
                 seq
             )];
         }
@@ -5101,8 +5172,9 @@ impl<P: DapPeer> Session<P> {
                 // So the panel's own config picker stays in sync with what
                 // this frame was actually read under, the same way the
                 // screen viewer's own encoding/palette selectors do.
-                "config": view.config_override.map(|c| c.mode),
-                "page": view.config_override.and_then(|c| c.page)
+                "config": view.config_override.and_then(|c| c.ram_config),
+                "page": view.config_override.and_then(|c| c.page),
+                "paging": paging_text(view.config_override)
             }),
             seq
         );
@@ -5181,8 +5253,9 @@ impl<P: DapPeer> Session<P> {
                 json!({
                     "memoryReference": address_reference(address),
                     "count": count,
-                    "config": config_override.map(|c| c.mode),
-                    "page": config_override.and_then(|c| c.page)
+                    "config": paging_config(config_override),
+                    "page": paging_page(config_override),
+                    "paging": paging_text(config_override)
                 }),
                 Purpose::MemoryView
             );
@@ -5247,8 +5320,9 @@ impl<P: DapPeer> Session<P> {
                 json!({
                     "memoryReference": address_reference(address),
                     "count": count,
-                    "config": config_override.map(|c| c.mode),
-                    "page": config_override.and_then(|c| c.page)
+                    "config": paging_config(config_override),
+                    "page": paging_page(config_override),
+                    "paging": paging_text(config_override)
                 }),
                 Purpose::MemoryView
             );
@@ -6603,9 +6677,7 @@ impl<P: DapPeer> Session<P> {
         seq: i64
     ) -> std::io::Result<Vec<Value>> {
         let maximum = crate::amspiritlite::register_maximum(name);
-        let Some(value) = parse_number(wanted)
-            .or_else(|| self.map.address_of_symbol(wanted))
-            .and_then(|value| u32::try_from(value).ok())
+        let Some(value) = parse_number(wanted).or_else(|| self.map.address_of_symbol(wanted))
         else {
             return Ok(vec![protocol::failure(
                 request,
@@ -7527,31 +7599,25 @@ fn same_file(left: &Path, right: &Path) -> bool {
 
 pub(crate) use crate::text::parse_number;
 
-/// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument -
-/// `_`, blank, or unset all mean "the CPU's own live view" (`None`, the
-/// ordinary default, the same placeholder convention `-sv`'s own overrides
-/// already use). `0`-`7` alone is an explicit RAM configuration ("C0"-"C7")
-/// with the live extended-RAM page left alone; `mode:page` (e.g. `4:2`)
-/// also picks an explicit page - reported live as needed on hardware with
-/// more than the base 128K's own one extra page, where "C0"-"C7" alone
-/// cannot reach anything past whatever page happens to be live, since
-/// those names only ever vary the mode. See `ConfigOverride`'s own doc
-/// comment and `amspiritlite::physical_bank_for_config`'s for what happens
-/// with the result.
-fn parse_config_override(text: Option<&&str>) -> Option<ConfigOverride> {
-    let text = text?.trim();
-    if text.is_empty() || text == "_" {
-        return None;
-    }
-    let (mode_text, page_text) = text.split_once(':').unwrap_or((text, ""));
-    let mode = mode_text.parse::<u8>().ok().filter(|n| *n <= 7)?;
-    let page = if page_text.is_empty() {
-        None
-    }
-    else {
-        page_text.parse::<u32>().ok()
+/// `-mv`/`-dv`/`-sv`'s optional trailing paging argument (see [`ConfigOverride`]): `_`, blank or
+/// unset is the CPU's own paging now (`None`), as is `cpu`; a trailing `:` with no page after it
+/// is no page (`4:` is `4`).
+fn parse_config_override(text: Option<&&str>) -> Result<Option<ConfigOverride>, String> {
+    let Some(text) = text else {
+        return Ok(None);
     };
-    Some(ConfigOverride { mode, page })
+    let text = text.trim().trim_end_matches(':');
+    if text.is_empty() || text == "_" {
+        return Ok(None);
+    }
+    match cpclib_bemu_api::Paging::parse(text) {
+        Some(paging) if paging.is_cpu() => Ok(None),
+        Some(paging) => Ok(Some(paging)),
+        None => Err(format!(
+            "'{text}' is not a paging: C0-C7 (or &C0-&FF), Pn, L or -L, U or -U, Un, LPn, LBn, R or -R, W, \
+             comma-separated (C4,P1,-L), or _ for the CPU's own"
+        )),
+    }
 }
 
 pub(crate) use crate::text::decode_base64;
@@ -7658,39 +7724,36 @@ mod tests {
         assert_eq!(trailing_comment("nop ;"), Some(""));
     }
 
-    /// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument -
-    /// `_`, blank, and unset must all mean "live/CPU view" (`None`), a bare
-    /// `0`-`7` is a mode with the live page left alone, and `mode:page`
-    /// also picks an explicit page.
+    /// `-mv`/`-dv`/`-sv`'s optional trailing paging argument: `_`, blank, unset and `cpu` are
+    /// the CPU's own (`None`); the older bare `0`-`7` and `mode:page` still mean the RAM
+    /// configuration and its page; anything else is a paging, or refused.
     #[test]
     fn config_override_parses_the_placeholder_mode_and_optional_page() {
         use super::{ConfigOverride, parse_config_override};
 
-        let mode = |mode: u8| Some(ConfigOverride { mode, page: None });
-        let mode_and_page = |mode: u8, page: u32| {
-            Some(ConfigOverride {
-                mode,
-                page: Some(page)
-            })
+        let mode = |mode: u8| {
+            Ok(Some(ConfigOverride {
+                ram_config: Some(mode),
+                ..ConfigOverride::default()
+            }))
+        };
+        let mode_and_page = |mode: u8, page: u8| {
+            Ok(Some(ConfigOverride {
+                ram_config: Some(mode),
+                page: Some(page),
+                ..ConfigOverride::default()
+            }))
         };
 
-        assert_eq!(parse_config_override(None), None, "unset");
-        assert_eq!(parse_config_override(Some(&"_")), None, "placeholder");
-        assert_eq!(parse_config_override(Some(&"")), None, "blank");
-        assert_eq!(
-            parse_config_override(Some(&"  ")),
-            None,
-            "blank, whitespace"
-        );
-        assert_eq!(
-            parse_config_override(Some(&"4")),
-            mode(4),
-            "C4, the reported case - live page"
-        );
+        assert_eq!(parse_config_override(None), Ok(None), "unset");
+        assert_eq!(parse_config_override(Some(&"_")), Ok(None), "placeholder");
+        assert_eq!(parse_config_override(Some(&"")), Ok(None), "blank");
+        assert_eq!(parse_config_override(Some(&"  ")), Ok(None), "blank, whitespace");
+        assert_eq!(parse_config_override(Some(&"cpu")), Ok(None), "the CPU's, by name");
+        assert_eq!(parse_config_override(Some(&"4")), mode(4), "C4, the reported case - live page");
         assert_eq!(parse_config_override(Some(&"0")), mode(0));
         assert_eq!(parse_config_override(Some(&"7")), mode(7));
-        assert_eq!(parse_config_override(Some(&"8")), None, "mode out of range");
-        assert_eq!(parse_config_override(Some(&"nope")), None, "not a number");
+        assert_eq!(parse_config_override(Some(&"C7")), mode(7));
         assert_eq!(
             parse_config_override(Some(&"4:2")),
             mode_and_page(4, 2),
@@ -7706,6 +7769,15 @@ mod tests {
             mode(4),
             "trailing colon with nothing after it is the same as no page at all"
         );
+        assert_eq!(
+            parse_config_override(Some(&"C4,U7,-L")).map(|p| p.map(|p| p.to_string())),
+            Ok(Some("C4,-L,U7".to_owned()))
+        );
+        // refused, rather than read through the CPU's paging without a word
+        for nonsense in ["8", "nope", "C9", "U300"] {
+            let refused = parse_config_override(Some(&nonsense)).unwrap_err();
+            assert!(refused.contains("is not a paging"), "{nonsense}: {refused}");
+        }
     }
 
     /// `line_cost`'s own tricky cases.

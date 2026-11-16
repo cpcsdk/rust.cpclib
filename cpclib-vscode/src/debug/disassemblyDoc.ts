@@ -66,6 +66,13 @@ function configKey(config: number | null | undefined): string {
     return typeof config === 'number' ? `c${config}` : 'live';
 }
 
+/** The toolbar's key for a view: its RAM configuration, or `paging` for any other paging
+ * (a ROM, `C4,-L`...), which the 9 fixed labels cannot name. */
+function viewKey(dump: { config?: number | null; paging?: string | null }): string {
+    const plain = !dump.paging || dump.paging === 'cpu' || /^C[0-7]$/i.test(dump.paging);
+    return plain ? configKey(dump.config) : 'paging';
+}
+
 function configLabel(config: number | null | undefined): string {
     return typeof config === 'number' ? `C${config}` : 'Live (CPU)';
 }
@@ -251,7 +258,7 @@ function refreshActiveDisasmConfigContext(): void {
     const editor = vscode.window.activeTextEditor;
     const uri = editor?.document.uri;
     const key = uri?.scheme === DISASSEMBLY_SCHEME
-        ? configKey(state.get(uri.toString())?.dump.config)
+        ? viewKey(state.get(uri.toString())?.dump ?? {})
         : undefined;
     void vscode.commands.executeCommand('setContext', 'cpclib.disasmConfig', key);
 }
@@ -312,6 +319,9 @@ export async function disposeDisassemblyDoc(sessionId: string): Promise<void> {
  * the old in-page `<select>`'s own `<option>` list. */
 const CONFIG_CHOICES: (number | null)[] = [null, 0, 1, 2, 3, 4, 5, 6, 7];
 
+/** The toolbar's 10th variant: any other paging, typed. */
+const OTHER_PAGING = 'paging';
+
 /**
  * Opens the RAM-configuration picker for the *active* disassembly document -
  * the `editor/title` toolbar button's command handler (all 9 `when`-gated
@@ -326,26 +336,70 @@ async function pickDisassemblyConfig(): Promise<void> {
     const current = uri?.scheme === DISASSEMBLY_SCHEME ? state.get(uri.toString()) : undefined;
     if (!current) { return; }
 
-    const picked = await vscode.window.showQuickPick(
-        CONFIG_CHOICES.map(c => ({
-            label: configLabel(c),
-            picked: configKey(c) === configKey(current.dump.config),
-            config: c,
-        })),
-        { placeHolder: 'RAM configuration for this disassembly view' },
+    const currentKey = viewKey(current.dump);
+    const count = current.dump.instructions.length || 32;
+    // A place: a ROM, a RAM bank, a cartridge page, the registers - shown where it runs.
+    type Choice = { label: string; description?: string; picked?: boolean; paging?: string; place?: string; numbered?: string; max?: number };
+    const picked = await vscode.window.showQuickPick<Choice>(
+        [
+            ...CONFIG_CHOICES.map(c => ({
+                label: configLabel(c),
+                description: c === null ? 'as the CPU pages it now' : `the RAM as &C${c} pages it`,
+                picked: configKey(c) === currentKey,
+                paging: c === null ? '_' : `C${c}`,
+            })),
+            { label: 'Upper ROM…', description: 'a ROM slot, at &C000 (0 BASIC, 7 AMSDOS)', numbered: 'UPPER', max: 255 },
+            { label: 'Lower ROM', description: 'the firmware, at &0000', place: 'LOWER:0000' },
+            { label: 'RAM bank…', description: 'a 16K bank, whatever is paged (0-3 the main 64K, 4… the extension)', numbered: 'B', max: 255 },
+            { label: 'Cartridge page…', description: 'CPC+: a page of the cartridge, at &C000', numbered: 'CART', max: 31 },
+            { label: 'ASIC registers', description: 'CPC+: the registers, at &4000', place: 'ASIC:0000' },
+            {
+                label: 'Other paging…',
+                description: current.dump.paging && currentKey === OTHER_PAGING ? current.dump.paging : '-L, U7, C4,P1, W…',
+                picked: currentKey === OTHER_PAGING,
+            },
+        ],
+        { placeHolder: 'What this disassembly view reads' },
     );
     if (!picked) { return; }
+    if (picked.place !== undefined || picked.numbered !== undefined) {
+        let place = picked.place;
+        if (picked.numbered !== undefined) {
+            const typed = await vscode.window.showInputBox({
+                prompt: `${picked.label.replace('…', '')} number (0-${picked.max})`,
+                validateInput: text => {
+                    const n = Number(text);
+                    return Number.isInteger(n) && n >= 0 && n <= (picked.max ?? 255) ? undefined : `a number from 0 to ${picked.max}`;
+                },
+            });
+            if (typed === undefined) { return; }
+            place = `${picked.numbered}${hex(Number(typed), 2)}:0000`;
+        }
+        await consoleCommand(`-dv ${place} ${count}`);
+        return;
+    }
+    let paging = picked.paging;
+    if (paging === undefined) {
+        const typed = await vscode.window.showInputBox({
+            prompt: 'Paging: C0-C7 (or &C0-&FF), Pn, L/-L, U/-U, Un, LPn, LBn, R/-R, W - comma-separated',
+            placeHolder: 'U7, C4,P1,-L, W…',
+            value: current.dump.paging && current.dump.paging !== 'cpu' ? current.dump.paging : '',
+        });
+        if (typed === undefined) { return; }
+        paging = typed.replace(/\s+/g, '') || '_';
+    }
 
     const anchor = current.dump.followsPc ? '_' : `0x${hex(current.dump.address, 4)}`;
-    const count = current.dump.instructions.length || 32;
-    const config = picked.config === null ? '_' : String(picked.config);
-    await consoleCommand(`-dv ${anchor} ${count} ${config}`);
+    await consoleCommand(`-dv ${anchor} ${count} ${paging}`);
 }
 
 /** Every `cpclib.disassemblyConfigPicker.<key>` command id declared in
  * package.json's `editor/title` toolbar - one per {@link CONFIG_CHOICES}
  * entry, all sharing {@link pickDisassemblyConfig}. */
-const CONFIG_PICKER_COMMAND_IDS = CONFIG_CHOICES.map(c => `cpclib.disassemblyConfigPicker.${configKey(c)}`);
+const CONFIG_PICKER_COMMAND_IDS = [
+    ...CONFIG_CHOICES.map(c => `cpclib.disassemblyConfigPicker.${configKey(c)}`),
+    `cpclib.disassemblyConfigPicker.${OTHER_PAGING}`,
+];
 
 export function registerDisassemblyDoc(context: vscode.ExtensionContext): void {
     context.subscriptions.push(

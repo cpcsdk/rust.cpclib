@@ -43,6 +43,9 @@ export interface MemoryDump {
      * if an override was in effect - `null`/absent means the CPU's own
      * live view (the default). See `-mv`'s own `[config]` argument. */
     config?: number | null;
+    /** The paging these bytes were read through (`C4,P1`, `U7`, `-L`...), when not the
+     * CPU's own: what `-mv`/`-dv`/`-sv`'s `[paging]` argument was. */
+    paging?: string | null;
     /** The explicit extended-RAM page these bytes were read under, if one
      * was given (`config`'s own `mode:page` form) - `null`/absent means
      * whichever page was live at the time. */
@@ -64,6 +67,9 @@ export interface ScreenDump {
      * an override was in effect - `null`/absent means the CPU's own live
      * view (the default). See `-sv`'s own `[config]` argument. */
     config?: number | null;
+    /** The paging these bytes were read through (`C4,P1`, `U7`, `-L`...), when not the
+     * CPU's own: what `-mv`/`-dv`/`-sv`'s `[paging]` argument was. */
+    paging?: string | null;
     /** The explicit extended-RAM page this frame was read under, if one
      * was given (`config`'s own `mode:page` form) - `null`/absent means
      * whichever page was live at the time. */
@@ -218,6 +224,9 @@ export interface Disassembly {
      * an override was in effect - `null`/absent means the CPU's own live
      * view (the default). See `-dv`'s own `[config]` argument. */
     config?: number | null;
+    /** The paging these bytes were read through (`C4,P1`, `U7`, `-L`...), when not the
+     * CPU's own: what `-mv`/`-dv`/`-sv`'s `[paging]` argument was. */
+    paging?: string | null;
     /** The explicit extended-RAM page this read was made under, if one was
      * given (`config`'s own `mode:page` form) - `null`/absent means
      * whichever page was live at the time. */

@@ -1411,9 +1411,8 @@ impl<P: DapPeer> BasicSession<P> {
             row_height_override,
             palette_override,
             encoding_override,
-            // Only AMSpiriT Lite can honour an explicit RAM configuration,
-            // and this session has no `ConfigOverride` concept to begin
-            // with - nothing to stamp.
+            // This session has no paging of its own to read through
+            // (see `session::ConfigOverride`): nothing to stamp.
             None,
             regs,
             mode,

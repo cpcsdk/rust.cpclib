@@ -948,6 +948,29 @@ pub(crate) fn bemu_register_name(name: &str) -> Option<&'static str> {
         .map(|(_, bemu)| *bemu)
 }
 
+/// A `readMemory` whose `memoryReference` is a location in a space (`UPPER07:0000`), made the
+/// CPU address and the paging that show it there ([`crate::protocol::view_of_location`]), its
+/// RAM view too when it has one: the same read a view of it asks for.
+fn locate_memory_reference(message: &mut Value) {
+    let Some(arguments) = message.get_mut("arguments").and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    let Some((address, paging)) = arguments
+        .get("memoryReference")
+        .and_then(Value::as_str)
+        .and_then(crate::protocol::view_of_location_text)
+    else {
+        return;
+    };
+    arguments.insert("memoryReference".into(), json!(crate::protocol::address_reference(address)));
+    arguments.insert("paging".into(), json!(paging.to_string()));
+    if let Some((config, page)) = crate::protocol::ram_view(&paging) {
+        arguments.insert("config".into(), json!(config));
+        arguments.insert("page".into(), json!(page));
+    }
+}
+
 /// The 8-bit halves bemu sets a register pair by.
 fn bemu_register_halves(name: &str) -> Option<(&'static str, &'static str)> {
     Some(match name {
@@ -2042,6 +2065,89 @@ impl AmspiritLitePeer {
     /// live as needed on hardware with more than the base 128K's own one
     /// extra page: naming a configuration by mode alone can never reach a
     /// page other than whatever happens to be live.
+    /// A `readMemory` through `paging` (bemu: `GET /api/ram?at=&paging=`).
+    fn read_memory_through(&mut self, message: &Value, paging: &cpclib_bemu_api::Paging) -> std::io::Result<()> {
+        let arguments = message.get("arguments");
+        let address = arguments
+            .and_then(|a| a.get("memoryReference"))
+            .and_then(Value::as_str)
+            .and_then(crate::protocol::parse_address_reference)
+            .unwrap_or(0)
+            & 0xFFFF;
+        let count = arguments
+            .and_then(|a| a.get("count"))
+            .and_then(Value::as_i64)
+            .unwrap_or(16)
+            .clamp(1, 0x10000);
+        let call = Call::get("/api/ram")
+            .query("at", cpclib_bemu_api::Location::Cpu(address as u16))
+            .query("len", count)
+            .query("paging", paging);
+        let answer = perform(&self.endpoint, &call);
+        let seq = self.next_seq();
+        let response = match answer {
+            Ok(body) => match serde_json::from_str::<cpclib_bemu_api::Ram>(&body) {
+                Ok(read) => response_for(message, &json!({ "hex": read.hex }), seq),
+                Err(_) => {
+                    let refusal = serde_json::from_str::<cpclib_bemu_api::ErrorReply>(&body)
+                        .map(|refusal| refusal.error)
+                        .unwrap_or(body);
+                    crate::protocol::failure(message, &format!("the emulator refused the read: {refusal}"), seq)
+                },
+            },
+            Err(e) => crate::protocol::failure(message, &format!("the emulator did not answer the read: {e}"), seq)
+        };
+        let _ = self.outgoing.send(response);
+        Ok(())
+    }
+
+    /// A `writeMemory` bemu places itself (`POST /api/ram` with `at`): a CPU address (the RAM a
+    /// write there reaches, through `paging`, the CPU's by default) or a RAM bank by its name;
+    /// bemu refuses a ROM.
+    fn write_memory_at(&mut self, message: &Value, paging: Option<&cpclib_bemu_api::Paging>) -> std::io::Result<()> {
+        let arguments = message.get("arguments");
+        let reference = arguments
+            .and_then(|a| a.get("memoryReference"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let data = arguments
+            .and_then(|a| a.get("data"))
+            .and_then(Value::as_str)
+            .map(crate::session::decode_base64)
+            .unwrap_or_default();
+        let seq = self.next_seq();
+        let Some(at) = cpclib_bemu_api::Location::parse(reference)
+        else {
+            let _ = self.outgoing.send(crate::protocol::failure(
+                message,
+                &format!("'{reference}' is not an address nor a location"),
+                seq
+            ));
+            return Ok(());
+        };
+        let write = cpclib_bemu_api::WriteRam {
+            at: Some(at),
+            paging: paging.copied(),
+            data: Some(data.iter().map(|byte| format!("{byte:02X}")).collect()),
+            ..Default::default()
+        };
+        let refusal = match perform(
+            &self.endpoint,
+            &Call::post("/api/ram").body(serde_json::to_string(&write).unwrap_or_default())
+        ) {
+            Ok(body) => serde_json::from_str::<cpclib_bemu_api::ErrorReply>(&body)
+                .ok()
+                .map(|refusal| format!("the emulator refused the write: {}", refusal.error)),
+            Err(e) => Some(format!("the emulator did not answer the write: {e}"))
+        };
+        let response = match refusal {
+            Some(refusal) => crate::protocol::failure(message, &refusal, seq),
+            None => crate::protocol::response(message, json!({ "bytesWritten": data.len() }), seq)
+        };
+        let _ = self.outgoing.send(response);
+        Ok(())
+    }
+
     /// A `writeMemory` through the current mapping (bemu): each 16K region
     /// written to the RAM bank its writes reach (`/api/memmap`'s
     /// `write_bank`, RAM under a ROM included).
@@ -2449,36 +2555,78 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             return self.step_over(&message, command == "stepOut");
         }
 
-        // A view (Memory View, Disassembly View) can ask what an *explicit*
-        // RAM configuration would show, independent of whatever is live
-        // right now - `-dv`/`-mv`'s own optional config-override argument,
-        // carried as `"config"`/`"page"` fields session.rs adds to the
-        // `readMemory` arguments it builds (not part of real DAP, which has
-        // no such concept). `call_for` cannot build this alone: resolving a
-        // bare mode with no explicit page needs the live `ram_page` - its
-        // own round trip, so this is handled here instead of after the
-        // fact, since the *first* call `call_for` would otherwise build is
-        // to the wrong endpoint entirely.
-        if command == "readMemory"
-            && let Some(config) = message
+        // Memory through another paging than the CPU's, or in a space: a view's
+        // (`-mv`/`-dv`/`-sv`'s paging, carried as `"paging"`, with `"config"`/`"page"` when it is
+        // a RAM view), or a location typed in the editor (`UPPER07:0000`). bemu reads and writes
+        // them itself (`memory_spaces`); AMSpiriT Lite reads a RAM view bank by bank.
+        let mut message = message;
+        if command == "readMemory" {
+            locate_memory_reference(&mut message);
+        }
+        let paging = message
+            .get("arguments")
+            .and_then(|a| a.get("paging"))
+            .and_then(Value::as_str)
+            .and_then(cpclib_bemu_api::Paging::parse)
+            .filter(|paging| !paging.is_cpu());
+        let native = self.has_feature("memory_spaces");
+        if command == "readMemory" {
+            if let Some(paging) = paging.filter(|_| native) {
+                return self.read_memory_through(&message, &paging);
+            }
+            // `call_for` cannot build this alone: resolving a bare mode with no explicit page
+            // needs the live `ram_page`, its own round trip.
+            if let Some(config) = message
                 .get("arguments")
                 .and_then(|a| a.get("config"))
                 .and_then(Value::as_u64)
-        {
-            let page = message
-                .get("arguments")
-                .and_then(|a| a.get("page"))
-                .and_then(Value::as_u64)
-                .map(|page| page as u32);
-            return self.read_memory_with_config_override(&message, config as u8, page);
+            {
+                let page = message
+                    .get("arguments")
+                    .and_then(|a| a.get("page"))
+                    .and_then(Value::as_u64)
+                    .map(|page| page as u32);
+                return self.read_memory_with_config_override(&message, config as u8, page);
+            }
+            if let Some(paging) = paging {
+                let seq = self.next_seq();
+                let _ = self.outgoing.send(crate::protocol::failure(
+                    &message,
+                    &format!(
+                        "reading through {paging} needs a bemu that pages its memory for the debugger; \
+                         this emulator reads through a RAM configuration (C0-C7, and its page) alone"
+                    ),
+                    seq
+                ));
+                return Ok(());
+            }
         }
-
-        // bemu's `POST /api/ram` writes to the RAM banks (`addr` an offset in
-        // `bank`, bank 0 by default), not to what the CPU sees: with `&C4`
-        // paged, a write at #4000 would land in bank 1, not in the bank 4 the
-        // Memory View shows there. So the write goes where the CPU's would.
-        if command == "writeMemory" && self.extensions {
-            return self.write_memory_as_the_cpu(&message);
+        if command == "writeMemory" {
+            if native {
+                return self.write_memory_at(&message, paging.as_ref());
+            }
+            let reference = message
+                .get("arguments")
+                .and_then(|a| a.get("memoryReference"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if paging.is_some() || crate::protocol::view_of_location_text(reference).is_some() {
+                let seq = self.next_seq();
+                let _ = self.outgoing.send(crate::protocol::failure(
+                    &message,
+                    "writing through a paging, or in a RAM bank by its name, needs a bemu that pages \
+                     its memory for the debugger",
+                    seq
+                ));
+                return Ok(());
+            }
+            // bemu's older `POST /api/ram` writes to the RAM banks (`addr` an offset in `bank`),
+            // not to what the CPU sees: with `&C4` paged, a write at #4000 would land in bank 1,
+            // not in the bank 4 the Memory View shows there. So the write goes where the CPU's
+            // would.
+            if self.extensions {
+                return self.write_memory_as_the_cpu(&message);
+            }
         }
 
         let Some(call) = call_for(&message)
@@ -3502,6 +3650,27 @@ mod tests {
             banked_writes(&memmap, 0xFFFF, &[5, 6]).unwrap(),
             vec![(3, 0x3FFF, vec![5]), (0, 0, vec![6])]
         );
+    }
+
+    #[test]
+    fn a_location_read_is_the_read_of_its_view() {
+        let mut message = request("readMemory", json!({ "memoryReference": "B05:0010", "count": 4 }));
+        locate_memory_reference(&mut message);
+        let arguments = &message["arguments"];
+        assert_eq!(arguments["memoryReference"], "0x4010");
+        assert_eq!(arguments["paging"], "C5,P0");
+        // a RAM view: AMSpiriT Lite reads it too
+        assert_eq!(arguments["config"], 5);
+        assert_eq!(arguments["page"], 0);
+
+        let mut rom = request("readMemory", json!({ "memoryReference": "UPPER07:0000", "count": 4 }));
+        locate_memory_reference(&mut rom);
+        assert_eq!(rom["arguments"]["paging"], "U7");
+        assert!(rom["arguments"].get("config").is_none(), "not a RAM view");
+
+        let mut plain = request("readMemory", json!({ "memoryReference": "0x4000", "count": 4 }));
+        locate_memory_reference(&mut plain);
+        assert_eq!(plain["arguments"], json!({ "memoryReference": "0x4000", "count": 4 }));
     }
 
     #[test]

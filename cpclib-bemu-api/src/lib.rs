@@ -34,6 +34,9 @@ pub const FEATURES: &[&str] = &[
     "raster_names",
     // `GET /api/doc?format=openapi` generated from these types
     "openapi",
+    // `/api/ram`'s `at` (RAM banks, ROMs, the cartridge, the ASIC's registers) and `paging`,
+    // `/api/memmap`'s `paging`
+    "memory_spaces",
 ];
 
 // ------------------------------------------------------------------ values
@@ -668,6 +671,308 @@ pub struct RunTo {
     pub nop: Option<Int>,
 }
 
+// ------------------------------------------------------------------ memory spaces, pagings
+
+/// A memory a [`Location`] is in, apart from the CPU's address space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Space {
+    /// A 16K RAM bank: 0-3 the main 64K (`MB0`-`MB3`), 4 and up the extension's 64K pages
+    /// (`P0B0`-`P0B3` are 4-7, `P1B0` is 8...).
+    Ram(u16),
+    /// The lower ROM: the firmware (on a CPC+, the cartridge page RMR2 selects).
+    Lower,
+    /// An upper ROM slot (on a CPC+, the cartridge page its number selects; an empty slot reads
+    /// as BASIC's, as on the CPC).
+    Upper(u8),
+    /// A page of a CPC+'s cartridge.
+    Cartridge(u8),
+    /// A CPC+'s ASIC register page (`&4000`-`&7FFF` when paged): offset 0 is `&4000`.
+    Asic,
+}
+
+impl Space {
+    /// As a [`Location`] writes it, before the `:` (`B04`, `LOWER`, `UPPER07`, `CART01`, `ASIC`).
+    pub fn name(self) -> String {
+        match self {
+            Space::Ram(bank) => format!("B{bank:02X}"),
+            Space::Lower => "LOWER".to_owned(),
+            Space::Upper(slot) => format!("UPPER{slot:02X}"),
+            Space::Cartridge(page) => format!("CART{page:02X}"),
+            Space::Asic => "ASIC".to_owned(),
+        }
+    }
+
+    /// `text`, as [`Self::name`] writes it, in any case; a RAM bank also by the name the window
+    /// gives it (`MB0`-`MB3`, `P1B2`).
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim().to_ascii_uppercase();
+        let hex = |digits: &str| (!digits.is_empty()).then(|| u16::from_str_radix(digits, 16).ok()).flatten();
+        if text == "LOWER" {
+            return Some(Space::Lower);
+        }
+        if text == "ASIC" {
+            return Some(Space::Asic);
+        }
+        if let Some(slot) = text.strip_prefix("UPPER") {
+            return hex(slot).and_then(|slot| u8::try_from(slot).ok()).map(Space::Upper);
+        }
+        if let Some(page) = text.strip_prefix("CART") {
+            return hex(page).and_then(|page| u8::try_from(page).ok()).map(Space::Cartridge);
+        }
+        if let Some(block) = text.strip_prefix("MB") {
+            return block.parse::<u16>().ok().filter(|b| *b < 4).map(Space::Ram);
+        }
+        if let Some((page, block)) = text.strip_prefix('P').and_then(|rest| rest.split_once('B')) {
+            let (page, block) = (page.parse::<u16>().ok()?, block.parse::<u16>().ok()?);
+            return (block < 4).then(|| Space::Ram(4 + page * 4 + block));
+        }
+        text.strip_prefix('B').and_then(hex).map(Space::Ram)
+    }
+
+    /// Whether the CPU can write it (the RAM; not a ROM, the cartridge or the registers).
+    pub fn writable(self) -> bool {
+        matches!(self, Space::Ram(_))
+    }
+}
+
+/// Where a byte is: a CPU address (through a [`Paging`]), or an offset in a [`Space`].
+///
+/// Written `0x4000` (or `&4000`, `#4000`, `16384`) for a CPU address, `SPACE:hhhh` (a hex
+/// offset) for the others: `B04:0010` (RAM bank 4; also `P0B0:0010`), `LOWER:0038`,
+/// `UPPER07:0000`, `CART01:0100`, `ASIC:0000`. The same names as the breakpoints' locations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Location {
+    Cpu(u16),
+    In {
+        space: Space,
+        /// In the space: 0-&3FFF, but for a RAM bank, where it may run on into the next banks.
+        offset: u32,
+    },
+}
+
+impl Location {
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim();
+        if let Some((space, offset)) = text.split_once(':') {
+            let space = Space::parse(space)?;
+            let offset = parse_hex_address(offset)?;
+            let limit = if matches!(space, Space::Ram(_)) { 0xFFFF } else { 0x3FFF };
+            return (offset <= limit).then_some(Location::In { space, offset });
+        }
+        parse_address(text)
+            .and_then(|address| u16::try_from(address).ok())
+            .map(Location::Cpu)
+    }
+}
+
+impl std::fmt::Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Location::Cpu(address) => write!(f, "0x{address:04X}"),
+            Location::In { space, offset } => write!(f, "{}:{offset:04X}", space.name()),
+        }
+    }
+}
+
+/// A hex offset (`0010`, `0x10`, `&10`, `#10`).
+fn parse_hex_address(text: &str) -> Option<u32> {
+    let text = text.trim();
+    let digits = ["0x", "0X", "&", "#", "$"]
+        .iter()
+        .find_map(|prefix| text.strip_prefix(prefix))
+        .unwrap_or(text);
+    (!digits.is_empty()).then(|| u32::from_str_radix(digits, 16).ok()).flatten()
+}
+
+/// An address: decimal, or hex with `0x`, `&`, `#` or `$`.
+fn parse_address(text: &str) -> Option<u32> {
+    let text = text.trim();
+    match ["0x", "0X", "&", "#", "$"].iter().find_map(|prefix| text.strip_prefix(prefix)) {
+        Some(digits) => u32::from_str_radix(digits, 16).ok(),
+        None => text.parse().ok(),
+    }
+}
+
+macro_rules! text_type {
+    ($name:ident, $what:literal, $schema:literal) => {
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_str(self)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let text = String::deserialize(deserializer)?;
+                $name::parse(&text).ok_or_else(|| {
+                    serde::de::Error::custom(format!(concat!("\"{}\" is not ", $what), text))
+                })
+            }
+        }
+
+        impl JsonSchema for $name {
+            fn schema_name() -> Cow<'static, str> {
+                stringify!($name).into()
+            }
+
+            fn json_schema(_: &mut SchemaGenerator) -> Schema {
+                json_schema!({ "type": "string", "description": $schema })
+            }
+        }
+    };
+}
+
+text_type!(
+    Location,
+    "a location (0x4000, B04:0010, LOWER:0038, UPPER07:0000, CART01:0100, ASIC:0000)",
+    "Where a byte is: a CPU address (0x4000, &4000, #4000 or decimal), read through a paging; or \
+     SPACE:hhhh, a hex offset in a space: Bnn (RAM bank nn, hex; also MB0-MB3, PxBy), LOWER (the \
+     lower ROM), UPPERnn (upper ROM slot nn, hex), CARTnn (CPC+ cartridge page nn, hex), ASIC (the \
+     CPC+ register page, 0 is &4000)."
+);
+
+/// How the CPU's addresses are read: as the CPU reads them now, or through another paging,
+/// ACE's way. Each part left out is as the machine has it now.
+///
+/// Written as comma-separated parts, in any case: `cpu` (or nothing): the CPU's paging now;
+/// `C0`-`C7` the RAM configuration, `&C0`-`&FF` the Gate Array's value (the configuration and the
+/// page), `Pn` the extension's 64K page (decimal); `L` or `-L` the lower ROM paged or not, `U` or
+/// `-U` the upper ROM, `Un` upper ROM number n (paged, decimal); on a CPC+ `LPn` the lower ROM's
+/// cartridge page, `LBn` the block it is in (0-2: &0000, &4000, &8000), `R` or `-R` the ASIC's
+/// registers at &4000; `W` what a write reaches (the RAM, under the ROMs too). `C4,P1,-L`,
+/// `U7`, `W`. The old `4` and `4:2` stand for `C4` and `C4,P2`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Paging {
+    pub ram_config: Option<u8>,
+    pub page: Option<u8>,
+    pub lower_rom: Option<bool>,
+    pub upper_rom: Option<bool>,
+    pub upper_number: Option<u8>,
+    pub lower_page: Option<u8>,
+    pub lower_block: Option<u8>,
+    pub registers: Option<bool>,
+    /// What a write reaches, not what a read gives.
+    pub writes: bool,
+}
+
+impl Paging {
+    /// The CPU's paging now: nothing changed.
+    pub fn is_cpu(&self) -> bool {
+        *self == Paging::default()
+    }
+
+    /// Only the RAM's configuration and page are chosen (what an emulator that pages nothing
+    /// else can follow).
+    pub fn ram_only(&self) -> bool {
+        Paging {
+            ram_config: None,
+            page: None,
+            ..*self
+        }
+        .is_cpu()
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim();
+        let mut paging = Paging::default();
+        if text.is_empty() || text.eq_ignore_ascii_case("cpu") || text == "_" {
+            return Some(paging);
+        }
+        // the debugger's old forms: a configuration, or configuration:page
+        if let Some((config, page)) = text.split_once(':') {
+            paging.ram_config = Some(config.parse::<u8>().ok().filter(|c| *c < 8)?);
+            paging.page = Some(page.parse().ok()?);
+            return Some(paging);
+        }
+        if let Ok(config) = text.parse::<u8>() {
+            paging.ram_config = Some(config).filter(|c| *c < 8);
+            return paging.ram_config.map(|_| paging);
+        }
+        for part in text.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            let upper = part.to_ascii_uppercase();
+            let number = |digits: &str| digits.parse::<u8>().ok();
+            match upper.as_str() {
+                "L" => paging.lower_rom = Some(true),
+                "-L" => paging.lower_rom = Some(false),
+                "U" => paging.upper_rom = Some(true),
+                "-U" => paging.upper_rom = Some(false),
+                "R" => paging.registers = Some(true),
+                "-R" => paging.registers = Some(false),
+                "W" => paging.writes = true,
+                _ if upper.starts_with('&') || upper.starts_with("0X") => {
+                    let value = u8::try_from(parse_address(&upper)?).ok().filter(|v| *v >= 0xC0)?;
+                    paging.ram_config = Some(value & 7);
+                    paging.page = Some((value >> 3) & 7);
+                }
+                _ if upper.starts_with("LP") => paging.lower_page = Some(number(&upper[2..]).filter(|p| *p < 8)?),
+                _ if upper.starts_with("LB") => paging.lower_block = Some(number(&upper[2..]).filter(|b| *b < 3)?),
+                _ if upper.starts_with('C') => paging.ram_config = Some(number(&upper[1..]).filter(|c| *c < 8)?),
+                _ if upper.starts_with('P') => paging.page = Some(number(&upper[1..])?),
+                _ if upper.starts_with('U') => {
+                    paging.upper_rom = Some(true);
+                    paging.upper_number = Some(number(&upper[1..])?);
+                }
+                _ => return None,
+            }
+        }
+        Some(paging)
+    }
+}
+
+impl std::fmt::Display for Paging {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut parts = Vec::new();
+        if let Some(config) = self.ram_config {
+            parts.push(format!("C{config}"));
+        }
+        if let Some(page) = self.page {
+            parts.push(format!("P{page}"));
+        }
+        match self.lower_rom {
+            Some(true) => parts.push("L".to_owned()),
+            Some(false) => parts.push("-L".to_owned()),
+            None => {}
+        }
+        if let Some(page) = self.lower_page {
+            parts.push(format!("LP{page}"));
+        }
+        if let Some(block) = self.lower_block {
+            parts.push(format!("LB{block}"));
+        }
+        match (self.upper_rom, self.upper_number) {
+            (Some(true) | None, Some(number)) => parts.push(format!("U{number}")),
+            (Some(true), None) => parts.push("U".to_owned()),
+            // not paged, its number does not matter
+            (Some(false), _) => parts.push("-U".to_owned()),
+            (None, None) => {}
+        }
+        match self.registers {
+            Some(true) => parts.push("R".to_owned()),
+            Some(false) => parts.push("-R".to_owned()),
+            None => {}
+        }
+        if self.writes {
+            parts.push("W".to_owned());
+        }
+        if parts.is_empty() {
+            f.write_str("cpu")
+        } else {
+            f.write_str(&parts.join(","))
+        }
+    }
+}
+
+text_type!(
+    Paging,
+    "a paging (cpu, or C0-C7, &C0-&FF, Pn, L, -L, U, -U, Un, LPn, LBn, R, -R, W, comma-separated)",
+    "How the CPU's addresses are read, each part left out as the machine has it now: cpu (the \
+     default) or comma-separated parts: C0-C7 (the RAM configuration), &C0-&FF (the Gate Array's \
+     value: configuration and page), Pn (the extension's 64K page), L/-L (lower ROM paged or not), \
+     U/-U (upper ROM), Un (upper ROM number n, paged); CPC+: LPn (the lower ROM's cartridge page), \
+     LBn (its block, 0-2), R/-R (the ASIC registers at &4000); W (what a write reaches: the RAM, \
+     under the ROMs too). E.g. C4,P1,-L or U7."
+);
+
 // ------------------------------------------------------------------ memory
 
 named! {
@@ -696,6 +1001,13 @@ pub struct ReadRam {
     /// `raw` (default) or `cpu`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<RamView>,
+    /// In place of `addr`, `bank` and `view`: where to read from, a CPU address (through
+    /// `paging`) or an offset in a RAM bank, a ROM, a cartridge page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Location>,
+    /// How a CPU address is read (default the CPU's paging now): with `at`, or `view=cpu`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paging: Option<Paging>,
 }
 
 /// `GET /api/ram`: the bytes, as hex.
@@ -708,6 +1020,12 @@ pub struct Ram {
     /// `cpu` when read as the CPU does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<RamView>,
+    /// With `at`: where the bytes were read from, as `at` names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Location>,
+    /// The paging a CPU address was read through, when not the CPU's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paging: Option<Paging>,
 }
 
 /// `POST /api/ram`: write bytes to RAM, and/or jump.
@@ -728,6 +1046,22 @@ pub struct WriteRam {
     /// The `PC` `exec` sets (default `addr`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<Int>,
+    /// In place of `addr` and `bank`: where to write, a CPU address (the RAM a write there
+    /// reaches, through `paging`) or an offset in a RAM bank. A ROM, a cartridge, the ASIC's
+    /// registers are not written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Location>,
+    /// How a CPU address `at` is written (default the CPU's paging now).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paging: Option<Paging>,
+}
+
+/// `GET /api/memmap`'s query.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MemMapQuery {
+    /// The paging to describe (default the CPU's now).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paging: Option<Paging>,
 }
 
 /// `GET /api/memmap`: what each 16K region of the CPU maps.
@@ -764,6 +1098,10 @@ pub struct MemRegion {
     pub ext: Option<bool>,
     /// The RAM bank written, ROM or not.
     pub write_bank: u16,
+    /// What is read here, as a [`Location`]'s space names it (`B04`, `LOWER`, `UPPER07`,
+    /// `CART01`, `ASIC`); none from a bemu older than it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// `GET /api/symbols`: one symbol.
@@ -1702,6 +2040,64 @@ mod tests {
             assert!(schemas.contains(schema), "{event}: {schema}");
         }
         assert_eq!(schemas.len(), EVENTS.len());
+    }
+
+    #[test]
+    fn a_location_is_a_cpu_address_or_an_offset_in_a_space() {
+        let parse = |text: &str| Location::parse(text);
+        assert_eq!(parse("0x4000"), Some(Location::Cpu(0x4000)));
+        assert_eq!(parse("&C000"), Some(Location::Cpu(0xC000)));
+        assert_eq!(parse("16384"), Some(Location::Cpu(16384)));
+        assert_eq!(parse("B04:0010"), Some(Location::In { space: Space::Ram(4), offset: 0x10 }));
+        assert_eq!(parse("p1b2:0"), Some(Location::In { space: Space::Ram(10), offset: 0 }));
+        assert_eq!(parse("MB3:3fff"), Some(Location::In { space: Space::Ram(3), offset: 0x3FFF }));
+        assert_eq!(parse("upper07:C0"), Some(Location::In { space: Space::Upper(7), offset: 0xC0 }));
+        assert_eq!(parse("CART1F:0100"), Some(Location::In { space: Space::Cartridge(0x1F), offset: 0x100 }));
+        assert_eq!(parse("LOWER:0038"), Some(Location::In { space: Space::Lower, offset: 0x38 }));
+        assert_eq!(parse("ASIC:0000"), Some(Location::In { space: Space::Asic, offset: 0 }));
+        // a RAM bank's offset runs on into the next banks; a ROM's does not
+        assert!(parse("B00:8000").is_some());
+        assert_eq!(parse("UPPER07:4000"), None);
+        for nonsense in ["", "X1:0", "B:0", "UPPER:0", "0x10000", "B04:zz"] {
+            assert_eq!(parse(nonsense), None, "{nonsense}");
+        }
+        for text in ["0x4000", "B04:0010", "LOWER:0038", "UPPER07:0000", "CART01:0100", "ASIC:0000"] {
+            assert_eq!(parse(text).unwrap().to_string(), text);
+        }
+        assert!(Space::Ram(0).writable() && !Space::Upper(0).writable());
+    }
+
+    #[test]
+    fn a_paging_is_written_in_parts() {
+        let parse = |text: &str| Paging::parse(text);
+        assert!(parse("cpu").unwrap().is_cpu() && parse("").unwrap().is_cpu() && parse("_").unwrap().is_cpu());
+        let paging = parse("C4,P1,-L,U7,W").unwrap();
+        assert_eq!(
+            paging,
+            Paging {
+                ram_config: Some(4),
+                page: Some(1),
+                lower_rom: Some(false),
+                upper_rom: Some(true),
+                upper_number: Some(7),
+                writes: true,
+                ..Paging::default()
+            }
+        );
+        assert_eq!(paging.to_string(), "C4,P1,-L,U7,W");
+        // the Gate Array's value: the configuration and the page
+        assert_eq!(parse("&CA").unwrap(), Paging { ram_config: Some(2), page: Some(1), ..Paging::default() });
+        assert_eq!(parse("lp2,lb1,r").unwrap().to_string(), "LP2,LB1,R");
+        // the debugger's old forms
+        assert_eq!(parse("4").unwrap(), Paging { ram_config: Some(4), ..Paging::default() });
+        assert_eq!(parse("4:2").unwrap().to_string(), "C4,P2");
+        assert!(parse("C4").unwrap().ram_only() && !parse("C4,-L").unwrap().ram_only());
+        for nonsense in ["C8", "&BF", "LB3", "LP8", "X", "9", "4:x", "U256"] {
+            assert_eq!(parse(nonsense), None, "{nonsense}");
+        }
+        assert_eq!(serde_json::to_string(&parse("C4,U7").unwrap()).unwrap(), r#""C4,U7""#);
+        let refused = serde_json::from_str::<Paging>(r#""C9""#).unwrap_err().to_string();
+        assert!(refused.contains("is not a paging"), "{refused}");
     }
 
     #[test]

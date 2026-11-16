@@ -110,9 +110,125 @@ pub fn parse_address_reference(reference: &str) -> Option<u32> {
     }
 }
 
+/// The RAM configuration and page of `paging`, when they are all it chooses (with the ROMs
+/// turned off at most): a RAM view, which an emulator that pages nothing else (AMSpiriT Lite) can
+/// be read through, bank by bank.
+pub fn ram_view(paging: &cpclib_bemu_api::Paging) -> Option<(u8, Option<u8>)> {
+    let rest = cpclib_bemu_api::Paging {
+        ram_config: None,
+        page: None,
+        lower_rom: paging.lower_rom.filter(|paged| *paged),
+        upper_rom: paging.upper_rom.filter(|paged| *paged),
+        ..*paging
+    };
+    if !rest.is_cpu() {
+        return None;
+    }
+    Some((paging.ram_config?, paging.page))
+}
+
+/// Where a view shows a location in a space, and the paging that puts the space there - so its
+/// addresses, labels and disassembly read as where it runs: an upper ROM at `&C000`, a CPC+
+/// cartridge page there too (as upper ROM 128 + n, the way a CPC+ reaches any of them), the lower
+/// ROM at `&0000`, the ASIC's registers at `&4000`, a RAM bank of the main 64K in its own block
+/// (with the ROM over it turned off), an extension's at `&4000` (`C4`-`C7` and its page). `None`
+/// for a CPU address, which has no space to show.
+pub fn view_of_location(location: cpclib_bemu_api::Location) -> Option<(u32, cpclib_bemu_api::Paging)> {
+    use cpclib_bemu_api::{Location, Paging, Space};
+    let Location::In { space, offset } = location
+    else {
+        return None;
+    };
+    let paging = Paging::default();
+    let (base, paging) = match space {
+        Space::Ram(bank @ 0..=3) => (
+            u32::from(bank) * 0x4000,
+            Paging {
+                ram_config: Some(0),
+                lower_rom: (bank == 0).then_some(false),
+                upper_rom: (bank == 3).then_some(false),
+                ..paging
+            }
+        ),
+        Space::Ram(bank) => (
+            0x4000,
+            Paging {
+                ram_config: Some(4 + ((bank - 4) % 4) as u8),
+                page: Some(u8::try_from((bank - 4) / 4).ok()?),
+                ..paging
+            }
+        ),
+        Space::Lower => (
+            0,
+            Paging {
+                lower_rom: Some(true),
+                lower_block: Some(0),
+                ..paging
+            }
+        ),
+        Space::Upper(slot) => (
+            0xC000,
+            Paging {
+                upper_rom: Some(true),
+                upper_number: Some(slot),
+                ..paging
+            }
+        ),
+        Space::Cartridge(page) => (
+            0xC000,
+            Paging {
+                upper_rom: Some(true),
+                upper_number: Some(128u8.checked_add(page)?),
+                ..paging
+            }
+        ),
+        Space::Asic => (
+            0x4000,
+            Paging {
+                registers: Some(true),
+                ..paging
+            }
+        )
+    };
+    Some(((base + offset) & 0xFFFF, paging))
+}
+
+/// [`view_of_location`] of a location as written (`UPPER07:0000`); `None` for anything else,
+/// a CPU address included.
+pub fn view_of_location_text(text: &str) -> Option<(u32, cpclib_bemu_api::Paging)> {
+    view_of_location(cpclib_bemu_api::Location::parse(text)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_location_is_shown_where_it_runs() {
+        let view = |text: &str| view_of_location_text(text).map(|(address, paging)| (address, paging.to_string()));
+        assert_eq!(view("UPPER07:0010"), Some((0xC010, "U7".to_owned())));
+        assert_eq!(view("CART03:0000"), Some((0xC000, "U131".to_owned())));
+        assert_eq!(view("LOWER:0038"), Some((0x0038, "L,LB0".to_owned())));
+        assert_eq!(view("ASIC:0020"), Some((0x4020, "R".to_owned())));
+        assert_eq!(view("B00:0100"), Some((0x0100, "C0,-L".to_owned())));
+        assert_eq!(view("B01:0100"), Some((0x4100, "C0".to_owned())));
+        assert_eq!(view("B03:0000"), Some((0xC000, "C0,-U".to_owned())));
+        // an extension's bank: C4-C7 put it at &4000, with its page
+        assert_eq!(view("B04:0010"), Some((0x4010, "C4,P0".to_owned())));
+        assert_eq!(view("P1B2:0000"), Some((0x4000, "C6,P1".to_owned())));
+        assert_eq!(view("0x4000"), None, "a CPU address has no space to show");
+        assert_eq!(view("HL"), None);
+    }
+
+    #[test]
+    fn a_ram_view_is_a_configuration_and_a_page_at_most_with_the_roms_off() {
+        let ram_view = |text: &str| ram_view(&cpclib_bemu_api::Paging::parse(text).unwrap());
+        assert_eq!(ram_view("C4"), Some((4, None)));
+        assert_eq!(ram_view("C4,P2,-L,-U"), Some((4, Some(2))));
+        assert_eq!(ram_view("C4,U7"), None, "an upper ROM is not RAM");
+        assert_eq!(ram_view("C4,W"), None);
+        assert_eq!(ram_view("-L"), None, "no configuration to read through");
+    }
 
     #[test]
     fn addresses_round_trip() {
