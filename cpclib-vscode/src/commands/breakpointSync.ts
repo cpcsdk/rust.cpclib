@@ -26,11 +26,32 @@ import { isDebugSessionActive } from '../debug/launch';
  *
  * A red dot's condition is the directive's `CONDITION="..."` (ACE's language,
  * as the debugger applies it): set, changed or cleared on the dot, the
- * directive follows. Removing the dot removes the whole directive, whatever
- * it carries. A hit count or a log message has no directive attribute: it
- * lasts as long as the dot.
+ * directive follows - only then: a dot touched otherwise (enabled, given a hit
+ * count) leaves the directive as written, a condition typed in the source
+ * included. Removing the dot removes a plain directive and comments out one
+ * with arguments; a dot set again on that line brings it back. A hit count or
+ * a log message has no directive attribute: it lasts as long as the dot.
  */
+/** Each red dot's condition when last seen, by the dot's id. */
+const dotConditions = new Map<string, string | null>();
+
 async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): Promise<void> {
+    const before = new Map(dotConditions);
+    const remember = (breakpoint: vscode.Breakpoint) => {
+        if (breakpoint instanceof vscode.SourceBreakpoint) {
+            dotConditions.set(breakpoint.id, breakpoint.condition?.trim() || null);
+        }
+    };
+    event.added.forEach(remember);
+    event.changed.forEach(remember);
+    event.removed.forEach(breakpoint => dotConditions.delete(breakpoint.id));
+    await syncWithConditions(event, before);
+}
+
+async function syncWithConditions(
+    event: vscode.BreakpointsChangeEvent,
+    dotConditionsBefore: Map<string, string | null>,
+): Promise<void> {
     // During a debug session a red dot is a *live* breakpoint: VS Code sends it
     // to the adapter, which sets it in the emulator. Writing the directive as
     // well would edit the user's source behind their back and desynchronise the
@@ -52,14 +73,23 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
         return;
     }
 
-    const wanted: { uri: vscode.Uri; line: number; enable: boolean; condition: string | null }[] = [];
+    // `undefined`: the directive's condition is left as it is.
+    const wanted: { uri: vscode.Uri; line: number; enable: boolean; condition: string | null | undefined }[] = [];
     const collect = (breakpoints: readonly vscode.Breakpoint[], enable: boolean) => {
         for (const breakpoint of breakpoints) {
             if (!(breakpoint instanceof vscode.SourceBreakpoint)) { continue; }
             const uri = breakpoint.location.uri;
             if (!uri.fsPath.toLowerCase().endsWith('.asm')) { continue; }
             const condition = breakpoint.condition?.trim() || null;
-            wanted.push({ uri, line: breakpoint.location.range.start.line, enable, condition });
+            const known = dotConditionsBefore.get(breakpoint.id);
+            // Said only when it is the dot's own news: a new dot's condition, or
+            // one changed. Otherwise a condition typed in the source, or the
+            // one a commented directive brings back, would be wiped.
+            const told = !enable ? undefined
+                : known === undefined ? (condition ?? undefined)
+                : condition !== known ? condition
+                : undefined;
+            wanted.push({ uri, line: breakpoint.location.range.start.line, enable, condition: told });
         }
     };
     collect(event.added, true);
@@ -84,7 +114,12 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
                 newText: string;
             } | null>(
                 'workspace/executeCommand',
-                { command: 'cpclib.breakpointEdit', arguments: [uri.toString(), line, enable, condition] },
+                {
+                    command: 'cpclib.breakpointEdit',
+                    arguments: condition === undefined
+                        ? [uri.toString(), line, enable]
+                        : [uri.toString(), line, enable, condition],
+                },
             );
             if (!textEdit) { continue; }
             edit.replace(
@@ -172,6 +207,12 @@ async function showExistingBreakpoints(document: vscode.TextDocument): Promise<v
 }
 
 export function registerBreakpointSync(context: ExtensionContext): void {
+    // the dots VS Code kept from the last time, as they are now
+    for (const breakpoint of vscode.debug.breakpoints) {
+        if (breakpoint instanceof vscode.SourceBreakpoint) {
+            dotConditions.set(breakpoint.id, breakpoint.condition?.trim() || null);
+        }
+    }
     context.subscriptions.push(
         vscode.debug.onDidChangeBreakpoints(e => { void syncBreakpointDirectives(e); }),
         // The other direction: a file that already contains directives shows

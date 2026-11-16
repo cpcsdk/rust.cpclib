@@ -137,21 +137,20 @@ impl Advanced {
         requests
     }
 
-    /// The label of a breakpoint sent whole (a directive's, the manager's)
-    /// by its name.
     /// A directive sent whole, by its name.
     fn program_entry(&self, name: &str) -> Option<&Value> {
         let index = name.strip_prefix(&format!("{OURS}program:"))?.parse::<usize>().ok()?;
         self.program.get(index)
     }
 
+    /// The label of a breakpoint sent whole (a directive's, the manager's)
+    /// by its name.
     fn program_label(&self, name: &str) -> Option<&str> {
         if let Some(id) = name.strip_prefix(&format!("{OURS}manager:")).and_then(|id| id.parse::<u64>().ok()) {
             let entry = self.manager.iter().find(|e| e.get("id").and_then(Value::as_u64) == Some(id))?;
             return entry.get("label").and_then(Value::as_str);
         }
-        let index = name.strip_prefix(&format!("{OURS}program:"))?.parse::<usize>().ok()?;
-        self.program.get(index)?.get("label").and_then(Value::as_str)
+        self.program_entry(name)?.get("label").and_then(Value::as_str)
     }
 
     /// The manager's raster breakpoints: the query of each

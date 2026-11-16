@@ -207,8 +207,8 @@ fn is_condition_argument(argument: &str) -> bool {
         .is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("condition"))
 }
 
-/// `CONDITION="..."` for `condition`, or `None` when it cannot be written (it
-/// holds a `"`, which would end the string).
+/// `CONDITION="..."` for `condition` - between single quotes when it holds a
+/// `"` - or `None` when it holds both quotes and cannot be written.
 fn condition_argument(condition: &str) -> Option<String> {
     if !condition.contains('"') {
         Some(format!("CONDITION=\"{condition}\""))
@@ -228,11 +228,7 @@ fn condition_of(directive: &str) -> Option<String> {
     directive_arguments(arguments)
         .into_iter()
         .find(|argument| is_condition_argument(argument))
-        .and_then(|argument| {
-            argument
-                .split_once('=')
-                .map(|(_, value)| value.trim().trim_matches(['"', '\'']).to_owned())
-        })
+        .and_then(|argument| argument.split_once('=').map(|(_, value)| unquoted(value).to_owned()))
         .filter(|condition| !condition.is_empty())
 }
 
@@ -347,6 +343,7 @@ pub(super) fn remove_breakpoint_edit(
     // ADDR=buffer` loses all of it, not only its first word.
     let mut start = directive_start(listing, line_text, line)?;
     let mut end = directive_end(line_text, start);
+    let directive = line_text[start..end].to_owned();
 
     // A separator on the right closes the line up after the removal.
     let tail = line_text.get(end..)?;
@@ -368,9 +365,7 @@ pub(super) fn remove_breakpoint_edit(
 
     // A directive with arguments is commented out rather than lost: the red
     // dot set again on the line brings it back whole.
-    let directive = &line_text[directive_start(listing, line_text, line)?..];
-    let directive = &directive[..directive_end(directive, 0)];
-    if has_arguments(directive) {
+    if has_arguments(&directive) {
         let rest = format!("{}{}", &line_text[..start], &line_text[end..]);
         let (code, comment) = split_comment(&rest);
         let code = code.trim_end();
@@ -405,6 +400,18 @@ pub(super) fn remove_breakpoint_edit(
     })
 }
 
+/// A string's text without its quotes, `"` or `'` (the pair only: a quote
+/// inside is the string's own).
+fn unquoted(value: &str) -> &str {
+    let value = value.trim();
+    for quote in ['"', '\''] {
+        if let Some(inner) = value.strip_prefix(quote).and_then(|v| v.strip_suffix(quote)) {
+            return inner;
+        }
+    }
+    value
+}
+
 /// Whether a directive carries arguments (`BREAKPOINT TYPE=MEM, ...`), not
 /// only its word.
 fn has_arguments(directive: &str) -> bool {
@@ -435,7 +442,36 @@ fn commented_directive(line_text: &str) -> Option<(usize, String, String)> {
     }
     // up to the comment that followed it, if any
     let (directive, after) = split_comment(text);
+    // a comment that only talks about a breakpoint is not one
+    if !looks_like_arguments(&directive.trim()[word.len()..]) {
+        return None;
+    }
     Some((code.len(), directive.trim_end().to_owned(), after.trim().to_owned()))
+}
+
+/// Whether the text after a `breakpoint` word reads as its arguments (as
+/// clearing a red dot comments out only a directive with some): each a word
+/// of the directive (`MEM`, `WRITE`, `STOP`...), a `KEY=value` of it, or -
+/// the first only - an address, one expression without blanks.
+fn looks_like_arguments(arguments: &str) -> bool {
+    const WORDS: &[&str] = &[
+        "EXEC", "EXECUTE", "MEM", "MEMORY", "IO", "R", "READ", "W", "WRITE", "RW", "READWRITE", "STOP", "STOPPER",
+        "WATCH", "WATCHER"
+    ];
+    const KEYS: &[&str] = &[
+        "TYPE", "ACCESS", "RUNMODE", "ADDR", "ADDRESS", "MASK", "SIZE", "VALUE", "VALMASK", "CONDITION", "NAME", "STEP"
+    ];
+    let arguments = directive_arguments(arguments);
+    !arguments.is_empty()
+        && arguments.iter().enumerate().all(|(index, argument)| {
+            match argument.split_once('=') {
+                Some((key, _)) => KEYS.iter().any(|known| key.trim().eq_ignore_ascii_case(known)),
+                None => {
+                    WORDS.iter().any(|known| argument.eq_ignore_ascii_case(known))
+                        || (index == 0 && !argument.contains(char::is_whitespace))
+                }
+            }
+        })
 }
 
 /// An edit replacing the whole of `line`.
@@ -845,6 +881,27 @@ mod tests {
             edited(program, 0, true, Some(Some("A = 6"))).as_deref(),
             Some("\tbreakpoint MEM, WRITE, STOP, addr=buffer, name='a: b; c', CONDITION=\"A = 6\" ; why")
         );
+    }
+
+    /// A comment that only mentions a breakpoint is not a directive to bring
+    /// back: setting a red dot on its line writes a new one, the comment kept.
+    #[test]
+    fn a_comment_about_a_breakpoint_is_not_restored() {
+        assert_eq!(
+            edited("\tinc a ; breakpoint here because the loop is wrong\n", 0, true, Some(None)).as_deref(),
+            Some("\tBREAKPOINT : inc a ; breakpoint here because the loop is wrong")
+        );
+        assert_eq!(
+            edited("\tinc a ; breakpoint, then step\n", 0, true, Some(None)).as_deref(),
+            Some("\tBREAKPOINT : inc a ; breakpoint, then step")
+        );
+    }
+
+    /// A condition's own quotes are kept, only the pair around it goes.
+    #[test]
+    fn a_condition_keeps_its_own_quotes() {
+        assert_eq!(condition_of("breakpoint CONDITION='A = \"x\"'").as_deref(), Some("A = \"x\""));
+        assert_eq!(condition_of("breakpoint name=\"n\", condition=A=5").as_deref(), Some("A=5"));
     }
 
     /// Inside a macro body (no tokens there) too.

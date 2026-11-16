@@ -1280,11 +1280,10 @@ impl<P: DapPeer> Session<P> {
         let plural = if count == 1 { "" } else { "s" };
         Some(format!(
             "{count} BREAKPOINT directive{plural} in the program {} armed alongside the editor's \
-             red dots, at {}. The gutter cannot show a directive, so stopping at one looks like \
-             stopping at nothing - and a directive written inside a macro body is armed once for \
-             every place the macro is used. A directive's red dot is the directive: \
-             clearing it takes the directive back for this session, and its condition, hit \
-             count or log message replace the directive's.",
+             red dots, at {}. A directive written inside a macro body is armed once for every \
+             place the macro is used. A directive's red dot (the gutter shows one on its line) is \
+             the directive: clearing it takes the directive back for this session, and its \
+             condition, hit count or log message replace the directive's.",
             if count == 1 { "is" } else { "are" },
             where_.join(", ")
         ))
@@ -5715,8 +5714,14 @@ impl<P: DapPeer> Session<P> {
             let origin = if bp.one_shot { "entry" } else { "directive" };
             let mut item = row(origin, format!("directive:{}", bp.label), bp.address);
             item["name"] = json!(bp.label);
+            // its pass: the directive's (STEP=), or its red dot's hit count
+            item["step"] = json!(
+                bp.armed_body()
+                    .and_then(|body| body.get("after").and_then(Value::as_u64))
+                    .or(bp.dot.after)
+                    .unwrap_or(0)
+            );
             if let Some(body) = &bp.armed_body() {
-                item["step"] = json!(body.get("after").and_then(Value::as_u64).unwrap_or(0));
                 for key in ["access", "condition"] {
                     if let Some(value) = body.get(key) {
                         item[key] = value.clone();
@@ -7659,11 +7664,6 @@ fn fingerprint_of(file: &Path) -> Option<u64> {
     Some(hash ^ bytes.len() as u64)
 }
 
-/// Whether two paths name the same file.
-///
-/// The assembler records the path it was given and the editor sends whatever
-/// the user opened, so a plain `==` is not enough - but canonicalising is a
-/// syscall, so the cheap comparison is tried first.
 /// Whether a directive is written in `file`: the same file, or - the
 /// assembler having been given a relative name - one whose path ends with it.
 fn written_in(written: &cpclib_asm::assembler::delayed_command::BreakpointSource, file: &Path) -> bool {
@@ -7671,6 +7671,11 @@ fn written_in(written: &cpclib_asm::assembler::delayed_command::BreakpointSource
     same_file(named, file) || (named.is_relative() && file.ends_with(named))
 }
 
+/// Whether two paths name the same file.
+///
+/// The assembler records the path it was given and the editor sends whatever
+/// the user opened, so a plain `==` is not enough - but canonicalising is a
+/// syscall, so the cheap comparison is tried first.
 fn same_file(left: &Path, right: &Path) -> bool {
     if left == right {
         return true;
