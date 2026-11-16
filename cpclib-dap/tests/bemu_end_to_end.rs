@@ -753,30 +753,58 @@ fn saved_manager_breakpoints_are_armed_at_launch() {
     adapter.finish();
 }
 
-/// bemu in a tab: its web build, served by the adapter, opened by a browser
-/// as the editor opens it, and debugged through the page. Needs a web build
-/// with the debug API (`$CPCLIB_BEMU_WEB`, bemu's `web/pkg`) and a browser
-/// to open it (`$CPCLIB_TEST_BROWSER`, a Chromium); without them the test
-/// says so and passes.
-#[test]
-fn in_a_tab_the_page_is_debugged() {
-    let (Ok(web), Ok(browser)) = (std::env::var("CPCLIB_BEMU_WEB"), std::env::var("CPCLIB_TEST_BROWSER"))
-    else {
-        eprintln!("skipped: set $CPCLIB_BEMU_WEB (bemu's web/pkg) and $CPCLIB_TEST_BROWSER (a Chromium) to run this test");
-        return;
-    };
-    assert!(Path::new(&web).join("bemu.js").is_file(), "no bemu.js in {web}");
-    let source = program("main.asm", LOOP);
-    let mut adapter = Adapter::start();
+/// A browser showing bemu's page, closed with the test.
+struct Browser {
+    child: Child,
+    profile: PathBuf
+}
+
+impl Drop for Browser {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.profile);
+    }
+}
+
+/// The browser to open bemu's page with, and its web build: both needed
+/// for a tab, else the test says so and passes.
+fn tab_tools() -> Option<String> {
+    match (std::env::var("CPCLIB_BEMU_WEB"), std::env::var("CPCLIB_TEST_BROWSER")) {
+        (Ok(web), Ok(browser)) => {
+            assert!(Path::new(&web).join("bemu.js").is_file(), "no bemu.js in {web}");
+            Some(browser)
+        },
+        _ => {
+            eprintln!(
+                "skipped: set $CPCLIB_BEMU_WEB (bemu's web/pkg) and $CPCLIB_TEST_BROWSER (a Chromium) to run this test"
+            );
+            None
+        }
+    }
+}
+
+/// Launch `program` in a tab, opening the page the adapter announces as the
+/// editor does; the launch is answered once the page runs.
+fn launch_in_a_tab(adapter: &mut Adapter, browser: &str, program: &Path, extra: Value) -> Browser {
     adapter.request("initialize", json!({ "adapterID": "cpclib", "linesStartAt1": true, "columnsStartAt1": true }));
-    let launch = adapter.send("launch", json!({ "program": source, "emulator": "bemu", "stopOnEntry": true }));
+    let mut arguments = json!({ "program": program, "emulator": "bemu" });
+    for (key, value) in extra.as_object().unwrap() {
+        arguments[key] = value.clone();
+    }
+    let launch = adapter.send("launch", arguments);
 
     // told before the launch is over: the page has to be opened for it to end
     let ready = adapter.wait("the page to open", |m| m["event"] == "cpclib/emulatorReady");
     let url = ready["body"]["url"].as_str().expect("a page").to_owned();
     assert!(url.starts_with("http://127.0.0.1:") && url.ends_with("/debug"), "{ready}");
-    let profile = std::env::temp_dir().join(format!("cpclib-dap-bemu-tab-{}", std::process::id()));
-    let mut page = Command::new(&browser)
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let profile = std::env::temp_dir().join(format!(
+        "cpclib-dap-bemu-tab-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
+    let child = Command::new(browser)
         .args(["--headless=new", "--no-sandbox", "--disable-gpu", "--autoplay-policy=no-user-gesture-required"])
         .arg(format!("--user-data-dir={}", profile.display()))
         .arg(&url)
@@ -784,20 +812,29 @@ fn in_a_tab_the_page_is_debugged() {
         .stderr(Stdio::null())
         .spawn()
         .expect("the browser starts");
-    struct Closed(Child);
-    impl Drop for Closed {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
-    }
-    let _closed = Closed(std::mem::replace(&mut page, Command::new("true").spawn().unwrap()));
+    let opened = Browser { child, profile };
 
     let response = adapter.wait("response to launch", |m| m["type"] == "response" && m["request_seq"] == launch);
     assert_eq!(response["success"], true, "{response}\n{}", adapter.transcript());
     let again = adapter.wait("the emulator ready", |m| m["event"] == "cpclib/emulatorReady");
     assert_eq!(again["body"]["emulator"], "bemu", "{again}");
     assert_eq!(again["body"]["url"], url.as_str(), "{again}");
+    opened
+}
+
+/// bemu in a tab: its web build, served by the adapter, opened by a browser
+/// as the editor opens it, and debugged through the page. Needs a web build
+/// with the debug API (`$CPCLIB_BEMU_WEB`, bemu's `web/pkg`) and a browser
+/// to open it (`$CPCLIB_TEST_BROWSER`, a Chromium).
+#[test]
+fn in_a_tab_the_page_is_debugged() {
+    let Some(browser) = tab_tools()
+    else {
+        return;
+    };
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    let _page = launch_in_a_tab(&mut adapter, &browser, &source, json!({ "stopOnEntry": true }));
 
     adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": LINE_INC_A }] }));
     adapter.request("configurationDone", json!({}));
@@ -816,5 +853,60 @@ fn in_a_tab_the_page_is_debugged() {
     assert_eq!(adapter.line(), LINE_LD_C000);
     assert_eq!(hex_value(&adapter.register("A")), 2);
     adapter.finish();
-    let _ = std::fs::remove_dir_all(&profile);
+}
+
+/// A BASIC program in a tab: the page boots BASIC, bemu loads the program
+/// once it is up.
+#[test]
+fn a_basic_program_in_a_tab() {
+    let Some(browser) = tab_tools()
+    else {
+        return;
+    };
+    let source = program("main.bas", "10 A=1\n20 A=A+1\n30 GOTO 20\n");
+    let mut adapter = Adapter::start();
+    let _page = launch_in_a_tab(&mut adapter, &browser, &source, json!({}));
+    adapter.request("setBreakpoints", json!({ "source": { "path": source }, "breakpoints": [{ "line": 2 }] }));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(adapter.line(), 2);
+    let a = adapter.variable("A", "Variables");
+    assert!(a.starts_with("1 "), "A on the first pass: {a}");
+    adapter.finish();
+}
+
+/// Stopped while bemu's page is not open yet (the tab closed at once, or
+/// Stop pressed): the launch ends then, not when its wait for the page runs
+/// out, and the adapter with it. Needs bemu's web build (`$CPCLIB_BEMU_WEB`).
+#[test]
+fn a_stop_before_the_page_opens_ends_the_launch_at_once() {
+    match std::env::var("CPCLIB_BEMU_WEB") {
+        Ok(web) => assert!(Path::new(&web).join("bemu.js").is_file(), "no bemu.js in {web}"),
+        Err(_) => {
+            eprintln!("skipped: set $CPCLIB_BEMU_WEB (bemu's web/pkg) to run this test");
+            return;
+        }
+    }
+    let source = program("main.asm", LOOP);
+    let mut adapter = Adapter::start();
+    adapter.request("initialize", json!({ "adapterID": "cpclib", "linesStartAt1": true, "columnsStartAt1": true }));
+    let launch = adapter.send("launch", json!({ "program": source, "emulator": "bemu" }));
+    adapter.wait("the page to open", |m| m["event"] == "cpclib/emulatorReady");
+
+    // the page is never opened: the editor stops the session instead
+    let stopped_at = Instant::now();
+    adapter.send("disconnect", json!({}));
+    let response = adapter.wait("response to launch", |m| m["type"] == "response" && m["request_seq"] == launch);
+    assert_eq!(response["success"], false, "{response}");
+    assert!(response["message"].as_str().unwrap_or_default().contains("stopped"), "{response}");
+    assert!(stopped_at.elapsed() < Duration::from_secs(5), "the launch ended late: {:?}", stopped_at.elapsed());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if let Ok(Some(_)) = adapter.child.try_wait() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    panic!("the adapter did not exit after the disconnect");
 }

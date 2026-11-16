@@ -331,6 +331,19 @@ impl Transcript {
 static EARLY_EVENTS: std::sync::Mutex<Option<std::sync::mpsc::Sender<(String, Value)>>> =
     std::sync::Mutex::new(None);
 
+/// The editor stopped the session (`disconnect`, `terminate`) or went: what
+/// a launch waits for (bemu's page) is waited for no longer. Set by the
+/// thread reading the editor, which sees every message as it comes, while
+/// the protocol thread may be busy with the launch. Never cleared: the
+/// protocol thread ends the adapter on that same message.
+static LAUNCH_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the editor stopped the session during the launch (see
+/// [`LAUNCH_CANCELLED`]).
+fn launch_cancelled() -> bool {
+    LAUNCH_CANCELLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Send `event` to the editor now, from inside a launch (see [`EARLY_EVENTS`]).
 fn announce(event: &str, body: Value) {
     if let Some(sender) = EARLY_EVENTS.lock().unwrap_or_else(|held| held.into_inner()).as_ref() {
@@ -397,10 +410,19 @@ pub fn run_stdio() -> std::io::Result<()> {
         let mut chunk = [0u8; 8192];
         loop {
             match input.read(&mut chunk) {
-                Ok(0) | Err(_) => return,
+                Ok(0) | Err(_) => {
+                    // the editor is gone: nothing to launch for
+                    LAUNCH_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    return;
+                },
                 Ok(read) => buffer.extend_from_slice(&chunk[..read])
             }
             for message in protocol::decode(&mut buffer) {
+                // seen here, as it comes: the protocol thread may be busy
+                // with a launch that waits for something (see `LAUNCH_CANCELLED`)
+                if matches!(message.get("command").and_then(Value::as_str), Some("disconnect" | "terminate")) {
+                    LAUNCH_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
                 if editor_tx.send(message).is_err() {
                     return;
                 }
@@ -820,7 +842,7 @@ fn start_session(
                 }
             }
         }
-else if wants_1984js_early {
+        else if wants_1984js_early {
             let _ = crate::js1984_bridge::install();
         }
     });
@@ -1209,10 +1231,10 @@ fn resolve_emulator_choice(arguments: &Value) -> (String, cpclib_project::config
 }
 
 /// A bemu this session started: its process (its own window), or the
-/// server of its page (in a tab) and the page's URL.
+/// server of its page (in a tab).
 enum Started {
     Process(std::process::Child),
-    Page(cpclib_runner::web::bemu::BemuPage, String)
+    Page(cpclib_runner::web::bemu::BemuPage)
 }
 
 /// Picks and connects to whichever emulator this session talks to (1984js
@@ -1289,16 +1311,20 @@ fn connect_backend(
                     let page = bemu::serve_in_tab(arguments, load)?;
                     announce(
                         "output",
-                        json!({ "category": "console", "output": format!("bemu is starting in its tab ({})\n", page.page_url()) })
+                        json!({
+                            "category": "console",
+                            "output": format!(
+                                "bemu starts once its page is open: {} (VS Code opens it in a tab)\n",
+                                page.page_url()
+                            )
+                        })
                     );
                     announce(
                         "cpclib/emulatorReady",
                         json!({ "url": page.page_url(), "emulator": "bemu", "supports": [] })
                     );
-                    page.wait_until_ready(std::time::Duration::from_secs(120))?;
-                    let endpoint = page.endpoint();
-                    let url = page.page_url();
-                    (endpoint, Some((Started::Page(page, url), held)))
+                    page.wait_until_ready(bemu::PAGE_OPEN_TIMEOUT, launch_cancelled)?;
+                    (page.endpoint(), Some((Started::Page(page), held)))
                 }
                 else {
                     let (endpoint, child) = bemu::launch(arguments, load, port)?;
@@ -1328,8 +1354,8 @@ fn connect_backend(
         if let Some((started, _)) = started {
             peer = match started {
                 Started::Process(child) => peer.owning(child),
-                Started::Page(page, page_url) => {
-                    url = page_url;
+                Started::Page(page) => {
+                    url = page.page_url();
                     peer.serving(page)
                 }
             };

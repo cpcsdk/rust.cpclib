@@ -37,6 +37,12 @@ pub fn in_tab(arguments: &Value) -> bool {
             .is_none()
 }
 
+/// How long a launch waits for bemu's page to be opened and its emulator to
+/// start, at most: VS Code opens it at once, and it starts in a second or
+/// two; the rest is for a person opening it in a browser by hand. A stop
+/// meanwhile ends the wait at once.
+pub const PAGE_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// The executable named by the launch configuration or the environment.
 fn named_executable(arguments: &Value) -> Option<PathBuf> {
     arguments
@@ -47,24 +53,27 @@ fn named_executable(arguments: &Value) -> Option<PathBuf> {
 }
 
 /// The executable to start: the one named, else bndbuild's (installed if
-/// it is not yet), else `amsrust` from the `PATH`.
-pub fn executable(arguments: &Value) -> PathBuf {
-    named_executable(arguments).unwrap_or_else(|| {
-        use cpclib_runner::runner::emulator::Emulator;
-        use cpclib_runner::runner::emulator::bemu::BemuVersion;
-        let configuration = Emulator::Bemu(BemuVersion::default())
-            .configuration::<cpclib_common::event::DiscardObserver>();
-        if configuration.is_cached()
-            || configuration
-                .install(&cpclib_common::event::DiscardObserver)
-                .is_ok()
-        {
-            configuration.exec_fname().into_std_path_buf()
-        }
-        else {
-            PathBuf::from("amsrust")
-        }
-    })
+/// it is not yet), else `amsrust` from the `PATH` - with why bndbuild's
+/// could not be installed then, for the error if that one does not start
+/// either.
+pub fn executable(arguments: &Value) -> (PathBuf, Option<String>) {
+    if let Some(named) = named_executable(arguments) {
+        return (named, None);
+    }
+    use cpclib_runner::runner::emulator::Emulator;
+    use cpclib_runner::runner::emulator::bemu::BemuVersion;
+    let configuration = Emulator::Bemu(BemuVersion::default())
+        .configuration::<cpclib_common::event::DiscardObserver>();
+    let installed = if configuration.is_cached() {
+        Ok(())
+    }
+    else {
+        configuration.install(&cpclib_common::event::DiscardObserver)
+    };
+    match installed {
+        Ok(()) => (configuration.exec_fname().into_std_path_buf(), None),
+        Err(e) => (PathBuf::from("amsrust"), Some(e))
+    }
 }
 
 /// bemu's web build in a page, loaded with `load`, the machine configured
@@ -111,7 +120,7 @@ pub fn launch(
     load: Load,
     port: u16
 ) -> Result<(String, std::process::Child), String> {
-    let program = executable(arguments);
+    let (program, not_installed) = executable(arguments);
     let port = port_to_serve_on(port);
     let mut command = std::process::Command::new(&program);
     let mut snapshot_file = None;
@@ -141,9 +150,12 @@ pub fn launch(
         .stderr(std::process::Stdio::null());
     crate::amspiritlite::strip_snap_leaked_env_vars(&mut command);
     let mut child = command.spawn().map_err(|e| {
+        let download = not_installed
+            .map(|why| format!(" (bndbuild could not download it: {why})"))
+            .unwrap_or_default();
         format!(
-            "cannot start bemu ({}): {e} - set \"emulatorPath\" in the launch configuration, \
-             or $CPCLIB_BEMU, to its amsrust executable",
+            "cannot start bemu ({}): {e}{download} - set \"emulatorPath\" in the launch \
+             configuration, or $CPCLIB_BEMU, to its amsrust executable",
             program.display()
         )
     })?;
@@ -173,7 +185,10 @@ mod tests {
     #[test]
     fn the_executable_is_the_launch_configurations_first() {
         let named = json!({ "emulatorPath": "/opt/bemu/amsrust" });
-        assert_eq!(executable(&named), PathBuf::from("/opt/bemu/amsrust"));
+        assert_eq!(
+            executable(&named),
+            (PathBuf::from("/opt/bemu/amsrust"), None)
+        );
     }
 
     #[test]
