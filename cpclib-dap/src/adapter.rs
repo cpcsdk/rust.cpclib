@@ -820,7 +820,7 @@ fn start_session(
                 }
             }
         }
-else if wants_1984js_early {
+        else if wants_1984js_early {
             let _ = crate::js1984_bridge::install();
         }
     });
@@ -1209,10 +1209,10 @@ fn resolve_emulator_choice(arguments: &Value) -> (String, cpclib_project::config
 }
 
 /// A bemu this session started: its process (its own window), or the
-/// server of its page (in a tab) and the page's URL.
+/// server of its page (in a tab).
 enum Started {
     Process(std::process::Child),
-    Page(cpclib_runner::web::bemu::BemuPage, String)
+    Page(cpclib_runner::web::bemu::BemuPage)
 }
 
 /// Picks and connects to whichever emulator this session talks to (1984js
@@ -1289,16 +1289,20 @@ fn connect_backend(
                     let page = bemu::serve_in_tab(arguments, load)?;
                     announce(
                         "output",
-                        json!({ "category": "console", "output": format!("bemu is starting in its tab ({})\n", page.page_url()) })
+                        json!({
+                            "category": "console",
+                            "output": format!(
+                                "bemu starts once its page is open: {} (VS Code opens it in a tab)\n",
+                                page.page_url()
+                            )
+                        })
                     );
                     announce(
                         "cpclib/emulatorReady",
                         json!({ "url": page.page_url(), "emulator": "bemu", "supports": [] })
                     );
-                    page.wait_until_ready(std::time::Duration::from_secs(120))?;
-                    let endpoint = page.endpoint();
-                    let url = page.page_url();
-                    (endpoint, Some((Started::Page(page, url), held)))
+                    page.wait_until_ready(bemu::PAGE_OPEN_TIMEOUT)?;
+                    (page.endpoint(), Some((Started::Page(page), held)))
                 }
                 else {
                     let (endpoint, child) = bemu::launch(arguments, load, port)?;
@@ -1328,8 +1332,8 @@ fn connect_backend(
         if let Some((started, _)) = started {
             peer = match started {
                 Started::Process(child) => peer.owning(child),
-                Started::Page(page, page_url) => {
-                    url = page_url;
+                Started::Page(page) => {
+                    url = page.page_url();
                     peer.serving(page)
                 }
             };

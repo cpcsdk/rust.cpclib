@@ -15,6 +15,11 @@
 //! refuses whatever a browser sends (an `Origin` or `Sec-Fetch-*` header):
 //! another page on this machine cannot drive the debugger through it.
 //!
+//! One page runs the emulator: the first to claim the session
+//! (`/session/claim`). Another one - the address opened in a browser too, or
+//! the tab reloaded, each a new emulator - is told so and starts nothing:
+//! the debugger's requests are never shared between two machines.
+//!
 //! When the page goes (its tab closed), the server stops listening: the
 //! peer's connections are refused, which is how it notices an emulator gone.
 
@@ -174,7 +179,10 @@ struct Relay {
     replies: Mutex<HashMap<u64, Sender<Reply>>>,
     next_id: AtomicU64,
     subscribers: Mutex<Vec<Sender<String>>>,
-    /// When the page last asked for requests, and whether it is asking now.
+    /// The page that runs the emulator (its own id), once one claimed it.
+    owner: Mutex<Option<String>>,
+    /// When the page last asked for requests, and how many of its asks are
+    /// being held now.
     polling: Mutex<(Instant, usize)>,
     stopped: AtomicBool
 }
@@ -274,6 +282,7 @@ pub fn serve(
         replies: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
         subscribers: Mutex::new(Vec::new()),
+        owner: Mutex::new(None),
         polling: Mutex::new((Instant::now(), 0)),
         stopped: AtomicBool::new(false)
     });
@@ -329,6 +338,18 @@ impl Relay {
         }
         let authorised =
             request.query.get("token").map(String::as_str) == Some(self.token.as_str());
+        // the routes of the page running the emulator: its own only
+        let owned = matches!(
+            request.path.as_str(),
+            "/session/ready"
+                | "/session/failed"
+                | "/session/next"
+                | "/session/reply"
+                | "/session/events"
+        );
+        if authorised && owned && !self.owned_by(&request) {
+            return respond(&mut stream, 409, "text/plain", ANOTHER_PAGE.as_bytes());
+        }
         match (request.method.as_str(), request.path.as_str()) {
             ("GET", "/debug") => {
                 respond(
@@ -342,6 +363,14 @@ impl Relay {
                 match self.load.bytes() {
                     Some(bytes) => respond(&mut stream, 200, "application/octet-stream", bytes),
                     None => respond(&mut stream, 404, "text/plain", b"nothing to load")
+                }
+            },
+            ("POST", "/session/claim") if authorised => {
+                if self.claim(&request) {
+                    respond(&mut stream, 204, "text/plain", b"")
+                }
+                else {
+                    respond(&mut stream, 409, "text/plain", ANOTHER_PAGE.as_bytes())
                 }
             },
             ("POST", "/session/ready") if authorised => {
@@ -377,14 +406,37 @@ impl Relay {
         }
     }
 
+    /// Claim the session for the page asking (`page=` its id): the first to
+    /// ask has it, the others are refused.
+    fn claim(&self, request: &Request) -> bool {
+        let Some(page) = request.query.get("page").filter(|page| !page.is_empty())
+        else {
+            return false;
+        };
+        let mut owner = self.owner.lock().unwrap();
+        match owner.as_ref() {
+            Some(owner) => owner == page,
+            None => {
+                *owner = Some(page.clone());
+                true
+            }
+        }
+    }
+
+    /// Whether the page asking is the one that claimed the session.
+    fn owned_by(&self, request: &Request) -> bool {
+        let owner = self.owner.lock().unwrap();
+        owner.is_some() && owner.as_deref() == request.query.get("page").map(String::as_str)
+    }
+
     fn set_state(&self, state: PageState) {
         let mut current = self.state.lock().unwrap();
-        // the first word counts: a page reloaded is not a new emulator
         if *current == PageState::Waiting {
             *current = state;
         }
-        self.polling.lock().unwrap().0 = Instant::now();
         drop(current);
+        // the page's life is counted from now
+        self.polling.lock().unwrap().0 = Instant::now();
         self.state_changed.notify_all();
     }
 
@@ -516,9 +568,7 @@ impl Relay {
             &mut stream,
             200,
             "application/json",
-            serde_json::Value::from(requests.clone())
-                .to_string()
-                .as_bytes()
+            serde_json::Value::from(requests).to_string().as_bytes()
         );
         if written.is_err() {
             // the page did not get them: they wait for its next poll
@@ -630,6 +680,11 @@ fn respond_with(stream: &mut TcpStream, reply: &Reply) -> std::io::Result<()> {
     stream.flush()
 }
 
+/// What a page that does not run the emulator is told.
+const ANOTHER_PAGE: &str = "this debug session's bemu runs in another page (opened first): \
+                            a page reloaded or opened twice is a new emulator, the debugger \
+                            cannot follow it - restart the debug session";
+
 /// No header splitting through what the page says.
 fn single_line(text: &str) -> String {
     text.replace(['\r', '\n'], " ")
@@ -657,7 +712,9 @@ const PAGE: &str = r#"<!DOCTYPE html>
 <div id="status">Starting bemu...</div>
 <script type="module">
   const session = window.__cpclib_bemu;
-  const token = 'token=' + encodeURIComponent(session.token);
+  // this page, for the server to tell it from another one opened on the same address
+  const page = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + String(Date.now()));
+  const token = 'token=' + encodeURIComponent(session.token) + '&page=' + encodeURIComponent(page);
   const status = document.getElementById('status');
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const post = (path, body) => fetch(path + (path.includes('?') ? '&' : '?') + token, { method: 'POST', body });
@@ -666,6 +723,13 @@ const PAGE: &str = r#"<!DOCTYPE html>
     const message = String(error && error.message ? error.message : error);
     status.textContent = 'bemu could not start: ' + message;
     await post('/session/failed', message).catch(() => {});
+  }
+
+  // the first page has the session; another starts nothing
+  const claimed = await post('/session/claim', '').catch(error => ({ ok: false, text: async () => String(error) }));
+  if (!claimed.ok) {
+    status.textContent = await claimed.text();
+    throw new Error(status.textContent);
   }
 
   let emu;
@@ -716,21 +780,37 @@ const PAGE: &str = r#"<!DOCTYPE html>
     await post('/session/reply?' + query, reply.body).catch(() => {});
   }
 
+  // the debug session ended (the server gone): the machine stops with it
+  let over = false;
+  function end(why) {
+    if (over) { return; }
+    over = true;
+    status.textContent = why;
+    emu.pause();
+  }
+
   async function relay() {
-    for (;;) {
+    let failures = 0;
+    while (!over) {
       let requests = [];
       try {
         const polled = await fetch('/session/next?' + token);
+        failures = 0;
         if (polled.status === 200) { requests = await polled.json(); }
+        else if (polled.status === 409) { end(await polled.text()); }
         else if (polled.status !== 204) { await sleep(500); }
       }
-      catch (_) { await sleep(500); continue; }
+      catch (_) {
+        if (++failures >= 6) { end('The debug session is over.'); }
+        await sleep(500);
+        continue;
+      }
       for (const request of requests) { answer(request); }
     }
   }
 
   async function events() {
-    for (;;) {
+    while (!over) {
       try {
         const pending = await emu.debugEvents();
         if (pending.length) { await post('/session/events', pending.join('')); }
@@ -740,9 +820,27 @@ const PAGE: &str = r#"<!DOCTYPE html>
     }
   }
 
+  // As a desktop bemu started without a snapshot: BASIC up, at full speed,
+  // before a debugger comes (bemu's BASIC_BOOT_T_STATES, 1.5 s: 76 frames),
+  // for it to find BASIC's state rather than a boot in progress.
+  if (session.load !== 'snapshot') {
+    const BASIC_BOOT_FRAMES = 76;
+    const deadline = Date.now() + 15000;
+    await emu.setSpeed('max');
+    try {
+      while (Date.now() < deadline) {
+        const ping = JSON.parse(new TextDecoder().decode((await emu.api('GET', '/api/ping')).body));
+        if (ping.emu.frames >= BASIC_BOOT_FRAMES) { break; }
+        await sleep(20);
+      }
+    }
+    catch (_) {}
+    finally { await emu.setSpeed(1); }
+  }
+
+  await post('/session/ready', '');
   relay();
   events();
-  await post('/session/ready', '');
   status.textContent = '';
   emu.canvas.focus();
 </script>
@@ -779,6 +877,11 @@ mod tests {
         let port = page.port();
         let token = page.relay.token.clone();
         std::thread::spawn(move || {
+            let token = format!("{token}&page=fake");
+            call(
+                port,
+                &format!("POST /session/claim?token={token} HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
+            );
             call(
                 port,
                 &format!("POST /session/ready?token={token} HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
@@ -943,11 +1046,54 @@ mod tests {
         assert!(answer.starts_with("HTTP/1.1 403"), "{answer}");
     }
 
+    /// The session claimed for page `id`: the query its routes carry.
+    fn claimed(page: &BemuPage, id: &str) -> String {
+        let token = format!("{}&page={id}", page.relay.token);
+        let answer = call(
+            page.port(),
+            &format!("POST /session/claim?token={token} HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
+        );
+        assert!(answer.starts_with("HTTP/1.1 204"), "{answer}");
+        token
+    }
+
+    #[test]
+    fn a_second_page_is_refused() {
+        let package = package();
+        let page = serve(package.path(), Load::Boot, serde_json::json!({})).unwrap();
+        claimed(&page, "first");
+        claimed(&page, "first"); // the same page again: still its own
+        let token = format!("{}&page=second", page.relay.token);
+        for route in [
+            "POST /session/claim",
+            "POST /session/ready",
+            "GET /session/next",
+            "POST /session/events"
+        ] {
+            let answer = call(
+                page.port(),
+                &format!("{route}?token={token} HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
+            );
+            assert!(
+                answer.starts_with("HTTP/1.1 409") && answer.contains("another page"),
+                "{route}: {answer}"
+            );
+        }
+        // nor without saying which page it is
+        let token = page.relay.token.clone();
+        let answer = call(
+            page.port(),
+            &format!("POST /session/ready?token={token} HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
+        );
+        assert!(answer.starts_with("HTTP/1.1 409"), "{answer}");
+        assert_eq!(*page.relay.state.lock().unwrap(), PageState::Waiting);
+    }
+
     #[test]
     fn a_page_that_fails_says_why() {
         let package = package();
         let page = serve(package.path(), Load::Boot, serde_json::json!({})).unwrap();
-        let token = page.relay.token.clone();
+        let token = claimed(&page, "page");
         call(
             page.port(),
             &format!(
@@ -967,7 +1113,7 @@ mod tests {
     fn a_page_gone_closes_the_api() {
         let package = package();
         let page = serve(package.path(), Load::Boot, serde_json::json!({})).unwrap();
-        let token = page.relay.token.clone();
+        let token = claimed(&page, "page");
         call(
             page.port(),
             &format!("POST /session/ready?token={token} HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
