@@ -339,7 +339,7 @@ impl Advanced {
 
 /// A number the manager keeps as a JSON number or as text (`"100"`).
 fn number_of(value: &Value) -> Option<u64> {
-    value.as_u64().or_else(|| value.as_str().and_then(|text| crate::text::parse_number(text)).map(u64::from))
+    value.as_u64().or_else(|| value.as_str().and_then(crate::text::parse_number).map(u64::from))
 }
 
 fn is_raster(entry: &Value) -> bool {

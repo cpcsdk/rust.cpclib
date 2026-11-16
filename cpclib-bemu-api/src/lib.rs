@@ -417,7 +417,10 @@ impl<'de> Deserialize<'de> for Flag {
                 }
             }
             fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Flag, E> {
-                self.visit_u64(u64::try_from(v).unwrap_or(2))
+                match u64::try_from(v) {
+                    Ok(v) => self.visit_u64(v),
+                    Err(_) => Err(E::invalid_value(serde::de::Unexpected::Signed(v), &self)),
+                }
             }
             fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Flag, E> {
                 match v.trim() {
@@ -1669,6 +1672,36 @@ mod tests {
         )
         .unwrap();
         assert!(ping.features.is_empty());
+    }
+
+    #[test]
+    fn a_flag_is_0_or_1() {
+        let parse = |json: &str| serde_json::from_str::<Flag>(json).map(|f| f.0).ok();
+        assert_eq!(parse(r#""1""#), Some(true));
+        assert_eq!(parse(r#""0""#), Some(false));
+        assert_eq!(parse("true"), Some(true));
+        assert_eq!(parse(r#""2""#), None);
+        let negative = serde_json::from_str::<Flag>("-1").unwrap_err().to_string();
+        assert!(negative.contains("-1"), "{negative}");
+    }
+
+    #[test]
+    fn a_name_takes_any_case_and_its_other_spellings() {
+        assert_eq!(BreakpointKind::parse("MEMORY"), Some(BreakpointKind::Mem));
+        assert_eq!(BreakpointAccess::parse(" Read "), Some(BreakpointAccess::Read));
+        let refused = serde_json::from_str::<BreakpointKind>(r#""nope""#).unwrap_err().to_string();
+        assert!(refused.contains("expected one of exec, mem, io"), "{refused}");
+        assert_eq!(serde_json::to_string(&BreakpointKind::Mem).unwrap(), r#""mem""#);
+    }
+
+    #[test]
+    fn every_event_has_its_schema() {
+        let mut generator = SchemaGenerator::default();
+        let schemas: Vec<&str> = event_schemas(&mut generator).into_iter().map(|(name, _)| name).collect();
+        for (event, schema) in EVENTS {
+            assert!(schemas.contains(schema), "{event}: {schema}");
+        }
+        assert_eq!(schemas.len(), EVENTS.len());
     }
 
     #[test]
