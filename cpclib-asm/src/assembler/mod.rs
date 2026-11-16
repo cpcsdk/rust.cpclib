@@ -2844,31 +2844,30 @@ impl Env {
         {
             // here we manipulate a very simple breakpoint
             let (current_address, page): (u16, u8) = if let Some(exp) = address {
-                if exp.is_label() {
-                    let label = exp.label();
-                    let symbols = self.symbols();
-                    let value: &Value = symbols.any_value(label)?.unwrap();
-                    match value {
-                        Value::Expr(expr_result) => {
-                            let expr_result = expr_result.clone();
-                            (self.int_forward(&expr_result)? as _, 0)
-                        },
-                        Value::Address(physical_address) => {
-                            (
-                                physical_address.address(),
-                                physical_address.remu_bank() as _
-                            )
-                        }, /* BUG we lost the differentiation between the different kind of addresses, */
-                        _ => todo!()
-                    }
+                // A label already known gives its page too; any other
+                // expression - a label defined further on included, unknown
+                // until a later pass - its value.
+                let known = if exp.is_label() {
+                    self.symbols().any_value(exp.label())?.map(|v| Value::from(v.clone()))
                 }
                 else {
-                    let current_address = {
-                        let __r = self.resolve_expr_must_never_fail(exp)?;
-                        self.int_forward(&__r)?
-                    };
-                    let page = 0; // BUG should be dynamic and not hard coded !
-                    (current_address as _, page)
+                    None
+                };
+                match known {
+                    Some(Value::Address(physical_address)) => {
+                        (
+                            physical_address.address(),
+                            physical_address.remu_bank() as _
+                        )
+                    }, /* BUG we lost the differentiation between the different kind of addresses, */
+                    _ => {
+                        let current_address = {
+                            let __r = self.resolve_expr_may_fail_in_first_pass(exp)?;
+                            self.int_forward(&__r)?
+                        };
+                        let page = 0; // BUG should be dynamic and not hard coded !
+                        (current_address as _, page)
+                    }
                 }
             }
             else {
@@ -2906,8 +2905,9 @@ impl Env {
 
             let mut brk = AdvancedRemuBreakPoint {
                 addr: if let Some(address) = address {
+                    // a label defined further on is only known in a later pass
                     ({
-                        let __r = self.resolve_expr_must_never_fail(address)?;
+                        let __r = self.resolve_expr_may_fail_in_first_pass(address)?;
                         self.int_forward(&__r)?
                     }) as u16
                 }

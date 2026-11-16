@@ -90,3 +90,45 @@ fn a_breakpoint_written_in_the_file_points_at_itself() {
     );
     assert_eq!(written.line, 6, "{written:?}");
 }
+
+/// A directive may name a label defined further on, as an address or as
+/// `ADDR=`: known only in a later pass, it is not an unknown symbol (nor, for
+/// the plain form, a crash).
+#[test]
+fn a_breakpoint_may_name_a_label_defined_further_on() {
+    let directory = std::env::temp_dir().join(format!("cpclib-brk-forward-{}", std::process::id()));
+    let _ = fs_err::create_dir_all(&directory);
+    let main = directory.join("main.asm");
+    fs_err::write(
+        &main,
+        "\torg 0x4000\nstart\n\tbreakpoint later\n\tbreakpoint type=mem, access=write, addr=buffer\n\tld a,1\nlater\n\tret\nbuffer\n\tdefb 0\n"
+    )
+    .unwrap();
+    let found = breakpoints(&directory, &main);
+    let addresses: Vec<u16> = found.iter().map(|b| b.address).collect();
+    assert_eq!(addresses, vec![0x4002, 0x4003], "{found:?}");
+}
+
+/// Every attribute of the advanced form reaches the debugger as written.
+#[test]
+fn an_advanced_breakpoint_keeps_every_attribute() {
+    use cpclib_asm::assembler::delayed_command::AssembledBreakpointKind;
+    let directory = std::env::temp_dir().join(format!("cpclib-brk-attributes-{}", std::process::id()));
+    let _ = fs_err::create_dir_all(&directory);
+    let main = directory.join("main.asm");
+    fs_err::write(
+        &main,
+        "\torg 0x4000\n\tbreakpoint 0x7f00, type=io, access=write, runmode=watch, mask=0xff00, size=2, value=0x40, valmask=0xc0, condition=\"A = &55\", name=\"ink\", step=3\n\tret\n"
+    )
+    .unwrap();
+    let found = breakpoints(&directory, &main);
+    assert_eq!(found.len(), 1, "{found:?}");
+    let brk = &found[0];
+    assert_eq!((brk.address, brk.kind, brk.name.as_deref()), (0x7f00, AssembledBreakpointKind::Io, Some("ink")));
+    let details = brk.details.as_ref().expect("the attributes");
+    assert_eq!(details.access, "w");
+    assert!(details.watch);
+    assert_eq!((details.mask, details.size, details.value, details.value_mask), (0xff00, 2, 0x40, 0xc0));
+    assert_eq!(details.condition.as_deref(), Some("A = &55"));
+    assert_eq!(details.step, Some(3));
+}

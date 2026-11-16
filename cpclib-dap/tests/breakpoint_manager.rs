@@ -43,7 +43,8 @@ fn breakpoints_made_by_hand_reach_an_emulator_that_takes_them_whole() {
     let mut session = session(RecordingPeer::new().also_supporting(BEMU));
     let exec = set(&mut session, json!({ "kind": "exec", "address": "&4003", "condition": "BC=7 AND FlagC", "name": "TrackDone" }));
     assert_eq!(exec["success"], true, "{exec}");
-    let port = set(&mut session, json!({ "kind": "io", "address": "&FB01", "mask": "&FF81", "access": "rw", "mode": "watch", "step": "2" }));
+    // step 3: acts from the third match on, two let pass
+    let port = set(&mut session, json!({ "kind": "io", "address": "&FB01", "mask": "&FF81", "access": "rw", "mode": "watch", "step": "3" }));
     assert_eq!(port["body"]["id"], 2);
 
     let sent = session.peer().last("cpclib/setManagerBreakpoints").unwrap();

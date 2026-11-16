@@ -209,7 +209,38 @@ struct ProgramBreakpoint {
     /// Not the same place as `address`: a directive arms the instruction that
     /// follows it, so one written inside a macro body stops the program
     /// wherever the macro was *used*.
-    written_at: Option<cpclib_asm::assembler::delayed_command::BreakpointSource>
+    written_at: Option<cpclib_asm::assembler::delayed_command::BreakpointSource>,
+    /// Taken back in the editor: its red dot was cleared (see
+    /// `Session::resync_suppressions`). Setting the dot again brings it back
+    /// without the program reassembled.
+    suppressed: bool,
+    /// The condition, hit count or log message given to the red dot on the
+    /// directive's line, which replace the directive's own for the session
+    /// (empty: the directive's).
+    dot: BreakOptions,
+    /// The editor has shown a red dot on the directive's line (VS Code draws
+    /// one for each directive): only then does a missing dot mean it was
+    /// cleared. An editor that never shows them leaves directives armed.
+    dotted: bool
+}
+
+impl ProgramBreakpoint {
+    /// The whole directive as armed (an emulator applying it whole): its red
+    /// dot's condition, hit count or log message in place of its own.
+    fn armed_body(&self) -> Option<Value> {
+        let mut body = self.advanced.clone()?;
+        if let Some(condition) = &self.dot.condition {
+            body["condition"] = json!(condition);
+        }
+        if let Some(after) = self.dot.after {
+            body["after"] = json!(after);
+        }
+        if let Some(message) = &self.dot.log_message {
+            body["run"] = json!("watch");
+            body["logMessage"] = json!(message);
+        }
+        Some(body)
+    }
 }
 
 fn directive_kind(kind: cpclib_asm::assembler::delayed_command::AssembledBreakpointKind) -> &'static str {
@@ -605,7 +636,11 @@ struct PlacedBreakpoint {
     /// Why it could not be placed, when it could not.
     message: Option<String>,
     /// Its condition, hit count and log message, when the emulator takes them.
-    options: BreakOptions
+    options: BreakOptions,
+    /// It is on the line a `BREAKPOINT` directive is written on: that
+    /// directive's red dot (the gutter shows one for each), not a breakpoint
+    /// of its own. Its options go to the directive.
+    directive: bool
 }
 
 /// What a breakpoint carries beyond its address: a condition (in the
@@ -727,11 +762,6 @@ pub struct Session<P: DapPeer> {
     /// breakpoint. Treating them as untouchable made every gutter breakpoint
     /// unremovable for the life of the session. See `suppressed`.
     program_breakpoints: Vec<ProgramBreakpoint>,
-    /// Program breakpoints the editor has explicitly taken back.
-    ///
-    /// Recorded by address rather than removed, so that re-adding the red dot
-    /// brings the breakpoint back without needing the program reassembled.
-    suppressed: std::collections::HashSet<u32>,
     /// Watch expressions waiting on a memory read.
     pending_watches: Vec<PendingWatch>,
     /// Array watches that have been read, so expanding one in the Watch panel
@@ -915,7 +945,6 @@ impl<P: DapPeer> Session<P> {
             breakpoints: HashMap::new(),
             next_breakpoint_id: 1,
             program_breakpoints: Vec::new(),
-            suppressed: std::collections::HashSet::new(),
             pending_watches: Vec::new(),
             watch_arrays: Vec::new(),
             pending_memory_views: Vec::new(),
@@ -1112,10 +1141,10 @@ impl<P: DapPeer> Session<P> {
                 if let Some(condition) = &details.condition {
                     body["condition"] = json!(condition);
                 }
-                if let Some(step) = details.step {
-                    notices.push(format!(
-                        "{where_} asks for step {step}; this emulator has no step count, so that part is not applied."
-                    ));
+                // ACE's step: it acts from its N-th match on (as a hit count
+                // N), the N - 1 before let pass
+                if let Some(step) = details.step.filter(|step| *step > 1) {
+                    body["after"] = json!(step - 1);
                 }
                 self.program_breakpoints.push(ProgramBreakpoint {
                     address: breakpoint.address as u32,
@@ -1124,8 +1153,11 @@ impl<P: DapPeer> Session<P> {
                     advanced: Some(body),
                     label: where_.clone(),
                     kind: directive_kind(breakpoint.kind),
-                    lost: details.step.map(|step| format!("step {step}")),
-                    written_at: breakpoint.written_at.clone()
+                    lost: None,
+                    written_at: breakpoint.written_at.clone(),
+                    suppressed: false,
+                    dot: BreakOptions::default(),
+                    dotted: false
                 });
                 continue;
             }
@@ -1171,7 +1203,10 @@ impl<P: DapPeer> Session<P> {
                 label: where_.clone(),
                 kind: directive_kind(breakpoint.kind),
                 lost: unsupported.clone(),
-                written_at: breakpoint.written_at.clone()
+                written_at: breakpoint.written_at.clone(),
+                suppressed: false,
+                dot: BreakOptions::default(),
+                dotted: false
             });
         }
         notices
@@ -1214,7 +1249,7 @@ impl<P: DapPeer> Session<P> {
             .program_breakpoints
             .iter()
             .filter(|bp| {
-                bp.watch.is_none() && !bp.one_shot && !self.suppressed.contains(&bp.address)
+                bp.watch.is_none() && !bp.one_shot && !bp.suppressed
             })
             .map(|bp| bp.address)
             .collect();
@@ -1222,10 +1257,21 @@ impl<P: DapPeer> Session<P> {
             return None;
         }
 
-        let mut where_: Vec<String> = addresses
+        // Where each is written, when known: a memory or port directive's
+        // address is what it watches, not a line of the program.
+        let mut where_: Vec<String> = self
+            .program_breakpoints
             .iter()
+            .filter(|bp| bp.watch.is_none() && !bp.one_shot && !bp.suppressed)
             .take(LISTED)
-            .map(|address| self.address_in_source(*address))
+            .map(|bp| match &bp.written_at {
+                Some(written) => format!(
+                    "{}:{}",
+                    Path::new(&written.file).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                    written.line
+                ),
+                None => self.address_in_source(bp.address)
+            })
             .collect();
         if addresses.len() > LISTED {
             where_.push(format!("and {} more", addresses.len() - LISTED));
@@ -1234,10 +1280,10 @@ impl<P: DapPeer> Session<P> {
         let plural = if count == 1 { "" } else { "s" };
         Some(format!(
             "{count} BREAKPOINT directive{plural} in the program {} armed alongside the editor's \
-             red dots, at {}. The gutter cannot show a directive, so stopping at one looks like \
-             stopping at nothing - and a directive written inside a macro body is armed once for \
-             every place the macro is used. Setting a red dot anywhere in a file and clearing it \
-             again takes that file's directives back for this session.",
+             red dots, at {}. A directive written inside a macro body is armed once for every \
+             place the macro is used. A directive's red dot (the gutter shows one on its line) is \
+             the directive: clearing it takes the directive back for this session, and its \
+             condition, hit count or log message replace the directive's.",
             if count == 1 { "is" } else { "are" },
             where_.join(", ")
         ))
@@ -2110,7 +2156,8 @@ impl<P: DapPeer> Session<P> {
                         line,
                         address: None,
                         message: problem,
-                        options: BreakOptions::default()
+                        options: BreakOptions::default(),
+                        directive: false
                     })
                 },
                 Some(placement) => {
@@ -2135,7 +2182,8 @@ impl<P: DapPeer> Session<P> {
                         line: placement.line,
                         address: Some(placement.address),
                         message,
-                        options: if options_taken { options } else { BreakOptions::default() }
+                        options: if options_taken { options } else { BreakOptions::default() },
+                        directive: false
                     })
                 },
                 None => {
@@ -2167,7 +2215,8 @@ impl<P: DapPeer> Session<P> {
                         line,
                         address: None,
                         message: Some(message),
-                        options: BreakOptions::default()
+                        options: BreakOptions::default(),
+                        directive: false
                     })
                 }
             }
@@ -2181,7 +2230,7 @@ impl<P: DapPeer> Session<P> {
         // Scoped to this file's addresses on purpose: `setBreakpoints` speaks
         // for one file, and a directive in another file is not being spoken
         // about at all.
-        self.resync_suppressions(&path, &placed);
+        self.resync_suppressions(&path, &mut placed);
 
         self.breakpoints.insert(path, placed.clone());
         self.push_breakpoints()?;
@@ -2192,7 +2241,9 @@ impl<P: DapPeer> Session<P> {
                 .map(|bp| {
                     let mut entry = json!({
                         "id": bp.id,
-                        "verified": bp.address.is_some(),
+                        // a directive's red dot holds whatever the directive
+                        // watches, a line that runs or not
+                        "verified": bp.address.is_some() || bp.directive,
                         "line": bp.line
                     });
                     if let Some(address) = bp.address {
@@ -2723,7 +2774,7 @@ impl<P: DapPeer> Session<P> {
                 entry_stops.push(entry(bp.label.clone(), detail, Some(bp.address), "armed", None));
                 continue;
             }
-            let (status, note) = if self.suppressed.contains(&bp.address) {
+            let (status, note) = if bp.suppressed {
                 ("inactive", Some("its red dot was cleared in the editor".to_owned()))
             }
             else if let Some(lost) = &bp.lost {
@@ -5329,45 +5380,64 @@ impl<P: DapPeer> Session<P> {
         }
     }
 
-    /// Bring the suppressed set in line with what the editor just said about
-    /// one file.
+    /// Bring the program's breakpoints in line with what the editor just said
+    /// about one file's red dots.
     ///
-    /// A program breakpoint whose address belongs to `file` is suppressed
-    /// unless the editor listed it; listing it again brings it back. Addresses
-    /// in other files are untouched.
-    fn resync_suppressions(&mut self, file: &Path, placed: &[PlacedBreakpoint]) {
+    /// A directive is matched to the red dot on the line it is written on (the
+    /// gutter shows one there for each): that dot is the directive - marked
+    /// so, it arms nothing of its own - its options replace the directive's,
+    /// and once shown, without it the directive is taken back (an editor that
+    /// never shows such dots leaves the directives armed). Matched by line, not by
+    /// address: a memory or port directive watches an address no line runs,
+    /// and one written in a macro body is armed wherever the macro is used.
+    ///
+    /// A breakpoint whose directive's place is unknown keeps the older rule:
+    /// it belongs to this file if its address does, and the editor listing
+    /// that address keeps it.
+    fn resync_suppressions(&mut self, file: &Path, placed: &mut [PlacedBreakpoint]) {
+        for program in self.program_breakpoints.iter_mut().filter(|bp| !bp.one_shot) {
+            let Some(written) = &program.written_at
+            else {
+                continue;
+            };
+            if !written_in(written, file) {
+                continue;
+            }
+            match placed.iter_mut().find(|dot| dot.requested_line == written.line) {
+                Some(dot) => {
+                    dot.directive = true;
+                    program.dotted = true;
+                    program.suppressed = false;
+                    program.dot = dot.options.clone();
+                },
+                // its dot cleared; never shown, it is not the editor's to clear
+                None if program.dotted => {
+                    program.suppressed = true;
+                    program.dot = BreakOptions::default();
+                },
+                None => {}
+            }
+        }
+
         let wanted: std::collections::HashSet<u32> =
-            placed.iter().filter_map(|bp| bp.address).collect();
-
-        let addresses: Vec<u32> = self
+            placed.iter().filter(|bp| !bp.directive).filter_map(|bp| bp.address).collect();
+        let map = &self.map;
+        for program in self
             .program_breakpoints
-            .iter()
-            .filter(|bp| bp.watch.is_none() && !bp.one_shot)
-            .map(|bp| bp.address)
-            .collect();
-
-        for address in addresses {
-            // Whether this breakpoint is in the file being spoken about.
-            //
+            .iter_mut()
+            .filter(|bp| bp.written_at.is_none() && bp.watch.is_none() && !bp.one_shot)
+        {
             // Every page that claims the address is asked, not just the
             // unambiguous answer: `location_at` returns nothing at all for an
             // address two pages both hold, so on a paged program this said
             // "belongs to no file" about every such breakpoint and clearing the
-            // red dot did nothing at all. If any page's row for this address is
-            // in the file the user just clicked in, they are speaking about it.
-            let in_this_file = self
-                .map
-                .candidates_at(address)
+            // red dot did nothing at all.
+            let in_this_file = map
+                .candidates_at(program.address)
                 .iter()
                 .any(|(_, location)| same_file(&location.file, file));
-            if !in_this_file {
-                continue;
-            }
-            if wanted.contains(&address) {
-                self.suppressed.remove(&address);
-            }
-            else {
-                self.suppressed.insert(address);
+            if in_this_file {
+                program.suppressed = !wanted.contains(&program.address);
             }
         }
     }
@@ -5471,7 +5541,9 @@ impl<P: DapPeer> Session<P> {
                 known.push(options.clone());
             }
         };
-        for bp in self.breakpoints.values().flatten() {
+        // A red dot on a directive's line is that directive, armed below (or
+        // whole): not a breakpoint of its own besides.
+        for bp in self.breakpoints.values().flatten().filter(|bp| !bp.directive) {
             if let Some(address) = bp.address {
                 add(address, &bp.options);
             }
@@ -5479,9 +5551,11 @@ impl<P: DapPeer> Session<P> {
         // Plus what the source itself asked for. A `BREAKPOINT` directive is
         // not something the editor knows about, so it would otherwise be wiped
         // by the next red-dot change.
+        // Its red dot's condition, hit count or log message, when it has
+        // some, in place of none.
         for bp in &self.program_breakpoints {
-            if bp.watch.is_none() && bp.advanced.is_none() && !self.suppressed.contains(&bp.address) {
-                add(bp.address, &BreakOptions::default());
+            if bp.watch.is_none() && bp.advanced.is_none() && !bp.suppressed {
+                add(bp.address, &bp.dot);
             }
         }
         // The manager's, on an emulator that cannot take them whole: the plain
@@ -5640,7 +5714,15 @@ impl<P: DapPeer> Session<P> {
             let origin = if bp.one_shot { "entry" } else { "directive" };
             let mut item = row(origin, format!("directive:{}", bp.label), bp.address);
             item["name"] = json!(bp.label);
-            if let Some(body) = &bp.advanced {
+            // its step, the match it acts from: the directive's (STEP=), or
+            // its red dot's hit count
+            item["step"] = json!(
+                bp.armed_body()
+                    .and_then(|body| body.get("after").and_then(Value::as_u64))
+                    .or(bp.dot.after)
+                    .map_or(0, |after| if after == 0 { 0 } else { after + 1 })
+            );
+            if let Some(body) = &bp.armed_body() {
                 for key in ["access", "condition"] {
                     if let Some(value) = body.get(key) {
                         item[key] = value.clone();
@@ -5659,7 +5741,7 @@ impl<P: DapPeer> Session<P> {
                 item["access"] = json!(if watch.read && watch.write { "rw" } else if watch.read { "r" } else { "w" });
                 item["mode"] = json!("watch");
             }
-            if self.suppressed.contains(&bp.address) && !bp.one_shot {
+            if bp.suppressed && !bp.one_shot {
                 item["status"] = json!("inactive");
                 item["note"] = json!("its red dot was cleared in the editor");
             }
@@ -5739,8 +5821,8 @@ impl<P: DapPeer> Session<P> {
         let whole: Vec<Value> = self
             .program_breakpoints
             .iter()
-            .filter(|bp| !self.suppressed.contains(&bp.address))
-            .filter_map(|bp| bp.advanced.clone())
+            .filter(|bp| !bp.suppressed)
+            .filter_map(ProgramBreakpoint::armed_body)
             .collect();
         if whole.is_empty() && !self.program_breakpoints.iter().any(|bp| bp.advanced.is_some()) {
             return Ok(());
@@ -5795,7 +5877,10 @@ impl<P: DapPeer> Session<P> {
             kind: "exec",
             lost: None,
             // No directive to point at: this one is the launch configuration's.
-            written_at: None
+            written_at: None,
+            suppressed: false,
+            dot: BreakOptions::default(),
+            dotted: false
         });
     }
 
@@ -7203,9 +7288,7 @@ impl<P: DapPeer> Session<P> {
             .program_breakpoints
             .iter()
             .find(|breakpoint| {
-                breakpoint.address == address as u32
-                    && breakpoint.watch.is_none()
-                    && !self.suppressed.contains(&breakpoint.address)
+                breakpoint.address == address as u32 && breakpoint.watch.is_none() && !breakpoint.suppressed
             })
             .and_then(|breakpoint| breakpoint.written_at.clone());
         let Some(written_at) = written_at
@@ -7580,6 +7663,13 @@ fn fingerprint_of(file: &Path) -> Option<u64> {
         hash = hash.wrapping_mul(0x1000_0000_01B3);
     }
     Some(hash ^ bytes.len() as u64)
+}
+
+/// Whether a directive is written in `file`: the same file, or - the
+/// assembler having been given a relative name - one whose path ends with it.
+fn written_in(written: &cpclib_asm::assembler::delayed_command::BreakpointSource, file: &Path) -> bool {
+    let named = Path::new(&written.file);
+    same_file(named, file) || (named.is_relative() && file.ends_with(named))
 }
 
 /// Whether two paths name the same file.

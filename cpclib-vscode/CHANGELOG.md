@@ -17,6 +17,12 @@ All notable changes to the CPClib VS Code extension are documented here.
   `cpclib.debug.bemuWindow` setting) opens the native bemu bndbuild downloads, in its own window.
   `bemuConfig` chooses the machine in a tab
 
+- Breakpoints: a `BREAKPOINT` directive's red dot is the directive during a debug session
+  (clearing it takes the directive back, its condition, hit count or log message replace the
+  directive's); outside one, a red dot's condition is written as the directive's
+  `CONDITION="..."` and kept in step; clearing the dot of a directive with arguments comments
+  it out (it used to be left half-written), setting the dot again brings it back
+
 ## [0.0.1] - Initial release
 
 - Language support for Z80 assembly (basm syntax), bndbuild, Locomotive BASIC, and CatArt
