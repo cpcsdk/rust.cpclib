@@ -146,7 +146,7 @@ impl ManagerBreakpoint {
     /// Whether an emulator without advanced breakpoints can still arm it:
     /// an execution breakpoint that only stops on an address.
     pub fn is_plain_exec(&self) -> bool {
-        self.kind == ManagerKind::Exec && self.condition.is_none() && !self.watch && self.step == 0 && self.mask == 0xffff && self.size == 1
+        self.kind == ManagerKind::Exec && self.condition.is_none() && !self.watch && self.step <= 1 && self.mask == 0xffff && self.size == 1
     }
 
     /// What the peer posts to bemu's `/api/breakpoints`, with its `id` and
@@ -207,8 +207,9 @@ impl ManagerBreakpoint {
         if let Some(condition) = &self.condition {
             body["condition"] = json!(condition);
         }
-        if self.step > 0 {
-            body["after"] = json!(self.step);
+        // ACE's step: it acts from its N-th match on, the N - 1 before let pass
+        if self.step > 1 {
+            body["after"] = json!(self.step - 1);
         }
         body
     }
@@ -233,7 +234,8 @@ mod tests {
         let form = json!({ "kind": "io", "address": "&FB01", "mask": "&FF81", "access": "rw", "value": "&00", "valmask": "#00", "step": "2" });
         let brk = ManagerBreakpoint::from_form(&form, 2, resolve).unwrap();
         assert_eq!((brk.address, brk.mask, brk.access.as_str(), brk.step), (0xfb01, 0xff81, "rw", 2));
-        assert_eq!(brk.body("&FB01")["after"], 2);
+        // step 2: acts from the second match on, one let pass
+        assert_eq!(brk.body("&FB01")["after"], 1);
 
         let plain = ManagerBreakpoint::from_form(&json!({ "kind": "exec", "address": "0x0506" }), 3, resolve).unwrap();
         assert!(plain.is_plain_exec());

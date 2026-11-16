@@ -1141,10 +1141,10 @@ impl<P: DapPeer> Session<P> {
                 if let Some(condition) = &details.condition {
                     body["condition"] = json!(condition);
                 }
-                // ACE's step, the breakpoint manager's pass: hits let pass
-                // before it acts
-                if let Some(step) = details.step.filter(|step| *step > 0) {
-                    body["after"] = json!(step);
+                // ACE's step: it acts from its N-th match on (as a hit count
+                // N), the N - 1 before let pass
+                if let Some(step) = details.step.filter(|step| *step > 1) {
+                    body["after"] = json!(step - 1);
                 }
                 self.program_breakpoints.push(ProgramBreakpoint {
                     address: breakpoint.address as u32,
@@ -5714,12 +5714,13 @@ impl<P: DapPeer> Session<P> {
             let origin = if bp.one_shot { "entry" } else { "directive" };
             let mut item = row(origin, format!("directive:{}", bp.label), bp.address);
             item["name"] = json!(bp.label);
-            // its pass: the directive's (STEP=), or its red dot's hit count
+            // its step, the match it acts from: the directive's (STEP=), or
+            // its red dot's hit count
             item["step"] = json!(
                 bp.armed_body()
                     .and_then(|body| body.get("after").and_then(Value::as_u64))
                     .or(bp.dot.after)
-                    .unwrap_or(0)
+                    .map_or(0, |after| if after == 0 { 0 } else { after + 1 })
             );
             if let Some(body) = &bp.armed_body() {
                 for key in ["access", "condition"] {

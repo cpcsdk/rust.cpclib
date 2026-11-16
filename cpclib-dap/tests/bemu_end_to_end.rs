@@ -899,24 +899,37 @@ fn a_watch_directive_reports_without_stopping() {
     adapter.finish();
 }
 
-/// A directive's `STEP=` lets that many hits pass before it acts, as the
-/// manager's pass does.
+/// A directive's `STEP=N` raises it from its N-th match on, the ones before
+/// let pass - as a hit count N, and the manager's step.
 #[test]
-fn a_directive_step_lets_hits_pass() {
+fn a_directive_step_raises_it_on_its_nth_match() {
     let Some(bemu) = bemu()
     else {
         return;
     };
     let source = program(
         "main.asm",
-        "\torg #4000\n\trun start\nstart\n\tld a,0\nloop\n\tbreakpoint step=2, name=\"third pass\"\n\tinc a\n\tjr loop\n"
+        "\torg #4000\n\trun start\nstart\n\tld a,0\nloop\n\tbreakpoint step=3, name=\"third match\"\n\tinc a\n\tjr loop\n"
     );
     let mut adapter = Adapter::start();
     adapter.launch(&source, &bemu, json!({}));
     adapter.request("configurationDone", json!({}));
     let stop = adapter.stopped();
-    assert_eq!(hex_value(&adapter.register("A")), 2, "two passes let through: {stop}");
+    // matches with A = 0, 1, then 2: raised on the third
+    assert_eq!(hex_value(&adapter.register("A")), 2, "the third match: {stop}");
     assert!(!console(&adapter).contains("not applied"), "{}", console(&adapter));
+    let overview = adapter.request("cpclib/breakpointManager", json!({}));
+    let directive = overview["body"]["tabs"]["exec"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["origin"] == "directive")
+        .cloned()
+        .unwrap_or_else(|| panic!("{overview}"));
+    assert_eq!(directive["step"], 3, "shown as written: {directive}");
+    adapter.request("continue", json!({ "threadId": 1 }));
+    adapter.stopped();
+    assert_eq!(hex_value(&adapter.register("A")), 3, "and every match after: the fourth");
     adapter.finish();
 }
 

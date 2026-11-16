@@ -101,7 +101,7 @@ tab, `bemuConfig` chooses the machine (`{"model": "6128", "ramKb": 576}`).
 - **Breakpoints** from the gutter, and from the program itself: every
   `BREAKPOINT` directive basm assembled is armed too, in ACE's form when it
   carries one (memory or port, read or write, mask, size, value, an ACE
-  condition, a pass with `STEP=`, `RUNMODE=WATCH` to only report) - bemu applies
+  condition, `STEP=N` to act from the N-th match, `RUNMODE=WATCH` to only report) - bemu applies
   them whole. Each directive shows as a red dot on its line, and that dot *is*
   the directive: clearing it takes the directive back for the session, giving
   it a condition, hit count or log message replaces the directive's. Outside a

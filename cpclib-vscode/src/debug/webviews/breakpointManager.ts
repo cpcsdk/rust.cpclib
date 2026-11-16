@@ -208,7 +208,7 @@ button:disabled { opacity: 0.5; cursor: default; }
     <div class="field not-raster"><label for="condition">Condition</label><input id="condition" placeholder="BC=7 AND FlagC"></div>
     <div class="field not-raster"><label for="mode">Mode</label>
       <select id="mode"><option value="stop">Stop</option><option value="watch">Watch (report, go on)</option></select></div>
-    <div class="field not-raster"><label for="step">Pass</label><input id="step" type="number" min="0" value="0" title="Passes let through before it acts"></div>
+    <div class="field not-raster"><label for="step">Step</label><input id="step" type="number" min="0" value="0" title="The match it acts from: 3 lets two pass and acts on the third and after (0 or 1: from the first)"></div>
     <div class="field"><label for="name">Name</label><input id="name"></div>
     <div class="buttons">
       <button type="submit" class="action" id="add">Add</button>
