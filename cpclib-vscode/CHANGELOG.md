@@ -20,8 +20,8 @@ All notable changes to the CPClib VS Code extension are documented here.
 - Breakpoints: a `BREAKPOINT` directive's red dot is the directive during a debug session
   (clearing it takes the directive back, its condition, hit count or log message replace the
   directive's); outside one, a red dot's condition is written as the directive's
-  `CONDITION="..."` and kept in step, and clearing the dot removes the whole directive (an
-  advanced one used to be left half-written)
+  `CONDITION="..."` and kept in step; clearing the dot of a directive with arguments comments
+  it out (it used to be left half-written), setting the dot again brings it back
 
 ## [0.0.1] - Initial release
 

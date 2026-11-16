@@ -111,6 +111,9 @@ pub(crate) fn breakpoint_edit(
     }
     match directive_start(&listing, line_text, line) {
         Some(start) => set_condition_edit(line_text, line, start, condition?),
+        None if commented_directive(line_text).is_some() => {
+            restore_breakpoint_edit(&listing, line_text, line, condition)
+        },
         None => {
             let config = analyzer.config();
             let directive = match condition.flatten() {
@@ -147,33 +150,51 @@ fn directive_start(listing: &LocatedListing, line_text: &str, line: u32) -> Opti
 /// included, up to a statement separator or a comment that is not inside a
 /// string (a name or a condition may hold either), trailing blanks left out.
 fn directive_end(line_text: &str, start: usize) -> usize {
-    let mut quoted = false;
+    let mut quote = Quote::default();
     let mut end = line_text.len();
     for (offset, c) in line_text[start..].char_indices() {
-        match c {
-            '"' => quoted = !quoted,
-            ':' | ';' if !quoted => {
-                end = start + offset;
-                break;
-            },
-            _ => {}
+        if quote.outside(c) && matches!(c, ':' | ';') {
+            end = start + offset;
+            break;
         }
     }
     start + line_text[start..end].trim_end().len()
 }
 
+/// Whether a scan is inside a string: `"..."` or `'...'` (rasm writes
+/// `NAME='...'`), each closed by its own quote.
+#[derive(Default)]
+struct Quote(Option<char>);
+
+impl Quote {
+    /// Take `c` in; whether it is outside any string (a quote itself is not).
+    fn outside(&mut self, c: char) -> bool {
+        match self.0 {
+            Some(open) => {
+                if c == open {
+                    self.0 = None;
+                }
+                false
+            },
+            None if c == '"' || c == '\'' => {
+                self.0 = Some(c);
+                false
+            },
+            None => true
+        }
+    }
+}
+
 /// The directive's arguments, split on the commas outside strings.
 fn directive_arguments(arguments: &str) -> Vec<String> {
     let mut parts = vec![String::new()];
-    let mut quoted = false;
+    let mut quote = Quote::default();
     for c in arguments.chars() {
-        match c {
-            '"' => {
-                quoted = !quoted;
-                parts.last_mut().unwrap().push(c);
-            },
-            ',' if !quoted => parts.push(String::new()),
-            _ => parts.last_mut().unwrap().push(c)
+        if quote.outside(c) && c == ',' {
+            parts.push(String::new());
+        }
+        else {
+            parts.last_mut().unwrap().push(c);
         }
     }
     parts.into_iter().map(|part| part.trim().to_owned()).filter(|part| !part.is_empty()).collect()
@@ -189,7 +210,15 @@ fn is_condition_argument(argument: &str) -> bool {
 /// `CONDITION="..."` for `condition`, or `None` when it cannot be written (it
 /// holds a `"`, which would end the string).
 fn condition_argument(condition: &str) -> Option<String> {
-    (!condition.contains('"')).then(|| format!("CONDITION=\"{condition}\""))
+    if !condition.contains('"') {
+        Some(format!("CONDITION=\"{condition}\""))
+    }
+    else if !condition.contains('\'') {
+        Some(format!("CONDITION='{condition}'"))
+    }
+    else {
+        None
+    }
 }
 
 /// The condition of a directive (`breakpoint ..., CONDITION="A = 5"`), if it
@@ -199,7 +228,11 @@ fn condition_of(directive: &str) -> Option<String> {
     directive_arguments(arguments)
         .into_iter()
         .find(|argument| is_condition_argument(argument))
-        .and_then(|argument| argument.split_once('=').map(|(_, value)| value.trim().trim_matches('"').to_owned()))
+        .and_then(|argument| {
+            argument
+                .split_once('=')
+                .map(|(_, value)| value.trim().trim_matches(['"', '\'']).to_owned())
+        })
         .filter(|condition| !condition.is_empty())
 }
 
@@ -333,6 +366,29 @@ pub(super) fn remove_breakpoint_edit(
         }
     }
 
+    // A directive with arguments is commented out rather than lost: the red
+    // dot set again on the line brings it back whole.
+    let directive = &line_text[directive_start(listing, line_text, line)?..];
+    let directive = &directive[..directive_end(directive, 0)];
+    if has_arguments(directive) {
+        let rest = format!("{}{}", &line_text[..start], &line_text[end..]);
+        let (code, comment) = split_comment(&rest);
+        let code = code.trim_end();
+        let mut new_line = if code.trim().is_empty() {
+            // alone on its line: commented where it was
+            let indent = &line_text[..line_text.len() - line_text.trim_start().len()];
+            format!("{indent}; {directive}")
+        }
+        else {
+            format!("{code} ; {directive}")
+        };
+        if !comment.is_empty() {
+            new_line.push(' ');
+            new_line.push_str(comment);
+        }
+        return Some(whole_line_edit(line_text, line, new_line));
+    }
+
     Some(TextEdit {
         range: Range {
             start: Position {
@@ -347,6 +403,91 @@ pub(super) fn remove_breakpoint_edit(
         },
         new_text: String::new()
     })
+}
+
+/// Whether a directive carries arguments (`BREAKPOINT TYPE=MEM, ...`), not
+/// only its word.
+fn has_arguments(directive: &str) -> bool {
+    directive.trim().split_once(char::is_whitespace).is_some_and(|(_, arguments)| !arguments.trim().is_empty())
+}
+
+/// A line's code and its comment (from the first `;` outside a string, `""`
+/// when it has none).
+fn split_comment(line_text: &str) -> (&str, &str) {
+    let mut quote = Quote::default();
+    for (index, c) in line_text.char_indices() {
+        if quote.outside(c) && c == ';' {
+            return (&line_text[..index], &line_text[index..]);
+        }
+    }
+    (line_text, "")
+}
+
+/// A directive commented out on the line (`; BREAKPOINT TYPE=MEM, ...`), as
+/// clearing its red dot leaves it: where its comment starts, the directive,
+/// and the comment after it (`; why`, or `""`).
+fn commented_directive(line_text: &str) -> Option<(usize, String, String)> {
+    let (code, comment) = split_comment(line_text);
+    let text = comment.strip_prefix(';')?.trim_start();
+    let word = text.get(..text.find(|c: char| !c.is_alphanumeric() && c != '_').unwrap_or(text.len()))?;
+    if !word.eq_ignore_ascii_case("breakpoint") {
+        return None;
+    }
+    // up to the comment that followed it, if any
+    let (directive, after) = split_comment(text);
+    Some((code.len(), directive.trim_end().to_owned(), after.trim().to_owned()))
+}
+
+/// An edit replacing the whole of `line`.
+fn whole_line_edit(line_text: &str, line: u32, new_text: String) -> TextEdit {
+    TextEdit {
+        range: Range {
+            start: Position { line, character: 0 },
+            end: Position {
+                line,
+                character: crate::common::document::byte_offset_to_utf16_col(line_text, line_text.len()) as u32
+            }
+        },
+        new_text
+    }
+}
+
+/// The edit that brings back a directive commented out on `line` (see
+/// [`remove_breakpoint_edit`]), with `condition` when the red dot carries one:
+/// in front of the line's first instruction, or where it was when it had the
+/// line to itself.
+fn restore_breakpoint_edit(
+    listing: &LocatedListing,
+    line_text: &str,
+    line: u32,
+    condition: Option<Option<&str>>
+) -> Option<TextEdit> {
+    let (comment_at, directive, after) = commented_directive(line_text)?;
+    let directive = match condition {
+        Some(condition) => with_condition(&directive, condition)?,
+        None => directive
+    };
+    let code = line_text[..comment_at].trim_end();
+    let first_instruction = super::token::flatten_listing(listing.iter())
+        .filter(|t| line_and_column(*t).0 == line)
+        .find(|t| t.mnemonic().is_some())
+        .map(|t| line_and_column(t).1 as usize)
+        .or_else(|| {
+            // a macro body has no tokens: its first word, when the line has code
+            (inside_a_macro_body(&macro_body_ranges(listing), line) && !code.trim().is_empty())
+                .then(|| code.len() - code.trim_start().len())
+        });
+    let mut new_line = match first_instruction {
+        Some(column) if column <= code.len() => format!("{}{directive} : {}", &code[..column], &code[column..]),
+        // no instruction: alone (or after a label), where it was
+        _ if code.trim().is_empty() => format!("{}{directive}", &line_text[..line_text.len() - line_text.trim_start().len()]),
+        _ => format!("{code} {directive}")
+    };
+    if !after.is_empty() {
+        new_line.push(' ');
+        new_line.push_str(&after);
+    }
+    Some(whole_line_edit(line_text, line, new_line))
 }
 
 /// Every directive of `document`: its 0-based line and its condition, for the
@@ -653,16 +794,80 @@ mod tests {
         Some(out)
     }
 
-    /// An advanced directive comes off whole: leaving its arguments behind
-    /// would not assemble.
+    /// A directive with arguments is commented out, not lost, and never left
+    /// half-written: the arguments come with it, quoted `:` and `;` included.
     #[test]
-    fn removing_an_advanced_directive_takes_its_arguments_too() {
-        let program = "\tbreakpoint type=mem, access=write, addr=buffer, name=\"a: b\" ; why\n\tld a,1\nbuffer\n\tdefb 0\n";
-        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\t ; why"));
-        let program = "\tbreakpoint condition=\"A = 5\" : inc a\n";
-        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\tinc a"));
+    fn clearing_an_advanced_directive_comments_it_out() {
+        let program = "\tbreakpoint type=mem, access=write, addr=buffer, name=\"a: b; c\" ; why\n\tld a,1\nbuffer\n\tdefb 0\n";
+        assert_eq!(
+            edited(program, 0, false, None).as_deref(),
+            Some("\t; breakpoint type=mem, access=write, addr=buffer, name=\"a: b; c\" ; why")
+        );
+        let program = "\tbreakpoint condition=\"A = 5\" : inc a ; count\n";
+        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\tinc a ; breakpoint condition=\"A = 5\" ; count"));
         let program = "\tld a,0 : breakpoint #7f00, type=io\n";
-        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\tld a,0"));
+        assert_eq!(edited(program, 0, false, None).as_deref(), Some("\tld a,0 ; breakpoint #7f00, type=io"));
+        let program = "loop\tld a,0 : breakpoint #7f00, type=io : inc a\n";
+        assert_eq!(edited(program, 0, false, None).as_deref(), Some("loop\tld a,0 : inc a ; breakpoint #7f00, type=io"));
+        // a plain one has nothing worth keeping
+        assert_eq!(edited("\tbreakpoint : inc a\n", 0, false, None).as_deref(), Some("\tinc a"));
+    }
+
+    /// Clearing the red dot then setting it again gives the directive back as
+    /// it was written, wherever it was on the line.
+    #[test]
+    fn a_commented_directive_comes_back_with_its_red_dot() {
+        for original in [
+            "\tbreakpoint type=mem, access=write, addr=buffer, name=\"a: b\" ; why",
+            "\tbreakpoint condition=\"A = 5\" : inc a ; count",
+            "loop\tbreakpoint #7f00, type=io : ld a,0",
+            "\tbreakpoint #7f00, type=io",
+        ] {
+            let program = |line: &str| format!("{line}\n\tld a,1\nbuffer\n\tdefb 0\n");
+            let cleared = edited(&program(original), 0, false, None).expect("commented out");
+            assert!(cleared.contains("; breakpoint"), "{cleared}");
+            let back = edited(&program(&cleared), 0, true, None).expect("restored");
+            assert_eq!(back, original, "round trip of {original:?} through {cleared:?}");
+        }
+    }
+
+    /// rasm's spelling, single quotes, and what they hold kept whole.
+    #[test]
+    fn single_quoted_arguments_as_rasm_writes_them() {
+        let program = "\tbreakpoint MEM,WRITE,STOP,addr=buffer,name='a: b; c',condition='A = 5' ; why\n\tld a,1\nbuffer\n\tdefb 0\n";
+        let d = Document::new(Url::parse("file:///t.asm").unwrap(), program.to_string(), 1);
+        assert_eq!(breakpoint_directives(&AssemblyAnalyzer::new(), &d), vec![(0, Some("A = 5".to_owned()))]);
+        let cleared = edited(program, 0, false, None).expect("commented out");
+        assert_eq!(cleared, "\t; breakpoint MEM,WRITE,STOP,addr=buffer,name='a: b; c',condition='A = 5' ; why");
+        assert_eq!(edited(&program.replacen("\tbreakpoint", "\t; breakpoint", 1), 0, true, None).as_deref(),
+                   Some("\tbreakpoint MEM,WRITE,STOP,addr=buffer,name='a: b; c',condition='A = 5' ; why"));
+        assert_eq!(
+            edited(program, 0, true, Some(Some("A = 6"))).as_deref(),
+            Some("\tbreakpoint MEM, WRITE, STOP, addr=buffer, name='a: b; c', CONDITION=\"A = 6\" ; why")
+        );
+    }
+
+    /// Inside a macro body (no tokens there) too.
+    #[test]
+    fn a_directive_in_a_macro_body_is_commented_and_restored() {
+        let program = |line: &str| format!("\tmacro DEBUG\n{line}\n\tendm\n\tDEBUG()\n");
+        let original = "\tbreakpoint condition=\"A = 1\" : ld bc,0";
+        let cleared = edited(&program(original), 1, false, None).expect("commented out");
+        assert_eq!(cleared, "\tld bc,0 ; breakpoint condition=\"A = 1\"");
+        assert_eq!(edited(&program(&cleared), 1, true, None).as_deref(), Some(original));
+    }
+
+    /// Restored with the red dot's condition when it has one; a commented
+    /// directive has no red dot of its own.
+    #[test]
+    fn a_commented_directive_restored_takes_the_dots_condition() {
+        let program = "\tinc a ; breakpoint name=\"n\", condition=\"A = 3\"\n";
+        assert_eq!(
+            edited(program, 0, true, Some(Some("A = 4"))).as_deref(),
+            Some("\tbreakpoint name=\"n\", CONDITION=\"A = 4\" : inc a")
+        );
+        let d = Document::new(Url::parse("file:///t.asm").unwrap(), program.to_string(), 1);
+        assert!(breakpoint_directives(&AssemblyAnalyzer::new(), &d).is_empty(), "inactive: no red dot");
     }
 
     /// A red dot with a condition writes a directive with it.
@@ -674,8 +879,12 @@ mod tests {
         );
         // without one, the plain directive
         assert_eq!(edited("\tinc a\n", 0, true, Some(None)).as_deref(), Some("\tBREAKPOINT : inc a"));
-        // a `"` cannot be written in the string: nothing is
-        assert_eq!(edited("\tinc a\n", 0, true, Some(Some("A = \"x\""))), None);
+        // a `"` in it: written between single quotes; both: not written
+        assert_eq!(
+            edited("\tinc a\n", 0, true, Some(Some("A = \"x\""))).as_deref(),
+            Some("\tBREAKPOINT CONDITION='A = \"x\"' : inc a")
+        );
+        assert_eq!(edited("\tinc a\n", 0, true, Some(Some("\"'"))), None);
     }
 
     /// The dot's condition changed: the directive's follows - added, changed,

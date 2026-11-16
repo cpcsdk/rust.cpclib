@@ -107,7 +107,8 @@ tab, `bemuConfig` chooses the machine (`{"model": "6128", "ramKb": 576}`).
   it a condition, hit count or log message replaces the directive's. Outside a
   session the gutter edits the source: a red dot writes a `BREAKPOINT`, its
   condition becomes the directive's `CONDITION="..."`, and clearing it removes
-  the whole directive.
+  a plain directive or comments out one with arguments - the dot set again on
+  that line brings it back whole.
 - **Stepping** in, over, out - and *back*, which the emulator supports through
   its own checkpoints. On a line holding several instructions
   (`ld a,l : inc a : ld (.p),a`) the cursor lands on the **instruction**, not on

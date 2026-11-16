@@ -701,9 +701,15 @@ argument it stops on the instruction that follows; with arguments it is
 written in ACE's form, which bemu applies whole. An address may be a label
 defined further on.
 
+Strings may be written between `"` or `'` (rasm's `NAME='...'`). Unlike rasm,
+whose ACE breakpoints default to memory ones, a `BREAKPOINT` with arguments
+and no `TYPE` breaks on execution.
+
 In VS Code, a `BREAKPOINT` directive shows as a red dot on its line. Clearing
-the dot removes the whole directive, arguments included; giving the dot a
-condition writes it as `CONDITION="..."` (changed or cleared with the dot).
+the dot removes a plain directive, and comments out one with arguments
+(`; BREAKPOINT TYPE=MEM, ...`): setting the dot on that line again brings it
+back whole. Giving the dot a condition writes it as `CONDITION="..."`
+(changed or cleared with the dot).
 During a debug session the dot *is* the directive: clearing it takes the
 directive back for the session, and its condition, hit count or log message
 replace the directive's.
