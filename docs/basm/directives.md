@@ -701,6 +701,11 @@ argument it stops on the instruction that follows; with arguments it is
 written in ACE's form, which bemu applies whole. An address may be a label
 defined further on.
 
+As in rasm, a label is a breakpoint too, a plain one on its address, when its
+name starts with `BRK` (`brk_loop`), a macro's local label `@BRK...`, or a
+local label `.BRK...` (`main.brkloop`) - letter case ignored, values (`EQU`)
+excepted. The debugger names it after the label.
+
 Strings may be written between `"` or `'` (rasm's `NAME='...'`). Unlike rasm,
 whose ACE breakpoints default to memory ones, a `BREAKPOINT` with arguments
 and no `TYPE` breaks on execution.
