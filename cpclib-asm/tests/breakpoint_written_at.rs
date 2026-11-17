@@ -132,3 +132,37 @@ fn an_advanced_breakpoint_keeps_every_attribute() {
     assert_eq!(details.condition.as_deref(), Some("A = &55"));
     assert_eq!(details.step, Some(3));
 }
+
+/// rasm's rule: a label named `BRK...` - or a local one `.BRK...` - is a
+/// breakpoint on its address, named after it, located where it is defined; a
+/// value (`EQU`) is not, nor a label that merely contains the letters.
+#[test]
+fn a_brk_label_is_a_breakpoint() {
+    use cpclib_asm::assembler::delayed_command::AssembledBreakpointKind;
+    let directory = std::env::temp_dir().join(format!("cpclib-brk-labels-{}", std::process::id()));
+    let _ = fs_err::create_dir_all(&directory);
+    let main = directory.join("main.asm");
+    fs_err::write(
+        &main,
+        "\torg 0x4000\n\tld a,1\nbrk_here\n\tinc a\nmain\n\tnop\n.brkloop\n\tdec a\n.notbrk\n\tnop\nBRKVALUE equ 0x1234\nbreaking\n\tret\n"
+    )
+    .unwrap();
+    let found = breakpoints(&directory, &main);
+    let described: Vec<(u16, Option<&str>, u32)> = found
+        .iter()
+        .map(|b| (b.address, b.name.as_deref(), b.written_at.as_ref().map_or(0, |w| w.line)))
+        .collect();
+    assert_eq!(described, vec![(0x4002, Some("brk_here"), 3), (0x4004, Some("main.brkloop"), 7)], "{found:?}");
+    assert!(found.iter().all(|b| b.kind == AssembledBreakpointKind::Execution && b.details.is_none()));
+}
+
+#[test]
+fn which_labels_are_breakpoints() {
+    use cpclib_asm::assembler::delayed_command::is_brk_label;
+    for name in ["BRK", "brk_loop", "Brk1", "@brkmacro", "main.brkloop", "MAIN.BRK"] {
+        assert!(is_brk_label(name), "{name}");
+    }
+    for name in ["breaking", "loop_brk", "brkmain.loop", "obrk"] {
+        assert!(!is_brk_label(name), "{name}");
+    }
+}

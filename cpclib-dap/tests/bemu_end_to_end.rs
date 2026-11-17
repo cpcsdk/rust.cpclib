@@ -933,6 +933,32 @@ fn a_directive_step_raises_it_on_its_nth_match() {
     adapter.finish();
 }
 
+/// A label named `brk...` is a breakpoint (rasm's rule): the program stops
+/// on its address, its line, and the breakpoints view names it.
+#[test]
+fn a_brk_label_stops_the_program() {
+    let Some(bemu) = bemu()
+    else {
+        return;
+    };
+    let source = program(
+        "main.asm",
+        "\torg #4000\n\trun start\nstart\n\tld a,0\nloop\n\tinc a\nbrk_after_inc\n\tjr loop\n"
+    );
+    let mut adapter = Adapter::start();
+    adapter.launch(&source, &bemu, json!({}));
+    adapter.request("configurationDone", json!({}));
+    let stop = adapter.stopped();
+    assert_eq!(stop["body"]["reason"], "breakpoint", "{stop}");
+    assert_eq!(adapter.line(), 8, "the label's instruction, `jr loop`: {stop}");
+    assert_eq!(hex_value(&adapter.register("A")), 1, "{stop}");
+    let overview = adapter.request("cpclib/breakpoints", json!({}));
+    let kinds = overview["body"]["kinds"].as_array().unwrap();
+    let directives = kinds.iter().find(|k| k["id"] == "directive").unwrap()["entries"].as_array().unwrap().clone();
+    assert!(directives.iter().any(|d| d["label"] == "brk_after_inc"), "{overview}");
+    adapter.finish();
+}
+
 /// A log message given to a directive's red dot: the directive reports it
 /// instead of stopping, when it fires (its own condition kept).
 #[test]

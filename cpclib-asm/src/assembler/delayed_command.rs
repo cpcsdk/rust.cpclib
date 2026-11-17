@@ -277,6 +277,15 @@ pub struct BreakpointCommand {
     pub(crate) written_at: Option<BreakpointSource>
 }
 
+/// Whether a label is a breakpoint by rasm's rule (letter case ignored): a
+/// label starting with `BRK` (and no local part after it), a macro's local one
+/// starting with `@BRK`, or a local one whose own name starts with `BRK`
+/// (`.BRK...`) - each on the address it names, as a `BREAKPOINT` there.
+pub fn is_brk_label(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    (name.starts_with("BRK") && !name[3..].contains('.')) || name.starts_with("@BRK") || name.contains(".BRK")
+}
+
 /// Where a `BREAKPOINT` directive is written, in the file's own numbering.
 ///
 /// A macro body is re-parsed as a source of its own, so the span's line counts
@@ -364,7 +373,10 @@ impl From<BreakPointCommandSimple> for InnerBreakpointCommand {
 #[derive(Debug, Clone)]
 pub struct BreakPointCommandSimple {
     pub(crate) address: u16,
-    pub(crate) page: u8
+    pub(crate) page: u8,
+    /// The `BRK` label it comes from (rasm's rule, see
+    /// [`BreakpointCommand::from_brk_label`]), which names it.
+    pub(crate) label: Option<String>
 }
 
 impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointCommand {
@@ -461,7 +473,7 @@ impl BreakpointCommand {
                     page: brk.page,
                     kind: AssembledBreakpointKind::Execution,
                     extra: None,
-                    name: None,
+                    name: brk.label.clone(),
                     details: None,
                     written_at: self.written_at.clone()
                 }
@@ -534,7 +546,25 @@ impl BreakpointCommand {
     }
 
     pub fn new_simple(address: u16, page: u8, span: Option<Z80Span>) -> Self {
-        (BreakPointCommandSimple { address, page }, span).into()
+        (BreakPointCommandSimple { address, page, label: None }, span).into()
+    }
+
+    /// The breakpoint a label stands for, by rasm's rule (see
+    /// [`is_brk_label`]): on its address, named after it, located where it
+    /// is defined.
+    pub fn from_brk_label(address: u16, page: u8, label: &str, written_at: Option<BreakpointSource>) -> Self {
+        Self {
+            brk: BreakPointCommandSimple {
+                address,
+                page,
+                label: Some(label.to_owned())
+            }
+            .into(),
+            info: AssemblerError::AssemblingError {
+                msg: format!("Add a breakpoint: label {label}, PC=&{address:X}@{page}")
+            },
+            written_at
+        }
     }
 
     // Convert when possible

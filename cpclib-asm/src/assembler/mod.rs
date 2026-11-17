@@ -1765,29 +1765,33 @@ impl Env {
         };
 
         let pages_mmr = MMR_PAGES_SELECTION;
-        for (activepage, _page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
-            for brk in self.sna.pages_info[activepage].collect_breakpoints() {
-                let info = &brk.info;
-                self.observer().emit_stderr(&format!("{info}"));
+        let mut breakpoints: Vec<BreakpointCommand> = pages_mmr[0..self.sna.pages_info.len()]
+            .iter()
+            .enumerate()
+            .flat_map(|(activepage, _page)| self.sna.pages_info[activepage].collect_breakpoints().iter().cloned())
+            .collect();
+        breakpoints.extend(self.brk_label_breakpoints());
+        for brk in &breakpoints {
+            let info = &brk.info;
+            self.observer().emit_stderr(&format!("{info}"));
 
-                if let Some(chunk) = winape_chunk.as_mut()
-                    && let Some(brk) = brk.winape()
-                {
-                    chunk.add_breakpoint(brk);
-                }
-                if let Some(chunk) = ace_chunk.as_mut()
-                    && let Some(brk) = brk.ace()
-                {
-                    chunk.add_breakpoint(brk);
-                }
+            if let Some(chunk) = winape_chunk.as_mut()
+                && let Some(brk) = brk.winape()
+            {
+                chunk.add_breakpoint(brk);
+            }
+            if let Some(chunk) = ace_chunk.as_mut()
+                && let Some(brk) = brk.ace()
+            {
+                chunk.add_breakpoint(brk);
+            }
 
-                if let Some(chunk) = remu.as_mut() {
-                    chunk.add_entry(&brk.remu().into());
-                }
+            if let Some(chunk) = remu.as_mut() {
+                chunk.add_entry(&brk.remu().into());
+            }
 
-                if let Some(chunk) = wabp.as_mut() {
-                    chunk.add_breakpoint(brk.wabp());
-                }
+            if let Some(chunk) = wabp.as_mut() {
+                chunk.add_breakpoint(brk.wabp());
             }
         }
 
@@ -2179,7 +2183,44 @@ impl Env {
             .iter()
             .flat_map(|page| page.collect_breakpoints())
             .map(|command| command.described())
+            .chain(self.brk_label_breakpoints().iter().map(|command| command.described()))
             .collect()
+    }
+
+    /// The breakpoints the program's `BRK` labels stand for, by rasm's rule
+    /// (see [`crate::assembler::delayed_command::is_brk_label`]), in address
+    /// order.
+    pub fn brk_label_breakpoints(&self) -> Vec<BreakpointCommand> {
+        use crate::assembler::delayed_command::{BreakpointSource, is_brk_label};
+        let mut found: Vec<(u16, String, BreakpointCommand)> = self
+            .symbols()
+            .expression_symbol()
+            .into_iter()
+            .filter(|(symbol, _)| is_brk_label(symbol.value()))
+            .filter_map(|(symbol, value)| {
+                let Value::Address(address) = value.value()
+                else {
+                    return None; // a value, not a place in the program
+                };
+                let written_at = value.location().map(|location| {
+                    BreakpointSource {
+                        file: location.fname().to_owned(),
+                        line: location.line() as u32,
+                        column: location.column().max(1) as u32
+                    }
+                });
+                let name = symbol.value().to_string();
+                let command = BreakpointCommand::from_brk_label(
+                    address.address(),
+                    address.remu_bank() as u8,
+                    &name,
+                    written_at
+                );
+                Some((address.address(), name, command))
+            })
+            .collect();
+        found.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+        found.into_iter().map(|(_, _, command)| command).collect()
     }
 
     pub fn source_map(&self) -> Option<crate::assembler::listing_output::RawSourceMap> {
