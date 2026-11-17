@@ -24,9 +24,9 @@ impl CslVersion {
         Self { major, minor }
     }
 
-    /// Returns the latest CSL version (1.2)
+    /// Returns the latest CSL version (1.3)
     pub const fn latest() -> Self {
-        Self { major: 1, minor: 2 }
+        Self { major: 1, minor: 3 }
     }
 }
 
@@ -434,6 +434,81 @@ impl std::fmt::Display for ScreenshotScale {
     }
 }
 
+/// What a `joystick` instruction holds down on one joystick (v1.3): its directions and
+/// fire buttons. Everything not named is released.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct JoystickInput {
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
+    pub fire1: bool,
+    pub fire2: bool,
+    pub fire3: bool
+}
+
+impl JoystickInput {
+    /// The words of the instruction, in this order.
+    pub const WORDS: [&'static str; 7] = ["up", "down", "left", "right", "fire1", "fire2", "fire3"];
+
+    fn flags(&self) -> [bool; 7] {
+        [
+            self.up, self.down, self.left, self.right, self.fire1, self.fire2, self.fire3
+        ]
+    }
+
+    /// Hold `word` (one of [`Self::WORDS`]) down; false when the word is not one of them.
+    pub fn press(&mut self, word: &str) -> bool {
+        let flag = match word {
+            "up" => &mut self.up,
+            "down" => &mut self.down,
+            "left" => &mut self.left,
+            "right" => &mut self.right,
+            "fire1" => &mut self.fire1,
+            "fire2" => &mut self.fire2,
+            "fire3" => &mut self.fire3,
+            _ => return false
+        };
+        *flag = true;
+        true
+    }
+
+    /// Nothing held down.
+    pub fn is_released(&self) -> bool {
+        !self.flags().iter().any(|f| *f)
+    }
+
+    /// The bits of the joystick's keyboard matrix line, a bit at 0 for what is held down:
+    /// bit 0 up, 1 down, 2 left, 3 right, 4 fire 2, 5 fire 1, 6 fire 3 (joystick 0 is line 9,
+    /// joystick 1 line 6, shared with keys). Bit 7 stays at 1.
+    pub fn matrix_line(&self) -> u8 {
+        let bits = [
+            (self.up, 0),
+            (self.down, 1),
+            (self.left, 2),
+            (self.right, 3),
+            (self.fire2, 4),
+            (self.fire1, 5),
+            (self.fire3, 6)
+        ];
+        bits.iter()
+            .filter(|(held, _)| *held)
+            .fold(0xFF, |line, (_, bit)| line & !(1 << bit))
+    }
+}
+
+impl fmt::Display for JoystickInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let words = Self::WORDS
+            .iter()
+            .zip(self.flags())
+            .filter(|(_, held)| *held)
+            .map(|(word, _)| *word)
+            .join(" ");
+        write!(f, "{words}")
+    }
+}
+
 /// All CSL instructions as defined in the specification
 #[derive(Debug, Clone, PartialEq)]
 pub enum CslInstruction {
@@ -512,6 +587,13 @@ pub enum CslInstruction {
     /// Send 10 bytes values for keyboard matrix (v1.2)
     /// Bit n.row n=1 means key not pressed
     KeyboardWrite([u8; 10]),
+
+    /// Hold down directions and fire buttons of joystick 0 or 1 until the next `joystick`
+    /// instruction for it (v1.3): `joystick 0 right fire1`, `joystick 0` releases it
+    Joystick {
+        port: u8,
+        input: JoystickInput
+    },
 
     // Meta instruction
     /// An instruction followed by an inline comment on the same line
@@ -684,6 +766,8 @@ impl fmt::Display for CslInstruction {
                     rows.iter().map(|b| b.to_string()).join(",")
                 )
             },
+            Self::Joystick { port, input } if input.is_released() => write!(f, "joystick {port}"),
+            Self::Joystick { port, input } => write!(f, "joystick {port} {input}"),
             Self::InstructionWithComment(instruction, comment) => {
                 write!(f, "{} ;{}", instruction, comment)
             },
@@ -747,6 +831,14 @@ impl CslInstruction {
         matches!(self, Self::KeyboardWrite(_))
     }
 
+    /// Check if this instruction is a v1.3 feature: `joystick`, a zoomed `screenshot`
+    pub fn is_v1_3_feature(&self) -> bool {
+        matches!(
+            self,
+            Self::Joystick { .. } | Self::Screenshot { scale: Some(_), .. }
+        )
+    }
+
     /// Check if this instruction is a v1.5 feature
     pub fn is_v1_5_feature(&self) -> bool {
         matches!(self, Self::WaitSsm(_))
@@ -777,6 +869,7 @@ impl CslInstruction {
             Self::KeyOutput(_) => "key_output",
             Self::KeyFromFile(_) => "key_from_file",
             Self::KeyboardWrite(_) => "keyboard_write",
+            Self::Joystick { .. } => "joystick",
             Self::Wait(_) => "wait",
             Self::WaitDriveOnOff(_) => "wait_driveonoff",
             Self::WaitVsyncOffOn => "wait_vsyncoffon",
@@ -1235,6 +1328,18 @@ impl CslScriptBuilder {
             ));
         }
 
+        // Check v1.3 features
+        if instruction.is_v1_3_feature()
+            && (version.major < 1 || (version.major == 1 && version.minor < 3))
+        {
+            return Err(format!(
+                "Instruction '{}' requires CSL version 1.3 or higher, but script uses version {}.{}",
+                instruction.instruction_name(),
+                version.major,
+                version.minor
+            ));
+        }
+
         // Check v1.2 features
         if instruction.is_v1_2_feature()
             && (version.major < 1 || (version.major == 1 && version.minor < 2))
@@ -1369,7 +1474,13 @@ impl CslScript {
     fn minimal_version(&self) -> String {
         let mut minimal = 0;
         for instruction in &self.instructions {
-            if instruction.is_v1_2_feature() {
+            if instruction.is_v1_5_feature() {
+                minimal = minimal.max(5);
+            }
+            else if instruction.is_v1_3_feature() {
+                minimal = minimal.max(3);
+            }
+            else if instruction.is_v1_2_feature() {
                 minimal = minimal.max(2);
             }
             else if instruction.is_v1_1_feature() {
@@ -2032,6 +2143,68 @@ mod tests {
         assert!(
             result.is_ok(),
             "Version should be allowed after comments and empty lines"
+        );
+    }
+
+    #[test]
+    fn test_joystick() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+
+        let script =
+            "csl_version 1.3\njoystick 0 right fire1\njoystick 1 fire2 up ;jump\njoystick 0\n";
+        let parsed = parse_csl_with_rich_errors(script, None).expect("joystick parses");
+        let joysticks: Vec<_> = parsed
+            .instructions()
+            .iter()
+            .map(|i| {
+                match i {
+                    CslInstruction::InstructionWithComment(inner, _) => inner.as_ref().clone(),
+                    other => other.clone()
+                }
+            })
+            .filter(|i| matches!(i, CslInstruction::Joystick { .. }))
+            .collect();
+        assert_eq!(joysticks.len(), 3);
+        let CslInstruction::Joystick { port, input } = joysticks[0]
+        else {
+            unreachable!()
+        };
+        assert_eq!(port, 0);
+        assert!(input.right && input.fire1 && !input.left && !input.fire2);
+        // fire 1 is bit 5, right bit 3
+        assert_eq!(input.matrix_line(), 0xFF & !(1 << 5) & !(1 << 3));
+        assert_eq!(joysticks[0].to_string(), "joystick 0 right fire1");
+        // the words come out in a fixed order
+        assert_eq!(joysticks[1].to_string(), "joystick 1 up fire2");
+        let CslInstruction::Joystick { input, .. } = joysticks[2]
+        else {
+            unreachable!()
+        };
+        assert!(input.is_released());
+        assert_eq!(input.matrix_line(), 0xFF);
+        assert_eq!(joysticks[2].to_string(), "joystick 0");
+    }
+
+    #[test]
+    fn test_joystick_errors() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+
+        let err = parse_csl_with_rich_errors("csl_version 1.2\njoystick 0 up\n", None).unwrap_err();
+        assert!(err.to_string().contains("1.3"), "{err}");
+        assert!(parse_csl_with_rich_errors("csl_version 1.3\njoystick 2 up\n", None).is_err());
+        assert!(parse_csl_with_rich_errors("csl_version 1.3\njoystick 0 jump\n", None).is_err());
+    }
+
+    #[test]
+    fn test_screenshot_zoom_needs_v1_3() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+
+        let err =
+            parse_csl_with_rich_errors("csl_version 1.2\nscreenshot 0.5\n", None).unwrap_err();
+        assert!(err.to_string().contains("1.3"), "{err}");
+        assert!(parse_csl_with_rich_errors("csl_version 1.2\nscreenshot vsync\n", None).is_ok());
+        assert!(
+            parse_csl_with_rich_errors("csl_version 1.3\nscreenshot vsync 440px\n", None).is_ok()
         );
     }
 }
