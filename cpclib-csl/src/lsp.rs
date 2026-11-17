@@ -44,6 +44,9 @@ pub enum ArgShape {
     /// 10 comma-separated byte values, a raw keyboard-matrix write
     /// (`keyboard_write`, v1.2).
     KeyboardWrite,
+    /// A joystick number (`0`/`1`), then any of `up down left right fire1 fire2 fire3`
+    /// (`joystick`, v1.3).
+    Joystick,
     /// A single required number (`wait`).
     Duration,
     /// One optional number, defaulting to 1 (`wait_driveonoff`).
@@ -51,7 +54,7 @@ pub enum ArgShape {
     /// An optional bare word `vsync` (`screenshot`/`snapshot`).
     OptionalVsyncFlag,
     /// An optional bare word `vsync`, then an optional zoom: a factor (`0.5`) or a width
-    /// (`440px`) (`screenshot`, a cpclib extension).
+    /// (`440px`) (`screenshot`; the zoom needs v1.3).
     ScreenshotArgs,
     /// One of `1`, `2`, `3` (`snapshot_version`).
     SnapshotVersion,
@@ -71,6 +74,7 @@ pub struct InstructionSpec {
 const V1_0: CslVersion = CslVersion::new(1, 0);
 const V1_1: CslVersion = CslVersion::new(1, 1);
 const V1_2: CslVersion = CslVersion::new(1, 2);
+const V1_3: CslVersion = CslVersion::new(1, 3);
 const V1_5: CslVersion = CslVersion::new(1, 5);
 
 /// Every CSL instruction keyword `csl_parser::parse_instruction` accepts,
@@ -186,6 +190,11 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
         name: "keyboard_write",
         min_version: V1_2,
         args: ArgShape::KeyboardWrite
+    },
+    InstructionSpec {
+        name: "joystick",
+        min_version: V1_3,
+        args: ArgShape::Joystick
     },
     InstructionSpec {
         name: "wait",

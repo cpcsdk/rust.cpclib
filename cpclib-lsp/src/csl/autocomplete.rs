@@ -99,6 +99,7 @@ fn describe_shape(shape: ArgShape) -> &'static str {
         ArgShape::KeyDelay => "<press_delay> [delay_after_key] [delay_after_cr]",
         ArgShape::KeyboardOutput => "'<text, \\(KEY) escapes allowed>'",
         ArgShape::KeyboardWrite => "<10 comma-separated byte values>",
+        ArgShape::Joystick => "<0|1> [up] [down] [left] [right] [fire1] [fire2] [fire3]",
         ArgShape::Duration => "<microseconds>",
         ArgShape::OptionalCount => "[count]",
         ArgShape::OptionalVsyncFlag => "[vsync]",

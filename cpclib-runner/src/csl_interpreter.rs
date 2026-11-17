@@ -17,7 +17,7 @@
 //! endpoint for media, reset, or machine-config changes - those can only be
 //! honored if they appear at the very start of a script, folded into launch
 //! arguments. A script's instructions are split at the first
-//! `wait*`/`key_output`/`key_from_file`/`keyboard_write` instruction:
+//! `wait*`/`key_output`/`key_from_file`/`keyboard_write`/`joystick` instruction:
 //! everything before that point is "leading" (folded into launch args),
 //! everything from there on is "live" (replayed after launch, one step at a
 //! time). A media/config instruction that shows up in the *live* portion
@@ -127,6 +127,7 @@ fn is_live_trigger(instr: &CslInstruction) -> bool {
             | CslInstruction::KeyOutput(_)
             | CslInstruction::KeyFromFile(_)
             | CslInstruction::KeyboardWrite(_)
+            | CslInstruction::Joystick { .. }
     )
 }
 

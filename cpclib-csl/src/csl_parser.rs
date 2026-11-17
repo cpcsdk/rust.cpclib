@@ -11,7 +11,7 @@ use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, opt, preceded, repeat, terminated
 };
 use cpclib_common::winnow::error::{ContextError, StrContext};
-use cpclib_common::winnow::stream::LocatingSlice;
+use cpclib_common::winnow::stream::{LocatingSlice, Stream};
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 
@@ -443,7 +443,8 @@ fn parse_key_element<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, 
     alt((
         parse_special_key.map(KeyElement::Special),
         // a key string is on one line: a forgotten closing quote must not swallow the next lines
-        one_of(|c: char| !matches!(c, '\'' | '\\' | '{' | '}' | '\n' | '\r')).map(KeyElement::Character)
+        one_of(|c: char| !matches!(c, '\'' | '\\' | '{' | '}' | '\n' | '\r'))
+            .map(KeyElement::Character)
     ))
     .parse_next(input)
 }
@@ -521,6 +522,47 @@ fn parse_keyboard_write<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
         CslInstruction::KeyboardWrite([r0, r1, r2, r3, r4, r5, r6, r7, r8, r9])
     })
     .parse_next(input)
+}
+
+/// Parse joystick instruction (v1.3): `joystick <0|1> [up] [down] [left] [right] [fire1] [fire2]
+/// [fire3]`, the words in any order; none releases the joystick
+fn parse_joystick<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("joystick", ws1)
+        .context(StrContext::Label("joystick"))
+        .parse_next(input)?;
+
+    let port = cut_err(
+        alt(("0".value(0u8), "1".value(1u8)))
+            .context(StrContext::Label("joystick number (0 or 1)"))
+    )
+    .parse_next(input)?;
+    let mut joystick = JoystickInput::default();
+    loop {
+        let checkpoint = input.checkpoint();
+        let word: Option<&str> = opt(preceded(
+            ws1,
+            take_while(1.., |c: char| c.is_ascii_alphanumeric())
+        ))
+        .parse_next(input)?;
+        match word {
+            Some(word) if joystick.press(word) => {},
+            Some(_) => {
+                // back to the word, so that the error points at it
+                input.reset(&checkpoint);
+                ws1.parse_next(input)?;
+                return cut_err(cpclib_common::winnow::combinator::fail.context(
+                    StrContext::Label("up, down, left, right, fire1, fire2 or fire3")
+                ))
+                .parse_next(input);
+            },
+            None => break
+        }
+    }
+    ws0.parse_next(input)?;
+    Ok(CslInstruction::Joystick {
+        port,
+        input: joystick
+    })
 }
 
 /// Parse wait instruction
@@ -763,6 +805,7 @@ pub fn parse_instruction<'a>(
                     alt((
                         parse_key_from_file,
                         parse_keyboard_write,
+                        parse_joystick,
                         parse_wait_driveonoff,
                         parse_wait_vsyncoffon,
                         parse_wait_ssm0000,
@@ -969,12 +1012,18 @@ fn convert_parse_error_to_csl_error(
 
     // an odd number of quotes (not counting \') on the line: one is never closed
     let line_start = input[..offset].rfind('\n').map_or(0, |i| i + 1);
-    let line_end = input[offset..].find(['\n', '\r']).map_or(input.len(), |i| offset + i);
+    let line_end = input[offset..]
+        .find(['\n', '\r'])
+        .map_or(input.len(), |i| offset + i);
     let line = &input[line_start..line_end];
     let mut span = span;
-    if line.trim_start().starts_with("key_output") && line.replace("\\'", "").matches('\'').count() % 2 == 1 {
+    if line.trim_start().starts_with("key_output")
+        && line.replace("\\'", "").matches('\'').count() % 2 == 1
+    {
         message = "Invalid CSL syntax: unterminated quote in key_output".to_string();
-        notes.push("the key sequence must end with a closing quote (') on the same line".to_string());
+        notes.push(
+            "the key sequence must end with a closing quote (') on the same line".to_string()
+        );
         span = line_start..line_end.max(line_start + 1);
     }
 
@@ -1058,8 +1107,16 @@ mod tests {
 
     #[test]
     fn unterminated_key_output_is_reported_on_its_own_line() {
-        let error = parse_csl_with_rich_errors("csl_version 1.0\nkey_output 'CAT\\(RET)\nwait 3000\nkey_output 'A'\n", None).unwrap_err();
-        assert!(error.message.contains("unterminated quote"), "{}", error.message);
+        let error = parse_csl_with_rich_errors(
+            "csl_version 1.0\nkey_output 'CAT\\(RET)\nwait 3000\nkey_output 'A'\n",
+            None
+        )
+        .unwrap_err();
+        assert!(
+            error.message.contains("unterminated quote"),
+            "{}",
+            error.message
+        );
         assert_eq!(&error.source[error.span.clone()], "key_output 'CAT\\(RET)");
     }
 
@@ -1427,7 +1484,7 @@ mod screenshot_scale_tests {
     use super::*;
 
     fn screenshot(line: &str) -> CslInstruction {
-        let script = parse_csl_with_rich_errors(&format!("csl_version 1.0\n{line}\n"), None)
+        let script = parse_csl_with_rich_errors(&format!("csl_version 1.3\n{line}\n"), None)
             .unwrap_or_else(|e| panic!("{line}: {e}"));
         script
             .iter()
@@ -1477,7 +1534,7 @@ mod screenshot_scale_tests {
             "screenshot 1.2.3"
         ] {
             assert!(
-                parse_csl_with_rich_errors(&format!("csl_version 1.0\n{line}\n"), None).is_err(),
+                parse_csl_with_rich_errors(&format!("csl_version 1.3\n{line}\n"), None).is_err(),
                 "{line}"
             );
         }
