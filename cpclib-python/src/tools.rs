@@ -30,6 +30,7 @@ const ALL_COMMANDS: &[&[&str]] = &[
     task::CADENCE_CMDS,
     task::CPCSYNTAXERROR_CMDS,
     task::KONCEPCJA_CMDS,
+    task::TUXAPE_CMDS,
     task::EMULATOR_1984_CMDS,
     task::RETROVM_CMDS,
     task::ASM_CMDS,

@@ -766,7 +766,9 @@ impl EmulatorConf {
                 },
                 // `koncepcja [options] <slotfile(s)>`: the first .dsk goes in
                 // drive A, the second one in drive B.
-                Emulator::Koncepcja(_) => args.push(emu.launch_fname(drive_a)?.to_string())
+                Emulator::Koncepcja(_) => args.push(emu.launch_fname(drive_a)?.to_string()),
+                // `tuxape [options] [disc]`: the positional argument is the disc of drive A.
+                Emulator::TuxApe(_) => args.push(emu.launch_fname(drive_a)?.to_string())
             }
         }
 
@@ -799,6 +801,11 @@ impl EmulatorConf {
                         );
                     }
                     args.push(emu.launch_fname(drive_b)?.to_string())
+                },
+                // `--insert <drive>:<file>`
+                Emulator::TuxApe(_) => {
+                    args.push("--insert".to_owned());
+                    args.push(format!("B:{}", emu.launch_fname(drive_b)?));
                 }
             }
         }
@@ -840,7 +847,14 @@ impl EmulatorConf {
                     args.push("--load".to_owned());
                     args.push(emu.launch_fname(sna)?.to_string());
                 },
-                Emulator::Koncepcja(_) => args.push(emu.launch_fname(sna)?.to_string())
+                Emulator::Koncepcja(_) => args.push(emu.launch_fname(sna)?.to_string()),
+                // Its command line only takes discs and tapes: a snapshot is loaded from the window.
+                Emulator::TuxApe(_) => {
+                    return Err(
+                        "TuxAPE cannot load a snapshot from its command line (File > Load Snapshot, Ctrl+F5)"
+                            .to_owned()
+                    );
+                }
             }
         }
 
@@ -984,7 +998,8 @@ impl EmulatorConf {
                 | Emulator::RetroVm(_)
                 | Emulator::Cadence(_)
                 | Emulator::CpcSyntaxError(_)
-                | Emulator::Koncepcja(_) => {
+                | Emulator::Koncepcja(_)
+                | Emulator::TuxApe(_) => {
                     return Err(format!(
                         "ROM configuration is not yet supported for {emu:?}"
                     ));
@@ -1194,7 +1209,11 @@ impl EmulatorConf {
                         );
                     }
                 },
-                Emulator::Koncepcja(_) => args.push(format!("--autocmd=RUN\"{run}"))
+                Emulator::Koncepcja(_) => args.push(format!("--autocmd=RUN\"{run}")),
+                // no option to type or run anything
+                Emulator::TuxApe(_) => {
+                    o.emit_stderr("auto_run is currently ignored for TuxAPE\n");
+                }
             }
         }
 
@@ -1681,6 +1700,7 @@ pub(crate) struct CadenceUsedEmulator {}
 pub(crate) struct Emulator1984UsedEmulator {}
 pub(crate) struct CpcSyntaxErrorUsedEmulator {}
 pub(crate) struct KoncepcjaUsedEmulator {}
+pub(crate) struct TuxApeUsedEmulator {}
 pub(crate) struct BemuUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
@@ -2670,6 +2690,7 @@ pub(crate) enum Robot {
     Emulator1984(RobotImpl<Emulator1984UsedEmulator>),
     CpcSyntaxError(RobotImpl<CpcSyntaxErrorUsedEmulator>),
     Koncepcja(RobotImpl<KoncepcjaUsedEmulator>),
+    TuxApe(RobotImpl<TuxApeUsedEmulator>),
     Bemu(RobotImpl<BemuUsedEmulator>),
     #[cfg(feature = "screenshot")]
     Js1984(Js1984Robot),
@@ -2720,6 +2741,7 @@ used_emulators! {
     Emulator1984UsedEmulator => Emulator1984,
     CpcSyntaxErrorUsedEmulator => CpcSyntaxError,
     KoncepcjaUsedEmulator => Koncepcja,
+    TuxApeUsedEmulator => TuxApe,
 }
 
 impl<E: UsedEmulator> From<(Option<EmuWindow>, WindowEventsManager, &Emulator)> for RobotImpl<E> {
@@ -2853,6 +2875,7 @@ impl Robot {
             Robot::Emulator1984(r) => r,
             Robot::CpcSyntaxError(r) => r,
             Robot::Koncepcja(r) => r,
+            Robot::TuxApe(r) => r,
             Robot::Bemu(r) => r,
             #[cfg(feature = "screenshot")]
             Robot::Js1984(r) => r,
@@ -2934,6 +2957,9 @@ impl Robot {
             },
             Emulator::Koncepcja(_) => {
                 RobotImpl::<KoncepcjaUsedEmulator>::from((window, events_manager, emu)).into()
+            },
+            Emulator::TuxApe(_) => {
+                RobotImpl::<TuxApeUsedEmulator>::from((window, events_manager, emu)).into()
             },
             Emulator::Bemu(_) => {
                 RobotImpl::<BemuUsedEmulator>::from((window, events_manager, emu)).into()
@@ -3723,6 +3749,8 @@ pub enum Emu {
     #[value(alias = "cpcsyntaxerror")]
     Cpcse,
     Koncepcja,
+    /// TuxAPE, a WinAPE-like emulator for Linux
+    Tuxape,
     #[value(alias = "1984")]
     Emulator1984,
     /// The emscripten build of 1984, served in a browser rather than spawned.
@@ -3890,6 +3918,15 @@ pub fn list_emulators() -> Vec<EmulatorListEntry> {
             debuggable: false,
             debugger_launch_id: None,
             installed: Emulator::Koncepcja(Default::default())
+                .configuration::<()>()
+                .is_cached()
+        },
+        EmulatorListEntry {
+            id: id(Emu::Tuxape),
+            label: "TuxAPE",
+            debuggable: false,
+            debugger_launch_id: None,
+            installed: Emulator::TuxApe(Default::default())
                 .configuration::<()>()
                 .is_cached()
         },
@@ -4112,6 +4149,7 @@ fn emulator_from_choice(choice: Emu) -> Result<Emulator, String> {
         Emu::Cadence => Emulator::Cadence(Default::default()),
         Emu::Cpcse => Emulator::CpcSyntaxError(Default::default()),
         Emu::Koncepcja => Emulator::Koncepcja(Default::default()),
+        Emu::Tuxape => Emulator::TuxApe(Default::default()),
         Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
         Emu::Emulator1984Js => {
             return Err(

@@ -33,6 +33,7 @@ use cpclib_runner::runner::emulator::cpcsyntaxerror::CpcSyntaxErrorVersion;
 use cpclib_runner::runner::emulator::emulator1984::Emulator1984Version;
 use cpclib_runner::runner::emulator::koncepcja::KoncepcjaVersion;
 use cpclib_runner::runner::emulator::retrovm::RetroVmVersion;
+use cpclib_runner::runner::emulator::tuxape::TuxApeVersion;
 use cpclib_runner::runner::emulator::{
     AceVersion, AmspiritLiteVersion, AmspiritVersion, CpcecVersion, Emulator, SugarBoxV2Version,
     WinapeVersion
@@ -68,6 +69,7 @@ const EMULATORS: &[&str] = &[
     "cpcse",
     "emulator1984",
     "koncepcja",
+    "tuxape",
     "retrovm",
     "winape",
     "sugarbox"
@@ -90,6 +92,7 @@ fn parse_emulator(name: &str) -> PyResult<Emulator> {
         "cpcse" | "cpcsyntaxerror" => Emulator::CpcSyntaxError(CpcSyntaxErrorVersion::default()),
         "emulator1984" => Emulator::Emulator1984(Emulator1984Version::default()),
         "koncepcja" => Emulator::Koncepcja(KoncepcjaVersion::default()),
+        "tuxape" => Emulator::TuxApe(TuxApeVersion::default()),
         "retrovm" => Emulator::RetroVm(RetroVmVersion::default()),
         "winape" => Emulator::Winape(WinapeVersion::default()),
         "sugarbox" | "sugarboxv2" => Emulator::SugarBoxV2(SugarBoxV2Version::default()),

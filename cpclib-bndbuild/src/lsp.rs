@@ -225,6 +225,12 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: TUXAPE_CMDS,
+        description: "Run in TuxAPE emulator (a WinAPE-like emulator for Linux, from github.com/thomas-bressel/tux-ape)",
+        synopsis: "TODO",
+        example: ""
+    },
+    TaskType {
         names: EMULATOR_1984_CMDS,
         description: "Run in 1984 emulator",
         synopsis: "TODO",

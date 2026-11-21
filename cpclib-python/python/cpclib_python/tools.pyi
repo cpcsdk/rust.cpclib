@@ -244,6 +244,13 @@ def koncepcja(
 ) -> dict[str, str] | None:
     """Run in konCePCja emulator."""
 
+def tuxape(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    **kwargs: Any,
+) -> dict[str, str] | None:
+    """Run in TuxAPE emulator."""
+
 def dsk(
     *args: str,
     on_output: OutputCallback | None = None,

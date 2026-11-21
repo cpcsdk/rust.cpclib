@@ -41,6 +41,7 @@ CPC Runner is available as a standalone `cpcrunner` binary but can also be used 
 - **SugarboxV2** - Cross-platform, modern
 - **CPCSyntaxError** - Cross-platform, cycle-level
 - **konCePCja** - Windows and macOS (wine on Linux)
+- **TuxAPE** - Linux (a WinAPE-like emulator)
 
 ## Common Use Cases
 

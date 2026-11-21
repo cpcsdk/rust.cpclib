@@ -71,4 +71,5 @@ They are:
 - `retrovm` to launch Retro Virtual Machine
 - `cpcse` to launch CPCSyntaxError
 - `koncepcja` to launch konCePCja
+- `tuxape` to launch TuxAPE
 - `extern` to launch any command available on the machine

@@ -292,6 +292,7 @@ fn test_bndbuild_commands_documented() {
         (CAPRICEFOREVER_CMDS, "capriceforever"),
         (CPCSYNTAXERROR_CMDS, "cpcsyntaxerror"),
         (KONCEPCJA_CMDS, "koncepcja"),
+        (TUXAPE_CMDS, "tuxape"),
         (DISC_CMDS, "dsk"),
         (DISARK_CMDS, "disark"),
         (ECHO_CMDS, "echo"),

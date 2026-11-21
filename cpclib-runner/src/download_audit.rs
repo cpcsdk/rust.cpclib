@@ -33,6 +33,7 @@ use crate::runner::emulator::cpcsyntaxerror::CpcSyntaxErrorVersion;
 use crate::runner::emulator::emulator1984::Emulator1984Version;
 use crate::runner::emulator::koncepcja::KoncepcjaVersion;
 use crate::runner::emulator::retrovm::RetroVmVersion;
+use crate::runner::emulator::tuxape::TuxApeVersion;
 use crate::runner::emulator::{
     AceVersion, AmspiritLiteVersion, AmspiritVersion, CpcecVersion, SugarBoxV2Version,
     WinapeVersion
@@ -48,6 +49,11 @@ use crate::runner::vlink::Vlink;
 
 /// Tools that are not published for Linux, on purpose.
 const NOT_FOR_THIS_OS: &[&str] = &["cpcemu"];
+
+/// Tools whose author has not published a build yet (TuxAPE has no GitHub release, its CI only
+/// leaves workflow artifacts): reported, not failed. Remove it from here with its first release,
+/// after checking the asset names of `TuxApeVersion`.
+const NOT_PUBLISHED_YET: &[&str] = &["tuxape"];
 
 /// `(name, address or why there is none)` of every tool, the current version.
 fn resolved_downloads() -> Vec<(&'static str, Result<String, String>)> {
@@ -76,6 +82,7 @@ fn resolved_downloads() -> Vec<(&'static str, Result<String, String>)> {
         "cadence" => CadenceVersion::default();
         "cpcsyntaxerror" => CpcSyntaxErrorVersion::default();
         "koncepcja" => KoncepcjaVersion::default();
+        "tuxape" => TuxApeVersion::default();
         "retrovm" => RetroVmVersion::default();
         "sugarbox" => SugarBoxV2Version::default();
         "emulator1984" => Emulator1984Version::default();
@@ -114,6 +121,9 @@ fn download_audit() {
             Ok(url) => {
                 match network::download_response(&url) {
                     Ok(_) => println!("{name}\t{url}"),
+                    Err(e) if NOT_PUBLISHED_YET.contains(&name) => {
+                        println!("{name}\t(not published yet: {url} - {e})")
+                    },
                     Err(e) => {
                         println!("{name}\tDEAD {url} ({e})");
                         failures.push(format!("{name}: {url} - {e}"));
@@ -121,6 +131,9 @@ fn download_audit() {
                 }
             },
             Err(e) if NOT_FOR_THIS_OS.contains(&name) => println!("{name}\t(none: {e})"),
+            Err(e) if NOT_PUBLISHED_YET.contains(&name) => {
+                println!("{name}\t(not published yet: {e})")
+            },
             Err(e) => {
                 println!("{name}\tERROR {e}");
                 failures.push(format!("{name}: no address - {e}"));
