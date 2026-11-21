@@ -1,85 +1,101 @@
-use std::fmt::Display;
+//! TuxAPE, by Thomas Bressel: <https://tuxape.amstariga.fr> (sources:
+//! <https://github.com/thomas-bressel/tux-ape>).
+//!
+//! A C++20 / Qt 6 re-implementation of WinAPE 2.0 Beta 2 (same functions, same file formats, same
+//! interface layout), for Linux on a 64-bit PC. Its command line is `tuxape [--sym <file>]...
+//! [--tape <file>] [--insert <drive>:<file>]... [<disc>]`: the optional positional argument is the
+//! disc put in drive A:, `--insert B:file` the one for drive B:. There is no option to load a
+//! snapshot, to run a program or to type keys: those are menu entries of the window.
+//!
+//! The author publishes the builds on his site, not as GitHub releases: the page
+//! <https://tuxape.amstariga.fr/telechargements.html> links
+//! `telechargements/tuxape-<version>-linux-x86_64.tar.gz` (34 MB) and a `.deb` package. The archive
+//! unpacks to a `tuxape-<version>-linux-x86_64` folder holding the program (executable), Qt, the ROMs
+//! (`roms/`), the profiles and the folders it works in; it keeps everything there, so it is run in
+//! its own folder. Its `LICENCE.txt` allows to use, copy and give it away whole and free of charge.
+//!
+//! The site keeps the current version only: an older one disappears (1.1.9 does not answer
+//! any more), so the version that is known is the current one when this is written.
+
+use cpclib_common::camino::Utf8PathBuf;
 
 use crate::delegated::{
-    ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication,
-    GithubInformation
+    ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation,
+    InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
 };
 use crate::event::EventObserver;
 use crate::runner::exec::RunInDir;
 
-/// TuxAPE, by Thomas Bressel: <https://github.com/thomas-bressel/tux-ape>
-///
-/// A C++20 / Qt 6 re-implementation of WinAPE 2.0 Beta 2 (same functions, same file formats, same
-/// interface layout). Its command line is `tuxape [--sym <file>]... [--tape <file>]
-/// [--insert <drive>:<file>]... [<disc>]`: the optional positional argument is the disc put in drive
-/// A:, `--insert B:file` the one for drive B:. There is no option to load a snapshot, to run a
-/// program or to type keys: those are menu entries of the window.
-///
-/// It contains no ROM: it reads WinAPE's (the folder `WinAPE20B2` of the original distribution
-/// beside the program, or the folder named by `TUXAPE_ROM_DIR`), see its README.
-///
-/// The builds are published by the author as GitHub assets: a folder (`TuxAPE/`) holding the
-/// program, Qt and the files it needs. At the time of writing only the CI of the repository
-/// builds it (Linux x86_64 and arm64, as workflow artifacts) and no release has been published:
-/// [`GithubInformation`] below names the assets such a release is expected to have, and has to be
-/// checked against the first one.
 pub const TUXAPE_CMD: &str = "tuxape";
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+/// Where the builds of TuxAPE are published
+const TUXAPE_DOWNLOADS: &str = "https://tuxape.amstariga.fr/telechargements";
+
+#[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TuxApeVersion {
     #[default]
-    V1_1_9
+    V1_1_10
 }
 
-impl Display for TuxApeVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TuxAPE {}", self.version_name().trim_start_matches('v'))
-    }
-}
-
-impl GithubCompiledApplication for TuxApeVersion {}
-
-impl ExecutableInformation for TuxApeVersion {
-    fn target_os_folder(&self) -> &'static str {
-        match self {
-            Self::V1_1_9 => "TuxAPE_1.1.9"
-        }
-    }
-
-    // The archive keeps the `TuxAPE/` folder of the build.
-    fn target_os_exec_fname(&self) -> &'static str {
-        #[cfg(target_os = "windows")]
-        return "TuxAPE/tuxape.exe";
-        #[cfg(not(target_os = "windows"))]
-        return "TuxAPE/tuxape";
-    }
-
-    // It finds roms/, plugins/, profile/... beside the executable (and its Qt in qt/).
-    fn target_os_run_in_dir(&self) -> RunInDir {
-        RunInDir::AppDir
-    }
-}
-
-impl GithubInformation for TuxApeVersion {
-    fn project(&self) -> &'static str {
-        "tux-ape"
-    }
-
-    fn owner(&self) -> &'static str {
-        "thomas-bressel"
+impl TuxApeVersion {
+    pub fn get_command(&self) -> &str {
+        TUXAPE_CMD
     }
 
     fn version_name(&self) -> &'static str {
         match self {
-            Self::V1_1_9 => "v1.1.9"
+            Self::V1_1_10 => "1.1.10"
         }
     }
 
-    // Only Linux is built (x86_64; the arm64 build is for the Raspberry Pi 4 and 5).
-    fn linux_key(&self) -> Option<&'static str> {
+    /// Where the ROMs of the emulator are (it ships all of Amstrad's)
+    pub fn roms_folder(&self) -> Utf8PathBuf {
+        self.configuration::<()>()
+            .cache_folder()
+            .join(format!("tuxape-{}-linux-x86_64/roms", self.version_name()))
+    }
+
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        InternetStaticCompiledApplication::configuration(self)
+    }
+}
+
+impl StaticInformation for TuxApeVersion {
+    // Linux only: no other build is published.
+    fn static_download_urls(&self) -> &'static MutiplatformUrls {
+        static V1_1_10: std::sync::OnceLock<MutiplatformUrls> = std::sync::OnceLock::new();
         match self {
-            Self::V1_1_9 => Some("TuxAPE-linux-x86_64.tar.gz")
+            Self::V1_1_10 => {
+                V1_1_10.get_or_init(|| {
+                    MutiplatformUrls::builder()
+                        .linux(format!(
+                            "{TUXAPE_DOWNLOADS}/tuxape-{}-linux-x86_64.tar.gz",
+                            self.version_name()
+                        ))
+                        .build()
+                })
+            },
         }
+    }
+}
+
+impl ExecutableInformation for TuxApeVersion {
+    fn target_os_folder(&self) -> &'static str {
+        match self {
+            Self::V1_1_10 => "TuxAPE_1.1.10"
+        }
+    }
+
+    // The archive keeps its `tuxape-<version>-linux-x86_64` folder.
+    fn target_os_exec_fname(&self) -> &'static str {
+        match self {
+            Self::V1_1_10 => "tuxape-1.1.10-linux-x86_64/tuxape"
+        }
+    }
+
+    // It finds roms/, profile/, plugins/... beside the executable (and its Qt in qt/).
+    fn target_os_run_in_dir(&self) -> RunInDir {
+        RunInDir::AppDir
     }
 }
 
@@ -106,27 +122,28 @@ impl DownloadableInformation for TuxApeVersion {
     }
 }
 
+impl InternetStaticCompiledApplication for TuxApeVersion {}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::delegated::GithubCompiledApplication;
 
     #[test]
-    fn it_is_a_github_executable_run_in_its_folder() {
+    fn it_is_downloaded_from_its_site_and_run_in_its_folder() {
         let version = TuxApeVersion::default();
-        assert_eq!(version.to_string(), "TuxAPE 1.1.9");
-        assert_eq!(version.owner(), "thomas-bressel");
-        assert_eq!(version.project(), "tux-ape");
-        assert!(version.linux_key().unwrap().ends_with(".tar.gz"));
-        // only Linux builds exist
-        assert!(version.windows_key().is_none());
-        assert!(version.macos_key().is_none());
-
-        let conf = GithubCompiledApplication::configuration::<()>(&version);
+        let conf = version.configuration::<()>();
         assert!(conf.custom_install.is_none());
-        assert!(
-            conf.exec_fname.ends_with("TuxAPE/tuxape")
-                || conf.exec_fname.ends_with("TuxAPE/tuxape.exe")
+        assert_eq!(conf.exec_fname, "tuxape-1.1.10-linux-x86_64/tuxape");
+
+        let urls = version.static_download_urls();
+        assert_eq!(
+            urls.linux.as_deref(),
+            Some("https://tuxape.amstariga.fr/telechargements/tuxape-1.1.10-linux-x86_64.tar.gz")
         );
+        // only a Linux build exists
+        assert!(urls.windows.is_none() && urls.macos.is_none());
+        assert!(version
+            .roms_folder()
+            .ends_with("tuxape-1.1.10-linux-x86_64/roms"));
     }
 }

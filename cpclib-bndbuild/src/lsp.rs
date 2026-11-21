@@ -226,7 +226,7 @@ pub const TASK_TYPES: &[TaskType] = &[
     },
     TaskType {
         names: TUXAPE_CMDS,
-        description: "Run in TuxAPE emulator (a WinAPE-like emulator for Linux, from github.com/thomas-bressel/tux-ape)",
+        description: "Run in TuxAPE emulator (a WinAPE-like emulator for Linux, from tuxape.amstariga.fr)",
         synopsis: "TODO",
         example: ""
     },

@@ -719,8 +719,6 @@ Arguments:
       Disc image to put in drive A:
 
 There is no option to load a snapshot or to run a program: use the menus of the window.
-TuxAPE needs the ROMs of WinAPE: a `roms` folder beside the program, or the folder named by
-the TUXAPE_ROM_DIR environment variable.
 
 Examples:
   tuxape game.dsk

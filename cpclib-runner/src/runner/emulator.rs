@@ -172,6 +172,7 @@ impl Emulator {
             Emulator::Winape(v) => v.roms_folder(),
             Emulator::Emulator1984(v) => v.roms_folder(),
             Emulator::Bemu(v) => v.roms_folder(),
+            Emulator::TuxApe(v) => v.roms_folder(),
             _ => unimplemented!()
         }
     }
