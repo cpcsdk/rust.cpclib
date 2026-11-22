@@ -411,8 +411,20 @@
         "icon": "$(warning)"
       },
       {
+        "command": "cpclib.runCslWith.tuxape",
+        "title": "TuxAPE (via CSL interpreter)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
         "command": "cpclib.runCslWith.koncepcja.needsInstall",
         "title": "konCePCja (via CSL interpreter, not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "cpclib.runCslWith.tuxape.needsInstall",
+        "title": "TuxAPE (via CSL interpreter, not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(warning)"
       },
@@ -743,8 +755,20 @@
         "icon": "$(pass-filled)"
       },
       {
+        "command": "cpclib.runWith.tuxape",
+        "title": "TuxAPE",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
         "command": "cpclib.runWith.koncepcja.needsInstall",
         "title": "konCePCja (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.tuxape.needsInstall",
+        "title": "TuxAPE (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
@@ -1223,8 +1247,18 @@
           "group": "1_installed"
         },
         {
+          "command": "cpclib.runWith.tuxape",
+          "when": "cpclib.emu.tuxape.installed",
+          "group": "1_installed"
+        },
+        {
           "command": "cpclib.runWith.koncepcja.needsInstall",
           "when": "!cpclib.emu.koncepcja.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.tuxape.needsInstall",
+          "when": "!cpclib.emu.tuxape.installed",
           "group": "1_installed"
         },
         {
@@ -1375,8 +1409,18 @@
           "group": "1_installed"
         },
         {
+          "command": "cpclib.runCslWith.tuxape",
+          "when": "cpclib.emu.tuxape.installed",
+          "group": "1_installed"
+        },
+        {
           "command": "cpclib.runCslWith.koncepcja.needsInstall",
           "when": "!cpclib.emu.koncepcja.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runCslWith.tuxape.needsInstall",
+          "when": "!cpclib.emu.tuxape.installed",
           "group": "1_installed"
         },
         {
@@ -1543,7 +1587,15 @@
           "when": "false"
         },
         {
+          "command": "cpclib.runWith.tuxape",
+          "when": "false"
+        },
+        {
           "command": "cpclib.runWith.koncepcja.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.tuxape.needsInstall",
           "when": "false"
         },
         {
@@ -1663,7 +1715,15 @@
           "when": "false"
         },
         {
+          "command": "cpclib.runCslWith.tuxape",
+          "when": "false"
+        },
+        {
           "command": "cpclib.runCslWith.koncepcja.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runCslWith.tuxape.needsInstall",
           "when": "false"
         },
         {

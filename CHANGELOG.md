@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-bndbuild` add support fof Z80Profiler by Targhan/Arkos
 - `cpclib-bndbuild` add support of the catalog command
 - `cpclib-bndbuild`, `cpclib-runner` add the CPCSyntaxError (`cpcse`) and konCePCja (`koncepcja`) emulators
+- `cpclib-bndbuild`, `cpclib-runner` add the TuxAPE (`tuxape`) emulator, installed from a GitHub release
 - `cpclib-bndbuild`, `cpclib-runner` add the fantams assembler, built from its sources on first use
 - `cpclib-bndbuild`, `cpclib-runner` download the bemu emulator from the releases of github.com/rgiot/bemu instead of building it from its sources
 - `cpclib-dap`, `cpclib-vscode` memory elsewhere than the CPU's paging: a view (`-mv`, `-dv`, `-sv`) reads through a chosen paging (the RAM configuration and page, the lower and upper ROMs, an upper ROM's number, a CPC+'s cartridge page and ASIC registers, what a write reaches), and shows a RAM bank, a ROM or a cartridge page by its location (`UPPER07:0000`, `B04:0000`, `CART01:0000`) where it runs; the panels have a paging form, the disassembly view a picker for them

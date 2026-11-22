@@ -43,6 +43,7 @@ Available emulators:
 - `sugarbox` - SugarboxV2 (cross-platform)
 - `cpcse` - CPCSyntaxError (cross-platform)
 - `koncepcja` - konCePCja (Windows, macOS; wine on Linux)
+- `tuxape` - TuxAPE (Linux)
 
 ### `-m, --memory <MEMORY>`
 Set CPC memory configuration (in KB).

@@ -16,7 +16,10 @@ def test_commands_describe_every_tool():
     names = {c["name"] for c in tools.commands()}
     assert {"basm", "dsk", "img2cpc", "catalog", "hideur", "xfer", "sna", "crunch"} <= names
     basm = next(c for c in tools.commands() if c["name"] == "basm")
-    assert "assemble" in basm["aliases"] and basm["synopsis"].startswith("basm")
+    assert basm["synopsis"].startswith("basm")
+    # `assemble` belongs to the assembler facade `asm`, not to basm
+    asm = next(c for c in tools.commands() if c["name"] == "asm")
+    assert "assemble" in asm["aliases"] and asm["synopsis"].startswith("asm")
 
 
 def test_a_tool_runs_as_a_function_and_captures_its_output():

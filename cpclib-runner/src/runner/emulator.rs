@@ -21,6 +21,7 @@ pub mod retrovm;
 pub mod sugarbox;
 #[cfg(feature = "screenshot")]
 pub mod sugarbox_api;
+pub mod tuxape;
 pub mod winape;
 
 use std::path::absolute;
@@ -41,6 +42,7 @@ use emulator1984::{EMULATOR_1984_CMD, Emulator1984Version};
 use koncepcja::{KONCEPCJA_CMD, KoncepcjaVersion};
 use retrovm::{RETROVM_CMD, RetroVmVersion};
 pub use sugarbox::*;
+use tuxape::{TUXAPE_CMD, TuxApeVersion};
 pub use winape::*;
 
 use crate::delegated::{
@@ -63,6 +65,7 @@ pub enum Emulator {
     Emulator1984(Emulator1984Version),
     Koncepcja(KoncepcjaVersion),
     RetroVm(RetroVmVersion),
+    TuxApe(TuxApeVersion),
     Winape(WinapeVersion),
     SugarBoxV2(SugarBoxV2Version)
 }
@@ -121,7 +124,8 @@ impl Emulator {
             Emulator::CpcSyntaxError(_) => CPCSYNTAXERROR_CMD,
             Emulator::Emulator1984(_) => EMULATOR_1984_CMD,
             Emulator::Koncepcja(_) => KONCEPCJA_CMD,
-            Emulator::RetroVm(_) => RETROVM_CMD
+            Emulator::RetroVm(_) => RETROVM_CMD,
+            Emulator::TuxApe(_) => TUXAPE_CMD
         }
     }
 
@@ -149,7 +153,8 @@ impl Emulator {
             Emulator::Emulator1984(_) => window_name.starts_with("1984"),
             // "konCePCja 6.4.2"
             Emulator::Koncepcja(_) => window_name.starts_with("konCePCja"),
-            Emulator::RetroVm(_) => window_name.starts_with("Retro Virtual Machine")
+            Emulator::RetroVm(_) => window_name.starts_with("Retro Virtual Machine"),
+            Emulator::TuxApe(_) => window_name.starts_with("TuxAPE")
         }
     }
 
@@ -167,6 +172,7 @@ impl Emulator {
             Emulator::Winape(v) => v.roms_folder(),
             Emulator::Emulator1984(v) => v.roms_folder(),
             Emulator::Bemu(v) => v.roms_folder(),
+            Emulator::TuxApe(v) => v.roms_folder(),
             _ => unimplemented!()
         }
     }
@@ -244,7 +250,8 @@ impl Emulator {
             Emulator::SugarBoxV2(v) => v.configuration(),
             Emulator::CpcEmuPower(v) => v.configuration(),
             Emulator::CapriceForever(v) => v.configuration(),
-            Emulator::RetroVm(v) => v.configuration()
+            Emulator::RetroVm(v) => v.configuration(),
+            Emulator::TuxApe(v) => v.configuration()
         }
     }
 }

@@ -211,6 +211,7 @@ export const EMULATOR_MENU_ENTRIES: { id: string; label: string; dapId?: string 
     { id: 'cadence', label: 'Cadence' },
     { id: 'cpcse', label: 'CPCSyntaxError' },
     { id: 'koncepcja', label: 'konCePCja' },
+    { id: 'tuxape', label: 'TuxAPE' },
     { id: 'emulator1984', label: '1984 (native)' },
     { id: 'emulator1984-js', label: '1984js (browser)', dapId: '1984js' },
     { id: 'rvm', label: 'Retro Virtual Machine' },

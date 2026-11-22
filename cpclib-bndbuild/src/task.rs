@@ -25,6 +25,7 @@ use cpclib_runner::runner::emulator::cpcsyntaxerror::CPCSYNTAXERROR_CMD;
 use cpclib_runner::runner::emulator::emulator1984::EMULATOR_1984_CMD;
 use cpclib_runner::runner::emulator::koncepcja::KONCEPCJA_CMD;
 use cpclib_runner::runner::emulator::retrovm::RETROVM_CMD;
+use cpclib_runner::runner::emulator::tuxape::TUXAPE_CMD;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, AMSPIRIT_LITE_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
@@ -233,6 +234,7 @@ pub const CADENCE_CMDS: &[&str] = &[CADENCE_CMD];
 pub const CPCSYNTAXERROR_CMDS: &[&str] = &[CPCSYNTAXERROR_CMD, "cpcsyntaxerror"];
 pub const BEMU_CMDS: &[&str] = &[BEMU_CMD, "amsrust"];
 pub const KONCEPCJA_CMDS: &[&str] = &[KONCEPCJA_CMD];
+pub const TUXAPE_CMDS: &[&str] = &[TUXAPE_CMD, "tux-ape"];
 pub const EMULATOR_1984_CMDS: &[&str] = &[EMULATOR_1984_CMD];
 pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
 
@@ -401,7 +403,7 @@ is_some_cmd!(
     orgams,
     retrovm,
     rasm, rm, rtzx, two_cdt,
-    sjasmplus, sna, sugarbox, song2akm, song2akg, song2aky, song2events, song2raw, song2soundeffects, song2vgm, song2wav, song2ym,
+    sjasmplus, sna, sugarbox, tuxape, song2akm, song2akg, song2aky, song2events, song2raw, song2soundeffects, song2vgm, song2wav, song2ym,
     z80profiler,
     uz80,
     vasm,
@@ -853,6 +855,9 @@ impl InnerTask {
         }
         else if is_koncepcja_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_koncepcja_default(), std))
+        }
+        else if is_tuxape_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_tuxape_default(), std))
         }
         else if is_emulator_1984_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_1984_default(), std))

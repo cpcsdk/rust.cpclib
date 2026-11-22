@@ -244,6 +244,48 @@ def koncepcja(
 ) -> dict[str, str] | None:
     """Run in konCePCja emulator."""
 
+def tuxape(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in TuxAPE emulator."""
+
+def tux_ape(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in TuxAPE emulator (alias of `tuxape`)."""
+
+def cpcsyntaxerror(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in CPCSyntaxError emulator (alias of `cpcse`)."""
+
+def bemu(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in bemu emulator."""
+
+def amsrust(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Run in bemu emulator (alias of `bemu`)."""
+
+def zik2cpc(
+    *args: str,
+    on_output: OutputCallback | None = None,
+    capture: bool = False,
+) -> dict[str, str] | None:
+    """Convert, pack and play CPC music."""
+
 def dsk(
     *args: str,
     on_output: OutputCallback | None = None,

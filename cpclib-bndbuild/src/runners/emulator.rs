@@ -64,6 +64,12 @@ impl Emulator {
         ))
     }
 
+    pub fn new_tuxape_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::TuxApe(
+            Default::default()
+        ))
+    }
+
     pub fn new_1984_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Emulator1984(
             Default::default()
@@ -126,6 +132,7 @@ impl Emulator {
             Self::new_cpcsyntaxerror_default(),
             Self::new_bemu_default(),
             Self::new_koncepcja_default(),
+            Self::new_tuxape_default(),
             Self::new_1984_default(),
             Self::new_retrovm_default(),
             Self::new_facade()

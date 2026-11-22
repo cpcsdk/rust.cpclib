@@ -12,6 +12,7 @@ All notable changes to the CPClib VS Code extension are documented here.
   (converted to YM first), chosen with `[music] player` or the "with a specific player" commands
 - Generated music players print the song's title, author and comment, and which player is used
 - "Run with..." and "Run CSL with..." offer the CPCSyntaxError and konCePCja emulators
+- "Run with..." and "Run CSL with..." offer the TuxAPE emulator
 - Debugging: bemu is a debuggable emulator ("Debug with... > bemu", `"emulator": "bemu"`): by
   default its web build runs in a VS Code tab; `"bemuWindow": true` (or the
   `cpclib.debug.bemuWindow` setting) opens the native bemu bndbuild downloads, in its own window.

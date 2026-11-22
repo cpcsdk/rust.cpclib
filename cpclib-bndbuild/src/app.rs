@@ -31,7 +31,8 @@ use crate::runners::xfer::XferRunner;
 use crate::task::{
     Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcemu_cmd, is_cpcsyntaxerror_cmd,
     is_disc_cmd, is_echo_cmd, is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd,
-    is_koncepcja_cmd, is_orgams_cmd, is_retrovm_cmd, is_rm_cmd, is_two_cdt_cmd, is_winape_cmd,
+    is_koncepcja_cmd, is_orgams_cmd, is_retrovm_cmd, is_rm_cmd, is_tuxape_cmd, is_two_cdt_cmd,
+    is_winape_cmd,
     is_xfer_cmd
 };
 use crate::{
@@ -696,6 +697,32 @@ Arguments:
 Examples:
   koncepcja sorcery.dsk
   koncepcja game.dsk --autocmd="RUN\"GAME""#
+                .to_owned()
+        }
+        else if is_tuxape_cmd(runner) {
+            r#"TuxAPE (a WinAPE-like emulator, Linux only) can be started from the command line.
+
+Usage: tuxape [options] [disc]
+
+Options:
+  --insert <drive>:<file>
+      Put a disc in a drive, as B:file (drive A: is the optional argument)
+  --tape <file>
+      Put a tape in the deck
+  --sym <file>
+      Load a file of assembler symbols, for the debugger
+  --grab <file>, --grab-after <ms>
+      Save a picture of the window to <file> and quit
+
+Arguments:
+  [disc]
+      Disc image to put in drive A:
+
+There is no option to load a snapshot or to run a program: use the menus of the window.
+
+Examples:
+  tuxape game.dsk
+  tuxape game.dsk --insert B:data.dsk --sym game.sym"#
                 .to_owned()
         }
         else if is_rm_cmd(runner) {

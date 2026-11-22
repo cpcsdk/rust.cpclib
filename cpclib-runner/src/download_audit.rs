@@ -33,6 +33,7 @@ use crate::runner::emulator::cpcsyntaxerror::CpcSyntaxErrorVersion;
 use crate::runner::emulator::emulator1984::Emulator1984Version;
 use crate::runner::emulator::koncepcja::KoncepcjaVersion;
 use crate::runner::emulator::retrovm::RetroVmVersion;
+use crate::runner::emulator::tuxape::TuxApeVersion;
 use crate::runner::emulator::{
     AceVersion, AmspiritLiteVersion, AmspiritVersion, CpcecVersion, SugarBoxV2Version,
     WinapeVersion
@@ -76,6 +77,7 @@ fn resolved_downloads() -> Vec<(&'static str, Result<String, String>)> {
         "cadence" => CadenceVersion::default();
         "cpcsyntaxerror" => CpcSyntaxErrorVersion::default();
         "koncepcja" => KoncepcjaVersion::default();
+        "tuxape" => TuxApeVersion::default();
         "retrovm" => RetroVmVersion::default();
         "sugarbox" => SugarBoxV2Version::default();
         "emulator1984" => Emulator1984Version::default();

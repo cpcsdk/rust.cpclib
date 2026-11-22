@@ -372,6 +372,10 @@ Cycle-level emulator of the CPC 464/664/6128, Plus and GX4000, for Windows, Linu
 
 Amstrad CPC emulator. The media files are positional arguments and `--autocmd=<text>` is typed after the boot. Only Windows and macOS builds are published: on Linux, the Windows build runs through wine. For complete documentation, see <https://github.com/ikari-pl/konCePCja>.
 
+### Emulator: TuxAPE (tuxape,tux-ape)
+
+WinAPE-like Amstrad CPC emulator for Linux x86_64 (C++ / Qt), downloaded from its author's site, <https://tuxape.amstariga.fr/telechargements.html> (the archive holds the ROMs; sources on <https://github.com/thomas-bressel/tux-ape>). The disc of drive A is the positional argument, `--insert B:file` the one of drive B, `--sym <file>` loads assembler symbols. There is no option to load a snapshot or to run a program: the menus of the window do it.
+
 ### Emulator: SugarboxV2 (sugarbox)
 
 For complete documentation and download, see <https://github.com/Tom1975/SugarboxV2>.
