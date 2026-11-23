@@ -45,7 +45,7 @@ pub enum ArgShape {
     /// (`keyboard_write`, v1.2).
     KeyboardWrite,
     /// A joystick number (`0`/`1`), then any of `up down left right fire1 fire2 fire3`
-    /// (`joystick`, v1.3).
+    /// (`joystick`, v1.6).
     Joystick,
     /// A single required number (`wait`).
     Duration,
@@ -54,7 +54,7 @@ pub enum ArgShape {
     /// An optional bare word `vsync` (`screenshot`/`snapshot`).
     OptionalVsyncFlag,
     /// An optional bare word `vsync`, then an optional zoom: a factor (`0.5`) or a width
-    /// (`440px`) (`screenshot`; the zoom needs v1.3).
+    /// (`440px`) (`screenshot`; the zoom needs v1.6).
     ScreenshotArgs,
     /// One of `1`, `2`, `3` (`snapshot_version`).
     SnapshotVersion,
@@ -74,8 +74,9 @@ pub struct InstructionSpec {
 const V1_0: CslVersion = CslVersion::new(1, 0);
 const V1_1: CslVersion = CslVersion::new(1, 1);
 const V1_2: CslVersion = CslVersion::new(1, 2);
-const V1_3: CslVersion = CslVersion::new(1, 3);
+const V1_4: CslVersion = CslVersion::new(1, 4);
 const V1_5: CslVersion = CslVersion::new(1, 5);
+const V1_6: CslVersion = CslVersion::new(1, 6);
 
 /// Every CSL instruction keyword `csl_parser::parse_instruction` accepts,
 /// in the same order that function tries them.
@@ -193,7 +194,7 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
     },
     InstructionSpec {
         name: "joystick",
-        min_version: V1_3,
+        min_version: V1_6,
         args: ArgShape::Joystick
     },
     InstructionSpec {
@@ -223,7 +224,7 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
     },
     InstructionSpec {
         name: "screenshot_name",
-        min_version: V1_0,
+        min_version: V1_4,
         args: ArgShape::QuotedPath
     },
     InstructionSpec {
@@ -233,12 +234,12 @@ pub const INSTRUCTION_SPECS: &[InstructionSpec] = &[
     },
     InstructionSpec {
         name: "screenshot",
-        min_version: V1_0,
+        min_version: V1_0, // its zoom is V1_6
         args: ArgShape::ScreenshotArgs
     },
     InstructionSpec {
         name: "snapshot_name",
-        min_version: V1_0,
+        min_version: V1_4,
         args: ArgShape::QuotedPath
     },
     InstructionSpec {

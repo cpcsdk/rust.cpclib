@@ -1,7 +1,8 @@
 //! CSL (CPC Script Language) token modeling
 //!
-//! This module models the tokens and instructions of the CSL language v1.1
-//! as specified in the CSL-STANDARD_EN.pdf document.
+//! This module models the tokens and instructions of the CSL language up to v1.5
+//! as specified in the CSL-STANDARD-EN.pdf document (Longshot / Logon System, V1.5,
+//! September 2026), plus the cpclib extensions of v1.6 (`joystick`, a zoomed `screenshot`).
 //!
 //! CSL is a scripting language that allows precise automation of emulator control,
 //! simulating user actions. It uses a simple text format with one instruction per line.
@@ -24,9 +25,9 @@ impl CslVersion {
         Self { major, minor }
     }
 
-    /// Returns the latest CSL version (1.3)
+    /// Returns the latest CSL version (1.6: the 1.5 standard plus cpclib's extensions)
     pub const fn latest() -> Self {
-        Self { major: 1, minor: 3 }
+        Self { major: 1, minor: 6 }
     }
 }
 
@@ -402,7 +403,7 @@ impl TryFrom<&str> for KeyOutput {
         }
     }
 }
-/// The size of a screenshot, the emulator's picture zoomed (a cpclib extension of `screenshot`):
+/// The size of a screenshot, the emulator's picture zoomed (a cpclib extension of `screenshot`, v1.6):
 /// by a factor (`0.5`), or to a width in pixels (`440px`), its height in proportion.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ScreenshotScale {
@@ -434,7 +435,7 @@ impl std::fmt::Display for ScreenshotScale {
     }
 }
 
-/// What a `joystick` instruction holds down on one joystick (v1.3): its directions and
+/// What a `joystick` instruction holds down on one joystick (v1.6, a cpclib extension): its directions and
 /// fire buttons. Everything not named is released.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct JoystickInput {
@@ -570,8 +571,9 @@ pub enum CslInstruction {
     SnapshotDir(Utf8PathBuf),
 
     // Key strokes
-    /// Set delay between keystrokes (in microseconds)
-    /// First param: delay between keys, Second param (optional): delay after CR, Third param (optional): delay after special key
+    /// Set the key delays (in microseconds): `key_delay <press> <between 2 keys> [<after a CR>]`.
+    /// The standard's last parameter is optional (the delay after a CR is then the one of any
+    /// other key); the second one is accepted as optional too.
     KeyDelay {
         press_delay: u64,
         delay_after_key: Option<u64>,
@@ -589,7 +591,7 @@ pub enum CslInstruction {
     KeyboardWrite([u8; 10]),
 
     /// Hold down directions and fire buttons of joystick 0 or 1 until the next `joystick`
-    /// instruction for it (v1.3): `joystick 0 right fire1`, `joystick 0` releases it
+    /// instruction for it (v1.6, a cpclib extension): `joystick 0 right fire1`, `joystick 0` releases it
     Joystick {
         port: u8,
         input: JoystickInput
@@ -616,20 +618,20 @@ pub enum CslInstruction {
     WaitSsm(u16),
 
     // Exports
-    /// Specify name for next screenshot (without extension)
+    /// Specify name for next screenshot (without extension) (v1.4)
     ScreenshotName(Utf8PathBuf),
 
     /// Specify screenshot directory
     ScreenshotDir(Utf8PathBuf),
 
-    /// Take a screenshot (optionally wait for vsync), optionally zoomed (a cpclib extension:
+    /// Take a screenshot (optionally wait for vsync), optionally zoomed (a cpclib extension, v1.6:
     /// `screenshot 0.5`, `screenshot vsync 440px`), resized without moiré by the emulator
     Screenshot {
         wait_vsync: bool,
         scale: Option<ScreenshotScale>
     },
 
-    /// Specify name for next snapshot (without extension)
+    /// Specify name for next snapshot (without extension) (v1.4)
     SnapshotName(Utf8PathBuf),
 
     /// Take a snapshot (optionally wait for vsync)
@@ -793,7 +795,7 @@ impl fmt::Display for CslInstruction {
             Self::SnapshotName(name) => write!(f, "snapshot_name '{}'", name),
             Self::Snapshot { wait_vsync } => {
                 if *wait_vsync {
-                    write!(f, "snapshot V")
+                    write!(f, "snapshot vsync")
                 }
                 else {
                     write!(f, "snapshot")
@@ -831,17 +833,49 @@ impl CslInstruction {
         matches!(self, Self::KeyboardWrite(_))
     }
 
-    /// Check if this instruction is a v1.3 feature: `joystick`, a zoomed `screenshot`
-    pub fn is_v1_3_feature(&self) -> bool {
+    /// Check if this instruction is a v1.4 feature: `screenshot_name`, `snapshot_name`
+    pub fn is_v1_4_feature(&self) -> bool {
+        matches!(self, Self::ScreenshotName(_) | Self::SnapshotName(_))
+    }
+
+    /// Check if this instruction is a v1.5 feature
+    pub fn is_v1_5_feature(&self) -> bool {
+        matches!(self, Self::WaitSsm(_))
+    }
+
+    /// Check if this instruction is a v1.6 feature, a cpclib extension of the standard:
+    /// `joystick`, a zoomed `screenshot`
+    pub fn is_v1_6_feature(&self) -> bool {
         matches!(
             self,
             Self::Joystick { .. } | Self::Screenshot { scale: Some(_), .. }
         )
     }
 
-    /// Check if this instruction is a v1.5 feature
-    pub fn is_v1_5_feature(&self) -> bool {
-        matches!(self, Self::WaitSsm(_))
+    /// The oldest CSL version that has this instruction
+    pub fn min_version(&self) -> CslVersion {
+        if let Self::InstructionWithComment(instruction, _) = self {
+            return instruction.min_version();
+        }
+        let minor = if self.is_v1_6_feature() {
+            6
+        }
+        else if self.is_v1_5_feature() {
+            5
+        }
+        else if self.is_v1_4_feature() {
+            4
+        }
+        else if self.is_v1_2_feature() {
+            2
+        }
+        else if self.is_v1_1_feature() {
+            1
+        }
+        else {
+            0
+        };
+        CslVersion::new(1, minor)
     }
 
     /// Get the instruction name as it appears in CSL files
@@ -1316,49 +1350,13 @@ impl CslScriptBuilder {
 
         let version = self.current_version();
 
-        // Check v1.5 features
-        if instruction.is_v1_5_feature()
-            && (version.major < 1 || (version.major == 1 && version.minor < 5))
-        {
+        let required = instruction.min_version();
+        if version < required {
             return Err(format!(
-                "Instruction '{}' requires CSL version 1.5 or higher, but script uses version {}.{}",
+                "Instruction '{}' requires CSL version {}.{} or higher, but script uses version {}.{}",
                 instruction.instruction_name(),
-                version.major,
-                version.minor
-            ));
-        }
-
-        // Check v1.3 features
-        if instruction.is_v1_3_feature()
-            && (version.major < 1 || (version.major == 1 && version.minor < 3))
-        {
-            return Err(format!(
-                "Instruction '{}' requires CSL version 1.3 or higher, but script uses version {}.{}",
-                instruction.instruction_name(),
-                version.major,
-                version.minor
-            ));
-        }
-
-        // Check v1.2 features
-        if instruction.is_v1_2_feature()
-            && (version.major < 1 || (version.major == 1 && version.minor < 2))
-        {
-            return Err(format!(
-                "Instruction '{}' requires CSL version 1.2 or higher, but script uses version {}.{}",
-                instruction.instruction_name(),
-                version.major,
-                version.minor
-            ));
-        }
-
-        // Check v1.1 features
-        if instruction.is_v1_1_feature()
-            && (version.major < 1 || (version.major == 1 && version.minor < 1))
-        {
-            return Err(format!(
-                "Instruction '{}' requires CSL version 1.1 or higher, but script uses version {}.{}",
-                instruction.instruction_name(),
+                required.major,
+                required.minor,
                 version.major,
                 version.minor
             ));
@@ -1472,22 +1470,13 @@ impl Default for CslScriptBuilder {
 impl CslScript {
     /// Get a minimal version instruction  for scripts that don't specify a version
     fn minimal_version(&self) -> String {
-        let mut minimal = 0;
-        for instruction in &self.instructions {
-            if instruction.is_v1_5_feature() {
-                minimal = minimal.max(5);
-            }
-            else if instruction.is_v1_3_feature() {
-                minimal = minimal.max(3);
-            }
-            else if instruction.is_v1_2_feature() {
-                minimal = minimal.max(2);
-            }
-            else if instruction.is_v1_1_feature() {
-                minimal = minimal.max(1);
-            }
-        }
-        format!("csl_version 1.{}", minimal)
+        let minimal = self
+            .instructions
+            .iter()
+            .map(CslInstruction::min_version)
+            .max()
+            .unwrap_or(CslVersion::new(1, 0));
+        format!("csl_version {}.{}", minimal.major, minimal.minor)
     }
 }
 
@@ -2151,7 +2140,7 @@ mod tests {
         use crate::csl_parser::parse_csl_with_rich_errors;
 
         let script =
-            "csl_version 1.3\njoystick 0 right fire1\njoystick 1 fire2 up ;jump\njoystick 0\n";
+            "csl_version 1.6\njoystick 0 right fire1\njoystick 1 fire2 up ;jump\njoystick 0\n";
         let parsed = parse_csl_with_rich_errors(script, None).expect("joystick parses");
         let joysticks: Vec<_> = parsed
             .instructions()
@@ -2190,21 +2179,61 @@ mod tests {
         use crate::csl_parser::parse_csl_with_rich_errors;
 
         let err = parse_csl_with_rich_errors("csl_version 1.2\njoystick 0 up\n", None).unwrap_err();
-        assert!(err.to_string().contains("1.3"), "{err}");
-        assert!(parse_csl_with_rich_errors("csl_version 1.3\njoystick 2 up\n", None).is_err());
-        assert!(parse_csl_with_rich_errors("csl_version 1.3\njoystick 0 jump\n", None).is_err());
+        assert!(err.to_string().contains("1.6"), "{err}");
+        assert!(parse_csl_with_rich_errors("csl_version 1.6\njoystick 2 up\n", None).is_err());
+        assert!(parse_csl_with_rich_errors("csl_version 1.6\njoystick 0 jump\n", None).is_err());
     }
 
     #[test]
-    fn test_screenshot_zoom_needs_v1_3() {
+    fn test_screenshot_zoom_needs_v1_6() {
         use crate::csl_parser::parse_csl_with_rich_errors;
 
         let err =
             parse_csl_with_rich_errors("csl_version 1.2\nscreenshot 0.5\n", None).unwrap_err();
-        assert!(err.to_string().contains("1.3"), "{err}");
+        assert!(err.to_string().contains("1.6"), "{err}");
         assert!(parse_csl_with_rich_errors("csl_version 1.2\nscreenshot vsync\n", None).is_ok());
         assert!(
-            parse_csl_with_rich_errors("csl_version 1.3\nscreenshot vsync 440px\n", None).is_ok()
+            parse_csl_with_rich_errors("csl_version 1.6\nscreenshot vsync 440px\n", None).is_ok()
         );
+    }
+
+    /// The versions of the standard (V1.5): `screenshot_name`/`snapshot_name` came with 1.4,
+    /// `wait_ssm` with 1.5; `joystick` and a zoomed `screenshot` are cpclib's 1.6.
+    #[test]
+    fn test_versions_follow_the_standard() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+
+        assert_eq!(CslVersion::latest(), CslVersion::new(1, 6));
+        for (line, version) in [
+            ("screenshot_name 'a'", "1.4"),
+            ("snapshot_name 'a'", "1.4"),
+            ("wait_ssm 0xABCD", "1.5"),
+            ("joystick 0 up", "1.6"),
+            ("screenshot 0.5", "1.6")
+        ] {
+            let older = format!("csl_version 1.{}\n{line}\n", version[2..].parse::<u8>().unwrap() - 1);
+            let err = parse_csl_with_rich_errors(&older, None).unwrap_err();
+            assert!(err.to_string().contains(version), "{line}: {err}");
+            let script = format!("csl_version {version}\n{line}\n");
+            assert!(parse_csl_with_rich_errors(&script, None).is_ok(), "{line}");
+        }
+        // a comment after the instruction does not hide it
+        assert!(
+            parse_csl_with_rich_errors("csl_version 1.5\njoystick 0 up ;x\n", None).is_err()
+        );
+        // no version: the smallest one that has everything the script uses
+        let script = parse_csl_with_rich_errors("screenshot_name 'a'\nscreenshot\n", None).unwrap();
+        assert!(script.to_string().starts_with("csl_version 1.4\n"));
+    }
+
+    #[test]
+    fn test_snapshot_vsync_round_trips() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+
+        let script = parse_csl_with_rich_errors("snapshot vsync\nsnapshot\nscreenshot vsync\n", None)
+            .unwrap();
+        let text = script.to_string();
+        assert!(text.contains("snapshot vsync\n"), "{text}");
+        assert_eq!(parse_csl_with_rich_errors(&text, None).unwrap().to_string(), text);
     }
 }

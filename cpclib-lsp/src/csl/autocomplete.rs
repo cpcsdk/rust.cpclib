@@ -96,7 +96,7 @@ fn describe_shape(shape: ArgShape) -> &'static str {
         ArgShape::RomConfig => "<U|L|C|M> <0-255> '<path>'",
         ArgShape::QuotedPath => "'<path>'",
         ArgShape::DiskInsert => "[A|B] '<path>'",
-        ArgShape::KeyDelay => "<press_delay> [delay_after_key] [delay_after_cr]",
+        ArgShape::KeyDelay => "<press_delay> <delay_between_keys> [delay_after_cr]",
         ArgShape::KeyboardOutput => "'<text, \\(KEY) escapes allowed>'",
         ArgShape::KeyboardWrite => "<10 comma-separated byte values>",
         ArgShape::Joystick => "<0|1> [up] [down] [left] [right] [fire1] [fire2] [fire3]",
@@ -162,6 +162,13 @@ fn argument_completions(shape: ArgShape, arg_index: usize) -> Vec<CompletionItem
                 value_item("0.5", Some("Half the size (any factor)")),
                 value_item("440px", Some("440 pixels wide, the height in proportion")),
             ]
+        },
+        (ArgShape::Joystick, 1) => vec![value_item("0", None), value_item("1", None)],
+        (ArgShape::Joystick, _) => {
+            cpclib_csl::JoystickInput::WORDS
+                .iter()
+                .map(|word| value_item(*word, None))
+                .collect()
         },
         (ArgShape::SnapshotVersion, 1) => {
             vec![
@@ -276,6 +283,44 @@ mod tests {
         assert!(
             !names.contains(&"keyboard_write"),
             "keyboard_write needs 1.2, not just 1.1: {names:?}"
+        );
+    }
+
+    #[test]
+    fn keywords_are_gated_by_the_version_that_introduced_them() {
+        // screenshot_name/snapshot_name: 1.4, wait_ssm: 1.5, joystick: 1.6 (cpclib's)
+        for (version, expected) in [
+            ("1.3", (false, false, false)),
+            ("1.4", (true, false, false)),
+            ("1.5", (true, true, false)),
+            ("1.6", (true, true, true)),
+        ] {
+            let document = doc(&format!("csl_version {version}\n"));
+            let items = CslAnalyzer::new().completion(&document, pos(1, 0));
+            let names: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+            assert_eq!(
+                (
+                    names.contains(&"screenshot_name") && names.contains(&"snapshot_name"),
+                    names.contains(&"wait_ssm"),
+                    names.contains(&"joystick")
+                ),
+                expected,
+                "csl_version {version}: {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn joystick_offers_its_numbers_then_its_words() {
+        let analyzer = CslAnalyzer::new();
+        let items = analyzer.completion(&doc("joystick "), pos(0, 9));
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, vec!["0", "1"]);
+        let items = analyzer.completion(&doc("joystick 0 "), pos(0, 11));
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            vec!["up", "down", "left", "right", "fire1", "fire2", "fire3"]
         );
     }
 
