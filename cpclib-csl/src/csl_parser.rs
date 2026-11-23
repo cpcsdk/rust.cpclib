@@ -524,7 +524,7 @@ fn parse_keyboard_write<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
     .parse_next(input)
 }
 
-/// Parse joystick instruction (v1.3): `joystick <0|1> [up] [down] [left] [right] [fire1] [fire2]
+/// Parse joystick instruction (v1.6, a cpclib extension): `joystick <0|1> [up] [down] [left] [right] [fire1] [fire2]
 /// [fire3]`, the words in any order; none releases the joystick
 fn parse_joystick<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     ("joystick", ws1)
@@ -711,7 +711,7 @@ fn parse_snapshot_name<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a
 
 /// Parse snapshot instruction
 fn parse_snapshot<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
-    ("snapshot", ws0)
+    "snapshot"
         .context(StrContext::Label("snapshot"))
         .parse_next(input)?;
 
@@ -1484,7 +1484,7 @@ mod screenshot_scale_tests {
     use super::*;
 
     fn screenshot(line: &str) -> CslInstruction {
-        let script = parse_csl_with_rich_errors(&format!("csl_version 1.3\n{line}\n"), None)
+        let script = parse_csl_with_rich_errors(&format!("csl_version 1.6\n{line}\n"), None)
             .unwrap_or_else(|e| panic!("{line}: {e}"));
         script
             .iter()
@@ -1534,7 +1534,7 @@ mod screenshot_scale_tests {
             "screenshot 1.2.3"
         ] {
             assert!(
-                parse_csl_with_rich_errors(&format!("csl_version 1.3\n{line}\n"), None).is_err(),
+                parse_csl_with_rich_errors(&format!("csl_version 1.6\n{line}\n"), None).is_err(),
                 "{line}"
             );
         }

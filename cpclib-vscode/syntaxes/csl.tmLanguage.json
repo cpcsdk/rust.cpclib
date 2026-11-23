@@ -6,6 +6,7 @@
         { "include": "#comment" },
         { "include": "#keyword" },
         { "include": "#string" },
+        { "include": "#argument" },
         { "include": "#number" }
     ],
     "repository": {
@@ -15,7 +16,12 @@
         },
         "keyword": {
             "name": "keyword.control.instruction.csl",
-            "match": "(?i)\\b(csl_version|reset|crtc_select|gate_array|cpc_model|memory_exp|rom_dir|rom_config|disk_insert|disk_dir|tape_insert|tape_dir|tape_rewind|tape_play|tape_stop|snapshot_load|snapshot_dir|snapshot_name|snapshot_version|snapshot|key_delay|key_from_file|key_output|keyboard_write|joystick|wait_driveonoff|wait_vsyncoffon|wait_ssm0000|wait|screenshot_name|screenshot_dir|screenshot|csl_load|cls_load)\\b"
+            "match": "(?i)\\b(csl_version|reset|crtc_select|gate_array|cpc_model|memory_exp|rom_dir|rom_config|disk_insert|disk_dir|tape_insert|tape_dir|tape_rewind|tape_play|tape_stop|snapshot_load|snapshot_dir|snapshot_name|snapshot_version|snapshot|key_delay|key_from_file|key_output|keyboard_write|joystick|wait_driveonoff|wait_vsyncoffon|wait_ssm0000|wait_ssm|wait|screenshot_name|screenshot_dir|screenshot|csl_load|cls_load)\\b"
+        },
+        "argument": {
+            "comment": "The bare words some instructions take: reset soft|hard, screenshot/snapshot vsync, joystick directions and fire buttons.",
+            "name": "support.constant.csl",
+            "match": "(?i)\\b(soft|hard|vsync|up|down|left|right|fire[123])\\b"
         },
         "string": {
             "comment": "Single-quoted paths and key_output text - CSL never uses double quotes.",
@@ -32,6 +38,16 @@
         },
         "number": {
             "patterns": [
+                {
+                    "comment": "A wait_ssm code, hexadecimal and 0x-prefixed (0xABCD).",
+                    "name": "constant.numeric.hex.csl",
+                    "match": "\\b0[xX][0-9A-Fa-f]+\\b"
+                },
+                {
+                    "comment": "A screenshot zoom as a width, 440px (v1.6).",
+                    "name": "constant.numeric.csl",
+                    "match": "\\b[0-9]+px\\b"
+                },
                 {
                     "comment": "A csl_version number, e.g. 1.1 - matched before the plain-integer rule below.",
                     "name": "constant.numeric.csl",

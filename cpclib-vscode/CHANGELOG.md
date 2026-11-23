@@ -4,6 +4,10 @@ All notable changes to the CPClib VS Code extension are documented here.
 
 ## [Unreleased]
 
+- CSL: the language follows the V1.5 standard (`wait_ssm` and its hexadecimal code are highlighted,
+  `screenshot_name`/`snapshot_name` need `csl_version 1.4`, `wait_ssm` 1.5) and cpclib's 1.6
+  (the `joystick` instruction, a zoomed `screenshot`); completion offers the joystick's
+  numbers and words and only the instructions the declared version has
 - Music: Explorer context menu / commands accept CHIPNSFX `.chp` songs, played by CHIPNSFX's
   own player
 - Music: "Compare music players" lists what a song weighs with every player that can play it

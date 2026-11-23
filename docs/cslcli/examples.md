@@ -33,7 +33,7 @@ Example with syntax error:
 $ cslcli broken_script.csl
 Error parsing broken_script.csl at line 5, column 10:
    |
-5  | WAIT 10x
+5  | wait 10x
    |         ^ invalid character in number
    |
 Expected: valid number
@@ -105,18 +105,15 @@ cslcli messy_script.csl > formatted_script.csl
 
 ### Example Valid Script
 ```csl
-# Load program
-LOAD "game.dsk"
-
-# Wait for loading
-WAIT 3000
-
-# Send keypress
-KEYPRESS SPACE
-
-# Wait and verify
-WAIT 1000
-CHECK SCREEN "GAME OVER"
+; boot a disc and take a picture
+csl_version 1.4
+reset
+wait 3000000
+disk_insert 'game.dsk'
+key_output 'RUN"GAME"\(RET)'
+wait 5000000
+screenshot_name 'title'
+screenshot
 ```
 
 ### Validation Commands
