@@ -56,6 +56,7 @@ fn build_others() {
 fn build_shrinkler() {
     cxx_build::bridge("src/shrinkler.rs")
         .file("extra/Shrinkler4.6NoParityContext//basm_bridge.cpp")
+        .warnings(false)
         .std("c++14")
         .compile("cpclib-crunchers");
 
@@ -113,6 +114,7 @@ fn build_lzsa() {
         .file("extra/lzsa/lzsa-master/src/shrink_context.c")
         .file("extra/lzsa/lzsa-master/src/shrink_inmem.c")
         .file("extra/lzsa/lzsa-master/src/shrink_streaming.c")
+        .warnings(false)
         .flag("-fomit-frame-pointer")
         .opt_level(3)
         .cargo_metadata(true)

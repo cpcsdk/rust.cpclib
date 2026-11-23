@@ -525,8 +525,8 @@ impl AmsdosEntry {
         Self {
             idx,
             file_name: AmsdosFileName::from_entry_format(array_ref!(buffer, 0, 12)),
-            read_only: buffer[1 + 8].bit(7),
-            system: buffer[1 + 8 + 1].bit(7),
+            read_only: Bit::bit(&buffer[1 + 8], 7),
+            system: Bit::bit(&buffer[1 + 8 + 1], 7),
             num_page: buffer[12],
             page_size: buffer[15],
             blocs: {
