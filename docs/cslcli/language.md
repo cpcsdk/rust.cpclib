@@ -3,7 +3,8 @@
 CSL (CPC Script Language) scripts an emulator: it simulates user actions (reset, insert media,
 type keys, wait) and takes screenshots and snapshots. The standard is written by Longshot /
 Logon System ([CSL-STANDARD-EN.pdf](https://shaker.logonsystem.eu/Shaker_CSL/CSL-STANDARD-EN.pdf),
-V1.5, September 2026). `cpclib-csl` implements it, plus a few extensions numbered **1.6**.
+V1.6, November 2026). `cpclib-csl` implements it, plus one extension that the standard does not have:
+the zoom of `screenshot`, which we number 1.6 too.
 
 ## Syntax
 
@@ -37,7 +38,7 @@ screenshot
 | 1.2 | `keyboard_write` |
 | 1.4 | `screenshot_name`, `snapshot_name` |
 | 1.5 | `wait_ssm` |
-| 1.6 | `joystick`, a zoomed `screenshot` (cpclib extensions, not in the standard) |
+| 1.6 | `joystick` (from Krusty); a zoomed `screenshot` (a cpclib extension, not in the standard) |
 
 ## Miscellaneous
 
@@ -83,7 +84,7 @@ rom_config C 0 'EerieForest.cpr'
 | `key_output '<text>'` | Type the characters one by one. Unknown characters are skipped. |
 | `key_from_file '<file>'` | Type the characters of an ASCII file. |
 | `keyboard_write <row0>,...,<row9>` | *(1.2)* Set the 10 rows of the keyboard matrix; a bit at 0 is a key down. |
-| `joystick <0\|1> [up] [down] [left] [right] [fire1] [fire2] [fire3]` | *(1.6)* Hold these directions and buttons down on a joystick until its next `joystick` line; the number alone releases it. |
+| `joystick <0\|1>[,up][,down][,left][,right][,fire1][,fire2][,fire3]` | *(1.6)* Hold these directions and buttons down on a joystick, everything not named released, until its next `joystick` line. The number alone releases it (centres the stick). |
 
 In `key_output`, `\(CODE)` types a special key, and braces press keys together:
 
@@ -107,8 +108,17 @@ key_output '{\(SHI)1}'             ; SHIFT + 1
 
 `joystick 0` is line 9 and `joystick 1` line 6 of the keyboard matrix (shared with keys). A bit at 0
 is held down: bit 0 up, 1 down, 2 left, 3 right, 4 fire 2, 5 fire 1, 6 fire 3.
-`joystick 0 right fire1` gives line 9 = `0xD7`. The words may come in any order, and each `joystick`
-line replaces the whole state of that joystick.
+`joystick 0,right,fire1` gives line 9 = `0xD7`. The words may come in any order, and each `joystick`
+line replaces the whole state of that joystick. The standard writes the words after commas
+(`Joystick 0,right,up,fire2`); `cpclib` accepts blanks too, and any case.
+
+```csl
+joystick 0,up           ; up
+wait 200000
+joystick 0,up,fire1     ; up and fire 1
+wait 200000
+joystick 0              ; released: the stick is centred
+```
 
 ## Synchronization
 
@@ -132,7 +142,7 @@ line replaces the whole state of that joystick.
 | `snapshot_version <1\|2\|3>` | Version of the snapshots written (the emulator's own when not used). |
 | `csl_load '<file>'` | Load and run another CSL file, to chain scripts. |
 
-The zoom of `screenshot` *(1.6)* is a factor (`0.5`) or a width in pixels (`440px`, the height in
+The zoom of `screenshot` *(a cpclib extension, 1.6 for cpclib)* is a factor (`0.5`) or a width in pixels (`440px`, the height in
 proportion):
 
 ```csl

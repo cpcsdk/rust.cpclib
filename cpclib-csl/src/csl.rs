@@ -2,7 +2,8 @@
 //!
 //! This module models the tokens and instructions of the CSL language up to v1.5
 //! as specified in the CSL-STANDARD-EN.pdf document (Longshot / Logon System, V1.5,
-//! September 2026), plus the cpclib extensions of v1.6 (`joystick`, a zoomed `screenshot`).
+//! September 2026), and of V1.6 (November 2026, `joystick`), plus cpclib's zoomed `screenshot`, which the standard
+//! does not have.
 //!
 //! CSL is a scripting language that allows precise automation of emulator control,
 //! simulating user actions. It uses a simple text format with one instruction per line.
@@ -25,7 +26,7 @@ impl CslVersion {
         Self { major, minor }
     }
 
-    /// Returns the latest CSL version (1.6: the 1.5 standard plus cpclib's extensions)
+    /// Returns the latest CSL version (1.6, November 2026)
     pub const fn latest() -> Self {
         Self { major: 1, minor: 6 }
     }
@@ -435,7 +436,7 @@ impl std::fmt::Display for ScreenshotScale {
     }
 }
 
-/// What a `joystick` instruction holds down on one joystick (v1.6, a cpclib extension): its directions and
+/// What a `joystick` instruction holds down on one joystick (v1.6, from Krusty): its directions and
 /// fire buttons. Everything not named is released.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct JoystickInput {
@@ -460,7 +461,7 @@ impl JoystickInput {
 
     /// Hold `word` (one of [`Self::WORDS`]) down; false when the word is not one of them.
     pub fn press(&mut self, word: &str) -> bool {
-        let flag = match word {
+        let flag = match word.to_ascii_lowercase().as_str() {
             "up" => &mut self.up,
             "down" => &mut self.down,
             "left" => &mut self.left,
@@ -591,7 +592,7 @@ pub enum CslInstruction {
     KeyboardWrite([u8; 10]),
 
     /// Hold down directions and fire buttons of joystick 0 or 1 until the next `joystick`
-    /// instruction for it (v1.6, a cpclib extension): `joystick 0 right fire1`, `joystick 0` releases it
+    /// instruction for it (v1.6, from Krusty): `joystick 0,right,fire1`, `joystick 0` releases it
     Joystick {
         port: u8,
         input: JoystickInput
@@ -769,7 +770,10 @@ impl fmt::Display for CslInstruction {
                 )
             },
             Self::Joystick { port, input } if input.is_released() => write!(f, "joystick {port}"),
-            Self::Joystick { port, input } => write!(f, "joystick {port} {input}"),
+            Self::Joystick { port, input } => {
+                // the form of the standard's example: `Joystick 0,right,up,fire2`
+                write!(f, "joystick {port},{}", input.to_string().replace(' ', ","))
+            },
             Self::InstructionWithComment(instruction, comment) => {
                 write!(f, "{} ;{}", instruction, comment)
             },
@@ -843,8 +847,8 @@ impl CslInstruction {
         matches!(self, Self::WaitSsm(_))
     }
 
-    /// Check if this instruction is a v1.6 feature, a cpclib extension of the standard:
-    /// `joystick`, a zoomed `screenshot`
+    /// Check if this instruction is a v1.6 feature: `joystick` (from Krusty) and cpclib's zoomed
+    /// `screenshot`, which the standard does not have
     pub fn is_v1_6_feature(&self) -> bool {
         matches!(
             self,
@@ -2162,9 +2166,9 @@ mod tests {
         assert!(input.right && input.fire1 && !input.left && !input.fire2);
         // fire 1 is bit 5, right bit 3
         assert_eq!(input.matrix_line(), 0xFF & !(1 << 5) & !(1 << 3));
-        assert_eq!(joysticks[0].to_string(), "joystick 0 right fire1");
+        assert_eq!(joysticks[0].to_string(), "joystick 0,right,fire1");
         // the words come out in a fixed order
-        assert_eq!(joysticks[1].to_string(), "joystick 1 up fire2");
+        assert_eq!(joysticks[1].to_string(), "joystick 1,up,fire2");
         let CslInstruction::Joystick { input, .. } = joysticks[2]
         else {
             unreachable!()
@@ -2172,6 +2176,23 @@ mod tests {
         assert!(input.is_released());
         assert_eq!(input.matrix_line(), 0xFF);
         assert_eq!(joysticks[2].to_string(), "joystick 0");
+    }
+
+    /// The standard's own example, `Joystick 0,right,up,fire2`, and its spellings.
+    #[test]
+    fn test_joystick_as_the_standard_writes_it() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+
+        let line = |text: &str| {
+            let script =
+                parse_csl_with_rich_errors(&format!("csl_version 1.6\n{text}\n"), None).unwrap();
+            script.instructions().last().cloned().unwrap().to_string()
+        };
+        assert_eq!(line("Joystick 0,right,up,fire2"), "joystick 0,up,right,fire2");
+        assert_eq!(line("joystick 0, right , UP"), "joystick 0,up,right");
+        assert_eq!(line("joystick 1 left,fire1"), "joystick 1,left,fire1");
+        assert_eq!(line("joystick 0 ;centre"), "joystick 0 ;centre");
+        assert!(parse_csl_with_rich_errors("csl_version 1.6\njoystick 0,\n", None).is_err());
     }
 
     #[test]
@@ -2198,7 +2219,7 @@ mod tests {
     }
 
     /// The versions of the standard (V1.5): `screenshot_name`/`snapshot_name` came with 1.4,
-    /// `wait_ssm` with 1.5; `joystick` and a zoomed `screenshot` are cpclib's 1.6.
+    /// `wait_ssm` with 1.5; `joystick` is 1.6, and so is cpclib's zoomed `screenshot`.
     #[test]
     fn test_versions_follow_the_standard() {
         use crate::csl_parser::parse_csl_with_rich_errors;
