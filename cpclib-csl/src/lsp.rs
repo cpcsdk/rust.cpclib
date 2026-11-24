@@ -45,7 +45,7 @@ pub enum ArgShape {
     /// (`keyboard_write`, v1.2).
     KeyboardWrite,
     /// A joystick number (`0`/`1`), then any of `up down left right fire1 fire2 fire3`
-    /// (`joystick`, v1.6).
+    /// (`joystick`, v1.6, from Krusty; the standard writes `0,right,up`).
     Joystick,
     /// A single required number (`wait`).
     Duration,

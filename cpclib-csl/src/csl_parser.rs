@@ -6,7 +6,7 @@ use std::ops::Range;
 
 #[cfg(test)]
 use cpclib_common::winnow::ModalParser;
-use cpclib_common::winnow::ascii::{dec_uint, hex_uint, line_ending};
+use cpclib_common::winnow::ascii::{Caseless, dec_uint, hex_uint, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, opt, preceded, repeat, terminated
 };
@@ -524,10 +524,12 @@ fn parse_keyboard_write<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
     .parse_next(input)
 }
 
-/// Parse joystick instruction (v1.6, a cpclib extension): `joystick <0|1> [up] [down] [left] [right] [fire1] [fire2]
-/// [fire3]`, the words in any order; none releases the joystick
+/// Parse joystick instruction (v1.6, from Krusty): `joystick <0|1> [up] [down] [left] [right]
+/// [fire1] [fire2] [fire3]`, the words in any order; none releases the joystick.
+/// The standard writes `Joystick 0,right,up,fire2`: the name and the words are case-insensitive,
+/// and a comma or blanks separate the number and the words.
 fn parse_joystick<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
-    ("joystick", ws1)
+    (Caseless("joystick"), ws1)
         .context(StrContext::Label("joystick"))
         .parse_next(input)?;
 
@@ -540,7 +542,7 @@ fn parse_joystick<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Csl
     loop {
         let checkpoint = input.checkpoint();
         let word: Option<&str> = opt(preceded(
-            ws1,
+            alt((delimited(ws0, ',', ws0).void(), ws1)),
             take_while(1.., |c: char| c.is_ascii_alphanumeric())
         ))
         .parse_next(input)?;
@@ -549,7 +551,7 @@ fn parse_joystick<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Csl
             Some(_) => {
                 // back to the word, so that the error points at it
                 input.reset(&checkpoint);
-                ws1.parse_next(input)?;
+                alt((delimited(ws0, ',', ws0).void(), ws1)).parse_next(input)?;
                 return cut_err(cpclib_common::winnow::combinator::fail.context(
                     StrContext::Label("up, down, left, right, fire1, fire2 or fire3")
                 ))
