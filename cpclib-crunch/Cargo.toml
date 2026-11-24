@@ -23,7 +23,7 @@ cpclib-disc = {workspace = true}
 # sections (`LZ48`/`LZSHRINKLER`/...), which is its own separate cargo
 # feature set (defaults to off workspace-wide) - same fixed list as
 # `cpclib-crunchers` just above, for the same reason.
-cpclib-asm = {workspace = true, features = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"]}
+cpclib-asm = {workspace = true, features = ["embedded-files", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"]}
 cpclib-basmopt = {workspace = true}
 cpclib-tokens = {workspace = true}
 fs-err.workspace = true

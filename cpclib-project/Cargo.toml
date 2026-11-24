@@ -14,7 +14,7 @@ homepage.workspace = true
 # any third crate, so the orphan rule keeps that `From` impl here with the
 # config it belongs to.
 cpclib-asmoptim.workspace = true
-cpclib-asm.workspace = true
+cpclib-asm = { workspace = true, features = ["embedded-files"] }
 cpclib-tokens.workspace = true
 # `build_defs` recovers the `-D` symbols a build rule passes to basm by loading
 # the real build file - the same loader bndbuild itself uses, so the two cannot

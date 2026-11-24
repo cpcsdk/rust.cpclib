@@ -344,7 +344,14 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
         // handle inner file
         EmbeddedFiles::get(fname_repr)
             .ok_or(AssemblerError::IOError {
-                msg: format!("Unable to open {fname_repr:?}; it is not embedded.")
+                msg: if cfg!(feature = "embedded-files") {
+                    format!("Unable to open {fname_repr:?}; it is not embedded.")
+                }
+                else {
+                    format!(
+                        "Unable to open {fname_repr:?}: this build has no embedded files (cpclib-asm's `embedded-files` feature)."
+                    )
+                }
             })?
             .data
             .to_vec()

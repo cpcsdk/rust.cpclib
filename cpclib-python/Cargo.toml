@@ -17,7 +17,7 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 pyo3 = { workspace = true, features = ["extension-module"] }
 bon.workspace = true
-cpclib-asm = { workspace = true, default-features = false }
+cpclib-asm = { workspace = true, default-features = false , features = ["embedded-files"] }
 cpclib-basic = { workspace = true, default-features = false }
 cpclib-basm = { workspace = true, default-features = false }
 cpclib-bdasm = { workspace = true, default-features = false }
