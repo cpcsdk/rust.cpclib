@@ -38,7 +38,7 @@ generator = [
 ]
 
 [dependencies]
-cpclib-asm.workspace = true
+cpclib-asm = { workspace = true, features = ["embedded-files"] }
 cpclib-tokens.workspace = true
 cpclib-common.workspace = true
 fs-err.workspace = true
@@ -69,7 +69,7 @@ pulldown-cmark = { workspace = true, optional = true }
 tempfile.workspace = true
 
 [build-dependencies]
-cpclib-asm.workspace = true
+cpclib-asm = { workspace = true, features = ["embedded-files"] }
 fs-err.workspace = true
 
 [lints]

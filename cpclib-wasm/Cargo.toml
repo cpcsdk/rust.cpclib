@@ -20,7 +20,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-cpclib-asm.workspace = true
+cpclib-asm = { workspace = true, features = ["embedded-files"] }
 cpclib-sna.workspace = true
 cpclib-basic.workspace = true
 

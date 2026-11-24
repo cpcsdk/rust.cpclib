@@ -21,7 +21,7 @@ default = ["adapter"]
 # emulator-independent helpers remain - `disassemble`, `callstack`, `inspect` (without source
 # maps), `breakpoint_manager`, `protocol` - light enough for an emulator to show the same views,
 # and for the web (wasm32).
-adapter = ["dep:cpclib-runner", "dep:cpclib-bndbuild", "dep:cpclib-project"]
+adapter = ["dep:cpclib-runner", "dep:cpclib-bndbuild", "dep:cpclib-project", "cpclib-asm/embedded-files"]
 
 [dependencies]
 cpclib-project = { workspace = true, optional = true }

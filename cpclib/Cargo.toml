@@ -59,8 +59,10 @@ built = { workspace = true, features = ["chrono"] }
 
 
 [features]
-default = ["xferlib", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"]
+default = ["xferlib", "embedded-files", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"]
 xferlib = ["cpclib-xfer"]
+# cpclib-asm's `inner://` files (see its `embedded-files` feature)
+embedded-files = ["cpclib-asm/embedded-files"]
 cmdline = ["cpclib-common/cmdline"]
 
 

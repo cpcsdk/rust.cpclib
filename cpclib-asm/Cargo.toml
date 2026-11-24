@@ -108,8 +108,13 @@ fs-err.workspace = true
 
 
 [features]
-default = ["colored_errors", "indicatif", "apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7", "hfe"]
+default = ["colored_errors", "indicatif", "embedded-files", "apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7", "hfe"]
 colored_errors = []
+# The files of `assets/` embedded in the library, for the sources that include them as
+# `inner://NAME` (decrunchers, firmware labels...). Several are third-party routines whose
+# licences are not all stated: a program that only uses the assembler without them (an emulator)
+# leaves them out.
+embedded-files = []
 indicatif = ["dep:indicatif"]
 rayon = ["cpclib-common/rayon", "dep:rayon-cond"]
 chardet = ["dep:chardetng"]
